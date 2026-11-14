@@ -15,7 +15,7 @@
 // Pure + temp-dir fs, no spawn/child — IN pnpm check.
 
 import { strict as assert } from "node:assert";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -379,23 +379,6 @@ function ctxWith(firstUser: string) {
 		"[QK:CARRIER-FRAME-NAMES-CLAUDE-CARRIER] the claude frame must name the real carrier AND scope it to the engraving — " +
 			`saying only "this is not your system prompt" leaves the model to guess what the system prompt then is. Got: ${JSON.stringify(claudeAug.slice(0, 500))}`,
 	);
-	assert.ok(
-		cortexAug.includes("carries no system-prompt carrier at all") &&
-			!cortexAug.includes("does have a system-prompt carrier"),
-		"[QK:CARRIER-FRAME-DENIES-CORTEX-CARRIER] the cortex frame must deny the carrier — cortex's buildSessionMeta returns " +
-			`undefined so no _meta is sent; claiming a tiny carrier there would be a lie. Got: ${JSON.stringify(cortexAug.slice(0, 500))}`,
-	);
-
-	// The rail difference is not a doc claim — it is in the adapter source.
-	const adapterSrc = readFileSync(join(REPO_DIR, "pi-extensions/lib/acp/backend-adapter.ts"), "utf8");
-	const cortexAt = adapterSrc.indexOf('backend: "cortex"');
-	assert.ok(cortexAt > 0, "backend-adapter.ts still declares the cortex adapter");
-	assert.match(
-		adapterSrc.slice(cortexAt),
-		/buildSessionMeta\(\)\s*\{\s*return undefined;/,
-		"[QK:CARRIER-RAIL-DIFF-IS-SOURCE-PINNED] cortex's buildSessionMeta must still return undefined — the source fact the " +
-			"cortex frame's 'no carrier at all' sentence rests on. If this ever grows a carrier, the frame becomes a lie.",
-	);
 
 	// DISJOINT SURFACES: the thing the model is told is its system prompt (the
 	// engraving) must not contain the narrative it is told is user text. If the
@@ -559,9 +542,8 @@ console.log(
 		"signature change (stable carrier → stable signature); augment: prepended on `new` only (reuse delta has none), " +
 		"wire-only so it never enters contextMessageSignatures, entwurf cwd/AGENTS.md de-dup (present → drop only that " +
 		"section, home kept; absent → kept), day-granularity date, 50KB truncation marker, shipped AGENTS budget; " +
-		"provenance: both rails state the augment is first-user-message text and not the system prompt, claude names its " +
-		"tiny engraving-only carrier while cortex denies having one (pinned against cortexAdapter.buildSessionMeta → " +
-		"undefined), and carrier/augment stay disjoint; A-join: the carrier opens its own block after the SDK's fixed " +
+		"provenance: the augment is first-user-message text and not the system prompt, Claude names its " +
+		"tiny engraving-only carrier, and carrier/augment stay disjoint; A-join: the carrier opens its own block after the SDK's fixed " +
 		"sentence, the boundary is a loader constant (not the template's whitespace, which trim eats) and does not " +
 		"resurrect an opted-out carrier, the shipped carrier stays under the tiny budget, and the meta hop sends the " +
 		"loader string byte-for-byte so the wire and the reuse signature cannot desynchronize",

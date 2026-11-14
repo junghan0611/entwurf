@@ -22,8 +22,9 @@ A recorded source-checkout demo: callback → task → native Bash → reply.
   disposable worker or a subagent of a new central harness. You and the native harnesses keep
   steering; branches, worktrees, file isolation and internal delegation stay their concern.
 - **Native harnesses stay native.** Claude Code keeps its hooks and tools, Codex its own threads and
-  delegation, pi its extensions. Entwurf reconstructs no prompt, hydrates no transcript and mediates
-  no credential.
+  delegation, pi its extensions. Entwurf hydrates no native transcript and mediates no credential.
+  The one prompt it composes is the ACP plugin's: a new ACP session receives pi's own transcript
+  rendered as text ([rail](./docs/acp-backend-rail.md#adapter-contract)).
 - **One address.** A garden id names a record-backed citizen. A pane, socket, native session id or
   model is a carrier or an observation, never a second address.
 - **The same verbs on both screens.** In an ordinary tmux session or inside a Herdr workspace, a
@@ -201,7 +202,9 @@ identity, routes, roles, permissions or lifecycle. `entwurf help team`.
 **Entwurf** (기투, projection-of-self) connects independent visible siblings; a **garden id** names
 a record-backed citizen, not its pane or native transcript. The package holds the v2 core, the
 native-harness bridges, a pi adapter and an ACP plugin. ACP is one ingress, not the boundary; pi is
-one adapter, not the center. Claude and Cortex Code are ACP backends; Codex and Antigravity stay
+one adapter, not the center. Claude is the supported ACP backend; Cortex Code ACP is disabled in
+this source. Already-running processes keep their loaded bytes until an operator restarts them.
+Codex and Antigravity stay
 native so they keep their own tools and work context. The pi adapter registers the compiled bridge
 with Pi's built-in MCP after record birth, while pi's own receive stays its record-addressed control
 address. [FAQ](./FAQ.md) explains ACP, MCP and context carriers.
@@ -222,7 +225,7 @@ the MCP tool descriptions and the hints extracted there, [ENTWURF-CLI.json](./EN
 
 Owns: garden identity, live-fact dispatch and receipts, native bridge integrations,
 visible lifecycle launch seams, the pi adapter and isolated ACP plugin lifecycle.
-Does not: a second harness, memory DB, prompt reconstruction, transcript hydration,
+Does not: a second harness, memory DB, native-transcript hydration or replay,
 credential mediation, subscription bypass, pane-typing delivery or hidden orchestration.
 [AGENTS](./AGENTS.md) owns these invariants and exact capability boundaries.
 

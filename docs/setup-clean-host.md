@@ -23,7 +23,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-The current published Entwurf 0.52.0 uses the exact Pi 1.5.2 SDK set and host Pi `>=1.5.2 <1.6`. The marked 0.51.0 / SDK 1.5.0 examples below are historical and remain bound to their own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
+The current published Entwurf 0.53.1 uses the exact Pi 1.5.2 SDK set and host Pi `>=1.5.2 <1.6`, the same pairing as published 0.52.0 (0.53.0 was tagged but never published to npm). The marked 0.51.0 / SDK 1.5.0 examples below are historical and remain bound to their own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
 
 The validation TGZ installed in #155's operating window before the D1 display repair is an earlier, separate artifact, not the published one; see the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below.
 
@@ -35,14 +35,13 @@ The older package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4.x 
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence — current 0.52.0: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.5.2 in published 0.52.0; 1.5.0 in historical 0.51.0) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
+| pi | optional-by-presence — current 0.53.1: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.5.2 in published 0.53.1 and 0.52.0; 1.5.0 in historical 0.51.0) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | legacy citizen; native push paused (#152) |
 | OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all four operator-owned units (birth/MCP/status-line/terminal-title) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires the operator-owned app-server, started with `entwurf codex-app-server` in a tmux session of the operator's choosing (#95 D1 retired the fixed `codex` home) | native-push and visible fresh, supported in 0.21.0 |
-| Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.306 is required for the managed exec-hook lifecycle and same-id resume. The package
 never supplies or proxies backend credentials.
@@ -85,7 +84,7 @@ node --version
 npm --version
 ```
 
-The two npm forms below install the **published** package, `0.52.0` (Pi 1.5.x, the Pi 1.5.2 SDK
+The two npm forms below install the **published** package, `0.53.1` (Pi 1.5.x, the Pi 1.5.2 SDK
 set). The [product entry](../README.md#install)'s unpinned `npm install -g @junghanacs/entwurf`
 takes whichever version npm's `latest` dist-tag names; pin `@<version>` as below when you mean the
 exact artifact the [Requirements](#requirements) table describes.
@@ -94,7 +93,7 @@ Global install is simplest when native harnesses should find stable bins from ev
 working directory:
 
 ```bash
-npm install -g @junghanacs/entwurf@0.52.0
+npm install -g @junghanacs/entwurf@0.53.1
 entwurf --help
 entwurf setup /path/to/your-project
 entwurf check-bridge
@@ -105,7 +104,7 @@ A project-local installation is also supported:
 ```bash
 mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
 npm init -y
-npm install --save-dev @junghanacs/entwurf@0.52.0
+npm install --save-dev @junghanacs/entwurf@0.53.1
 npx entwurf setup .
 npx entwurf check-bridge
 ```
@@ -115,10 +114,10 @@ project-local install, or `./run.sh <command>` from a source checkout. Keep that
 same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the nine garden tools (0.52.0); it does not prove a backend model turn, native hook or retirement permission.
+lists the nine garden tools (0.53.1); it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
-Cortex, and their authentication remain operator-owned optional prerequisites for the
+and their authentication remain operator-owned optional prerequisites for the
 integrations that use them; all may be absent on an Entwurf-only host. A source checkout's
 pinned Pi development packages are for building and testing this repo, not a transitive product installation promise.
 
@@ -226,8 +225,8 @@ physical-Darwin receipt. `entwurf install` may write `.pi/settings.json`
 on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
 `setup` names the pi row FAIL with the §1 Darwin wording.
 
-For published Entwurf 0.52.0, install its exact host Pi floor and wire the project as shown below.
-The previous 0.51.0 uses the Pi 1.5.0 floor named in its own setup guide:
+For published Entwurf 0.53.1, install its exact host Pi floor and wire the project as shown below.
+Published 0.52.0 used the same floor; 0.51.0 uses the Pi 1.5.0 floor named in its own setup guide:
 
 ```bash
 npm install -g @earendil-works/pi-coding-agent@1.5.2
@@ -238,12 +237,12 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported host Pi range for published Entwurf 0.52.0 is `>=1.5.2 <1.6`.
+The supported host Pi range for published Entwurf 0.53.1 is `>=1.5.2 <1.6`.
 A detected host outside that range is refused for Pi wiring; Entwurf does not upgrade it.
 Align the host explicitly, for example with the exact npm command above, before wiring Pi. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
 
-Published 0.52.0 requires host Pi `>=1.5.2 <1.6`; `setup` reports a detected older host as FAIL. Prepare host Pi 1.5.2 before wiring, and use the checkout path rather than the global npm package when running a checkout directly. Range eligibility does not replace installation, validation or operating approval. Ordinary Pi 1.5.2 defaults its global `cacheWarming` setting to `idle`, which may send additional provider requests; pi-durable does not map that setting. See the [#158 durable boundary](./durable-native-support.md#sdk-152-candidate-boundary-158).
+Published 0.53.1 requires host Pi `>=1.5.2 <1.6`; `setup` reports a detected older host as FAIL. Prepare host Pi 1.5.2 before wiring, and use the checkout path rather than the global npm package when running a checkout directly. Range eligibility does not replace installation, validation or operating approval. Ordinary Pi 1.5.2 defaults its global `cacheWarming` setting to `idle`, which may send additional provider requests; pi-durable does not map that setting. See the [#158 durable boundary](./durable-native-support.md#sdk-152-candidate-boundary-158).
 
 For daily garden-native pi sessions:
 
@@ -347,7 +346,7 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 
 What the Entwurf package supplies:
 
-1. **The pi SDK set** — published 0.52.0 supplies `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
+1. **The pi SDK set** — published 0.53.1 supplies `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
    pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.5.2`, plus
    `proper-lockfile`, as production dependencies. Model data rides `pi-ai@1.5.2`, not a catalog copy.
    Historical 0.51.0 used <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`@earendil-works/pi-ai@1.5.0`<!-- /entwurf:published -->.
@@ -362,7 +361,7 @@ What the Entwurf package supplies:
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
    own `dist/` as installed — never through a source checkout.
 
-The upstream library guide for the published 0.51.0 pairing is [v1.5.0](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md); for the published 0.52.0 SDK APIs use [v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/durable/README.md).
+The upstream library guide for the published 0.51.0 pairing is [v1.5.0](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md); for the published 0.53.1 SDK APIs (the same set as 0.52.0) use [v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/durable/README.md).
 The [experimental app guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/experimental/durable/README.md)
 (last published at v1.1.0) records the app's origin: Entwurf's maintained app source, not a newer upstream app, is the current composition authority. Both guides describe what the carrier is. Running the bare upstream app does not attach Entwurf's
 garden contact. Entwurf does not rebuild the controller/model/auth/storage system or
@@ -459,7 +458,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2; historical 0.51.0 range <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->, current 0.52.0 range `>=1.5.2 <1.6`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2; historical 0.51.0 range <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->, current 0.53.1 range `>=1.5.2 <1.6`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. The native harnesses own credentials, model settings and their respective session stores — ordinary Pi JSONL and pi-durable SQLite; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -481,7 +480,7 @@ the validation TGZ the published artifact. Installing an older package is not a 
 
 ### SDK 1.5.2 candidate boundary (#158)
 
-The published 0.52.0 package (#158) pins the Pi SDK at exactly 1.5.2 (ten members) and declares host Pi `>=1.5.2 <1.6`. Publication does not install it on an operating host; an operating move requires its own installation and same-identity return receipts. The #155 receipts above prove their own subject only; none is inherited by 1.5.2.
+The published 0.52.0 package (#158) pins the Pi SDK at exactly 1.5.2 (ten members) and declares host Pi `>=1.5.2 <1.6`; published 0.53.1 keeps the same set and range. Publication does not install it on an operating host; an operating move requires its own installation and same-identity return receipts. The #155 receipts above prove their own subject only; none is inherited by 1.5.2.
 
 What #158 measured so far and what it did not is recorded in [the durable-native boundary](./durable-native-support.md#sdk-152-candidate-boundary-158) and in the #158 thread: registry tarball integrity and member edges, an isolated six-member scheduler comparison and a native SQLite cross-version read/append check. The pre-version checkpoint's frozen FULL belongs to its own recorded worktree. The earlier validation candidate has its own floor and installation receipts; later source edits and the final carrier-bearing artifact require their own acceptance. Operating-scale and interrupted sessions are not certified by the bounded fixtures. An operating move follows the default radius below, each step with its own receipt.
 
@@ -996,7 +995,7 @@ real initial Pi outside `codex`, then omitted-placement Codex and outbound Pi in
 callbacks and addressed delivery both ways. `DELIVERY.md` owns that 57-assertion receipt, its four
 coordinates, and its digest as history. The caller-seat re-run is **accepted** — 2026-09-16, 56
 assertions for the seat topology and 65 for the caller-DIRECTORY axis, both exit 0 — and it, not the
-fixed home, is the current contract (`DELIVERY.md`, `BASELINE.md:37-38`, `VERIFY.md` release
+fixed home, is the current contract (`DELIVERY.md`, BASELINE.md's release-host table (Codex caller-seat rows), `VERIFY.md` release
 acceptance).
 
 `entwurf_fresh_call` accepts backend `codex` — supported in 0.21.0 — and requires an explicit model. Its
@@ -1076,7 +1075,7 @@ LIVE=1 AGY_CONVERSATION_ID=<id> entwurf smoke-agy-native-push-live
 
 ACP turns are CERTIFIED on Linux; on macOS they are NOT CERTIFIED —
 pending physical host. Mux (visible fresh / resume) is the same state.
-A CI runner has no Claude or Cortex login.
+A CI runner has no Claude login.
 
 Claude uses the operator's existing local Claude authentication:
 
@@ -1084,16 +1083,10 @@ Claude uses the operator's existing local Claude authentication:
 LIVE=1 entwurf smoke-acp-provider-live
 ```
 
-Cortex requires an authenticated `cortex` CLI and an explicit connection. Keep
-`CORTEX_HOME` unset; the adapter refuses its presence because it bypasses containment.
-
-```bash
-LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
-  entwurf smoke-acp-cortex-live
-```
-
-The aggregate release gate is Claude-backed and does not run Cortex automatically.
-Its silence is not a Cortex PASS.
+Cortex ACP is disabled. Existing Cortex configuration and credentials are not modified.
+Entwurf fresh/resume exact admission refuses retired Cortex ids; the ACP adapter also
+refuses a Cortex id that reaches it, without a Claude fallback. Pi's own direct `--model`
+fuzzy selection precedes that adapter; its result for a typed retired id is unmeasured here.
 
 ### Backend prerequisites and resolver
 
@@ -1105,12 +1098,10 @@ operator-installed Claude runtime. Resolution order:
 2. `require.resolve(...)` against the bundled `@agentclientprotocol/claude-agent-acp`.
 3. `PATH:claude-agent-acp` fallback if package resolution fails.
 
-The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`, and
-`claude-fable-5-1`. Cortex exposes `cortex-auto`, `cortex-claude-opus-5`,
-`cortex-claude-sonnet-5`, and `cortex-openai-gpt-5.4`.
-`entwurfProvider.cortexConnection` or `ENTWURF_ACP_CORTEX_CONNECTION` selects
-an authenticated connection; the env override wins. Codex and Antigravity are
-native-push citizens (§4c/§5), not ACP backends.
+The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`,
+`claude-fable-5-1`, and `claude-fable-5-2`. Cortex ACP is disabled; a legacy
+`entwurfProvider.cortexConnection` does not select a backend or block Claude.
+Codex and Antigravity are native-push citizens (§4c/§5), not ACP backends.
 
 ### Settings reference and backend-specific keys
 
@@ -1145,15 +1136,11 @@ retired bundled `session-bridge` entry. It is not a general MCP catalog.
 user augment. Large Claude `_meta.systemPrompt` carriers can route OAuth sessions
 to metered “extra usage” billing.
 
-`entwurfProvider` is one block, not a promise that every key shapes both backends.
 `tools`, `permissionAllow`, `disallowedTools`, `settingSources`, `skillPlugins`
-and `appendSystemPrompt` are Claude's declaration surface, not Cortex's native
-tool surface. They still enter the config signature (and `tools` the common
-exclude-tools preflight), so editing them forces a fresh Cortex session.
-`cortexConnection` is Cortex-only; `mcpServers` reaches both through their own
-transports. `compaction` is a **top-level pi key**, not a backend knob. Unknown
-and retired keys are ignored; a wrong-backend key can fail silently, so check
-which backend consumes it before diagnosing bridge failure.
+and `appendSystemPrompt` are Claude's declaration surface. `mcpServers` carries
+explicit servers. `compaction` is a **top-level pi key**, not a backend knob.
+The retired `cortexConnection` key is not consumed by Claude and does not enable
+Cortex ACP; unknown and retired keys are ignored.
 
 ### Backend operation and containment
 
@@ -1168,12 +1155,8 @@ Read/Bash/Edit/Write; `Skill` is added for non-empty `skillPlugins`.
 The launch env sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`: vendor-managed
 background work is off, not arbitrary processes a command detaches itself.
 
-Cortex uses its native tools, session-private HOME / `SNOWFLAKE_HOME`, and private
-`cortex/mcp.json` projection because it ignores wire `mcpServers`. Only the bridge
-receives the real operator HOME needed for the garden store; `CORTEX_HOME` is
-refused, including an empty value, because it bypasses containment.
 [ACP backend rail — Shipped adapters](./acp-backend-rail.md#shipped-adapters)
-owns the exact overlay/carrier/backend mechanics and audit limits.
+owns the exact Claude overlay/carrier mechanics and audit limits.
 
 Entwurf owns no memory layer or memory DB, and no backend is another's memory
 authority. Operator semantic-memory / Denote tools remain host-native skills,
@@ -1208,7 +1191,7 @@ Non-empty `skillPlugins` auto-adds `Skill` to `tools` and `Skill(*)` to
 path or missing `.claude-plugin/plugin.json` before starting the session; the
 SDK, not the bridge, validates plugin.json contents and SKILL.md bodies.
 Start a fresh Claude session and ask it to list callable skills. The operator
-judgement is `Q-SKILL-CALLABLE` in [VERIFY](../VERIFY.md).
+judgement is asking the session which skills it can call; it is not a named row in [VERIFY](../VERIFY.md).
 This is Claude-only; Codex uses native `~/.codex/skills/` passthrough.
 [agent-config](https://github.com/junghan0611/agent-config) is a real multi-harness
 consumer, not a requirement for this setup.
@@ -1234,8 +1217,7 @@ Bridge identity, pi context, `~/AGENTS.md`, cwd AGENTS and date/cwd ride a one-s
 first-user prepend (`pi-context-augment.ts`), not the system carrier. It removes
 duplicate cwd AGENTS already in `<project-context ...>`. Its descriptions do not
 grant tools: the actual callable schema is truth (`read` / `Read` / `exec_command`,
-MCP only when schema-visible). Cortex engraving rides this augment because it
-has no system-prompt carrier; Claude uses `_meta.systemPrompt`.
+MCP only when schema-visible). Claude uses `_meta.systemPrompt` for its engraving.
 
 ### Session reuse and compaction
 
@@ -1251,7 +1233,12 @@ owns the reuse policy and distinguishes live mapping from semantic recall.
 **Entwurf does not implement compaction.** A backend's native compaction preserves
 the pi session/mapping; configure its policy through that backend's own interface,
 not a pi-side JSONL summary. The bridge exposes no backend-specific compaction
-knobs. The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
+knobs. One fixed exception on the Claude ACP rail: its adapter's idle `/compact` (an autonomous
+turn on an idle session) is turned off inline (`settings.idleCompaction: false`), because pi would
+not see that turn; in-prompt auto-compaction stays the backend's, and a managed settings tier would
+still win over the inline value ([rail §Capability posture](./acp-backend-rail.md#capability-posture)).
+Pi's own summaries on a Claude ACP model (`/compact`, the threshold, overflow recovery, `/tree`) are not that backend compaction: each runs as a one-shot tool-less turn on a new child, and the session's retained child is closed after a compaction ([rail §11-10](./acp-backend-rail.md)).
+The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
 session included) with `[entwurf:usage]` diagnostics. Near limit choose a visible
 action: clear, open a new session with a different model, or let the backend
 compact natively.

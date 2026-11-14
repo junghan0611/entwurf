@@ -115,7 +115,18 @@ const SONNET: Model<Api> = {
 	baseUrl: "",
 	input: ["text"],
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-	reasoning: false,
+	reasoning: true,
+	// #142: the curated level map; every turn below runs at "medium" (runTurn), which the fake driver
+	// reads back as effort. The effort contract itself lives in backend.thinking.test.ts.
+	thinkingLevelMap: {
+		off: null,
+		minimal: null,
+		low: "low",
+		medium: "medium",
+		high: "high",
+		xhigh: "xhigh",
+		max: "max",
+	},
 	contextWindow: 200_000,
 	maxTokens: 8_192,
 };
@@ -226,7 +237,7 @@ function makeWorld() {
 			const connection: AcpConnectionLike = {
 				initialize: async () => ({}),
 				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
-				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
+				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 				prompt: (params) => {
 					const script = scripts.shift();
 					if (!script) return Promise.reject(new Error("fake: no scripted prompt left"));
@@ -281,7 +292,12 @@ async function runTurn(
 	signal?: AbortSignal,
 ): Promise<AssistantMessageEvent[]> {
 	const events: AssistantMessageEvent[] = [];
-	for await (const event of backend.streamAcpTurn(SONNET, context, { sessionId, signal }, world.deps)) {
+	for await (const event of backend.streamAcpTurn(
+		SONNET,
+		context,
+		{ sessionId, signal, reasoning: "medium" },
+		world.deps,
+	)) {
 		events.push(event);
 	}
 	return events;

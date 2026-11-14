@@ -150,7 +150,10 @@ async function main(): Promise<void> {
 		const tmuxRetired = await dispatchFreshCall(pi(" entwurf/claude-opus-5 "), {}, recordingSpawn().spawn);
 		const current = recordingSpawn();
 		const herdrCurrent = await dispatchFreshCall(pi("entwurf/claude-opus-5-5"), HERDR_ENV, current.spawn);
-		const cortex = await dispatchFreshCall(pi("entwurf/cortex-claude-sonnet-5"), {}, recordingSpawn().spawn);
+		const cortexSpawn = recordingSpawn();
+		const cortex = await dispatchFreshCall(pi("entwurf/cortex-claude-sonnet-5"), {}, cortexSpawn.spawn);
+		const cortexHerdrSpawn = recordingSpawn();
+		const cortexHerdr = await dispatchFreshCall(pi("entwurf/cortex-auto"), HERDR_ENV, cortexHerdrSpawn.spawn);
 		const otherBackend = await dispatchFreshCall(
 			{ ...REQUEST, backend: "claude-code", model: "entwurf/claude-sonnet-5" },
 			{},
@@ -158,7 +161,7 @@ async function main(): Promise<void> {
 		);
 		const reasonOf = (d: Awaited<ReturnType<typeof dispatchFreshCall>>) => (d.result.ok ? null : d.result.reason);
 		ok(
-			"[QK:FCD-ACP-MODEL-EXACT] a pi sibling under the entwurf provider must name an EXACT curated ACP id: a retired Claude 5 id refuses as acp-model-not-curated on BOTH rails (trimmed like the rails read it) before herdr is asked anything, while the 5.5 id and a Cortex id pass through and another backend is not judged — Pi would otherwise open the retired id on a Cortex row by substring",
+			"[QK:FCD-ACP-MODEL-EXACT] a pi sibling under the entwurf provider names an exact supported Claude id: retired Claude and Cortex ids refuse before launch, while a current Claude id passes and another backend is not judged",
 			herdrRetired.rail === "herdr" &&
 				reasonOf(herdrRetired) === "acp-model-not-curated" &&
 				herdrSpawn.calls.length === 0 &&
@@ -166,7 +169,10 @@ async function main(): Promise<void> {
 				reasonOf(tmuxRetired) === "acp-model-not-curated" &&
 				reasonOf(herdrCurrent) !== "acp-model-not-curated" &&
 				current.calls.length > 0 &&
-				reasonOf(cortex) !== "acp-model-not-curated" &&
+				reasonOf(cortex) === "acp-model-not-curated" &&
+				cortexSpawn.calls.length === 0 &&
+				reasonOf(cortexHerdr) === "acp-model-not-curated" &&
+				cortexHerdrSpawn.calls.length === 0 &&
 				reasonOf(otherBackend) !== "acp-model-not-curated" &&
 				renderDispatchedFreshCall(herdrRetired).text.includes("exact curated ACP id") &&
 				renderDispatchedFreshCall(tmuxRetired).text.includes("exact curated ACP id"),

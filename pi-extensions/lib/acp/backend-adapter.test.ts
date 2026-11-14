@@ -27,8 +27,28 @@ describe("ACP launch env — claude foreground-only", () => {
 		});
 	});
 
-	it("cortex launches with no such switch — the claude contract does not leak into another backend", () => {
-		expect(cortexAdapter.launchEnvDefaults()).toEqual({});
+	it("the disabled Cortex adapter refuses its launch environment", () => {
+		expect(() => cortexAdapter.launchEnvDefaults()).toThrow(/cortex-acp-disabled/);
+	});
+});
+
+describe("ACP session settings — claude idle compaction", () => {
+	it("[QK:ACP-CLAUDE-NO-IDLE-COMPACTION] claude session settings turn off only the adapter's idle compaction, never in-prompt compaction", () => {
+		const config = {
+			tools: ["Read"],
+			permissionAllow: ["Read(*)"],
+			disallowedTools: [],
+			settingSources: [],
+			strictMcpConfig: true,
+			skillPlugins: [],
+		} as never;
+		const meta = claudeAdapter.buildSessionMeta(
+			{ modelId: "claude-opus-5-5", nativeModelId: "claude-opus-5-5", config },
+			null,
+		) as { claudeCode: { options: { settings: Record<string, unknown> } } };
+		const settings = meta.claudeCode.options.settings;
+		expect(settings.idleCompaction).toBe(false);
+		expect("autoCompactEnabled" in settings).toBe(false);
 	});
 });
 
@@ -64,8 +84,7 @@ describe("ACP prompt rejection — claude-only capability", () => {
 			expect(named?.verdict).toBe(INCOMPLETE_TOOL_CALL_VERDICT);
 		}
 
-		// Structural only: cortex declares no reader, so backend.ts keeps its old path for every
-		// cortex failure. No cortex runtime or LIVE behaviour is certified here.
+		// The disabled Cortex stub declares no vendor-rejection reader.
 		expect("readPromptRejection" in cortexAdapter).toBe(false);
 	});
 });
@@ -100,7 +119,18 @@ describe("ACP set-model readback — claude", () => {
 		expect(await enforce("claude-fable-5-1", answer("claude-fable-5-1"))).toEqual([
 			{ sessionId: "S", configId: "model", value: "claude-fable-5-1" },
 		]);
+		// 0.106.0 (#142, authenticated, no prompt): `claude-fable-5-2` answers its own row "Fable 5.2",
+		// which then replaces the alias row `fable` in the offered list.
+		const fable52Rows = [...MEASURED_ROWS, { value: "claude-fable-5-2", name: "Fable 5.2", description: "" }];
+		expect(await enforce("claude-fable-5-2", answer("claude-fable-5-2", fable52Rows))).toEqual([
+			{ sessionId: "S", configId: "model", value: "claude-fable-5-2" },
+		]);
 		const refused: Array<[string, unknown]> = [
+			// The alias `fable` also names Fable 5.2, but no alias row is declared for 5.2 and 5.1 must
+			// never be answered by it: either is a different id answering under the requested one.
+			["claude-fable-5-2", answer("fable", [...MEASURED_ROWS, { value: "fable", name: "Fable 5.2" }])],
+			["claude-fable-5-1", answer("fable", [...MEASURED_ROWS, { value: "fable", name: "Fable 5.2" }])],
+			["claude-fable-5-2", answer("claude-fable-5-1")],
 			["claude-fable-5-1", {}],
 			["claude-fable-5-1", undefined],
 			["claude-fable-5-1", { configOptions: [{ id: "effort", currentValue: "claude-fable-5-1" }] }],

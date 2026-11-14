@@ -4,6 +4,135 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.14-herdr.0.53.1 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.53.1` runtime and its measured npm sha512; it is not a new core release. Core 0.53.0 was tagged but never published to npm, so the previous pin is 0.52.0 (`v2026.11.12-herdr.0.52.0`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically. The install guidance, the support-contract rows and the durable supply note now name the published 0.53.1.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `45ea17e4d8f94b836c0b52cc9191fd6f0749610af0c8069343c17e01fb1557e5` matches the accepted core artifact byte for byte; independently computed sha512 matches the npm integrity and this lock. The publication moved `latest` to 0.53.1 and left `repair` at the value recorded before publication. Core `v0.53.1`, its accepted artifact and npm bytes are unchanged.
+- In a private sandbox (private HOME, XDG roots and agent directory), `pi install npm:@junghanacs/entwurf@0.53.1` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the four curated Claude models with no provider error. Pi warned that the host-provided packages should be peer dependencies; that is recorded, not changed here.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.53.1, a source swap, a real Herdr registration, public-ref installation, a vendor model turn or an operating-host upgrade.
+- On the candidate over `563b9334f786` with work surface `34fa94b760db`, the affected `check-dep-versions` PARTIAL killed 5/5 with both controls green (receipt `a8a5983dc548`); it is not kill-power measured on the eventual snapshot SHA. Exact pushed-SHA CI requires its own receipt.
+
+## 0.53.1 — 2026-11-14
+
+### What an npm user gets
+
+0.53.0 exists as a tag and a GitHub release only; it was never published to npm. For a user who installs from npm, 0.53.1 is the next version after 0.52.0, so everything under 0.53.0 below ships with it for the first time: the Claude ACP 0.106 set (#142), Cortex ACP disabled, the long-tool progress line (#162), and the verification documents. This section lists only what 0.53.1 adds on top.
+
+### Claude ACP 0.107 and a working manual `/compact` (#163)
+
+- **Driver 0.107.0.** `@agentclientprotocol/claude-agent-acp` 0.106.0 → 0.107.0 and the transitive `claude-agent-sdk` 0.3.322 → 0.3.323; the ACP wire SDK stays 2.6.0 and the Pi 1.5.2 set is unchanged (`7c98f8b4`). Static reading of both tarballs found `steer()` moved to its own module and no compaction diff; the new surfaces are retracted tool calls and `rate_limit` `resetsAt`.
+- **Manual `/compact` no longer refuses.** Every Pi-side summary on a Claude ACP model (`/compact`, the threshold, overflow recovery, `/tree` branch summaries) used to be refused by the tool-surface preflight, which read Pi's tool-less summary request as "read/bash/edit/write excluded"; this held since v0.24.0. A request with an empty replayed tool surface and `cacheRetention: "none"` is now Pi's summary request and runs as a one-shot turn on a new child with no tools, MCP servers, plugins, pre-approvals or setting sources, no augment and no notice, so the stored summary is exactly the model's text. An ordinary turn with every tool excluded still refuses. A `cancelled` stop that Pi did not abort is sealed as an error so Pi never keeps the partial text. After a compaction the session's retained Claude child is closed at once, and the next turn opens a new child from the compacted transcript (`5b7f7c24`, review corrections `7eb200a9`). Contract: `docs/acp-backend-rail.md` §11-10.
+- **The automatic threshold is not changed**, and the compaction inside a prompt the backend itself runs stays the backend's.
+
+### ACP tool visibility closer to Pi (#163, extends #162)
+
+- **M1 — running command.** The `[tool:running]` line names the command instead of "Terminal" once the title arrives; a beat in the same update prints alone.
+- **M2 — output preview.** A finished call previews at most 5 lines and 400 bytes of its output: head on success, tail on failure, nothing when the one-line summary already holds it, indentation kept.
+- **M3 — backend compaction.** The backend's own compaction shows trigger, tokens before and after, duration and failure on one `[acp: compaction …]` line, once.
+- **Control codes.** Every notice and preview line is cleaned the way Pi cleans tool output (ANSI/OSC and C0 controls removed), plus DEL and C1; the mapper's expression is compared against Pi's installed functions in a test (`e96403ec`, `f25c78de`). Contract: §11-11.
+- All new lines are signed, so they stay out of transcript replay, the reuse signature and andenken `control-v1` embedding. They are display-only.
+- Frames follow 0.107.0 as read, not a live capture.
+
+### Verification documents (0.53.1)
+
+- `BASELINE.md` and `VERIFY.md` each open with "Why this exists" (GLG's account: why the interview checks a pi-sized Claude, and why a session that passes becomes the examiner in the replicant-to-replicant walk).
+- `VERIFY.md` §1B.7a adds the manual `/compact` cell: Pi's own cut threshold (a transcript estimate of `keepRecentTokens`, default 20000, after the first user message; not Claude's occupancy), seven observations c0–c6, and `UNMEASURED` recording when compaction cannot be reached.
+- Both files shrink: BASELINE.md 38211 → 18318 bytes, VERIFY.md 120927 → 120815 bytes. The retired optional rounds, question IDs, answer guide, paused agy and Cortex baselines and the long release-host rows moved verbatim to `docs/baseline-receipts.md` ("Superseded / retired material"), which is read on GitHub and is not in the npm package.
+
+### Verification run on this candidate (R2R, 2026-11-14)
+
+n=1 on one host (oracle), run by an examiner session on this candidate (`a80518d1`) with GLG typing `/compact` himself; the full record is in `docs/baseline-receipts.md`.
+
+- **BASELINE blind pass: PASS** (subject `262958`; the sibling it opened, `b3e007`, passed the carrier part with a NOTE). Both called themselves "Claude Code"; GLG ruled that is not a defect. A memory question drew an `update-config` mention: NOTE.
+- **VERIFY §1B.2–5 and §1B.8: pass. §1B.6 effort, §1B.7 ESC, §1B.9 gates, c6 cancel and footer %: not measured.**
+- **§1B.7a manual `/compact`:** c0 split turn with two summary children pass; c1 summary clean (0 notice or control characters) pass; **c2 old child closed before the next prompt: PASS** (two observers; the summary children's appearance is shown by transcript, not a live `ps`); c3 new bootstrap from the summary pass; c4 code word and latest fact correct (quality observation); c5 "non-use observed, provided tool set unobserved". Short context (Pi about 40k, Claude about 250k), so not long-run durability.
+- **Found and fixed here:** VERIFY's description of which bridge bytes are live was half true (D2), and the §1B.8 `jq` comment "notices only" also matched the new tool lines (D3). **Left for the next lane:** the source-checkout bridge runs `src/` through strip-types while AGENTS.md Rule 11 says `run_ts` is the sole TS crossing (D1, wording is GLG's).
+
+### Herdr preparation
+
+Carried from 0.53.0: while 0.53.1 is unpublished, `runtime-lock.json` stays on the closed `herdr-checkout` verification carrier and no npm 0.53.1 bytes or integrity are invented. The last published npm pin remains 0.52.0.
+
+### Not changed
+
+A steer or stop to a busy ACP sibling still waits for the whole ACP turn (§11-9); no steering injection and no stop verb were added. The stop means is the local ESC.
+
+### Release evidence
+
+The candidate is `a80518d1` (the documentation diet, WHY sections and manual `/compact` cell) on top of `7a100e89` (main after the #163 land) and the release-record edits of this section. Floors ran on that tree before this section's evidence was written; the seal below binds the tree they ran on, and the make step's M0 floor covers the committed prepared HEAD.
+
+- P4 (deterministic floor), seal `f9d5acae58318dd4` (before = after; sha256 of HEAD + `git diff --binary` + `git diff --cached --binary` + untracked sha256sums, first 16 hex; no untracked files): `pnpm run build-bridge` rc=0 and byte-identical to the preserved dist manifest, then `pnpm run check:full` exit 0 in 978s. Log SHA-256 `f661de593de259721452e8fd14bc541aee2760d10aedae780d2948e12108e9f8`. This change moved no gate, mutant or matrix, so no PARTIAL group applies.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-14: MUST 24 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0, 1280s. Log SHA-256 `2a0d59b799610cdf5bc3210f25363d2c47079b4b1e74993bcfaaea46853be2db`; scratch `/tmp/entwurf-release-gate-0.53.1.ie8IEn`.
+  - `smoke-codex-fresh-live` ran against an app-server started for this cut (`entwurf codex-app-server`, pid 1047942, in the tmux session `codex-as-0531`, separate from the gate's session), stopped after the run. Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`. No exception was used.
+- P9 after P5: reclaimable roots 0, nothing deleted. One reparented `/tmp` process, the Emacs daemon running since November 9. About 103 roots each of `mux-resume-call-pd`, `herdr-resume-pd-pkg`, `herdr-resume-pd-nolauncher` and `herdr-resume-call` remain (87 after the 0.53.0 gate); they come from the beside-behaviour `*resume-call.test.ts` files, outside the owned-prefix scan. Recorded, not deleted.
+- Kill-power re-measured at this shipped SHA: none (all committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head f25c78dea35d surface 59cf75be0f02 -- ["bash","run.sh","check-acp-set-model-readback"] 44/44 receipt 32bd052290f7
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head f25c78dea35d surface 59cf75be0f02 -- ["bash","run.sh","check-acp-prompt-lifecycle"] 15/15 receipt e6cf8a16e881
+- Earlier checkpoints, binding their own trees: #163 branch frozen FULL green at `17244d48`; main `7a100e89`, exact-SHA CI run 43570025312, four required jobs success.
+- Exact prepared-SHA CI and the artifact acceptance belong to make and produce their own receipts.
+
+## 0.53.0 — 2026-11-13
+
+### Claude ACP 0.106 (#142)
+
+Entwurf 0.53.0 moves the Claude ACP rail to driver `@agentclientprotocol/claude-agent-acp` 0.106.0 and wire SDK `@agentclientprotocol/sdk` 2.6.0 (from 0.90.0 / 1.8.0), with `claude-agent-sdk` 0.3.322 as one coherent set. The 0.52.0 Pi SDK 1.5.2 set is unchanged.
+
+- **Curated rows.** `entwurf/claude-fable-5-2` joins the curated Claude ids; the set-model readback confirms it answers its own row. Supported Claude rows declare text-only input, because the rail sends an image only as an `[image omitted]` marker and has no path for image bytes. Cortex ACP is disabled: its old rows are not registered; exact Entwurf fresh/resume admission and the ACP adapter refuse retired Cortex ids without a Claude fallback. Existing Cortex configuration and credentials are untouched.
+- **No compaction behind pi.** The driver's 0.101 idle compaction is disabled through inline `settings.idleCompaction: false`, so context never changes behind pi. A pi compaction still rebuilds the ACP session from pi's summary and recent messages; it is not a continuation of the vendor transcript.
+- **Thinking as effort.** Pi thinking levels map to ACP effort (low..max; off and minimal are not offered). A new session sets effort after the set-model readback and confirms the driver's answer; a reused session re-sets only on change, and the operator sees `[acp: effort <v> read back]`. No level or an unmapped one rejects as `acp-thinking-level-unsupported`. A readback is not evidence of speed or depth.
+- **Cancel.** An abort while a reused session waits for a changed effort's answer now settles at once, sends no prompt and drops the session (previously it waited up to the 30 s bootstrap bound). After a cancelled turn settles, the operator sees whether the ACP session continues or the next message opens a new one. A rebuilt transcript that follows an aborted assistant turn carries one cause-neutral status line: the turn was cut, actions may already have taken effect, and cancellation is not rollback.
+- **Late updates.** A reused session installs its turn's update handler only when its own prompt goes out, so a late update from the previous, cancelled turn is no longer sealed as the new turn's answer. Inside the prompt window `session/update` carries no turn id, so that part still rests on the adapter.
+- **Not measured.** An ESC during text streaming, Edit/Write effects of a cancelled turn, a real keypress or wire cancel frame, n>1 cancel trials, and canonical resume after a restart.
+
+### Fresh-call tool names on ACP Claude (D1)
+
+A pi sibling opened by `entwurf_fresh_call` on a curated ACP Claude model (`entwurf/claude-*`) runs its turns inside the Claude Agent SDK and sees the bridge as `mcp__entwurf-bridge__*`, but its first-turn framing named Pi's `mcp__entwurf_bridge__*` spelling. The framing now takes the launch model and names the Claude spelling for exactly those ids; the load hint stays absent. Thinking-suffixed or fuzzy ACP ids are already refused at the dispatch root (#128). At the time, Cortex rows kept the Pi spelling because their spelling was unmeasured on this host; those rows are now retired. Found in the ACP Sonnet interview of the VERIFY walk; a LIVE fresh call on `entwurf/claude-sonnet-5-5` (n=1) called back through `mcp__entwurf-bridge__entwurf_callback`, and its first user message carried only the Claude spelling.
+
+### Verification documents
+
+- `VERIFY.md` opens with Part I, the self-run walk an ACP session executes on itself (closed allow list, turn map, examiner re-measure list), ahead of the release floors in Part II and history in the appendix. Its first run (ACP Opus 5.5, n=1) passed every measured turn with no blocker; effort, ESC and gate turns were not measured.
+- `BASELINE.md` opens with the core interview (Q-B0 and Q-B0-CARRIER) and its grading; dated #147/#157 host receipts moved to `docs/baseline-receipts.md`.
+- The reuse documentation says that only a resident pi (`entwurf pi`, `--entwurf-control`) reuses an ACP session; plain `pi` and `pi -p` are turn-scoped.
+
+### Herdr preparation
+
+An npm lock must name the checkout's own package version, so while 0.53.0 is unpublished `runtime-lock.json` returns to the closed `herdr-checkout` verification carrier, as in the 0.52.0 preparation. No npm 0.53.0 bytes or integrity are invented and the plugin manifest version is unchanged. The last published npm pin is 0.52.0; a re-pin to measured npm 0.53.0 bytes is separate work after publication. Moving an npm-activated host to the checkout source requires explicit deactivate first.
+
+### Cortex ACP disabled
+
+The `entwurf` ACP provider is Claude-only. Retired `cortex-*` ids are not registered; exact fresh/resume admission refuses them, and the ACP adapter refuses a Cortex id or a settings `backend: cortex` as `cortex-acp-disabled` before any child or overlay starts, with no Claude fallback. A dormant `cortexConnection` alone does not block Claude. The Cortex LIVE smoke and its gate are removed. Pi's own fuzzy `--model` selection outside Entwurf's launch seams is not governed by this change.
+
+### A long ACP tool shows that it is still running (#162)
+
+A long Bash in an ACP Claude sibling used to show only `[tool:start] Terminal` and a spinner until it finished; one real run sat that way for over seven minutes. claude-agent-acp 0.106.0 sends a running tool's elapsed time every 30 seconds with no client capability required, and the mapper dropped it. Each beat now renders as `[tool:running] <command> — 30s` (then `1m`, `1m30s`, …). The line is display-only: it stays out of transcript replay and the reuse-compat signature, and it is hidden with the other tool notices. It carries no partial output, because the adapter sends a foreground command's stdout only with its completion, even to a client that declares `_meta.terminal_output`. Both facts were measured on raw ACP frames on 2026-11-13. A steer to a busy ACP sibling still waits for the whole ACP turn (#163); that is separate work.
+
+### Release evidence
+
+This candidate is `9c5fc2b` (the #162 progress fix) on top of `6402c6a` (a gate race fix), `93eb879` (Cortex ACP disabled) and the earlier preparation `1e487f7`, plus these release-record edits.
+
+- P4 (deterministic floor) on `9c5fc2b` (seal `e6ea1dae9ccc9598`, before = after): `pnpm run check:full` exit 0 in 998s. Log SHA-256 `d546384f34e4f6e07764f205842aa0f22808361b2f16b0d581235f074618a83f`. The first P4 on the same seal (r4) was RED only at `check-bridge-delivery`: the gitignored bridge dist predated the mapper edit. `pnpm run build-bridge` repaired it with no tracked change, so the seal did not move. The #162 change added a beside-behaviour test and changed no gate, mutant or matrix, so no PARTIAL group applies.
+- P5 (LIVE `release-gate --cut`) r5 on `9c5fc2b` (same seal, before = after), 2026-11-14: MUST 24 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`. Log SHA-256 `aa9d504ebf3b7a4ce05001f83e2d3606d1719531884a704b498e109393688b75`.
+  - `smoke-codex-fresh-live` ran against an app-server started for this cut (`entwurf codex-app-server` in a dedicated tmux session, pid 3803464), after the vendor-managed Codex daemon that held the default socket with a dead seat pane was stopped. Kernel join: `owned: LISTEN inode 121523791 held by pid 3803464 (codex) fd 31`. Codex model `gpt-6.1-terra` (`ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-6.1-terra`). 0.53.0 carries Codex LIVE acceptance; no exception was used.
+- Earlier runs on this lane were RED and are preserved, each binding its own tree:
+  - r1 (`93eb879`, managed daemon pid 3110547): the Codex step failed because the daemon's inherited `TMUX_PANE` named a pane that no longer existed. An exception was first proposed and then withdrawn in favour of this re-measure.
+  - r2 (`c020d20`, pid 3803464): `check:full` failed at `COPILOT-RECEIVE-DOCTOR-UNREADABLE-ENVIRON-IS-RED`, a fixed 400 ms wait for a fixture that was not yet ready under load, fixed in `6402c6a` to wait for the fixture's ready signal (affected PARTIAL `check-copilot-receive-arm` 20/20). The Codex sibling (`gpt-6-luna`) called back with one character of the nonce missing, so the exact-nonce check correctly refused it.
+  - r3 (`6402c6a`, `gpt-6.1-terra`): Codex passed (66 assertions); `check:full` failed once at `check-meta-doctor-oracle` P3 (one claim not found after the mode refusal). Three standalone runs and the r5 floor passed; the cause is not isolated and is recorded as an intermittent under host load.
+- P9 after r5: two `entwurf-s2b-overlay` roots reclaimed (164K). One reparented `/tmp` process, the pre-existing Emacs daemon from November 9. About 87 roots each of `mux-resume-call-pd`, `herdr-resume-pd-*` and `herdr-resume-call` remain from the beside-behaviour `*resume-call.test.ts` files, outside the owned-prefix scan; recorded, not deleted.
+- The receipts below are from the earlier preparation at `1e487f7`, before the Cortex ACP disable change. They do not certify this candidate.
+- Pre-version checkpoint: `234a92a`, push run 43390591770, all four required jobs success (`check`, `install-surface`, `artifact-consumer`, `macos-install-surface`).
+- #142 branch checkpoints carry their own frozen FULL and affected PARTIAL results in their commit bodies (`90b5168`, `ac087af`, `6059fe6`, `28f1dd8`); those bind their own trees, not this SHA.
+- P4 (deterministic floor): the candidate (HEAD `234a92a` plus the release edits and the reuse-smoke fix later committed as `1950815`, seal `d05cafb932a2d12b`) took `pnpm run check:full` r3, 971s, exit 0, seal unchanged. r1 was RED at `check-herdr-plugin-build` (`runtime-lock-incoherent`: the Herdr lock still pinned npm 0.52.0 against package 0.53.0) and was repaired by the Herdr preparation above; r2 passed before the smoke fix moved the tree. The managed bridge rebuild produced a byte-identical dist.
+- P5 (LIVE `release-gate --cut`), r2 on the same seal, 2026-11-13: MUST 22 PASS / 1 FAIL / 1 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: BLOCKED`. Log SHA-256 `e3666d1eb9529c602c031c9584b2e4f3aa4055452d96007b92cd6bc6024ec64d`.
+  - FAIL `smoke-mux-lifecycle-live`: the Claude Code sibling it opened showed `API Error: 403 Attention Required! | Cloudflare` on its first turn and never called back; a vendor-side refusal, not an Entwurf defect. Re-measured standalone on the same seal: 86 checks passed, including the pi-on-ACP lane (exact callback, live send, live-resume refusal, same-id visible resume and recall). Log SHA-256 `e8b8b2b356096e7b4aae80204925139011bcf08d9f62075015d93eb2682d13b5`.
+  - SKIP `smoke-codex-fresh-live`: GLG chose not to supply the operator-owned Codex app-server pid and models for this cut, so the Codex fresh-call MUST step was unmeasured on that tree. `--cut` read that skip as a blocker; the Codex step was later measured green on this candidate (r5 above).
+  - r1 (earlier seal, 2026-11-13) was MUST 21 PASS / 2 FAIL / 1 SKIP. `smoke-acp-session-reuse-live` failed because the smoke called the backend with no thinking level and no registered `thinkingLevelMap`, which #142 refuses by design; fixed in `1950815` and passed in r2. `smoke-entwurf-chain-live` failed because its GPT hop (`openai-codex/gpt-5.6-luna`) transcribed the next citizen's garden id with one character missing and the decider refused it; no code changed, and it passed in r2. Gates that make a model copy a garden id by hand will occasionally go red this way. r1 log SHA-256 `0e18ea65404cda23de28f97a34f78f6db84820ce828313688766e80b5048af69`.
+- P9 after P5: five `check-probe-ordering` roots reclaimed (176K). One reparented `/tmp` process, a pre-existing Emacs daemon from November 9. About 64 roots each of `mux-resume-call-pd`, `herdr-resume-pd-*` and `herdr-resume-call` remain; they come from the beside-behaviour `*resume-call.test.ts` files, outside the P9 owned-prefix scan. They are recorded, not deleted.
+- Windows carrier and final artifact: produced and accepted in make (M3w) after green exact prepared-SHA CI.
+- Kill-power re-measured at this shipped SHA: none (all 1532 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 7efa53565a4e surface 65eb09de0814 -- ["bash","run.sh","check-mux-fresh-call"] 162/162 receipt db6a288bf8b0
+
 ## v2026.11.12-herdr.0.52.0 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.52.0` runtime and its measured npm sha512; it is not a new core release. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically.
@@ -968,7 +1097,7 @@ is recorded as dated evidence, not as a release gate.
 - `entwurf_retire_call {target}` makes one explicitly human-requested Pi or Claude Code attempt. Development, coordinator status and record-backed attribution are not standing permission. Where a host provides or is configured with an approval step, that step applies as well; Pi and pi-durable 1.3.0 have no built-in approval prompt by default. MCP annotations and caller identity are hints and attribution, not permission. No autonomous cleanup, roster expansion or automatic replay.
 - The per-request production binding captures its directories and cancellation signal. Requested/outcome events share an id in a target-gid append-only sidecar with explicit actor/target fields. Action, record-write failure and lock cleanup stay independent; an append failure cannot turn a possibly effective action into a safe retry. The source bridge lists nine tools, ordinary Pi seven active plus two hidden, and the durable contact eight.
 - Independent review repaired a metadata-test oracle, random-id privacy-test flakiness and snapshot/file-target consistency. A private `node_modules` compiled consumer passed29 assertions over anonymous/self refusal, existing resume refusal, inert Node RPC and two-line attribution. Operator dist hashes stayed unchanged. That consumer is not real Pi/Claude Code retirement, Native/LIVE, G4 rollout or release acceptance; final candidate floors and exact-SHA CI are still owed.
-- 2026-10-22, source `a9c9459`: one operator-requested, test-owned Native round trip per backend — a fresh pi-durable caller (actual offering of all eight contact tools) retired and same-id resumed a fresh ordinary Pi and a native Claude Code 2.1.307 target once each, with dormant delivery refused, identity and transcript preserved across the promptless resume, and blind recall. n=1; not a MUST gate, ACP, Herdr, Windows, release-artifact or flush/descendant claim ([BASELINE](./BASELINE.md#147-native-round-trip-2026-10-22-n1)). The five stale on-disk Codex/Copilot/OMP reader copies were rolled forward with their owning installers; Copilot birth's doctor runtime axis remains RED on a historical hook error. GLG explicitly deferred its Native runtime validation for this landing: the current free `auto` account, not a subscription, is impractical to test (GLG reports a greeting taking over a minute; not re-benchmarked here). On-disk reader compatibility is closed with that named runtime deferral; resident-process reloads and broader runtime/release acceptance remain unmeasured. Earlier component receipts below do not become this candidate's kill-power.
+- 2026-10-22, source `a9c9459`: one operator-requested, test-owned Native round trip per backend — a fresh pi-durable caller (actual offering of all eight contact tools) retired and same-id resumed a fresh ordinary Pi and a native Claude Code 2.1.307 target once each, with dormant delivery refused, identity and transcript preserved across the promptless resume, and blind recall. n=1; not a MUST gate, ACP, Herdr, Windows, release-artifact or flush/descendant claim ([BASELINE](./docs/baseline-receipts.md#147-native-round-trip-2026-10-22-n1)). The five stale on-disk Codex/Copilot/OMP reader copies were rolled forward with their owning installers; Copilot birth's doctor runtime axis remains RED on a historical hook error. GLG explicitly deferred its Native runtime validation for this landing: the current free `auto` account, not a subscription, is impractical to test (GLG reports a greeting taking over a minute; not re-benchmarked here). On-disk reader compatibility is closed with that named runtime deferral; resident-process reloads and broader runtime/release acceptance remain unmeasured. Earlier component receipts below do not become this candidate's kill-power.
 
 ### Internal retirement checkpoints (#147; before public composition)
 
@@ -1113,7 +1242,7 @@ is recorded as dated evidence, not as a release gate.
   once each: dormant delivery refused, native identity and transcript preserved across the
   promptless resume, blind recall correct. n=1; not a release-gate MUST, ACP, Herdr, Windows,
   release-artifact or flush/descendant claim
-  ([BASELINE](./BASELINE.md#147-native-round-trip-2026-10-22-n1),
+  ([BASELINE](./docs/baseline-receipts.md#147-native-round-trip-2026-10-22-n1),
   [#147](https://github.com/junghan0611/entwurf/issues/147#issuecomment-6329217980)).
 - Kill-power re-measured at this shipped SHA: none (all 1173 committed claims not re-proved,
   #144).

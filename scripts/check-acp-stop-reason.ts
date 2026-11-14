@@ -56,7 +56,21 @@ import type { Api, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
 
-const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
+// #142: a Claude turn carries pi's thinking level, which the backend sets as effort and reads back
+// before the prompt. This fixture runs every turn at one fixed level on rows carrying the curated
+// level map, and its fake driver reads back whatever config option it was asked to set. The effort
+// contract itself is certified in pi-extensions/lib/acp/backend.thinking.test.ts.
+const FIXTURE_THINKING_LEVEL = "medium";
+const FIXTURE_THINKING_LEVEL_MAP = {
+	off: null,
+	minimal: null,
+	low: "low",
+	medium: "medium",
+	high: "high",
+	xhigh: "xhigh",
+	max: "max",
+};
+const sonnet = { id: "claude-sonnet-5-5", thinkingLevelMap: FIXTURE_THINKING_LEVEL_MAP } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent> & {
 	result: () => Promise<{ stopReason: string; errorMessage?: string }>;
@@ -123,7 +137,7 @@ function makeHarness(recordDir: string, wireReason: string | null) {
 		createConnection: (_child: any, handlers: any) => ({
 			initialize: async () => ({ agentCapabilities: {} }),
 			newSession: async () => ({ sessionId: "ACP-1" }),
-			setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
+			setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 			prompt: async ({ sessionId }: any) => {
 				await handlers.sessionUpdate({
 					update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "PARTIAL" } },
@@ -249,7 +263,12 @@ try {
 
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const eventUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/event-mapper.js")).href;
-	const backend = (await import(backendUrl)) as any;
+	const backendModule = (await import(backendUrl)) as any;
+	const backend = {
+		...backendModule,
+		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
+			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
+	};
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const eventMod = (await import(eventUrl)) as any;
 

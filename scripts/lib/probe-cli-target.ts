@@ -92,8 +92,9 @@ export function hashFileSha256(path: string): string {
 
 /** Refuse if the given env carries the upstream override — KEY PRESENCE is the
  *  predicate, an empty string included. Upstream consumers disagree about
- *  empty (`??` at acp-agent.js:4083 treats "" as set and passes it on; a
- *  truthy check treats it as unset), and the probe refuses the ambiguity
+ *  empty (0.85.1's `??` at acp-agent.js:4083 treated "" as set and passed it
+ *  on; 0.106.0's truthy check at dist/claude-cli.js:20 treats it as unset), and
+ *  the probe refuses the ambiguity
  *  instead of picking a side. Used twice: on the runner's own process.env
  *  before resolving, and on the COMPOSED spawn env of every ACP child (adapter
  *  launch defaults / overlay overrides could inject what process.env did not

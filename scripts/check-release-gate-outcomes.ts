@@ -260,30 +260,18 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 //    is the second skip surface: some smokes never reach their .ts file at all.
 // ===========================================================================
 {
-	const viaWrapper = runSubcommand("smoke-acp-cortex-live", { LIVE: undefined });
+	const viaWrapper = runSubcommand("smoke-entwurf-v2-matrix-live", { LIVE: undefined });
 	assert.equal(
 		viaWrapper.code,
 		LIVE_SKIP_EXIT,
 		`[QK:WRAPPER-SKIP-IS-PROTOCOL-EXIT] a run.sh smoke WRAPPER that declines a prerequisite must return the protocol ` +
-			`SKIP code, not 0 — got exit ${viaWrapper.code}. The wrapper is a skip surface of its own (cortex and matrix ` +
-			"both decline before their .ts is ever reached), so fixing only the TypeScript " +
+			`SKIP code, not 0 — got exit ${viaWrapper.code}. The matrix wrapper declines before its .ts is reached, so fixing only the TypeScript ` +
 			`half would leave the aggregate counting those as PASS. Output: ${JSON.stringify(viaWrapper.output.slice(-300))}`,
 	);
 
-	// The measured Cortex cell: LIVE IS set, but the connection the adapter needs
-	// is not. Which branch declines (the wrapper's `cortex` PATH check or the
-	// smoke's own connection check) depends on the host; the OUTCOME must not.
-	const missingPrereq = runSubcommand("smoke-acp-cortex-live", {
-		LIVE: "1",
-		ENTWURF_ACP_CORTEX_CONNECTION: undefined,
-	});
-	assert.equal(
-		missingPrereq.code,
-		LIVE_SKIP_EXIT,
-		"LIVE=1 with no ENTWURF_ACP_CORTEX_CONNECTION must be a SKIP, not a PASS — this is the exact cell that made a " +
-			"cortex-less host look like cortex acceptance. Output: " +
-			JSON.stringify(missingPrereq.output.slice(-300)),
-	);
+	const disabled = runSubcommand("smoke-acp-cortex-live", { LIVE: undefined });
+	assert.equal(disabled.code, 2, "disabled Cortex smoke must refuse before a vendor probe");
+	assert.match(disabled.output, /cortex-acp-disabled/);
 }
 
 // ===========================================================================
@@ -312,11 +300,9 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		"smoke-agy-native-push-live": ["VERIFY.md", "Aggregate release-gate does not own an agy conversation id"],
 		"smoke-codex-native-push-live": ["VERIFY.md", "Aggregate release-gate does not own a loaded Codex thread"],
 		"smoke-acp-ordering-probe-live": ["docs/acp-backend-rail.md", "opt-in paired observation"],
-		// Cortex needs an external Snowflake connection the HOST owns, so an aggregate
-		// that required it would block every cut taken without that account. Excluded —
-		// NOT waived: its direct call stays required for a Cortex-rail cut, and running
-		// it without the connection still reports protocol SKIP rather than a pass.
-		"smoke-acp-cortex-live": ["VERIFY.md", "The release aggregate does not re-certify Cortex"],
+		// Cortex ACP is disabled. Its former direct LIVE requirement is historical;
+		// the retained command refuses by name without starting a vendor probe.
+		"smoke-acp-cortex-live": ["VERIFY.md", "Cortex ACP is disabled"],
 		// #116 C4: first evidence precedes promotion. The herdr rail's LIVE acceptance exists and
 		// runs on demand, but a rail whose first real acceptance run is days old has not earned a
 		// place in the aggregate that blocks every cut — and herdr is an OPTIONAL rail, so a cut
@@ -1066,7 +1052,7 @@ console.log(
 		"everything else→FAIL (never rounding a skip up), `--cut` refuses a MUST SKIP while a bare diagnostic run stays " +
 		"exit 0, no LIVE smoke still carries the pre-P1 exit-0 skip shape, and both real skip surfaces were INVOKED and " +
 		"observed to propagate the code: a smoke with LIVE unset (through run_ts, with its operator-readable marker) and " +
-		"a run.sh wrapper declining its own prerequisite (including the measured LIVE=1 no-cortex-connection cell); and every " +
+		"a run.sh wrapper declining its own prerequisite; the retired Cortex smoke refuses by name; and every " +
 		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry; and the moved " +
 		"check-gate-qualification stays reachable only as the schedule/dispatch drift diagnostic (absent from the " +
 		"default chain, from release_gate, from every push and from the release skill; exactly once in CI) over the " +

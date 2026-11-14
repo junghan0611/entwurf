@@ -23,6 +23,494 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-CLAUDE-SET-MODEL-ALIAS-EXACT]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-THINKING-MENU",
+			"title": "the curated Claude rows register no thinkingLevelMap — pi's menu offers off/minimal the driver cannot carry and hides xhigh/max it can",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": ["\t\tthinkingLevelMap: claudeAcpThinkingLevelMap(m.thinkingLevelMap),"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-THINKING-MENU]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-THINKING-REFUSE-UNMAPPED",
+			"title": "any mapped string passes as an effort — a map value the driver does not offer reaches the wire instead of a named refusal",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tif (typeof value === \"string\" && CLAUDE_EFFORT_VALUE_SET.has(value)) return value;"],
+			"replace": ["\tif (typeof value === \"string\") return value;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-THINKING-REFUSE-UNMAPPED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-EFFORT-READBACK",
+			"title": "the set-effort answer is no longer read back — the turn runs at whatever effort the driver kept while pi shows the requested level",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconfirmClaudeEffortAnswer(answer, modelId, value);"],
+			"replace": ["\t\tvoid answer;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-EFFORT-READBACK]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-NEW-SET",
+			"title": "a new session never sets effort — the first turn runs at the vendor default whatever level pi selected",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\t\tadapter.enforceThinking({ connection, acpSessionId, modelId: model.id, value: thinkingValue }),"
+			],
+			"replace": ["\t\t\t\t\tPromise.resolve(),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-THINKING-NEW-SET]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-REUSE-SET",
+			"title": "a reused session never re-sets a changed level — the operator's new level is shown but the live conversation keeps the old effort",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tif (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue !== thinkingValue) {"
+			],
+			"replace": [
+				"\t\t\tif (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue === undefined) {"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-THINKING-REUSE-SET]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-READBACK-NOTICE",
+			"title": "a new session sets effort without telling the operator — the read-back level is invisible in pi, so a changed menu level and the driver's answer cannot be compared",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\tsession.thinkingValue = thinkingValue;\n\t\t\t\t// Visible like the model lock: the operator sees the effort the driver read back.\n\t\t\t\tpushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);"
+			],
+			"replace": ["\t\t\t\tsession.thinkingValue = thinkingValue;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-THINKING-READBACK-NOTICE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-REUSE-ABORT",
+			"title": "an abort while a reuse turn waits for the effort answer is not heard — ESC settles only when the driver answers or the 30s bootstrap timeout fires",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (!signal) return p;"],
+			"replace": ["\treturn p;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-THINKING-REUSE-ABORT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CANCEL-NOTICE-REUSE-KEPT",
+			"title": "a reuse turn the agent cancelled keeps its live session without telling the operator — they cannot tell whether to continue or start over",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tpushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CANCEL-NOTICE-REUSE-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CANCEL-NOTICE-NEW-CLOSED",
+			"title": "a cancelled first turn claims the live session was kept although it was closed — the next message silently opens a new conversation",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tpushAcpLifecycleNotice(state, retain ? ACP_CANCEL_KEPT_NOTICE : ACP_CANCEL_CLOSED_NOTICE);"],
+			"replace": ["\t\t\t\tpushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CANCEL-NOTICE-NEW-CLOSED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-REUSE-ABORT-LATE",
+			"title": "an abort that arrives while a reuse turn waits for the effort answer is never heard — only an abort raised before the wait is honoured, so a real ESC waits for the driver or the 30s bound",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tonAbort = () => reject(new Error(\"entwurf: aborted by the operator before the prompt was sent\"));\n\t\tif (signal.aborted) onAbort();\n\t\telse signal.addEventListener(\"abort\", onAbort, { once: true });"
+			],
+			"replace": [
+				"\t\tonAbort = () => reject(new Error(\"entwurf: aborted by the operator before the prompt was sent\"));\n\t\tif (signal.aborted) onAbort();\n\t\telse void signal;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 90,
+			"signature": "[QK:ACP-THINKING-REUSE-ABORT-LATE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-REBUILD-ABORTED-STATUS",
+			"title": "a rebuilt session reads an aborted turn that left text as a finished one — the vendor's rejection text alone makes a started command look like it never ran",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": [
+				"\t\t\t\treturn text ? `Assistant: ${text}\\n${ABORTED_TURN_STATUS}` : `Assistant: ${ABORTED_TURN_STATUS}`;"
+			],
+			"replace": ["\t\t\t\treturn text ? `Assistant: ${text}` : `Assistant: ${ABORTED_TURN_STATUS}`;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REBUILD-ABORTED-STATUS]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-REBUILD-ABORTED-EMPTY",
+			"title": "an aborted turn that left no text vanishes from the rebuilt transcript — the new session never learns a turn was cut",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": [
+				"\t\t\t\treturn text ? `Assistant: ${text}\\n${ABORTED_TURN_STATUS}` : `Assistant: ${ABORTED_TURN_STATUS}`;"
+			],
+			"replace": ["\t\t\t\treturn text ? `Assistant: ${text}\\n${ABORTED_TURN_STATUS}` : undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REBUILD-ABORTED-EMPTY]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-REUSE-LATE-UPDATE-PRE-PROMPT",
+			"title": "a reuse turn routes the live session's updates to its stream before its own prompt is sent — a late update of the previous, cancelled turn arriving during the effort set is shown and sealed as this turn's answer",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tpushAcpLifecycleNotice(state, \"reusing live session\");\n\t\t\tsession.busy = true;"],
+			"replace": [
+				"\t\t\tpushAcpLifecycleNotice(state, \"reusing live session\");\n\t\t\tsession.busy = true;\n\t\t\tsession.activePromptHandler = makePromptHandler(session);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ROWS-TEXT-ONLY-INPUT",
+			"title": "the ACP rows advertise image input again — pi accepts an attachment the rail only ever sends as an `[image omitted]` marker",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": ["const ACP_ROW_INPUT: (\"text\" | \"image\")[] = [\"text\"];"],
+			"replace": ["const ACP_ROW_INPUT: (\"text\" | \"image\")[] = [\"text\", \"image\"];"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ROWS-TEXT-ONLY-INPUT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-DISABLED",
+			"title": "a retired Cortex model loses its named refusal at the turn resolver",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["if (modelId.toLowerCase().startsWith(CORTEX_MODEL_PREFIX)) {"],
+			"replace": ["if (false && modelId.toLowerCase().startsWith(CORTEX_MODEL_PREFIX)) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/cortex-admission.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-LEGACY-NOT-CURATED",
+			"title": "retired Cortex ids become accepted by the exact launch admission again",
+			"subject": "pi-extensions/lib/acp/model-ids.js",
+			"find": ["const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);"],
+			"replace": [
+				"const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...LEGACY_CORTEX_MODEL_IDS]);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-LEGACY-NOT-CURATED]",
+			"signatureSource": "pi-extensions/lib/acp/cortex-admission.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-DIRECT-DISABLED",
+			"title": "the exported retired adapter can launch Cortex again",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tresolveLaunch: cortexDisabled,"],
+			"replace": ["\tresolveLaunch: retiredCortexAdapter.resolveLaunch,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-DIRECT-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/cortex-admission.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-CONFIG-DISABLED",
+			"title": "an explicit Cortex backend selection reaches Claude instead of the named disabled refusal",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["if (backend?.toLowerCase() === \"cortex\") cortexDisabled();"],
+			"replace": ["if (false && backend?.toLowerCase() === \"cortex\") cortexDisabled();"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-CONFIG-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-TURN-DISABLED",
+			"title": "the production turn resolver falls back to Claude instead of refusing a Cortex model",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["({ adapter, nativeModelId } = resolveAcpBackendAdapter(model.id));"],
+			"replace": ["({ adapter, nativeModelId } = resolveAcpBackendAdapter(\"claude-opus-5-5\"));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-TURN-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-TOOLLESS",
+			"title": "the summary turn keeps the operator's tool surface — Pi's tool-less summary request reaches a Claude child that can still run Read/Bash/Edit/Write while summarizing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\ttools: [],"],
+			"replace": ["\t\t\ttools: config.tools,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-TOOLLESS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-INSTRUCTIONS-RELAYED",
+			"title": "Pi's summarization instructions are dropped — the system message never reaches the wire, so Claude answers the bare conversation instead of writing Pi's checkpoint summary",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const instructions = getCurrentSystemPrompt(context.messages).trim();"],
+			"replace": ["const instructions = \"\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-INSTRUCTIONS-RELAYED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-NO-NOTICE",
+			"title": "the summary turn emits lifecycle and tool notices — `[acp:]`/`[tool:]` lines join the text Pi stores as compaction.summary, which is what gets embedded",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["state.quiet = true;"],
+			"replace": ["state.quiet = false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-NO-NOTICE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-NOT-RETAINED",
+			"title": "the summary child is retained under a process-scoped policy — every /compact leaves one more idle Claude process behind under a key nobody reuses",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["lifecyclePolicy: \"turn-scoped\","],
+			"replace": ["lifecyclePolicy: \"process-scoped\","],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-NOT-RETAINED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-REQUIRES-CACHE-RETENTION",
+			"title": "an empty tool surface alone admits the summary path — an ordinary turn with every tool excluded silently runs tool-less instead of refusing the unhonourable exclusion",
+			"subject": "pi-extensions/lib/acp/tool-surface.ts",
+			"find": ["return activeToolNames.length === 0 && cacheRetention === \"none\";"],
+			"replace": ["return activeToolNames.length === 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-REQUIRES-CACHE-RETENTION]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-CLOSES-CHILD",
+			"title": "a compaction leaves the conversation's Claude child running — the pre-compaction context stays resident until the next turn's prefix break, against GLG's close-right-after decision",
+			"subject": "pi-extensions/acp-provider.ts",
+			"find": ["closeRetainedAcpSession(ctx.sessionManager.getSessionId());"],
+			"replace": ["void ctx;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACT-CLOSES-CHILD]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-NO-SETTING-SOURCES",
+			"title": "the summary child inherits the operator's settingSources — CLAUDE.md, hooks and plugins from disk reach a turn that should carry only the carrier and Pi's instructions",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tsettingSources: [],"],
+			"replace": ["\t\t\tsettingSources: config.settingSources,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-NO-SETTING-SOURCES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-VENDOR-CANCEL-NOT-KEPT",
+			"title": "a summary the backend cancelled without an abort from Pi is sealed as aborted — Pi keeps aborted text, so an incomplete summary becomes the session's checkpoint",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (summaryTurnActive && verdict.stopReason === \"aborted\" && !signal?.aborted) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-VENDOR-CANCEL-NOT-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-REQUIRES-EMPTY-SURFACE",
+			"title": "cacheRetention none alone admits the summary path — a request that declares tools loses its tools, MCP and augment and runs as a tool-less one-shot",
+			"subject": "pi-extensions/lib/acp/tool-surface.ts",
+			"find": ["return activeToolNames.length === 0 && cacheRetention === \"none\";"],
+			"replace": ["return cacheRetention === \"none\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-REQUIRES-EMPTY-SURFACE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SPARES-TURN-IN-FLIGHT",
+			"title": "a compaction closes a session whose turn is still running — the reused child is killed under the prompt it is answering",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (!session || session.busy || inFlightKeys.has(key)) return false;"],
+			"replace": ["\tif (!session) return false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-TITLE-SHOWN",
+			"title": "a call's concrete title is never shown while it runs — the operator reads 'Terminal' until the command has finished",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": [
+				"\t\tpushDisplayOnlyNotice(state, `\\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\\n`);"
+			],
+			"replace": ["\t\tvoid title;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-TITLE-SHOWN]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-TITLE-ONCE",
+			"title": "an update carrying both a new title and a progress beat prints two running lines for one event",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\telapsed === undefined &&\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-TITLE-ONCE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-TITLE-REPEAT-SILENT",
+			"title": "every title update prints a running line — a repeated title shows the same command again",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": [
+				"\t\tsanitizeNoticeFragment(update.title, NOTICE_TITLE_MAX) !== sanitizeNoticeFragment(previous.title, NOTICE_TITLE_MAX)"
+			],
+			"replace": ["\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-TITLE-REPEAT-SILENT]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-PREVIEW",
+			"title": "a finished tool shows no output preview — the operator sees only the one-line summary, as before",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\t\tconst preview = previewOf(summary, failed);"],
+			"replace": ["\t\t\tconst preview = undefined as string | undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-PREVIEW]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-FAILURE-TAIL",
+			"title": "a failure previews the head of its output — the stderr and exit reason at the end are cut off",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\tconst shown = failed ? lines.slice(-PREVIEW_MAX_LINES) : lines.slice(0, PREVIEW_MAX_LINES);"],
+			"replace": ["\tconst shown = lines.slice(0, PREVIEW_MAX_LINES);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-FAILURE-TAIL]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-BOUNDED",
+			"title": "a preview is bounded by lines only — a few very long lines put kilobytes of output on screen",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\treturn clipBytes(shown.join(\"\\n\"), PREVIEW_MAX_BYTES, failed);"],
+			"replace": ["\treturn shown.join(\"\\n\");"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-BOUNDED]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACTION-LINE",
+			"title": "the backend's own compaction shows no numbers — only the bare start/done tool pair",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\tpushAcpLifecycleNotice(state, parts.join(\" \"));"],
+			"replace": ["\tvoid parts;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACTION-LINE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACTION-ONCE",
+			"title": "an enriching terminal update prints a second compaction line for the same compaction",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\tif (observed.compactionShown) return;"],
+			"replace": ["\tif (observed.compactionShown === null) return;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACTION-ONCE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACTION-FAILED",
+			"title": "a failed compaction reads like a successful one — its line never says failed",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": [
+				"\tif (facts.error !== undefined && facts.error !== null && facts.error !== \"\") parts.push(\"failed\");"
+			],
+			"replace": ["\tvoid facts.error;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACTION-FAILED]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-NOTICE-NO-TERMINAL-CONTROL",
+			"title": "tool output and titles reach the terminal raw — an OSC 52 in a command's output writes the operator's clipboard, an OSC 0 retitles the window",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\treturn text.replace(ANSI_SEQUENCE, \"\").replace(CONTROL_CHARS, \"\");"],
+			"replace": ["\treturn text;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-NOTICE-NO-TERMINAL-CONTROL]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-NOTICE-ANSI-WHOLE",
+			"title": "only the escape byte is dropped — each sequence's parameters and payload (a clipboard base64, a colour code) stay on screen as text",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\treturn text.replace(ANSI_SEQUENCE, \"\").replace(CONTROL_CHARS, \"\");"],
+			"replace": ["\treturn text.replace(CONTROL_CHARS, \"\");"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-NOTICE-ANSI-WHOLE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-INDENT-KEPT",
+			"title": "a preview collapses each line's whitespace — a stack trace, YAML or diff loses its indentation",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\t.map((line) => sanitizePreviewLine(line));"],
+			"replace": ["\t\t.map((line) => sanitizeNoticeFragment(line, PREVIEW_MAX_BYTES));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-INDENT-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-PREVIEW-MATCHES-PI",
+			"title": "a preview keeps characters Pi drops from tool output — U+FFF9..U+FFFB, which break width measurement, survive",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F\\uFFF9-\\uFFFB]/g;"],
+			"replace": ["/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F]/g;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-PREVIEW-MATCHES-PI]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
 		}
 	]
 }

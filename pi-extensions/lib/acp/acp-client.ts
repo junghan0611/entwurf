@@ -17,13 +17,12 @@
 // smokes both drive ONE adapter — the SDK method-name mapping lives here only,
 // and the backend's orchestration + the gate fakes stay untouched.
 
-import {
-	type Usage as AcpWireUsage,
-	AGENT_METHODS,
-	CLIENT_METHODS,
-	client,
-	type Stream,
-} from "@agentclientprotocol/sdk";
+import { AGENT_METHODS, CLIENT_METHODS, client, type Stream } from "@agentclientprotocol/sdk";
+// SDK 2.x moved the experimental `Usage` out of the stable root into the `./unstable`
+// entry (`dist/v1/unstable/schema/types.gen.d.ts`, marked UNSTABLE/@experimental). A
+// type-only import: nothing of it reaches the emitted JS, and the wire carries the
+// same `usage` object either way.
+import type { Usage as AcpWireUsage } from "@agentclientprotocol/sdk/unstable";
 import type { AcpTextBlock } from "./context.js";
 
 /**

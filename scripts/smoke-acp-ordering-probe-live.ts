@@ -41,6 +41,7 @@
 import { type ChildProcessByStdio, execFileSync, spawn } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -576,7 +577,12 @@ async function main(): Promise<void> {
 		CLI_TARGET = await resolveProbeCliTarget({
 			env: process.env,
 			resolveNative: async () => {
-				const mod = (await import("@agentclientprotocol/claude-agent-acp/dist/acp-agent.js")) as {
+				// claude-agent-acp 0.103.0 narrowed `exports` to `.` and `./package.json`, so
+				// a bare deep specifier now fails ERR_PACKAGE_PATH_NOT_EXPORTED. The resolver
+				// still ships at `dist/claude-cli.js`; reach it by file URL from the exported
+				// package.json, the same anchor the production launcher uses.
+				const pkgJson = createRequire(import.meta.url).resolve("@agentclientprotocol/claude-agent-acp/package.json");
+				const mod = (await import(pathToFileURL(join(dirname(pkgJson), "dist", "claude-cli.js")).href)) as {
 					claudeCliPath: () => Promise<string>;
 				};
 				return mod.claudeCliPath();

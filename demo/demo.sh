@@ -12,7 +12,7 @@
 # recordings actually used — they are kept as the historical record, not as a
 # recommendation. Two things are stale about them: `entwurf/gpt-5.4` is no
 # longer a curated `entwurf` ACP id at all (that provider serves only the
-# claude-* and cortex-* rows in pi-extensions/lib/acp/models.ts), and GLG's
+# Claude rows in pi-extensions/lib/acp/models.ts; Cortex ACP is disabled), and GLG's
 # live-spend default moved to `openai-codex/gpt-5.6-luna` on a Plus plan. Do
 # NOT copy these ids into a live harness default — see VERIFY.md and NEXT.md.
 # Layout (tmux, 220x50):

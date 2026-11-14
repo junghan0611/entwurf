@@ -6,7 +6,7 @@
 # `smoke-herdr-plugin-build-live` redirects the product remote to a local bare clone with
 # git `insteadOf` and asserts `identity.kind === "herdr-checkout"`. Both are honest about
 # what they are, and neither has ever watched the plugin acquire its runtime from npm on a
-# machine that has never seen this repository. VERIFY.md:61 says a source switch is a
+# machine that has never seen this repository. VERIFY.md's "Switching the plugin's production acquisition source is a re-proof" note says a source switch is a
 # re-proof, and the production lock has said `npm` since dd84ac0 with that re-proof's
 # acquisition axis still empty. Cells [1]–[5] close that one axis.
 #
@@ -17,7 +17,7 @@
 # garden citizen with a record and a control socket; `entwurf peer-facts` and the plugin's
 # own status fan are asked about that citizen with neither side stubbed; and the shipped
 # teardown deletes the runtime it is executing from and then comes back. Those are
-# VERIFY.md:102's installed-runtime and deactivation rows, re-proved against the npm source
+# that VERIFY.md note's installed-runtime and deactivation rows, re-proved against the npm source
 # rather than against a fixture.
 #
 # AT A REF WHOSE LOCK NAMES `herdr-checkout`, the acquisition axis reports a NAMED SKIP and
@@ -456,7 +456,7 @@ fi
 # ── 6. the INSTALLED runtime, MEASURED instead of implied (#118 H1-5) ────────
 # A green [2] already implies this: `certifyInstalledTree` refuses an install whose tree
 # lacks the compiled entry, the three bins, or a `check-bridge` that exits 0
-# (herdr-runtime.mjs:824-843). Implication is not observation, and VERIFY.md:102 lists
+# (herdr-runtime.mjs:824-843). Implication is not observation, and that VERIFY.md note lists
 # "the installed runtime (name@version, compiled entry, three executable bins, a real
 # check-bridge)" as its own re-proof row against THIS source. A row closed by inference
 # cannot print the verb set it claims, so these lines run the npm-acquired bytes and print
@@ -838,7 +838,7 @@ fi
 # `check-herdr-activation` cell 16 proves this against fixtures: [QK:HAC-DEACTIVATE-ROUNDTRIP]
 # asserts the pi settings return to their ORIGINAL MEANING (JSON equality, not bytes — the
 # writer may reindent), zero install-state survives, and the runtime and ledger are retired.
-# VERIFY.md:102 lists deactivation as a row that must be re-run against the production
+# that VERIFY.md note lists deactivation as a row that must be re-run against the production
 # source, and #118's table still carries it as `deactivate 미결`. This runs the verb that
 # actually ships — `entwurf herdr-plugin-deactivate` from the npm-installed bin, deleting
 # the runtime it is itself executing from — and then reinstalls, because a teardown nobody

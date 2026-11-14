@@ -1,7 +1,7 @@
 {
 	"name": "@junghanacs/entwurf",
-	"version": "0.52.0",
-	"description": "Visible sibling sessions across independent agent harnesses: launch in Herdr or tmux, retire on request, visibly reopen supported sessions under the same id, and deliver messages by garden id; native bridges and Claude/Cortex ACP adapters.",
+	"version": "0.53.1",
+	"description": "Visible sibling sessions across independent agent harnesses: launch in Herdr or tmux, retire on request, visibly reopen supported sessions under the same id, and deliver messages by garden id; native bridges and a Claude ACP adapter.",
 	"license": "MIT",
 	"author": {
 		"name": "Junghan Kim",
@@ -102,8 +102,8 @@
 		"claudeCodeFloor": ">=2.1.306"
 	},
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.90.0",
-		"@agentclientprotocol/sdk": "1.8.0",
+		"@agentclientprotocol/claude-agent-acp": "0.107.0",
+		"@agentclientprotocol/sdk": "2.6.0",
 		"@anthropic-ai/sdk": "0.100.1",
 		"@earendil-works/chord": "1.5.2",
 		"@earendil-works/pi-agent-core": "1.5.2",

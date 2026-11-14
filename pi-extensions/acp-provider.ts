@@ -3,9 +3,8 @@
 // This is the pi-extension entry point that registers `entwurf` as a pi
 // session provider/model. It is intentionally THIN: it stands up the provider
 // surface (every registered adapter's curated rows + the no-auth sentinel) and
-// wires streamSimple to the real ACP backend (lib/acp/backend.ts — a
-// spawn-per-turn ACP child, `claude-agent-acp` or `cortex acp serve` depending
-// on which adapter the model id routes to). It does NOT build a
+// wires streamSimple to the real ACP backend (lib/acp/backend.ts — a Claude
+// ACP child whose lifetime follows pi's lifecycle). It does NOT build a
 // socket/peers/citizen protocol or touch the v2 core — socket-citizenship is
 // supplied by the host `--entwurf-control` pi session (AGENTS §ACP Plugin
 // Boundary).
@@ -13,8 +12,8 @@
 // The model set comes from `allCuratedModels()` — the union across the adapter
 // registry (backend-adapter.ts), NOT a per-backend list spelled here. Adding a
 // backend therefore never edits this file. check-acp-provider-surface pins that
-// the compiled entry really registers the EXACT union
-// ([QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE]).
+// the compiled entry registers the exact supported Claude-only set
+// ([QK:ACP-PROVIDER-CLAUDE-ONLY]).
 //
 // Fence: this entry rides the emit-capable root tsconfig (it is not in the root
 // `exclude` list); its lib modules are imported with `.js` suffixes (the root
@@ -22,7 +21,7 @@
 // strip-types fence is introduced.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { streamShellAcp } from "./lib/acp/backend.js";
+import { closeRetainedAcpSession, streamShellAcp } from "./lib/acp/backend.js";
 import { allCuratedModels } from "./lib/acp/backend-adapter.js";
 import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
 
@@ -63,6 +62,13 @@ export default function (pi: ExtensionAPI) {
 		// belongs to the operator's own backend CLI child (no-auth sentinel above);
 		// this plugin only orchestrates.
 		streamSimple: streamShellAcp,
+	});
+
+	// #163, GLG 2026-11-14: a successful compaction closes the Claude child of this Pi session at
+	// once. The next turn opens a new child from the compacted transcript (backend.ts
+	// `closeRetainedAcpSession`). A session that never used an ACP model has nothing to close.
+	pi.on("session_compact", (_event, ctx) => {
+		closeRetainedAcpSession(ctx.sessionManager.getSessionId());
 	});
 
 	// Mark only AFTER a successful registration. If allCuratedModels() (which

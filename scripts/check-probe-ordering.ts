@@ -1892,20 +1892,24 @@ function intervention(
 //     a mutant subject (§11-7-c), so kill-power here is the synthetic
 //     negatives, not a manifest entry.
 {
-	const inspect = (acpSrc: string, sdkSrc: string): string[] => {
+	// claude-agent-acp 0.103.0+ split the resolver out of the agent: `claudeCliPath` lives in
+	// `dist/claude-cli.js` (`cliSrc`) and the query-options literal in `dist/v1/acp-agent.js`
+	// (`acpSrc`), which now passes `await claudeCliPath()` alone — the env check moved inside
+	// the resolver, so the verbatim-override premise is judged there.
+	const inspect = (cliSrc: string, acpSrc: string, sdkSrc: string): string[] => {
 		const violations: string[] = [];
-		if (!acpSrc.includes("export async function claudeCliPath()")) {
-			violations.push("claudeCliPath export missing from acp-agent.js");
+		if (!cliSrc.includes("export async function claudeCliPath()")) {
+			violations.push("claudeCliPath export missing from claude-cli.js");
 		}
-		if (!/if \(process\.env\.CLAUDE_CODE_EXECUTABLE\) \{\s*return process\.env\.CLAUDE_CODE_EXECUTABLE;/.test(acpSrc)) {
+		if (!/if \(process\.env\.CLAUDE_CODE_EXECUTABLE\) \{\s*return process\.env\.CLAUDE_CODE_EXECUTABLE;/.test(cliSrc)) {
 			violations.push(
 				"claudeCliPath no longer returns the ambient override VERBATIM — the refusal precondition's premise moved",
 			);
 		}
-		const overrideLine = "pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath())";
+		const overrideLine = "pathToClaudeCodeExecutable: await claudeCliPath(),";
 		const iOverride = acpSrc.indexOf(overrideLine);
 		if (iOverride === -1) {
-			violations.push("the env-??-claudeCliPath resolution at the query options literal is gone");
+			violations.push("the claudeCliPath resolution at the query options literal is gone");
 		} else {
 			const iSpread = acpSrc.indexOf("...userProvidedOptions,");
 			if (iSpread === -1 || iSpread > iOverride) {
@@ -1944,49 +1948,55 @@ function intervention(
 
 	// Synthetic fixtures FIRST — an inspector that cannot see the defect it
 	// exists for is no inspector.
-	const goodAcp =
+	const goodCli =
 		"export async function claudeCliPath() {\n" +
-		"    if (process.env.CLAUDE_CODE_EXECUTABLE) {\n        return process.env.CLAUDE_CODE_EXECUTABLE;\n    }\n}\n" +
+		"    if (process.env.CLAUDE_CODE_EXECUTABLE) {\n        return process.env.CLAUDE_CODE_EXECUTABLE;\n    }\n}\n";
+	const goodAcp =
 		"const options = {\n            ...userProvidedOptions,\n" +
-		"            pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),\n};\n";
+		"            pathToClaudeCodeExecutable: await claudeCliPath(),\n};\n";
 	const goodSdk = `x=![".js",".mjs",".tsx",".ts",".jsx"].some((r)=>e.endsWith(r));y=Cs()?"bun":"node";spawnLocalProcess(e){let{command:t,args:r,cwd:n,env:o,signal:i}=e,s=cxe(t,r,{cwd:n,stdio:["pipe","pipe","pipe"],signal:i,env:o,windowsHide:!0})}`;
-	assert.deepEqual(inspect(goodAcp, goodSdk), [], "inspector passes the correct synthetic fixture");
+	assert.deepEqual(inspect(goodCli, goodAcp, goodSdk), [], "inspector passes the correct synthetic fixture");
 	const invertedAcp = goodAcp.replace(
-		"            ...userProvidedOptions,\n            pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),\n",
-		"            pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),\n            ...userProvidedOptions,\n",
+		"            ...userProvidedOptions,\n            pathToClaudeCodeExecutable: await claudeCliPath(),\n",
+		"            pathToClaudeCodeExecutable: await claudeCliPath(),\n            ...userProvidedOptions,\n",
 	);
 	assert.ok(
-		inspect(invertedAcp, goodSdk).some((v) => v.includes("key-order")),
+		inspect(goodCli, invertedAcp, goodSdk).some((v) => v.includes("key-order")),
 		"inspector catches userProvidedOptions inverted to win over the explicit override key",
 	);
 	assert.ok(
-		inspect(goodAcp.replace("export async function claudeCliPath()", "async function claudeCliPath()"), goodSdk).some(
-			(v) => v.includes("export missing"),
-		),
+		inspect(
+			goodCli.replace("export async function claudeCliPath()", "async function claudeCliPath()"),
+			goodAcp,
+			goodSdk,
+		).some((v) => v.includes("export missing")),
 		"inspector catches the claudeCliPath export disappearing",
 	);
 	assert.ok(
-		inspect(goodAcp, goodSdk.replace('".mjs",', "")).some((v) => v.includes("discriminator")),
+		inspect(goodCli, goodAcp, goodSdk.replace('".mjs",', "")).some((v) => v.includes("discriminator")),
 		"inspector catches the SDK suffix list drifting from the pinned SDK_SCRIPT_SUFFIXES",
 	);
 	// The no-shell negatives must be caught IN THE LEAF WINDOW, in both the
 	// minified and the plain spelling — the global one-spelling absence check
 	// this replaced passed them all.
 	assert.ok(
-		inspect(goodAcp, goodSdk.replace("windowsHide:!0", "windowsHide:!0,shell:!0")).some((v) =>
+		inspect(goodCli, goodAcp, goodSdk.replace("windowsHide:!0", "windowsHide:!0,shell:!0")).some((v) =>
 			v.includes("no-shell"),
 		) &&
-			inspect(goodAcp, goodSdk.replace("windowsHide:!0", "windowsHide:!0,shell:true")).some((v) =>
+			inspect(goodCli, goodAcp, goodSdk.replace("windowsHide:!0", "windowsHide:!0,shell:true")).some((v) =>
 				v.includes("no-shell"),
 			) &&
-			inspect(goodAcp, goodSdk.replace("spawnLocalProcess(", "spawnElsewhere(")).some((v) => v.includes("anchor")),
+			inspect(goodCli, goodAcp, goodSdk.replace("spawnLocalProcess(", "spawnElsewhere(")).some((v) =>
+				v.includes("anchor"),
+			),
 		"inspector catches shell:!0 AND shell:true inside the spawn leaf, and the leaf disappearing entirely",
 	);
 
 	// Installed dists — the actual §11-7-c load-bearing assumptions.
 	const rootRequire = createRequire(resolve(REPO_ROOT, "package.json"));
 	const acpPkgJson = rootRequire.resolve("@agentclientprotocol/claude-agent-acp/package.json");
-	const acpDist = readFileSync(join(dirname(acpPkgJson), "dist", "acp-agent.js"), "utf8");
+	const cliDist = readFileSync(join(dirname(acpPkgJson), "dist", "claude-cli.js"), "utf8");
+	const acpDist = readFileSync(join(dirname(acpPkgJson), "dist", "v1", "acp-agent.js"), "utf8");
 	const acpRequire = createRequire(acpPkgJson);
 	const sdkEntry = acpRequire.resolve("@anthropic-ai/claude-agent-sdk");
 	let sdkDist = readFileSync(sdkEntry, "utf8");
@@ -1995,9 +2005,9 @@ function intervention(
 		if (existsSync(sibling)) sdkDist = readFileSync(sibling, "utf8");
 	}
 	assert.deepEqual(
-		inspect(acpDist, sdkDist),
+		inspect(cliDist, acpDist, sdkDist),
 		[],
-		"installed acp-agent.js + sdk.mjs still carry every §11-7-c launch-semantics assumption (claudeCliPath verbatim env, override key order, suffix discriminator, node|bun choice, piped no-shell spawn)",
+		"installed claude-cli.js + v1/acp-agent.js + sdk.mjs still carry every §11-7-c launch-semantics assumption (claudeCliPath verbatim env, override key order, suffix discriminator, node|bun choice, piped no-shell spawn)",
 	);
 }
 
@@ -2050,7 +2060,7 @@ function intervention(
 	);
 	assert.ok(
 		RUNNER_SRC.includes("CLI_TARGET = await resolveProbeCliTarget({") &&
-			RUNNER_SRC.includes('"@agentclientprotocol/claude-agent-acp/dist/acp-agent.js"') &&
+			RUNNER_SRC.includes('join(dirname(pkgJson), "dist", "claude-cli.js")') &&
 			RUNNER_SRC.includes("`precondition-${err.reason}`"),
 		"the runner resolves the target through upstream claudeCliPath BEFORE any run, and a precondition refusal writes a NAMED classification on the artifact (not stderr alone)",
 	);

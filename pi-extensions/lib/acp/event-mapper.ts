@@ -28,6 +28,9 @@ import type { AssistantMessage, AssistantMessageEventStream } from "@earendil-wo
 
 const NOTICE_TITLE_MAX = 80;
 const NOTICE_SUMMARY_MAX = 160;
+/** #163 M2: a result preview shows at most this many lines and UTF-8 bytes of output. */
+const PREVIEW_MAX_LINES = 5;
+const PREVIEW_MAX_BYTES = 400;
 
 /** Identity fields for the running assistant message. */
 export interface AcpStreamIdentity {
@@ -39,6 +42,8 @@ export interface AcpStreamIdentity {
 type ObservedToolState = {
 	title: string;
 	status?: string;
+	/** #163 M3: the compaction line for this call was already shown. */
+	compactionShown?: boolean;
 };
 
 export type AcpPiStreamState = {
@@ -48,6 +53,13 @@ export type AcpPiStreamState = {
 	openThinkingIndex?: number;
 	/** When false, tool/permission notices are suppressed (kept terse for smokes). */
 	showToolNotifications?: boolean;
+	/**
+	 * #163: no notice of any kind — tool, permission, display-only or lifecycle. Set only for
+	 * Pi's one-shot summary turn. Pi stores that summary as `contentText(response.content)`,
+	 * which joins every text block (pi-ai `dist/utils/text.js`) without reading a signature,
+	 * so a notice here would become part of the summary the session file keeps.
+	 */
+	quiet?: boolean;
 	observedTools?: Map<string, ObservedToolState>;
 	/**
 	 * RAW, UNINTERPRETED observations from this turn's `usage_update` notifications
@@ -162,7 +174,7 @@ function ensureThinkingBlock(state: AcpPiStreamState): number {
  * permission events — informational, NOT structured tool calls.
  */
 function pushNotice(state: AcpPiStreamState, text: string): void {
-	if (!state.showToolNotifications || !text.trim()) return;
+	if (state.quiet || !state.showToolNotifications || !text.trim()) return;
 	closeThinkingBlock(state);
 	closeTextBlock(state);
 	const index = state.output.content.length;
@@ -172,17 +184,60 @@ function pushNotice(state: AcpPiStreamState, text: string): void {
 	state.stream.push({ type: "text_end", contentIndex: index, content: text, partial: state.output });
 }
 
+// #163: terminal escape sequences, the same range Pi strips from tool output before it shows it
+// (pi-coding-agent 1.5.2 `dist/utils/ansi.js` `stripAnsi`, derived from chalk/ansi-regex, MIT,
+// Copyright (c) Sindre Sorhus). OSC runs to its first terminator (BEL, ESC \\ or 0x9C); CSI and
+// its relatives take optional parameters and one final byte. Pi does not export it from its
+// package root, and this bridge imports Pi only by the root (`check-pi-import-surface`).
+const ANSI_SEQUENCE = new RegExp(
+	"(?:\\u001B\\][\\s\\S]*?(?:\\u0007|\\u001B\\u005C|\\u009C))|" +
+		"(?:(?:\\u001B\\[|\\u009B)[<=>]|[\\u001B\\u009B][[\\]()#;?]*)(?:\\d{1,4}(?:[;:]\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]",
+	"g",
+);
+// What is left that a terminal would act on: C0 except tab, LF and CR; DEL and C1; and
+// U+FFF9..U+FFFB, which Pi also drops because they crash width measurement
+// (`dist/utils/shell.js` `sanitizeBinaryOutput`).
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching these characters is the point.
+const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\uFFF9-\uFFFB]/g;
+
+/**
+ * #163: no text that a backend or a tool's output supplies reaches the operator's terminal as a
+ * control sequence. A window-title OSC 0 or a clipboard-write OSC 52 in a command's output would
+ * otherwise pass straight through the notice line and the pi-tui renderer. Every notice text
+ * goes through here: title, summary, preview and permission.
+ */
+function stripTerminalControls(text: string): string {
+	return text.replace(ANSI_SEQUENCE, "").replace(CONTROL_CHARS, "");
+}
+
+/** Neutralize backtick fences (which would swallow following lines in chat renderers) and clip with an ellipsis. */
+function fenceSafeClip(text: string, max: number): string {
+	const fenceSafe = text.replace(/`{3,}/g, "[fence]").replace(/`/g, "'");
+	if (fenceSafe.length <= max) return fenceSafe;
+	return `${fenceSafe.slice(0, max - 1)}…`;
+}
+
 /**
  * Sanitize an inline fragment for the one-line `[tool:*]` / `[permission:*]`
- * notice surface: collapse whitespace, neutralize backtick fences (which would
- * otherwise swallow following lines in chat renderers), truncate with ellipsis.
+ * notice surface: strip terminal controls, collapse whitespace, neutralize
+ * backtick fences, truncate with ellipsis.
  */
 export function sanitizeNoticeFragment(text: string | null | undefined, max: number): string {
 	if (!text) return "";
-	const collapsed = text.replace(/\s+/g, " ").trim();
-	const fenceSafe = collapsed.replace(/`{3,}/g, "[fence]").replace(/`/g, "'");
-	if (fenceSafe.length <= max) return fenceSafe;
-	return `${fenceSafe.slice(0, max - 1)}…`;
+	return fenceSafeClip(stripTerminalControls(text).replace(/\s+/g, " ").trim(), max);
+}
+
+/**
+ * #163: one line of an output preview. Unlike a notice fragment it keeps its indentation, so a
+ * stack trace, YAML or a diff reads as it does in Pi: controls stripped, CR dropped and tabs
+ * expanded to three spaces as Pi's tool renderer does (`dist/core/tools/render-utils.js`
+ * `replaceTabs`), trailing space trimmed.
+ */
+function sanitizePreviewLine(line: string): string {
+	return fenceSafeClip(
+		stripTerminalControls(line).replace(/\r/g, "").replace(/\t/g, "   ").trimEnd(),
+		PREVIEW_MAX_BYTES,
+	);
 }
 
 function firstTextItem(arr: unknown[]): string | undefined {
@@ -229,6 +284,24 @@ function titleForTool(update: Record<string, unknown>, previousTitle?: string): 
 	return String(update?.title ?? previousTitle ?? meta?.claudeCode?.toolName ?? update?.toolCallId ?? "Tool");
 }
 
+function isTerminalToolStatus(status: string | undefined): boolean {
+	return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+/** The adapter's progress-beat elapsed seconds, or undefined when this update is not a beat. */
+function elapsedSecondsOf(update: Record<string, unknown>): number | undefined {
+	const meta = update?._meta as { claudeCode?: { toolResponse?: { elapsedTimeSeconds?: unknown } } } | undefined;
+	const value = meta?.claudeCode?.toolResponse?.elapsedTimeSeconds;
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function formatElapsed(seconds: number): string {
+	const whole = Math.floor(seconds);
+	if (whole < 60) return `${whole}s`;
+	const rest = whole % 60;
+	return rest === 0 ? `${Math.floor(whole / 60)}m` : `${Math.floor(whole / 60)}m${rest}s`;
+}
+
 /**
  * Render an ACP tool_call / tool_call_update as a text notice (NEVER a
  * structured toolcall — the ACP child already executed it).
@@ -243,22 +316,51 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 	const updateContent = Array.isArray(update?.content) ? (update.content as unknown[]) : undefined;
 
 	if (update.sessionUpdate === "tool_call") {
-		observedTools.set(toolCallId, { title, status });
+		const observed: ObservedToolState = { title, status };
+		observedTools.set(toolCallId, observed);
 		pushNotice(state, `\n[tool:start] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n`);
+		// The adapter opens a compaction it saw only at its end as one terminal `tool_call`.
+		if (isTerminalToolStatus(status)) pushCompactionLine(state, update, observed);
 		return;
 	}
 
-	// tool_call_update. There is deliberately no mid-flight `[tool:running]`
-	// notice: it would have to be driven by the adapter's `_meta.terminal_output`,
-	// and that meta is gated upstream on `clientCapabilities._meta.terminal_output
-	// === true` while backend.ts initializes with `clientCapabilities: {}`. So the
-	// branch could never fire for any backend we ship — it claimed a transcript
-	// line the operator was never going to see. Declaring the terminal capability
-	// is a separate axis, not a one-line re-enable: the adapter would then send
-	// terminal widgets/metas this mapper cannot render honestly into a transcript.
+	// tool_call_update. A running tool's only mid-flight signal is the SDK's
+	// `tool_progress` beat, which the adapter forwards WITHOUT any client
+	// capability as `_meta.claudeCode.toolResponse.elapsedTimeSeconds` (#162,
+	// measured 2026-11-13 on claude-agent-acp 0.106.0 with `clientCapabilities: {}`:
+	// a 120 s foreground Bash produced beats at 30/60/90 s, the first one also
+	// carrying `status: "in_progress"`). It carries no stdout: the adapter sends a
+	// foreground command's output only with its completion, even to a client that
+	// declares `_meta.terminal_output` (measured the same day). So the honest
+	// mid-flight line is liveness plus elapsed time, never partial output. It is
+	// display-only, like a lifecycle notice: elapsed beats depend on wall time, so
+	// they stay out of transcript replay and the reuse-compat signature.
+	const elapsed = elapsedSecondsOf(update);
+	const running = !isTerminalToolStatus(status) && !isTerminalToolStatus(previous?.status);
+	// #163 M1: what is running, once it is known. The first `tool_call` is sent before the input
+	// has streamed, so a Bash call opens as "Terminal" (claude-agent-acp 0.107.0
+	// `tool-calls/reporters/bash.js:22`) and the command arrives later as a title-only update.
+	// One display-only line names it. A beat in the same update already names the title, so
+	// that update shows the beat alone; a repeated title shows nothing.
+	if (
+		running &&
+		elapsed === undefined &&
+		previous !== undefined &&
+		typeof update.title === "string" &&
+		sanitizeNoticeFragment(update.title, NOTICE_TITLE_MAX) !== sanitizeNoticeFragment(previous.title, NOTICE_TITLE_MAX)
+	) {
+		pushDisplayOnlyNotice(state, `\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n`);
+	}
+	if (elapsed !== undefined && running) {
+		pushDisplayOnlyNotice(
+			state,
+			`\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)} — ${formatElapsed(elapsed)}\n`,
+		);
+	}
 	if (status && status !== previous?.status) {
 		const summary = firstTextContent(update?.rawOutput) ?? firstTextContent(updateContent);
 		const suffix = summary ? ` — ${sanitizeNoticeFragment(summary, NOTICE_SUMMARY_MAX)}` : "";
+		const failed = status !== "completed" || rawOutputHasError(update?.rawOutput);
 		if (status === "completed") {
 			const label = rawOutputHasError(update?.rawOutput) ? "tool:failed" : "tool:done";
 			pushNotice(state, `\n[${label}] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}${suffix}\n`);
@@ -267,9 +369,109 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 		} else if (status === "cancelled") {
 			pushNotice(state, `\n[tool:cancelled] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}${suffix}\n`);
 		}
+		if (isTerminalToolStatus(status) && summary) {
+			const preview = previewOf(summary, failed);
+			if (preview) {
+				pushDisplayOnlyNotice(
+					state,
+					`\n[tool:output] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n${preview}\n`,
+				);
+			}
+		}
 	}
 
-	observedTools.set(toolCallId, { title, status });
+	const observed: ObservedToolState = { title, status, compactionShown: previous?.compactionShown };
+	observedTools.set(toolCallId, observed);
+	if (isTerminalToolStatus(status)) pushCompactionLine(state, update, observed);
+}
+
+/** The output inside one wrapping code fence; the adapter sends a command's output as "```console\n…\n```". */
+function unfence(text: string): string {
+	const fenced = /^```[^\n]*\n([\s\S]*?)\n?```\s*$/.exec(text);
+	return fenced ? fenced[1] : text;
+}
+
+/** Keep `text` within `maxBytes` UTF-8 bytes, cutting at a character boundary from the head or the tail. */
+function clipBytes(text: string, maxBytes: number, fromTail: boolean): string {
+	if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+	const chars = Array.from(text);
+	if (fromTail) chars.reverse();
+	const kept: string[] = [];
+	let bytes = Buffer.byteLength("…", "utf8");
+	for (const ch of chars) {
+		const size = Buffer.byteLength(ch, "utf8");
+		if (bytes + size > maxBytes) break;
+		kept.push(ch);
+		bytes += size;
+	}
+	if (fromTail) kept.reverse();
+	return fromTail ? `…${kept.join("")}` : `${kept.join("")}…`;
+}
+
+/**
+ * #163 M2: a short look at what a finished tool returned, as Pi shows a tool's output. At most
+ * PREVIEW_MAX_LINES lines and PREVIEW_MAX_BYTES bytes, each line passed through the notice
+ * sanitizer. A failure shows the TAIL, where a command's stderr and its exit status end up
+ * (`stdout` then `stderr`, `reporters/bash.js`); a success shows the head. Nothing when the whole
+ * output already fits on the terminal notice's one line.
+ */
+function previewOf(raw: string, failed: boolean): string | undefined {
+	const lines = unfence(raw)
+		.split("\n")
+		.map((line) => sanitizePreviewLine(line));
+	while (lines.length > 0 && lines[0] === "") lines.shift();
+	while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+	if (lines.length === 0) return undefined;
+	if (lines.length === 1 && lines[0].length <= NOTICE_SUMMARY_MAX) return undefined;
+	const omitted = lines.length > PREVIEW_MAX_LINES;
+	const shown = failed ? lines.slice(-PREVIEW_MAX_LINES) : lines.slice(0, PREVIEW_MAX_LINES);
+	if (omitted) {
+		if (failed) shown.unshift("…");
+		else shown.push("…");
+	}
+	return clipBytes(shown.join("\n"), PREVIEW_MAX_BYTES, failed);
+}
+
+function formatTokens(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+	if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+	return String(n);
+}
+
+/**
+ * #163 M3: the backend's own compaction, in numbers. claude-agent-acp reports it as a synthetic
+ * tool call whose `_meta.claudeCode.toolName` is "compact", and gives a client without the AIR
+ * extension the facts as `rawOutput: {trigger, preTokens, postTokens?, durationMs?, error?}`
+ * (0.107.0 `tool-calls/reporters/compaction.js` `finished`, `context-compaction.js:366-376`). One
+ * lifecycle line per compaction, whichever terminal update carries the facts first; a field that
+ * is absent is left out. Shown like the other `[acp: …]` lines, whatever the tool-notice setting.
+ */
+function pushCompactionLine(
+	state: AcpPiStreamState,
+	update: Record<string, unknown>,
+	observed: ObservedToolState,
+): void {
+	if (observed.compactionShown) return;
+	const meta = update?._meta as { claudeCode?: { toolName?: unknown } } | undefined;
+	if (meta?.claudeCode?.toolName !== "compact") return;
+	const facts = update?.rawOutput as
+		| { trigger?: unknown; preTokens?: unknown; postTokens?: unknown; durationMs?: unknown; error?: unknown }
+		| undefined;
+	if (!facts || typeof facts !== "object" || Array.isArray(facts)) return;
+	const parts = ["compaction"];
+	if (typeof facts.trigger === "string" && facts.trigger) parts.push(facts.trigger);
+	if (facts.error !== undefined && facts.error !== null && facts.error !== "") parts.push("failed");
+	const pre = typeof facts.preTokens === "number" ? formatTokens(facts.preTokens) : undefined;
+	const post = typeof facts.postTokens === "number" ? formatTokens(facts.postTokens) : undefined;
+	if (pre && post) parts.push(`${pre}→${post}`);
+	else if (pre) parts.push(pre);
+	if (typeof facts.durationMs === "number" && facts.durationMs >= 0) {
+		const seconds = facts.durationMs / 1000;
+		parts.push(`in ${seconds < 60 ? `${seconds.toFixed(1)}s` : formatElapsed(seconds)}`);
+	}
+	if (parts.length === 1) return;
+	observed.compactionShown = true;
+	pushAcpLifecycleNotice(state, parts.join(" "));
 }
 
 /** Push a permission-decision notice (informational text, not a tool call). */
@@ -287,6 +489,22 @@ export function pushPermissionNotice(state: AcpPiStreamState, title: string, dec
 export const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
 
 /**
+ * A tool notice that is display-only: suppressed with the tool stream
+ * (`showToolNotifications`), and stamped with LIFECYCLE_NOTICE_SIGNATURE so it
+ * never replays into an ACP prompt nor perturbs the reuse-compat signature.
+ */
+function pushDisplayOnlyNotice(state: AcpPiStreamState, text: string): void {
+	if (state.quiet || !state.showToolNotifications) return;
+	closeThinkingBlock(state);
+	closeTextBlock(state);
+	const index = state.output.content.length;
+	state.output.content.push({ type: "text", text, textSignature: LIFECYCLE_NOTICE_SIGNATURE });
+	state.stream.push({ type: "text_start", contentIndex: index, partial: state.output });
+	state.stream.push({ type: "text_delta", contentIndex: index, delta: text, partial: state.output });
+	state.stream.push({ type: "text_end", contentIndex: index, content: text, partial: state.output });
+}
+
+/**
  * Push a one-line ACP turn-lifecycle progress notice (`[acp: …]`) as its own
  * text block, stamped with LIFECYCLE_NOTICE_SIGNATURE. Two ways it differs from
  * tool/permission notices:
@@ -297,6 +515,7 @@ export const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
  *      reuse-compat signature (the two consumers filter on the signature).
  */
 export function pushAcpLifecycleNotice(state: AcpPiStreamState, text: string): void {
+	if (state.quiet) return;
 	const line = `\n[acp: ${sanitizeNoticeFragment(text, NOTICE_TITLE_MAX)}]\n`;
 	closeThinkingBlock(state);
 	closeTextBlock(state);

@@ -12,13 +12,10 @@
 //
 // The module's TWO jobs have different backend scopes — do not collapse them:
 //   - `buildClaudeSessionMeta` is claude-only by CONSTRUCTION, with exactly one
-//     caller (`claudeAdapter.buildSessionMeta`). Cortex exposes no
-//     `_meta.systemPrompt` and no tools/permission declaration surface (native
-//     tools + its own overlay mcp.json projection), so its adapter returns
-//     `undefined` and that function is never reached for a cortex turn.
+//     caller (`claudeAdapter.buildSessionMeta`).
 //   - `assertExcludeToolsHonored` is BACKEND-INVARIANT: backend.ts runs it for
-//     every adapter before any spawn, passing `backend: adapter.backend` and the
-//     resolved `config.tools`. A cortex turn DOES enter this module through it.
+//     every admitted adapter before any spawn, passing `backend: adapter.backend`
+//     and the resolved `config.tools`. Cortex ACP is disabled.
 // That split is why the `backend` field exists: the honest-divergence logic stays
 // explicit and the matrix gate can exercise both the "claude narrows via tools"
 // and "native always exposes" branches.
@@ -120,6 +117,29 @@ export function assertExcludeToolsHonored(activeToolNames: readonly string[], re
 	}
 }
 
+/**
+ * #163: is this Pi's own summarization request — the one tool-less turn the preflight above
+ * honours instead of refusing?
+ *
+ * Pi summarizes for `/compact`, the compaction threshold, overflow recovery and `/tree` branch
+ * summaries through one call (pi-coding-agent 1.5.2 `dist/core/compaction/compaction.js:476-489`,
+ * `completeSummarization`; branch summaries at `compaction/branch-summarization.js:233-237`). Its
+ * context declares no tools (`buildSummarizationContext`, `compaction.js:499-509`) and its options
+ * carry `cacheRetention: "none"` (`compaction.js:482`), which an ordinary agent-loop turn does not
+ * (pi-agent-core `dist/agent.js:306-330`).
+ *
+ * BOTH are required. An empty surface alone is also an operator who excluded every tool on an
+ * ordinary turn, which keeps today's refusal; `cacheRetention` alone is a request option, not a
+ * surface. Neither the summarization prompt's text nor a missing session id is read: Pi fills the
+ * id with a fresh `uuidv7()` (`compaction.js:481`), and matching its prompt would copy it.
+ * `cacheRetention` is a Pi convention, not a contract — the oracle beside this calls Pi's own
+ * `completeSummarization` so a Pi upgrade that drops it turns that test red rather than this
+ * path silently back into a refusal.
+ */
+export function isPiSummaryRequest(activeToolNames: readonly string[], cacheRetention: unknown): boolean {
+	return activeToolNames.length === 0 && cacheRetention === "none";
+}
+
 /** Inputs to the Claude `_meta` builder. */
 export interface ClaudeSessionMetaParams {
 	modelId?: string;
@@ -174,6 +194,14 @@ export function buildClaudeSessionMeta(
 			// the carrier's "doesn't-know" — keeping both means a future preset/SDK
 			// change cannot silently re-open memory through a channel the strip misses.
 			autoMemoryEnabled: false,
+			// No turn of the adapter's own (#142). claude-agent-acp 0.101.0 compacts an idle session
+			// before its 1h prompt cache expires by sending `/compact` as a prompt nobody here issued;
+			// a retained session's callbacks drop updates that arrive with no active turn, so that
+			// model turn would spend quota and replace context invisibly to pi. 0.106.0 (#1555) reads
+			// this inline key when no managed tier sets one. Only the IDLE trigger is off:
+			// `autoCompactEnabled` stays untouched, so Claude Code's own compaction inside a prompt
+			// we sent keeps working.
+			idleCompaction: false,
 		},
 	};
 	if (params.skillPlugins.length > 0) {

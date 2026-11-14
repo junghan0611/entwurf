@@ -5,9 +5,11 @@ It is not a second harness and does not create another citizen or socket layer. 
 host pi session already owns the record-backed citizen identity; each backend owns
 its own process, auth, transcript, and native tool surface.
 
-Claude is the reference adapter. Snowflake Cortex Code is the second shipped adapter.
-Implementation history and audit chronology live in CHANGELOG, issues, and git; this
-document keeps the current contract and its open evidence boundary.
+Claude is the supported adapter. Cortex Code ACP is disabled: its retired model ids
+are not registered and a direct selection refuses before launch, without a Claude fallback.
+Existing Cortex settings, credentials and native citizen records are not removed.
+Dated Cortex observations below are historical, not a current support claim.
+Implementation history and audit chronology live in CHANGELOG, issues, and git.
 
 ## Boundary
 
@@ -55,6 +57,29 @@ backend-specific keys; `adapterSettings` remains opaque until handed back to its
 A connection, model, carrier, MCP declaration, or overlay-relevant setting change must
 change the reuse signature rather than mutate a live incompatible session.
 
+**Session reuse needs a resident pi.** Reuse — the live ACP session kept across turns, each
+later turn sending only the new user message — exists only in a pi process started with
+`--entwurf-control` (`entwurf pi` adds it). Every other pi process, plain interactive `pi`
+and `pi -p` included, is turn-scoped: each turn opens a new ACP session, sends the pi
+transcript rendered as one text prompt, and tears the child down when the turn ends
+(`resolveLifecyclePolicy`, `pi-extensions/lib/acp/session-store.ts`). This boundary is as
+old as reuse itself (S2c, hang-safe one-shot exit); it is stated here so that "reuse without
+resending the transcript" is not read as a property of every pi process. Nothing in a pi
+profile or AGENTS file changes it.
+
+**What a rebuilt prompt carries (`context.ts`).** The rebuild is a TEXT rendering of pi's own
+transcript, not a replay: user text, assistant text and tool results become `User:` /
+`Assistant:` / `Tool result (…)` / `Tool error (…)` lines; assistant thinking, structured tool calls, the system
+prompt and lifecycle notices are left out; an image becomes the marker `[image omitted: <mime>]`
+on both the rebuild and the reuse delta. Because no path carries image bytes to the backend, every
+curated Claude ACP row declares `input: ["text"]` (`ACP_ROW_INPUT` in `models.ts`,
+`[QK:ACP-ROWS-TEXT-ONLY-INPUT]`), although pi's catalog lists the Anthropic models as
+`["text", "image"]`: that is the model behind the API, not this transport. What pi does with an
+attachment offered to a text-only row is pi's behaviour and is unmeasured here. Real image
+passthrough is a separate decision ([#161](https://github.com/junghan0611/entwurf/issues/161)); a
+row gains `image` only together with that path and its proof. A backend's own file tools (Claude's
+Read on an image file) are a different surface and are not affected.
+
 A streaming message begins with `stopReason: "pending"`. ACP's terminal set is mapped
 explicitly: `end_turn → stop`, `max_tokens → length`, `cancelled → aborted`; refusal,
 exhausted turn budget, unknown, and absent reasons end as errors. The original ACP
@@ -73,6 +98,25 @@ none.** A turn ends only on a lifecycle event:
 | the operator aborts | ACP `session/cancel` first — the agent closes its own turn (`cancelled → aborted`); process-group teardown only after a bounded grace, so an abort always returns |
 | the child dies / stdio ends | the turn fails naming the exit status and the session-scoped stderr tail — or an honest bounded absence when transport EOF wins the race — on both the new and the reuse path |
 
+**What an abort leaves (#142).** After the turn has settled, the operator is told one of two
+things: `[acp: stopped — changes already made stay; next message continues this session]` when
+the agent closed a reused turn on `session/cancel` (or ended a new turn `cancelled` with no
+operator abort, so the session was retained), so the live ACP session stays and the next
+message is a delta; or `[acp: stopped — changes already made stay; next message opens a new
+session]` when the session was dropped — a cancelled first turn (only a live, un-aborted
+session is retained), escalation teardown, or an abort before the prompt was sent — so the next
+message rebuilds from the pi transcript. That rebuild states the cut to the new session: an
+assistant turn pi recorded as `aborted` is followed by one harness line, `[turn status: aborted —
+actions this turn had started may already have taken effect; cancellation is
+not rollback]`, and claims nothing about what ran (`context.ts` `ABORTED_TURN_STATUS`; a reused
+session gets the user delta only). Neither notice rolls anything back, and neither speaks
+for the private Claude transcript behind the live session. An abort while a reuse turn waits
+for a changed effort's answer settles on the abort, not on the answer or the 30s bound; no
+prompt is sent and the session is dropped, since the effort the driver holds is unknown. Gates:
+`check-acp-set-model-readback` (`backend.thinking.test.ts`, QKs `ACP-THINKING-REUSE-ABORT`,
+`ACP-CANCEL-NOTICE-REUSE-KEPT`, `ACP-CANCEL-NOTICE-NEW-CLOSED`, `ACP-THINKING-REUSE-ABORT-LATE`;
+`context.test.ts`, QKs `ACP-REBUILD-ABORTED-STATUS`, `ACP-REBUILD-ABORTED-EMPTY`).
+
 Elapsed time is not evidence of failure, and a silent turn is not a failed turn: tool
 use, reasoning, and provider queueing all legitimately outrun any number we could pick.
 Suspected stalls are handled by exposing progress, never by a killing timer.
@@ -85,6 +129,27 @@ text must never read as transient — that pairing (absolute cutoff × blind ret
 turned one long turn into four in 0.13.0. Gates: `check-acp-prompt-lifecycle` (behavior,
 with pi's own classifier as the oracle), `check-probe-ordering` (no production prompt
 cutoff in source).
+
+### Upstream 0.106.0 cancel and effort contracts → this rail (#142)
+
+Upstream tests read at immutable `v0.106.0` = `51f514d7` (source read, not executed here; its CI
+runs `vitest run` without the two opt-in env flags below, so a file's presence is not a run).
+**Scope** is the reach of the upstream contract: `common` when it is ACP turn/cancel behaviour any backend's adapter must settle, `Claude` when it rests on a Claude adapter field, env or config; a Claude n=1 or
+a fixture is never inherited by another backend. **Status**: covered (a QK kills on it), open (our
+touchpoint is reachable and unmeasured), not exposed (our surface cannot reach it — not a backlog,
+and not proof the vendor can do nothing).
+
+| Upstream contract | Scope | Our touchpoint and proof | Status |
+|---|---|---|---|
+| A running tool's interrupted result is delivered before `cancelled`, verbatim, `_meta.claudeCode.nonExecutionKind:"user-rejected"` ([incomplete-tools:764](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L764-L780)) | Claude | rendered as `[tool:failed] …` text; a rebuild adds the `aborted` status line (`ACP-REBUILD-ABORTED-STATUS`/`-EMPTY`). Real n=1: the rejection was delivered while `start` was already on disk — the kind is not evidence of no effect | covered (fake) + n=1 |
+| Results that arrive after the cancelled turn ended are dropped ([incomplete-tools:921](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L921-L972)) | common | measured on a scripted partner (#142 private probe, n=1 per cell) with an update of the cancelled turn A on a KEPT session: (P1) before the next turn B starts there is no handler, so it is dropped; (P3) while B sets effort, before B's prompt is sent, a reuse turn now opens its stream only when its own prompt goes out, so the update is neither shown nor sealed as B's (`[QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT]`); (P2) once B's prompt is out, `session/update` carries no turn id, so routing cannot tell A's update from B's and relies on the adapter not speaking for a turn it already answered (this upstream contract; the real Claude producer is unmeasured here) — a local counter cannot restore an attribution the wire does not carry | P1 measured (private probe n=1, no QK) · P3 pre-prompt window measured → fixed · P2 upstream dependence, open |
+| A tool that finished as the cancel landed is reported completed ([incomplete-tools:940](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L940-L947)) | common | rendered `[tool:done]`; the turn still seals `aborted` | open — not measured cancel-specific |
+| A background subagent keeps running past a foreground cancel ([incomplete-tools:822](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L822-L833), [:974](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L974)) | Claude | background tasks are off at launch (`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, foreground-only lane) | not exposed |
+| A queued prompt cancelled before insertion is removed from Claude Code's queue and never runs ([turn-events:312](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/turn-events.test.ts#L312-L418)) | common | one prompt per session at a time (`inFlightKeys`); queueing is pi's (`PI-QUEUE-ABORT-DROPS-QUEUED`) | not exposed |
+| A force-cancel while an update is being sent still ends the turn ([turn-events:419](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/turn-events.test.ts#L419-L450)) | common | our own bound: `session/cancel` first, teardown after the grace (`ABORT-SENDS-PROTOCOL-CANCEL`, `ABORT-ESCALATION-BOUNDED`); a reuse turn the agent closes keeps its session (`ACP-REUSE-COOPERATIVE-CANCEL`, `ACP-CANCEL-NOTICE-REUSE-KEPT`) | covered for our own bound (fake), not upstream's internal force-cancel; n=1 settle 25–65 ms |
+| Effort applies through flag settings, the answer carries `currentValue`, a rejected selection keeps the old state, `default` is `null`, no update notification ([session-config-options:552](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/session-config-options.test.ts#L552-L655)) | Claude | set + read back, refusal fails before the prompt and drops a reused session (`ACP-CLAUDE-EFFORT-READBACK`); an abort while the answer is pending settles at once (`ACP-THINKING-REUSE-ABORT`, `-LATE` — beyond upstream). We never send `default`: no level refuses | covered (fake) + readback n=1 |
+| A real Bash turn cancelled mid-sleep settles every announced tool call ([live-capability-session-audit:367](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/live-capability-session-audit.test.ts#L367); opt-in `RUN_LIVE_CAPABILITY_AUDIT`) | Claude | our private ESC runs (reuse and first turn) also observe the file effect, the next input and the session kept/closed | open (LIVE n=1 each, #142; no fake QK) |
+| Session load/resume lifecycle ([session-load:21](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/session-load.test.ts#L21); opt-in `RUN_INTEGRATION_TESTS`) | common | persisted resume/load is off — bootstrap decides only `new`/`reuse` | not exposed (canonical resume after restart is separate design) |
 
 ### Typed Claude prompt rejection — no automatic whole-prompt replay (#127)
 
@@ -125,34 +190,35 @@ What "supported" means here, per declaration class. The classes are kept apart o
 undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
-and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK and Claude adapter rows
-equal the published 0.36.1–0.37.1 manifests (`claude-agent-acp 0.90.0`, `@agentclientprotocol/sdk
-1.8.0`); 0.31.0–0.36.0 shipped `0.85.1` / `1.6.0` and 0.30.0 shipped `0.79.0` / `1.4.0`
-(`[측정 2026-10-16]` `git show <tag>:package.json`). The transitive Claude Agent SDK `0.3.296`
-row has no direct manifest entry; its bump is recorded in CHANGELOG 0.36.1 (#128) and the ROADMAP
-Dep bump ledger. 0.38.0 (#145) changes only the pi SDK set; the ACP rows are unchanged from 0.37.1.
+and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK, Claude adapter and transitive Claude
+Agent SDK rows equal the published 0.53.1 (`[측정 2026-11-14]` `git show v0.53.1:package.json` and
+its lockfile): #142 landed `0.106.0` / `2.6.0` / `0.3.322` and #163 moved the adapter to `0.107.0`
+and the transitive SDK to `0.3.323` (wire SDK unchanged). 0.53.0 carried the #142 set but was tagged
+and never published to npm. Before that, 0.36.1–0.52.0 shipped `claude-agent-acp 0.90.0` /
+`@agentclientprotocol/sdk 1.8.0` with the transitive `0.3.296` (CHANGELOG 0.36.1, #128; 0.38.0, #145,
+changed only the pi SDK set); 0.31.0–0.36.0 shipped `0.85.1` / `1.6.0` and 0.30.0 shipped `0.79.0` /
+`1.4.0` (`[측정 2026-10-16]` `git show <tag>:package.json`). The transitive row has no direct manifest
+entry; its bumps are recorded in the ROADMAP Dep bump ledger.
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the #158 source candidate's declared SDK set and derived host range (the published 0.51.0 shipped SDK 1.5.0, #155), not a release or operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
-| ACP wire SDK | `@agentclientprotocol/sdk 1.8.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.90.0` | **exact**, bundled | shipped since 0.36.1; resolved before any PATH fallback; declaration is not compatibility evidence |
-| Claude Agent SDK | `0.3.296` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 and 0.53.1 ship (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
+| ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry) |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.107.0` | **exact**, bundled | #163 bump over #142's 0.106.0, first published in 0.53.1 (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
+| Claude Agent SDK | `0.3.323` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
-| Cortex Code | operator-installed CLI | **on-demand**, external | NOT a pinned dependency. Each LIVE record must name the exact CLI version it measured |
+| Cortex Code | operator-installed CLI | **disabled** | No supported Cortex ACP model or turn; old host receipts remain historical. |
 
-Current Cortex host reading: **`Cortex Code v1.1.52`, observed on the reference host `oracle`
-(2026-08-19)**. This is an OBSERVATION of what happens to be installed, not a pin, not a range, and
-not a direct LIVE certification — no Cortex evidence record is created by writing it down. It is
-recorded here only so the on-demand row names a concrete number instead of an abstraction.
+Historical host observation: **`Cortex Code v1.1.52` on `oracle` (2026-08-19)**.
+It is not a current installation, support or LIVE certification claim.
 
 Reading rules that do not bend:
 
-- **Claude PASS never certifies Cortex, and a Cortex SKIP never becomes a PASS.** They are separate
-  evidence axes with separate records; Cortex stays outside the Claude release floor.
+- **Claude PASS never certifies Cortex, and an old Cortex SKIP never becomes a PASS.**
+  Cortex ACP is now disabled; historical receipts remain bound to their own subjects.
 - **Exact** means one measured build. **Range** means a closed accepted interval. **Floor** means a
   minimum entwurf enforces itself. **On-demand** means the operator supplies the runtime and the
   evidence names its version — presence of an adapter certifies no external release.
@@ -201,6 +267,9 @@ different reasons, and collapsing them would hide a real risk**:
   the effort selector that ride it are unreachable for a second, independent reason as well:
   `[측정 2026-09-10]` `git grep -c configOptions pi-extensions/lib/acp/` is **0**, and entwurf
   has never set `EFFORT_CONFIG_ID`, which is the other gate on the SDK-side `applyFlagSettings`.
+  That second reason no longer holds from #142: entwurf now sets the `effort` config option on every
+  Claude session (§Claude effort). `recommendedValue` itself stays unreachable through the empty
+  `clientCapabilities`.
   The rest of 0.76.0 is one refactor: `resolveModelPreference` moved into a new
   `dist/session-model.*` (diff is comments and formatting), `dist/session-effort.*` is new, and
   `setSessionConfigOption` — our only model-forcing wire call — is byte-identical across
@@ -210,6 +279,9 @@ different reasons, and collapsing them would hide a real risk**:
   `resolvedProvider` and up onto the unconditional `session/new` path. entwurf passes `settings`
   as an OBJECT (`tool-surface.ts:153`), so the branch is never taken. That makes "entwurf never
   hands `settings` as a path" a contract rather than an accident; it is stated at that call site.
+- **Advertised but never called — 0.106.0 adds `session/options`** (#1592) and setup-request
+  `configOptions`. entwurf calls neither; effort goes through `session/set_config_option` and its
+  readback, because upstream skips a refused setup entry silently.
 - **0.77.0's BREAKING change does not reach us, twice over.** `claudeCode.options.agent` is no
   longer forwarded — the adapter now shallow-copies the options object and `delete`s `agent` on
   the unconditional `session/new` path (`[측정 2026-09-18, 0.79.0 dist/acp-agent.js:5934-5941 직독]`).
@@ -396,6 +468,49 @@ different reasons, and collapsing them would hide a real risk**:
     the agent (#1218); a new session's first prompt carries our augment ahead of the user text,
     a reuse turn does not.
 
+- **0.90.0 → 0.106.0 (#142) moves the wire SDK a major and changes what reaches us as follows.**
+  `[측정 2026-11-13, oracle aarch64, private candidate install, no session/prompt]` receipts are
+  host-local under `.tmp-verify/acp106-readback-20261113/` (stage1 no-auth; stage2–4 authenticated
+  through the production `ensureClaudeConfigOverlay(realDir, overlayDir)` whitelist into a sandbox
+  overlay; account email redacted).
+  - **Wire and launch.** The adapter depends on `@agentclientprotocol/sdk` 2.6.0 (major since 0.94);
+    the client moves with it so the L2c shared-wire contract holds. Protocol stays v1: `initialize`
+    answered `protocolVersion: 1`, `loadSession: true` and session capabilities `additionalDirectories,
+    close, delete, fork, list, options, resume, status, systemPrompt, title`, plus
+    `_meta.steering.supported`. 0.103.0 narrowed `exports` to `.` and `./package.json`; the production
+    launcher anchors on `package.json` and imports the bin by file URL, so it booted 0.106.0 unchanged.
+    Two LIVE probe scripts that deep-imported `dist/` were repointed the same way.
+  - **Production `_meta` passes 0.100's request validation.** Three `session/new` calls carrying
+    `model/tools/settingSources/settings/disallowedTools/extraArgs` and the shipped carrier succeeded.
+  - **Initial config options** (0.106 #1592) arrive on `session/new`: `mode` = `bypassPermissions`
+    (the overlay `defaultMode` still beats 0.101's built-in Auto default), `model`, `effort`
+    (category `thought_level`, values `default, low, medium, high, xhigh, max`), `fast`, `ultracode`,
+    and on a later session `agent`. `session/options` and setup-request `configOptions` are
+    advertised but never called here; a refused setup entry is skipped silently upstream, so effort is
+    set by `session/set_config_option` and read back instead.
+  - **Model rows (authenticated).** `claude-opus-5-5` → `opus`/"Opus 5.5", `claude-sonnet-5-5` →
+    `sonnet`/"Sonnet 5.5", `claude-fable-5-1` → its own row "Fable 5.1", `claude-fable-5-2` → its own
+    row "Fable 5.2" (the alias `fable` also names Fable 5.2). Unauthenticated, setting a non-alias id
+    fails `-32603` "Could not resolve authentication method", which is an auth fact, not support.
+    The offered list is not stable inside one adapter process: 5 rows on the first sessions, 14 on a
+    later one, and a later session listed `claude-fable-5-1[1m]` beside `claude-fable-5-2`. Only the
+    set-model answers above are measured support; an offered row is not.
+  - **Effort on a live session.** On one session `high → low → max` each read back exactly with the
+    model unchanged; `minimal` was refused `-32602 Invalid params` and the session stayed usable.
+    Readback is the adapter's acceptance, not evidence of applied reasoning depth.
+  - **Idle compaction** (0.101 #1522) can send the adapter's own `/compact` prompt on an idle session
+    (1h cache TTL, ≥100k–200k context, ~54 min idle). 0.106 #1555 makes the inline `settings`
+    `idleCompaction` key win when no managed tier sets it. Our retained-session callbacks drop
+    notifications that arrive with no active turn, so such a turn would be invisible to pi. Our
+    inline `idleCompaction: false` is held only as a `_meta` shape (`ACP-CLAUDE-NO-IDLE-COMPACTION`);
+    its runtime effect on an idle session is unmeasured, and a managed tier would win over it.
+  - **Inert for us:** #1430 replays pre-compaction history on `session/load` (a client-view replay,
+    not a prompt re-dispatch; we never call `session/load`); #1589 concerns the bun single-file
+    release executable, not the npm dist we import; auth-status/account description changes are
+    notifications we ignore. `bypassPermissions` also shadows `canUseTool`
+    (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` on stderr), so the permission callback is not a gate for
+    ordinary tool calls; the declared `tools`/`disallowedTools` surface is.
+
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title
   `Compact conversation`, and `_meta.contextCompaction` schema v1 — where it used to arrive as
@@ -416,8 +531,8 @@ contract. An optional upstream feature is not a core-value gap.
 - accumulated inactive minors are best folded into the next meaningful certification.
 
 Otherwise record and defer. Every certification separates declared pins, deterministic/package
-evidence, Claude LIVE aggregate evidence, and Cortex direct on-demand evidence (with its CLI
-version). Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** ledger.
+evidence and Claude LIVE aggregate evidence. Cortex ACP is disabled; its old LIVE observations
+remain historical. Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** ledger.
 
 ### Configured Claude ACP permissions
 
@@ -444,11 +559,15 @@ operator's repair named.
 
 ## Shipped adapters
 
-| Seam | Claude | Cortex Code |
+Claude alone is supported. The former Cortex column below is a historical comparison,
+not an executable route; Cortex model admission and direct adapter use now refuse.
+
+| Seam | Claude | Former Cortex Code (historical) |
 |---|---|---|
-| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
+| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, `claude-fable-5-2` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
 | Model authority | per-turn ACP set-model, its answer read back before the prompt | per-turn ACP set-model; an unavailable curated id fails before prompt; the answer is not read back |
+| Thinking level | pi's level → `effort`, set and read back before the prompt (§Claude effort) | not declared: no `thinkingLevelMap`, `reasoning` is not carried |
 | Carrier | engraving in `_meta.systemPrompt` | no system-prompt carrier; engraving rides the first-user augment |
 | Overlay | `CLAUDE_CONFIG_DIR` whitelist, configured-empty hooks, native memory hidden | session-scoped isolated HOME + `SNOWFLAKE_HOME`, private `cortex/mcp.json`, measured-minimum auth passthrough |
 | MCP | explicit wire `mcpServers` | explicit declarations projected to private `mcp.json` because Cortex ignores the wire field |
@@ -459,11 +578,10 @@ operator's repair named.
 
 The unprefixed Claude curation uses exact Opus/Sonnet 5.5 ids; the ACP adapter does
 not route the retired exact ids `claude-opus-5` or `claude-sonnet-5`, alias them to
-a newer model, or rewrite existing session records. Cortex retains its separate
-native 5 ids. Pi owns fuzzy CLI model selection before the adapter: with this
-seven-row set, its 1.1.0 resolver matches the old bare 5 patterns to the Cortex rows
-instead of refusing them (measured with the pure upstream resolver and synthetic rows,
-not a vendor turn). So the launches Entwurf builds admit only an EXACT curated id
+a newer model, or rewrite existing session records. Pi owns fuzzy CLI model selection
+before the adapter: an older seven-row fixture matched old bare 5 patterns to Cortex
+rows (measured with the pure upstream resolver, not a vendor turn). Cortex rows are
+now disabled. The launches Entwurf builds admit only an EXACT curated id
 (`pi-extensions/lib/acp/model-ids.js`): `entwurf_fresh_call` with backend `pi` and an
 `entwurf/<id>` model, and `entwurf_resume_call` of a session whose emitted provider is
 `entwurf`, refuse anything else as `acp-model-not-curated` before a pane opens. A human
@@ -473,8 +591,8 @@ The adapter reads its set-model answer back before the prompt. The driver resolv
 requested id onto one of the rows it offers and answers with that row's `value` as the
 model option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). Measured on
 2026-10-12 against 0.85.1, and again unchanged on 2026-10-14 against 0.90.0 (the second
-time also with the production session meta), with no prompt sent: `claude-fable-5-1`
-answers its own row,
+time also with the production session meta), and on 2026-11-13 against 0.106.0 authenticated
+(#142), with no prompt sent: `claude-fable-5-1` and `claude-fable-5-2` each answer their own row,
 while `claude-sonnet-5-5` and `claude-opus-5-5` answer the alias rows `sonnet` and
 `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row resolves to is not on the
 ACP wire, so `CLAUDE_SET_MODEL_ALIAS_ROWS` (`backend-adapter.ts`) declares, for each
@@ -484,6 +602,38 @@ the prompt, with text pi does not classify as transient. A curated id added late
 its own measured answer before it ships. `check-acp-set-model-readback` holds the
 contract offline; it does not certify the installed driver's runtime, and no 5.5 prompt
 turn is claimed by this measurement.
+
+#### Claude effort (#142)
+
+Pi's thinking level is carried as the adapter's `effort` session config option. Each curated
+Claude row registers a `thinkingLevelMap` (`claudeAcpThinkingLevelMap`, `models.ts`): `low`,
+`medium`, `high`, `xhigh` and `max` map to the effort value of the same name, `off` and `minimal`
+are `null`. So pi's own selector offers only `low..max`, and pi's normal clamp moves a saved `off`
+or `minimal` to `low` before any turn. The registry still decides which levels a model has: a
+level it marks `null` stays unsupported, and `xhigh`/`max` appear only where it maps them. The
+effort value `default` is the vendor's own choice; no pi level maps to it.
+
+At turn entry the adapter resolves the level before any process or session is touched. A turn
+that arrives with no level, an unsupported level, or a map value outside the effort set refuses as
+`acp-thinking-level-unsupported`, with nothing spawned. "No level" covers two cases pi does not
+distinguish on the wire: the agent sends no `reasoning` for `off`, and none when no level is set.
+Pi's own turn and compaction paths always carry a level for these rows after the clamp; the
+refusal is for callers outside that path, and it says so rather than run at a depth nobody chose.
+
+A new session sets effort right after set-model; a reused session sets it again only when the
+level changed since the value it last read back. The level is not part of the reuse signature, so
+changing it keeps the live conversation. The answer must read the value back as the `effort`
+option's `currentValue`; a refused set (`-32602` for an unoffered value), a missing option or
+another value fails the turn before the prompt, and a reused session is dropped, so the next turn
+opens a new session and resends the transcript. The text we author reads as neither transient nor
+overflow to pi; the sealed message still appends the session's stderr tail like any other
+pre-prompt failure, and a bootstrap timeout keeps its `timed out` wording, so either can classify as
+transient. A replay of that turn re-dispatches no prompt that ran. Each accepted set shows the operator a lifecycle notice `[acp: effort <value> read back]` (a new
+session always, a reused one only when the value changed; a refused set shows none). Like the other
+lifecycle notices it is excluded from the transcript a later turn sends and from the reuse signature.
+Readback is the adapter's acceptance of the value, not evidence of the
+reasoning depth applied or of turn speed. `check-acp-set-model-readback` holds the contract
+offline (`backend.thinking.test.ts`, five effort mutants).
 
 The bundled adapter resolves before any PATH fallback. Its overlay retains only the
 auth/runtime state required by the Claude Agent SDK and hides operator memory, hooks,
@@ -503,6 +653,9 @@ subagent transcripts are therefore not requested. Enabling either is a separate
 rendering contract, not a capability bit flip.
 
 ### Cortex Code audit (D1–D10)
+
+**Historical:** this audit describes the former Cortex ACP adapter, not a supported
+route. The current product refuses Cortex selection before launch.
 
 The original audit labels remain useful coordinates for source comments and gates:
 
@@ -638,15 +791,11 @@ Live axes:
 
 ```bash
 LIVE=1 ./run.sh release-gate /path/to/scratch --cut
-LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
-  ./run.sh smoke-acp-cortex-live
 ```
 
-The aggregate release gate is Claude-backed so a host without Cortex/Snowflake auth
-can run the package floor. That means Cortex is **on demand**, not optional evidence:
-a cut that changes or ships the Cortex rail must run and read its dedicated smoke.
-Per-cut counts, digests, versions, and host observations belong in BASELINE/CHANGELOG,
-not this standing contract.
+Cortex ACP is disabled; its former direct LIVE smoke refuses without probing a vendor.
+This does not waive the aggregate's Claude, Codex or native-citizen axes. Per-cut
+counts, digests, versions, and host observations belong in BASELINE/CHANGELOG.
 
 ## 11-8. Compaction is a tool lifecycle (0.75.0 onward)
 
@@ -719,8 +868,73 @@ The adapter keeps its own turn-settlement bookkeeping internally, and our event 
 update kinds it does not handle (`event-mapper.ts:377-378`), so nothing above is a claim that
 Entwurf must replicate vendor internals. The reason to stay put is the five contracts, not a ledger.
 
+## 11-10. Pi's own summary is a one-shot, tool-less turn (#163)
+
+Pi summarizes for `/compact`, the compaction threshold, overflow recovery and `/tree` branch
+summaries through one call, `completeSummarization` (pi-coding-agent 1.5.2
+`dist/core/compaction/compaction.js:477-489`). That request declares no tools and carries
+`cacheRetention: "none"`; an ordinary agent-loop turn carries no `cacheRetention`. Until #163 the
+tool-surface preflight read the empty surface as "read/bash/edit/write excluded" and refused every
+summary on a Claude ACP model.
+
+- **Admission.** `isPiSummaryRequest` (`tool-surface.ts`) needs BOTH an empty replayed tool
+  surface and `cacheRetention === "none"`. An ordinary turn with every tool excluded keeps the
+  refusal. Pi's prompt text and session id are not read; Pi fills the id with a fresh `uuidv7()`.
+- **The turn.** A new child under the turn-scoped policy, closed after its one prompt whatever the
+  process policy says. `tools`, `mcpServers`, skill plugins, the permission allow list and
+  `settingSources` are all empty, so no CLAUDE.md, hook or plugin is read from disk. The operator's engraving carrier stays, rendered with an empty MCP list. No first-message
+  augment. Pi's summarization instructions arrive as a system message, which the transcript
+  flattening drops, so their text (`getCurrentSystemPrompt`) is sent as the first prompt block.
+  No notice of any kind: the summary Pi stores is exactly the model's text, and the session file
+  is the embedding source. Pi keeps an `aborted` summary (it refuses only `error` and `length`,
+  pi-coding-agent 1.5.2 `compaction.js:454-462`), so a `cancelled` stop that Pi did not abort is
+  sealed as a non-transient error instead.
+- **After compaction.** `acp-provider.ts` subscribes to `session_compact` and closes that Pi
+  session's retained child at once (GLG 2026-11-14), unless a turn is in flight. A session is busy
+  only inside its key's in-flight claim, so the in-flight check covers both. The next turn opens a
+  new child from the compacted transcript.
+
+Proof: `pi-extensions/lib/acp/backend.summary-turn.test.ts` drives Pi's own `generateSummary` and
+`generateBranchSummary` through `streamAcpTurn`, so the request shape is Pi's, not a fixture's. A Pi
+upgrade that stops marking summaries with `cacheRetention: "none"` turns it red. Not covered here:
+the adapter's own compaction inside a prompt we sent (§11-8), and the threshold value.
+
+## 11-11. What a running turn shows (#162, #163)
+
+The mapper's tool lines come in two kinds, and the kind is a contract with two readers outside
+this file.
+
+| Line | Signed | Replayed into a new session | Reuse signature |
+|---|---|---|---|
+| `[tool:start\|done\|failed\|cancelled] <title>[ — <summary>]`, `[permission:<d>] <title>` | no | yes | yes |
+| `[tool:running] <title>[ — <elapsed>]`, `[tool:output] <title>` + preview, `[acp: …]` | yes | no | no |
+
+- `[tool:running] <title>` without elapsed time names a call once its title is known: a Bash call
+  opens as "Terminal" and its command arrives as a title-only update. A beat in the same update
+  already names the title, so it prints alone.
+- `[tool:output]` shows at most 5 lines and 400 UTF-8 bytes of a finished call's output: the head
+  on success, the tail on failure. A line keeps its indentation (tabs expand to three spaces), so a
+  stack trace or a diff reads as in Pi. When the whole output fits on the one-line summary, it is
+  not shown.
+- Every line, one-line or preview, is cleaned the way Pi cleans tool output before showing it
+  (pi-coding-agent 1.5.2 `getTextOutput`: `stripAnsi`, then `sanitizeBinaryOutput`, then CR
+  dropped), with DEL and C1 also removed. Pi's own range would leave an 8-bit OSC (`0x9D` … `0x9C`)
+  intact. Pi does not export these helpers from its root, so the mapper carries the same
+  expression, and a test compares it with Pi's installed functions. pi-tui's public
+  `stripTerminalSequences` is not a substitute: it ends a CSI only on `m/G/K/H/J` and scans ahead
+  for one, so on tool output it deletes text (`"\x1b[2A keep this text then Hm"` → `"m"`, measured
+  2026-11-14 at pi-tui 1.5.2). No strip-ansi or ansi-regex package is in the dependency tree.
+- `[acp: compaction <trigger>[ failed] <pre>[→<post>][ in <duration>]]` reports the backend's own
+  compaction from the `rawOutput` facts of its `compact` tool call, once per compaction.
+
+The second reader is andenken's `control-v1` selection (andenken `session-selection.ts`, read at
+`e5165ecc`, 2026-11-14). It drops every signed lifecycle block whatever its text, and drops an
+unsigned block only when it is exactly one sanitized `[tool:start|done|failed|cancelled]` or
+`[permission:*]` line. An unsigned line with a new label, or a changed unsigned grammar, is
+embedded. So a new tool line is signed, and changing the unsigned grammar goes to GLG first;
+andenken is not changed from here.
+
 ## Open work
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
-- broader installed-host and cross-machine Cortex evidence;
 - persisted ACP resume/load, which is not implemented by today's in-memory reuse.

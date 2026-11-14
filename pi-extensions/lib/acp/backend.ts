@@ -49,6 +49,7 @@ import {
 	appendAssistantMessageDiagnostic,
 	createAssistantMessageDiagnostic,
 	createAssistantMessageEventStream,
+	getCurrentSystemPrompt,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
 import {
@@ -61,6 +62,7 @@ import { prependNewPromptAugment } from "./augment.js";
 import {
 	ACP_PROMPT_REJECTION_DIAGNOSTIC,
 	type AcpBackendAdapter,
+	assertSupportedDeclaredBackend,
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
 import {
@@ -90,7 +92,7 @@ import {
 	resolveLifecyclePolicy,
 	writeSessionRecord,
 } from "./session-store.js";
-import { assertExcludeToolsHonored } from "./tool-surface.js";
+import { assertExcludeToolsHonored, isPiSummaryRequest } from "./tool-surface.js";
 
 // Bootstrap boundaries ONLY. initialize / newSession / set-model are handshake
 // steps that make no model progress, so a stuck one is a dead session and a cold
@@ -310,6 +312,9 @@ interface BridgeSession {
 	acpSessionId: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
+	/** The backend thinking value the driver last read back on this session (#142); a fact about the
+	 *  live session, never part of the reuse signature. Undefined until one is set. */
+	thinkingValue?: string;
 	alive: boolean;
 	busy: boolean;
 	/** Mutable per-turn router — see the CRITICAL note in the file header. */
@@ -449,6 +454,40 @@ let cleanupRegistered = false;
  * `process.once` would leak an EventEmitter listener per turn — GPT c617cb. The
  * handler is sync (the `exit` event forbids async work).
  */
+/**
+ * Close a retained session we are leaving on purpose: mark it retiring (so its exit is not
+ * announced as an unexpected end), drop it from the map, and tear its child down.
+ */
+function abandonRetainedSession(session: BridgeSession): void {
+	session.alive = false;
+	session.retiring = true;
+	if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
+	retainedChildren.delete(session.child);
+	session.connection.close?.();
+	teardownChild(session.child);
+}
+
+/**
+ * #163, GLG 2026-11-14: after a successful Pi compaction the retained Claude child of that Pi
+ * session is closed at once, not kept until the next turn's prefix break discards it. The next
+ * turn then opens a new child from Pi's compacted transcript (summary + kept tail) — the path
+ * `decideBootstrap` already takes when the stored prefix no longer matches.
+ *
+ * Keyed exactly as an ordinary turn keys its session: Pi passes its session manager's id as the
+ * stream `sessionId` (pi-coding-agent 1.5.2 `dist/core/sdk.js:276`), and `resolveSessionKey`
+ * turns that into `pi:<id>`. A busy or in-flight session is left alone — Pi aborts the running
+ * turn before compacting (`dist/core/agent-session.js:2327`), so a busy one is not the session
+ * that compaction left behind, and the prefix break still covers it. Returns whether a child
+ * was closed.
+ */
+export function closeRetainedAcpSession(piSessionId: string): boolean {
+	const key = `pi:${piSessionId}`;
+	const session = bridgeSessions.get(key);
+	if (!session || session.busy || inFlightKeys.has(key)) return false;
+	abandonRetainedSession(session);
+	return true;
+}
+
 function registerGlobalCleanup(): void {
 	if (cleanupRegistered) return;
 	cleanupRegistered = true;
@@ -756,6 +795,34 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 		if (timer) clearTimeout(timer);
 	});
 }
+
+// Reject as soon as the operator aborts, so a pre-prompt step on a LIVE session
+// (reuse has no bootstrap child to tear down) settles on the abort instead of on
+// the driver's answer or the bootstrap timeout. The step itself is abandoned, not
+// cancelled: the caller drops the session, since what the driver now holds is
+// unknown (#142, Dot review of the reuse effort set).
+function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return p;
+	let onAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_, reject) => {
+		onAbort = () => reject(new Error("entwurf: aborted by the operator before the prompt was sent"));
+		if (signal.aborted) onAbort();
+		else signal.addEventListener("abort", onAbort, { once: true });
+	});
+	return Promise.race([p, aborted]).finally(() => {
+		if (onAbort) signal.removeEventListener("abort", onAbort);
+	});
+}
+
+// What an operator who pressed ESC needs before speaking again (#142): the turn
+// has stopped, nothing already done was undone, and whether the next message
+// continues this live ACP session or opens a new one. Said only after the turn
+// settled, and only about the live session — not about any private transcript.
+export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
+export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
+/** #163: Pi's summary turn ended as `cancelled` with no abort from Pi. Kept non-transient for pi's retry classifier. */
+export const ACP_SUMMARY_CANCELLED_MESSAGE =
+	"ACP backend ended the summary turn as cancelled although Pi did not abort it; the summary is incomplete and is not kept";
 
 /**
  * Await ONE ACP prompt with NO wall-clock deadline — the turn ends on lifecycle
@@ -1151,6 +1218,8 @@ export function streamAcpTurn(
 		| undefined;
 	const cwd = opts?.cwd ?? process.cwd();
 	const signal = opts?.signal;
+	/** #163: this turn is Pi's one-shot summary request (set by runSummaryTurn). */
+	let summaryTurnActive = false;
 
 	stream.push({ type: "start", partial: state.output });
 
@@ -1420,7 +1489,17 @@ export function streamAcpTurn(
 	function finishSuccess(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {
 		sealTurnUsage(adapter, session, promptResult);
 		finalizeAcpStreamState(state);
-		const verdict = mapPromptStopReason(promptResult?.stopReason);
+		let verdict = mapPromptStopReason(promptResult?.stopReason);
+		// #163: Pi keeps an `aborted` summary as a checkpoint — only `error` and `length` are refused
+		// (pi-coding-agent 1.5.2 `compaction.js:454-462`). A summary the backend cancelled while
+		// nobody aborted it is incomplete text, so it is sealed as an error, never stored.
+		if (summaryTurnActive && verdict.stopReason === "aborted" && !signal?.aborted) {
+			verdict = {
+				stopReason: "error",
+				rawStopReason: verdict.rawStopReason,
+				errorMessage: ACP_SUMMARY_CANCELLED_MESSAGE,
+			};
+		}
 		if (verdict.rawStopReason !== undefined) state.output.rawStopReason = verdict.rawStopReason;
 		if (signal?.aborted || verdict.stopReason === "aborted") {
 			state.output.stopReason = "aborted";
@@ -1524,6 +1603,12 @@ export function streamAcpTurn(
 		// agree, else fail loud — a mismatch means the settings and the requested model
 		// disagree about which backend runs, and silently trusting the model id would
 		// hide an operator typo. Routing authority stays single (the model id).
+		try {
+			assertSupportedDeclaredBackend(config.backend);
+		} catch (err) {
+			finishError(err, false);
+			return;
+		}
 		if (config.backend !== undefined && config.backend !== adapter.backend) {
 			finishError(
 				new Error(
@@ -1547,21 +1632,33 @@ export function streamAcpTurn(
 		// child will still expose (declared != actual), fail fast into the stream
 		// rather than lie to the model. Uses the RESOLVED tool surface (S2g) so an
 		// operator-narrowed `tools` is what the truthfulness check honors.
+		//
+		// pi 0.86 folded `Context.systemPrompt`/`Context.tools` into a leading
+		// `role:"system"` message (`normalizeContext`, pi-ai
+		// `utils/transcript.ts`), so a provider only ever sees a
+		// `TranscriptContext`. The active surface is therefore REPLAYED from the
+		// system messages — `getCurrentTools` applies every toolsAdded/toolsRemoved
+		// delta in order. No `?? [...PI_BUILTIN_BACKED_TOOLS]` fallback: under 0.86
+		// the old `context.tools` read was ALWAYS undefined, so that fallback
+		// silently declared the full builtin set and the truthfulness preflight
+		// could never fire (false green). An empty replayed list on an ordinary turn
+		// means the operator excluded everything — keep that honest and reject.
+		//
+		// #163: the one empty surface that is NOT refused is Pi's own summarization
+		// request (`isPiSummaryRequest`). It is honoured rather than refused: the
+		// summary turn below runs on a child that is given no tools at all, so the
+		// declared surface (none) is the actual one.
+		let summaryTurn: boolean;
 		try {
-			// pi 0.86 folded `Context.systemPrompt`/`Context.tools` into a leading
-			// `role:"system"` message (`normalizeContext`, pi-ai
-			// `utils/transcript.ts`), so a provider only ever sees a
-			// `TranscriptContext`. The active surface is therefore REPLAYED from the
-			// system messages — `getCurrentTools` applies every toolsAdded/toolsRemoved
-			// delta in order. No `?? [...PI_BUILTIN_BACKED_TOOLS]` fallback: under 0.86
-			// the old `context.tools` read was ALWAYS undefined, so that fallback
-			// silently declared the full builtin set and the truthfulness preflight
-			// could never fire (false green). An empty replayed list means the operator
-			// excluded everything — keep that honest and let the preflight reject.
 			const activeToolNames = getCurrentTools(context.messages).map((t) => t.name);
-			assertExcludeToolsHonored(activeToolNames, { backend: adapter.backend, tools: config.tools });
+			summaryTurn = isPiSummaryRequest(activeToolNames, opts?.cacheRetention);
+			if (!summaryTurn) assertExcludeToolsHonored(activeToolNames, { backend: adapter.backend, tools: config.tools });
 		} catch (err) {
 			finishError(err, false);
+			return;
+		}
+		if (summaryTurn) {
+			await runSummaryTurn(config, adapter, nativeModelId);
 			return;
 		}
 
@@ -1585,6 +1682,24 @@ export function streamAcpTurn(
 		} catch (err) {
 			finishError(err, false);
 			return;
+		}
+		// #142: pi's thinking level → the backend's own value, resolved BEFORE any process or session is
+		// touched, so an unsupported level refuses with nothing to unwind. A backend without the
+		// capability (cortex) resolves nothing and keeps its old behaviour. The value is deliberately NOT
+		// in the reuse signature: changing it must not trade the live Claude conversation for a new one,
+		// so it is set on the live session before the prompt instead (runNewTurn / runReuseTurn).
+		let thinkingValue: string | undefined;
+		if (adapter.resolveThinking) {
+			try {
+				thinkingValue = adapter.resolveThinking({
+					modelId: model.id,
+					reasoning: opts?.reasoning,
+					thinkingLevelMap: model.thinkingLevelMap,
+				});
+			} catch (err) {
+				finishError(err, false);
+				return;
+			}
 		}
 		// S2g: the signature folds the FULL resolved config (mcpServersHash + tool
 		// surface + skillPlugins + flags) so any operator config change invalidates
@@ -1651,14 +1766,7 @@ export function streamAcpTurn(
 		// session (incompatible drift / stale-dead) — the model-lock throw already
 		// returned above, so this is never a "leave it alone" case. Close the old
 		// connection + child so it is not orphaned in retainedChildren (GPT blocker 2).
-		if (decision.path === "new" && existing) {
-			existing.alive = false;
-			existing.retiring = true;
-			if (bridgeSessions.get(sessionKey) === existing) bridgeSessions.delete(sessionKey);
-			retainedChildren.delete(existing.child);
-			existing.connection.close?.();
-			teardownChild(existing.child);
-		}
+		if (decision.path === "new" && existing) abandonRetainedSession(existing);
 
 		// Claim the key for the whole turn — atomic with the checks above (no await
 		// in between), so a concurrent first turn for the same key sees it in flight
@@ -1666,14 +1774,76 @@ export function streamAcpTurn(
 		inFlightKeys.add(sessionKey);
 		try {
 			if (decision.path === "reuse" && existing) {
-				await runReuseTurn(existing, ctxSigs, adapter);
+				await runReuseTurn(existing, ctxSigs, adapter, thinkingValue);
 			} else {
-				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId);
+				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId, thinkingValue);
 			}
 		} finally {
 			inFlightKeys.delete(sessionKey);
 		}
 	});
+
+	// --- #163: Pi's summary request → a one-shot, tool-less child that is never retained
+	//
+	// What makes it a SUMMARY turn rather than an ordinary new one, each for a reason:
+	//   - No tools, no MCP, nothing pre-approved, no skill plugins: the request declares no tools,
+	//     and a summarizer that could still run Bash would act where Pi cannot see it (Pi's own
+	//     "Summarization attempted to call a tool" guard reads `toolCall` blocks, which ACP tool
+	//     calls never become).
+	//   - No notice of any kind (`state.quiet`): Pi keeps `contentText(response.content)` as the
+	//     summary, joining every text block, and that summary lands in the session file.
+	//   - No first-user augment: it is operator context for a working session, not for a summary.
+	//   - The operator's engraving carrier stays (identity/billing/memory containment are not a
+	//     working-session feature), rendered with the empty MCP list this child really has.
+	//   - Pi's summarization instructions arrive as a system message, which the transcript
+	//     flattening never forwards (context.ts `case "system"`). They are relayed here, verbatim,
+	//     through Pi's own renderer, as the first prompt block — for this one turn only.
+	//   - Never retained and never registered: it shares no state with the conversation's session.
+	//     It neither reads nor tears down `bridgeSessions`, whatever key it arrived with.
+	async function runSummaryTurn(
+		config: ResolvedAcpConfig,
+		adapter: AcpBackendAdapter,
+		nativeModelId: string,
+	): Promise<void> {
+		state.quiet = true;
+		summaryTurnActive = true;
+		const summaryConfig: ResolvedAcpConfig = {
+			...config,
+			tools: [],
+			mcpServers: [],
+			skillPlugins: [],
+			permissionAllow: [],
+			// Filesystem isolation: no CLAUDE.md, hooks or plugins from the operator's Claude settings —
+			// the summarizer gets the carrier and Pi's instructions, nothing else (config.ts:413-420).
+			settingSources: [],
+		};
+		let engraving: string | null;
+		let thinkingValue: string | undefined;
+		try {
+			engraving = adapter.loadCarrier({ mcpServerNames: [], config: summaryConfig });
+			if (adapter.resolveThinking) {
+				thinkingValue = adapter.resolveThinking({
+					modelId: model.id,
+					reasoning: opts?.reasoning,
+					thinkingLevelMap: model.thinkingLevelMap,
+				});
+			}
+		} catch (err) {
+			finishError(err, false);
+			return;
+		}
+		const instructions = getCurrentSystemPrompt(context.messages).trim();
+		const params: BootstrapParams = {
+			cwd,
+			modelId: model.id,
+			bridgeConfigSignature: "",
+			contextMessageSignatures: [],
+			lifecyclePolicy: "turn-scoped",
+		};
+		await runNewTurn(params, [], engraving, summaryConfig, adapter, nativeModelId, thinkingValue, {
+			instructions,
+		});
+	}
 
 	// --- new session: spawn → initialize → newSession → setSessionConfigOption(model) → full transcript
 	async function runNewTurn(
@@ -1683,6 +1853,9 @@ export function streamAcpTurn(
 		config: ResolvedAcpConfig,
 		adapter: AcpBackendAdapter,
 		nativeModelId: string,
+		thinkingValue: string | undefined,
+		/** #163: set only by runSummaryTurn — relay these instructions, add no augment. */
+		summary?: { instructions: string },
 	): Promise<void> {
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
@@ -1702,7 +1875,8 @@ export function streamAcpTurn(
 			// talking to ended. Announced once (read-and-clear); the turn continues
 			// normally, since opening a fresh child for a NEW user turn is not a
 			// replay of anything.
-			const priorEnd = takeUnreportedChildEnd(sessionKey);
+			// A summary turn must not consume the conversation's end notice, whatever key it carries.
+			const priorEnd = summary ? undefined : takeUnreportedChildEnd(sessionKey);
 			if (priorEnd) {
 				pushAcpLifecycleNotice(
 					state,
@@ -1845,6 +2019,18 @@ export function streamAcpTurn(
 				adapter.enforceModel({ connection, acpSessionId, modelId: model.id, nativeModelId }),
 				SET_MODEL_TIMEOUT_MS,
 			);
+			// #142: the requested thinking level, set and read back before the prompt. The session keeps
+			// the value the driver confirmed, so a reuse turn sets it again only when it changes.
+			if (thinkingValue !== undefined && adapter.enforceThinking) {
+				await withTimeout(
+					"enforceThinking",
+					adapter.enforceThinking({ connection, acpSessionId, modelId: model.id, value: thinkingValue }),
+					SET_MODEL_TIMEOUT_MS,
+				);
+				session.thinkingValue = thinkingValue;
+				// Visible like the model lock: the operator sees the effort the driver read back.
+				pushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);
+			}
 
 			// S2f visibility: the session is live and model-locked — the next gap is
 			// the prompt round-trip to the first token.
@@ -1859,12 +2045,15 @@ export function streamAcpTurn(
 			// the pi Context, so it stays out of contextMessageSignatures (NEXT §S2d
 			// gate ②). `new`-only → reuse turns stay clean (once-only). Entwurf-spawned
 			// prompts that already carry cwd/AGENTS.md get that one section de-duped.
-			const prompt = prependNewPromptAugment(basePrompt, {
-				backend: adapter.backend,
-				cwd,
-				mcpServerNames: mcpServerNames(config),
-				emacsAgentSocket: process.env.PI_EMACS_AGENT_SOCKET?.trim() || undefined,
-			});
+			// #163: a summary turn carries Pi's summarization instructions instead.
+			const prompt: AcpTextBlock[] = summary
+				? [...(summary.instructions ? [{ type: "text" as const, text: summary.instructions }] : []), ...basePrompt]
+				: prependNewPromptAugment(basePrompt, {
+						backend: adapter.backend,
+						cwd,
+						mcpServerNames: mcpServerNames(config),
+						emacsAgentSocket: process.env.PI_EMACS_AGENT_SOCKET?.trim() || undefined,
+					});
 
 			// S2f visibility: about to send — say "sending" (not "sent") because the
 			// prompt could still sync-reject before the wire write; the next visible
@@ -1920,6 +2109,9 @@ export function streamAcpTurn(
 				unrefRetainedChild(spawned);
 			}
 
+			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
+				pushAcpLifecycleNotice(state, retain ? ACP_CANCEL_KEPT_NOTICE : ACP_CANCEL_CLOSED_NOTICE);
+			}
 			finishSuccess(adapter, session, promptResult);
 
 			if (retain) {
@@ -1947,6 +2139,7 @@ export function streamAcpTurn(
 			// own SIGTERM; the tail collected by then is sealed before our cleanup
 			// touches the stderr pipe.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
+			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
 			finishError(
 				err,
 				aborted,
@@ -1969,7 +2162,12 @@ export function streamAcpTurn(
 	}
 
 	// --- reuse: send only the latest user delta to the live ACP session
-	async function runReuseTurn(session: BridgeSession, ctxSigs: string[], adapter: AcpBackendAdapter): Promise<void> {
+	async function runReuseTurn(
+		session: BridgeSession,
+		ctxSigs: string[],
+		adapter: AcpBackendAdapter,
+		thinkingValue: string | undefined,
+	): Promise<void> {
 		/** Same phase discipline as a new turn — reuse just has no bootstrap to lose. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		try {
@@ -1979,7 +2177,27 @@ export function streamAcpTurn(
 			// resident turn looks identical to a cold start that stalled.
 			pushAcpLifecycleNotice(state, "reusing live session");
 			session.busy = true;
-			session.activePromptHandler = makePromptHandler(session);
+
+			// #142: a changed thinking level is set on THIS live session, before the delta is sent; the
+			// conversation is kept. A refused or mismatched answer fails the turn before the prompt and
+			// the session is dropped by the catch below, like any other pre-prompt failure on reuse.
+			if (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue !== thinkingValue) {
+				await withTimeout(
+					"enforceThinking",
+					untilAborted(
+						adapter.enforceThinking({
+							connection: session.connection,
+							acpSessionId: session.acpSessionId,
+							modelId: model.id,
+							value: thinkingValue,
+						}),
+						signal,
+					),
+					SET_MODEL_TIMEOUT_MS,
+				);
+				session.thinkingValue = thinkingValue;
+				pushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);
+			}
 
 			// The live ACP session already remembers the prior turns → send only the
 			// latest user delta (re-sending the transcript would duplicate history).
@@ -1993,6 +2211,12 @@ export function streamAcpTurn(
 			// ahead of the wire write; the prompt driver then owns the abort surface.
 			const wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
+			// #142: this turn's stream receives updates only from the moment its own prompt goes out.
+			// Before that, nothing on this live session can be this turn's output — a late update of
+			// the previous (cancelled) turn arriving during the effort set would otherwise be shown as
+			// this turn's answer. Inside the prompt window the wire carries no turn id; that part
+			// rests on the agent not speaking for a turn it already answered.
+			session.activePromptHandler = makePromptHandler(session);
 			phase = "prompt";
 			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
 				signal,
@@ -2005,6 +2229,10 @@ export function streamAcpTurn(
 			// prefix-compat check sees the full prior history (GPT ④: store the
 			// ctxSigs from the START of this call, only after the turn succeeds).
 			session.contextMessageSignatures = ctxSigs;
+			// A cancel the agent answered itself leaves this live session in place (no drop below).
+			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
+				pushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);
+			}
 			finishSuccess(adapter, session, promptResult);
 			persistRecord(session, deps);
 		} catch (err) {
@@ -2018,6 +2246,7 @@ export function streamAcpTurn(
 			// ordering matters most here: teardown first would have overwritten the
 			// child's own exit status with our SIGTERM.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
+			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.

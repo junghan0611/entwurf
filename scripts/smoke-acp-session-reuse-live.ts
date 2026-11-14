@@ -114,8 +114,17 @@ async function main(): Promise<void> {
 	// pick `process-scoped`, so turn 2 reuses the in-memory child.
 	if (!process.argv.includes("--entwurf-control")) process.argv.push("--entwurf-control");
 
-	const model = { id: MODEL } as unknown as Model<Api>;
-	const options = { cwd: scratch, sessionId: "reuse-smoke" };
+	// #142: the Claude ACP rail maps pi's thinking level through the REGISTERED row's
+	// `thinkingLevelMap` and refuses a turn with no level (pi sends none for `off` or an unset
+	// level). So this smoke takes the curated row's map and states a level, as an operator's pi
+	// does through its registered model and defaultThinkingLevel.
+	const models = (await import(pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/models.js")).href)) as {
+		curatedClaudeModels: () => Array<{ id: string; thinkingLevelMap?: unknown }>;
+	};
+	const row = models.curatedClaudeModels().find((m) => m.id === MODEL);
+	if (!row) fail(`model ${MODEL} is not a curated Claude ACP row`);
+	const model = { id: MODEL, thinkingLevelMap: row.thinkingLevelMap } as unknown as Model<Api>;
+	const options = { cwd: scratch, sessionId: "reuse-smoke", reasoning: "medium" as const };
 
 	console.error(`[smoke-acp-session-reuse-live] repo:     ${REPO_ROOT}`);
 	console.error(`[smoke-acp-session-reuse-live] cwd:      ${scratch}`);

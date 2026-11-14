@@ -7,7 +7,9 @@
 			"title": "the default launch names the vendor bin directly again — the child re-enters the process-name space a janitor for another harness scans by substring, which is the whole of #72",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
 			"find": ["\tconst launcher = fileURLToPath(new URL(\"./claude-acp-launch.js\", import.meta.url));"],
-			"replace": ["\tconst launcher = require.resolve(\"@agentclientprotocol/claude-agent-acp/dist/index.js\");"],
+			"replace": [
+				"\tconst launcher = require.resolve(\"@agentclientprotocol/claude-agent-acp/package.json\").replace(/package\\.json$/, \"dist/index.js\");"
+			],
 			"gate": ["bash", "run.sh", "check-acp-launch-namespace"],
 			"timeoutSeconds": 240,
 			"signature": "[QK:CLAUDE-LAUNCH-IS-NAMESPACED]",

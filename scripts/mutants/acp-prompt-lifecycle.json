@@ -77,9 +77,9 @@
 			"title": "a backend session that died between turns is cleared but never announced — the next turn respawns silently and the operator never learns the session is gone",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"\t\t\tconst priorEnd = takeUnreportedChildEnd(sessionKey);\n\t\t\tif (priorEnd) {\n\t\t\t\tpushAcpLifecycleNotice(\n\t\t\t\t\tstate,\n\t\t\t\t\t`previous ${adapter.backend} session ended between turns (${describeChildEnd(priorEnd)}) — opening a new one`,\n\t\t\t\t);\n\t\t\t}"
+				"\t\t\tconst priorEnd = summary ? undefined : takeUnreportedChildEnd(sessionKey);\n\t\t\tif (priorEnd) {\n\t\t\t\tpushAcpLifecycleNotice(\n\t\t\t\t\tstate,\n\t\t\t\t\t`previous ${adapter.backend} session ended between turns (${describeChildEnd(priorEnd)}) — opening a new one`,\n\t\t\t\t);\n\t\t\t}"
 			],
-			"replace": ["\t\t\ttakeUnreportedChildEnd(sessionKey);"],
+			"replace": ["\t\t\tif (!summary) takeUnreportedChildEnd(sessionKey);"],
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:IDLE-DEATH-ANNOUNCED]",

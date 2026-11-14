@@ -12,6 +12,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-CLAUDE-FOREGROUND-ONLY]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-NO-IDLE-COMPACTION",
+			"title": "the claude session settings lose idleCompaction:false — claude-agent-acp 0.101+ sends its own /compact prompt on an idle retained session, a model turn pi never sees",
+			"subject": "pi-extensions/lib/acp/tool-surface.ts",
+			"find": ["\t\t\tidleCompaction: false,"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-foreground-only"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		}
 	]
 }

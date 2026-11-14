@@ -1,23 +1,80 @@
-# NEXT — Herdr 0.52.0 npm snapshot
+# NEXT — 0.53.1 출하 뒤: Herdr 0.53.1 snapshot → 다음 레일
+
+0.53.1은 #163(ACP Claude 품질 레일)을 npm으로 처음 출하했다. 0.53.0은 태그와 GitHub release만 있다. 다음 core 레일은 GLG가 정한다. 0.55.0은 #160이 준비될 때 간다(GLG 2026-11-14, ff08d4 전달).
 
 # RAIL — 현재 좌표
 
-- [x] **1. Core 0.52.0.** `v0.52.0`=c015477, Windows-carrier artifact·동일 파일 Linux 수용·인간 npm 게시와 registry consumer 확인.
-- [x] **2. Herdr npm source.** 실 registry bytes/SRI, 격리 npm swap·수동 torn-state 복구와 fixture-listing build activation/deactivation 확인.
-- [ ] **3. Snapshot 후보.** ← CURRENT: 최종 candidate seal·frozen FULL 확인 후 코디의 source/evidence 판정.
-- [ ] **4. 공개.** ← PAUSED: main push·exact-SHA CI·public-ref proof·plugin tag/GitHub Release는 앞선 판정 뒤 진행.
+- [x] **1. 0.53.0 cut.** tag `v0.53.0`(`72975b0`)과 GitHub release(2026-11-13)까지 했고, npm에는 게시하지 않았다(GLG 결정).
+- [x] **2. #163 land.** claude-agent-acp 0.107.0, 정확한 manual `/compact`, Pi 같은 가시성. main `7a100e89`, exact-SHA CI run 43570025312의 4개 job 모두 success.
+- [x] **3. BASELINE·VERIFY R2R (2026-11-14, ACP Opus 5.5).** 기록은 `docs/baseline-receipts.md`의 "0.53.1 BASELINE and VERIFY run" 항목에 있다.
+- [x] **4. 0.53.1 prepare → make → publish.**
+  - prepare `563b9334`, M0 FULL green.
+  - exact-SHA CI run 43579212082의 4개 job 모두 success.
+  - Windows preview run 43580235467.
+  - candidate sha256 `45ea17e4…57e5`.
+  - [release](https://github.com/junghan0611/entwurf/releases/tag/v0.53.1).
+  - GLG가 npm에 publish했다. `latest`=0.53.1, `repair` 유지.
+  - U2(registry bytes = candidate)와 U3(registry install smoke)는 green이다.
+- [ ] **5. Herdr npm snapshot 0.53.1.** ← CURRENT: re-pin 커밋을 main에 push하고 exact-SHA CI를 확인한다. 이어서 tag-release로 `v2026.11.14-herdr.0.53.1`와 GitHub release를 만든다.
+
+현재 좌표: 1–4 완료 → 5 Herdr snapshot(push·CI·tag) → 다음 레일은 GLG 결정
 
 # NOW
 
-- **다음 한 행동:** 후보 전체 diff와 evidence 범위를 확인하고 frozen FULL의 동일 seal 결과를 받는다. 이후 코디의 승인 아래 exact-SHA CI와 public-ref proof를 각각 수집한다. 운영 host 설치·재시작은 별도 승인이다.
-- **설치 인계:** 승인 대기 여부를 인계 맨 앞에 쓴다. 준비한 스크립트/재개 명령의 존재는 실행 증거가 아니다. 설치 exit0와 carrier/SDK 정합 확인 후에만 재개를 준비 완료로 안내한다. 자동 Enter·설치·takeover로 인간의 승인 창을 건너뛰지 않는다.
-- **호스트 분리:** Oracle은 승인된 창에서 Pi SDK 1.5.2와 addon-less 0.52 validation TGZ `d72afb…`로 전환했고, 새 GR `be87bcf…`에서 운영 코디가 같은 ID로 복귀했다. 최종 공개 TGZ `d053860c…`로는 운영 재설치·재시작하지 않았다. ThinkPad의 0.52 전환은 미측정이다. #155의 당시 호스트 영수증은 `CHANGELOG.md`와 `docs/setup-clean-host.md`에 보존한다.
+- **다음 한 걸음:**
+  - re-pin 커밋의 exact-SHA CI 4개 job이 green이면 snapshot tag와 GitHub release를 만들고 release stamp를 찍는다.
+  - 그 뒤 ff08d4가 #163 결과 댓글과 종결을 맡는다.
+  - 운영 host를 0.53.1로 옮기는 설치·재시작은 별도 승인이다.
+- **0.53.1 증거:**
+  - `CHANGELOG.md`의 0.53.1 Release evidence와 Herdr snapshot 항목.
+  - candidate와 U0 receipt는 `~/.local/state/entwurf-releases/0.53.1-563b9334f786/candidate.XBHRFx/`에 있다(host-local).
+- **사용감 기록 (자문 a30dda 제안, 결재 조건 아님):** 평소 일 한 건을 ACP로 끝낸 뒤 GLG에게 묻는다.
+  1. 기다리는 동안 Claude가 무엇을 하는지 알았나.
+  2. ESC 뒤 상태를 알고 이어서 말할 수 있었나.
+  3. compact 뒤 최신 결정, 남은 일, 끝난 일이 구분됐나.
+  - 불편은 "하려던 일 / 화면 / 관측 / 수습" 네 칸으로 적는다.
+  - 관찰 항목: 턴이 끝난 뒤에도 사는 서브에이전트나 백그라운드 작업이 보이지 않는 사각.
+- **#163 Observation (기록만):** 계약 문서는 `docs/acp-backend-rail.md` §11-10·§11-11이다.
+  - O3: 요약 오라클은 pi `sdk`/`modelRuntime` 구간을 덮지 않는다.
+  - O5: `/new`나 fork 뒤 `session_compact` 키가 어긋날 때 no-op인지 확인하지 않았다.
+  - M2b: done/failed summary의 fence 꼴은 그대로 뒀다.
+  - O-2: 미리보기를 Markdown으로 해석할 수 있다.
+  - O-3: fence를 벗긴 뒤에도 `'`가 남을 수 있다.
+  - O-4: 바이트 자르기는 code point 경계에서 한다.
+  - O-5: title이 여러 번 바뀌면 running 줄도 여러 번 나온다.
+  - 제어문자 정리는 pi 범위에 DEL·C1 제거를 더한 것이다.
+- **범위 제외 (GLG 2026-11-14):** 실행 중인 턴에 `_session/steering` 주입, 정지 동사 노출. 정지 수단은 로컬 ESC다.
+- **운영 관찰:**
+  - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. 0.53.0과 0.53.1 cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정했다. daemon 복원은 GLG가 결정한다.
+  - `check-acp-backend-preflight`가 thinking level 없이 backend를 부른다(b3 O1).
+  - `*resume-call.test.ts`가 `/tmp`에 디렉터리를 남긴다(P9). 0.53.1 U3 뒤에는 `mux-resume-call-pd`와 `herdr-resume-*` 세 종류가 각 105개였다.
+  - U3 registry 설치에서 pi가 경고를 냈다: host-provided 패키지(`pi-agent-core`, `pi-ai`, `pi-coding-agent`, `pi-tui`)는 dependencies가 아니라 `"*"` 범위의 peerDependencies여야 한다. 기록만 했다.
+- **PAUSED:** #160(Oracle 실행, 0.55.0), durable ACP 통합.
+- **역할 (2026-11-14):**
+  - ff08d4: 실무 코디.
+  - b3fc7c: make와 post-publish 작성자.
+  - Sonnet f17cd8: prepare 문서.
+  - 02055a: 리뷰.
+  - a30dda: 자문.
+  - 68bd94: 운영 코디. GLG에게 DM하는 것은 68bd94뿐이다.
+- **Do not touch:**
+  - 출하된 tag/release/npm bytes
+  - push(GLG 승인 시만), `--no-verify`, worktree
+  - 운영 profile·overlay·hook, credential
+  - 자동 compaction 기준 논의, #160, andenken 리포
 
-# 원자료 / 정리 원칙
+# 이월 (다음 레일과 결정 대기)
 
-- [#155 closed](https://github.com/junghan0611/entwurf/issues/155), [core Release](https://github.com/junghan0611/entwurf/releases/tag/v0.51.0), [core32 CI4](https://github.com/junghan0611/entwurf/actions/runs/41704213407), [Windows producer](https://github.com/junghan0611/entwurf/actions/runs/41706422290), [Herdr ce5 CI4](https://github.com/junghan0611/entwurf/actions/runs/41728277499). 출하 TGZ SHA256 `04fcce26d0a6dec8b8bb9a7f14a843eee0defb313aedafa34080600853d36e4d`,11710142B이며 registry 실물과 동일하다. Core tag/npm 바이트는 마감 문서 갱신으로 바뀌지 않는다.
-- 재사용 가능한 기술·출하·후속 Herdr·설치 인계 기록은 `CHANGELOG.md`0.51.0 및 `docs/setup-clean-host.md`가 소유한다. 앞선6파일 후보의 local FULL963s/affected PARTIAL5/5와 뒤의 문서 bookkeeping/각 push CI를 구분한다. Whole qualification BODY를 재실행하거나 이전 후보 receipt를 새 SHA 수용으로 승계하지 않는다.
-- Host-local 원본은 `~/.local/state/entwurf-releases/`와 `~/.local/state/entwurf-preparations/155/`에 보존한다. 청소·archive 검증·퇴근의 실제 경계/원실패/후속 보정은 후자의 `closeout/` 원영수증에서 읽는다. `/tmp/i155` 원 경로의 존재를 전제하지 않는다. 증거를 건넬 때 핵심 hash와 판정을 함께 붙인다.
-- 기존 대화/records/native DB/일관 백업과 유일 accepted TGZ/U0는 삭제하지 않는다. 의존성 payload나 test scratch도 명시한 소유 목록과 holder를 확인하고, 기억을 포함하면 검증된 archive를 먼저 둔다. tar가 담지 못하는 죽은 UNIX socket의 정확한 metadata 예외는 별도 sidecar에 남기며 regular-file bytes를 제외하지 않는다. 보존 대상 readonly 증거의 권한은 바꾸지 않는다. 검증된 archive에 bytes와 원 mode를 보존한 뒤 회수하기로 명시한 test scratch는, 승인된 정확한 디렉터리에 한해 unlink에 필요한 owner-write를 허용한다. 이는 canonical 산물·운영 자료·archive의 권한 변경 허가가 아니다.
-- `team.json`은 gitignored 인간용 책갈피다. 퇴근 후에도 항목을 남기며 garden/native ID·backend·cwd는 현재 owner facts가 우선한다. 명부에 생존 상태나 전송/재개/퇴근 권한을 저장하지 않는다. 이번 다섯 target의 사용자 요청과 단일 retire-call 결과는 private closeout 기록으로 보존한다.
-- Offline는 private HOME/PI/XDG/runtime·TMPDIR=/tmp·verify-deps 두 설정error·noCI. 첫 예상 밖 실패는 원문 보존 STOP. blind retry/unsafe hook bypass/타 리포·운영 tmux·DB·credential 수선·임의 kill0. Quarantine 등 별도 보호 자료는 열거나 청소하지 않는다.
+- **0.53.1 CHANGELOG kill-power 줄:** `none (all committed claims not re-proved, #144)`에 claim 개수 N이 빠졌다. 0.53.0은 1532였다. 2026-11-14 PARTIAL receipt(`563b9334` 위)에는 committed mutant가 1547개(5개 실행 + 1542개 미실행)로 나온다. 이미 태그된 섹션이라 고치지 않았다(ff08d4 2026-11-14).
+- **D1(다음 레일):** AGENTS.md Rule 11의 "run_ts is the sole TS crossing"과 `mcp/entwurf-bridge/start.sh:47-68`이 어긋난다. start.sh는 소스 체크아웃에서 src를 strip-types로 실행한다. 문안은 GLG가 정한다. 같은 owner 체크아웃에서 ACP 쪽 bridge는 src를 쓰고 Pi 내장은 dist를 써서, dist가 낡으면 둘이 갈라질 수 있다(미측정).
+- **O3(다음 레일):** R2R에서 summary에는 옛 사실만 있었고, 갱신된 사실은 kept tail이 운반했다. 다음 VERIFY 다이어트 후보는 §1A Layers 1–4다.
+- **run.sh:7787 주석:** "VERIFY.md:61"은 낡았다. 다만 check-install-surface S9h가 검토된 dispatch case를 바이트로 비교하므로, 고칠 때는 S9h의 reviewed 바이트와 함께 고친다.
+- **GLG 결정 대기:**
+  - #161 판단.
+  - 형제 262958과 b3e007 처리.
+  - O4: b3e007 summary에 gog·scope·calendar 단어가 있다. andenken이 summary를 그대로 임베딩하므로 그 세션 파일을 memory-sync에서 뺄지.
+
+# 원자료
+
+- #163 thread, #161, `docs/acp-backend-rail.md`, VERIFY.md Part I, BASELINE.md, `docs/baseline-receipts.md`.
+- 출하 영수증은 `CHANGELOG.md`에 있다(0.53.1, Herdr snapshot 항목, 0.53.0). host-local 원본은 `~/.local/state/entwurf-releases/`에 있다.

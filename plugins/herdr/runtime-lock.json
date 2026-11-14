@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 2,
-	"comment": "Production npm pin for the independently versioned Herdr plugin: core 0.52.0 uses the Pi 1.5.2 SDK set. The registry tarball's measured sha512 equals dist.integrity and its sha256 equals the accepted Windows-carrier core artifact. Hosts moving from herdr-checkout to npm require explicit deactivate/activate, never inherited activation; settled same-source npm installations may rebind under the plugin README's ownership conditions.",
+	"comment": "Production npm pin for the independently versioned Herdr plugin: core 0.53.1 uses the Pi 1.5.2 SDK set. Core 0.53.0 was tagged but never published to npm, so the previous pin is 0.52.0. The registry tarball's measured sha512 equals dist.integrity and its sha256 equals the accepted Windows-carrier core artifact. Hosts moving from herdr-checkout to npm require explicit deactivate/activate, never inherited activation; settled same-source npm installations may rebind under the plugin README's ownership conditions.",
 	"source": "npm",
 	"name": "@junghanacs/entwurf",
-	"version": "0.52.0",
-	"integrity": "sha512-kewT5KhGrpehp8cv3KjR0zROro2kkldBXmbcJUNrkVWZ0K/2/J72GCzK6mrBGk0arM6BkwqhAVMn1E6UIfa9/A=="
+	"version": "0.53.1",
+	"integrity": "sha512-G2EU4l77GSOLmUn5BSsyfcJtAIU/48yWo32V11AMNUXQ61Y5gOJ6CsHYp8VoH6Bkpr3xcBH1mhTovNVaTHqzBw=="
 }

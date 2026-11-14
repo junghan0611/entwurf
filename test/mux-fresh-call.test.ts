@@ -138,26 +138,26 @@ describe("argv dialects", () => {
 
 	it("[QK:FRESHCALL-CODEX-CALLBACK-DIALECT] Codex uses the measured underscore/double-underscore MCP spelling with the digit retained", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL.codex).toBe("mcp__entwurf_bridge__entwurf_v2");
-		expect(buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			FRESH_CALL_CALLBACK_TOOL.codex,
-		);
+		expect(
+			buildFreshCallPrompt({ backend: "codex", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain(FRESH_CALL_CALLBACK_TOOL.codex);
 	});
 	// Pi 0.99.2 folds every non-[A-Za-z0-9_] character of the MCP server key to `_` (#125), so pi now
 	// shares Codex's spelling. Each literal is written here, never read back from the production map.
 	it("[QK:FRESHCALL-PI-CALLBACK-DIALECT] pi calls back under the 0.99.2 underscore spelling, and the prompt names it", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL.pi).toBe("mcp__entwurf_bridge__entwurf_callback");
-		expect(buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"mcp__entwurf_bridge__entwurf_callback",
-		);
+		expect(
+			buildFreshCallPrompt({ backend: "pi", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain("mcp__entwurf_bridge__entwurf_callback");
 	});
 	it("[QK:FRESHCALL-PI-DELIVERY-DIALECT] pi delivers its result under the 0.99.2 underscore spelling", () => {
 		expect(FRESH_CALL_DELIVERY_TOOL.pi).toBe("mcp__entwurf_bridge__entwurf_v2");
 	});
 	it("[QK:FRESHCALL-PI-PEERS-DIALECT] pi is offered peers under the 0.99.2 underscore spelling, and the prompt names it", () => {
 		expect(FRESH_CALL_PEERS_TOOL.pi).toBe("mcp__entwurf_bridge__entwurf_peers");
-		expect(buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"mcp__entwurf_bridge__entwurf_peers",
-		);
+		expect(
+			buildFreshCallPrompt({ backend: "pi", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain("mcp__entwurf_bridge__entwurf_peers");
 	});
 	it("[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST] pi argv is the prompt FIRST, then --entwurf-control — the flag-first order was measured to open a window whose turn never ran", () => {
 		expect(piArgs[0]).toBe("PROMPT");
@@ -225,9 +225,9 @@ describe("argv dialects", () => {
 	it("[QK:FRESHCALL-COPILOT-CALLBACK-TOOL] the Copilot callback tool is the MEASURED `<server>-<tool>` composition, not Claude Code's `mcp__server__tool` spelling — a copied dialect costs the whole first turn", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL.copilot).toBe("entwurf-bridge-entwurf_callback");
 		expect(FRESH_CALL_CALLBACK_TOOL.copilot).not.toBe(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
-		expect(buildFreshCallPrompt({ backend: "copilot", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"entwurf-bridge-entwurf_callback",
-		);
+		expect(
+			buildFreshCallPrompt({ backend: "copilot", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain("entwurf-bridge-entwurf_callback");
 	});
 
 	it("no backend passes a shell string, a window name, a tmux cwd or an env carrier — codex's `-C` is the one directory token, and it is the VENDOR's flag rather than tmux's", () => {
@@ -281,9 +281,9 @@ describe("argv dialects", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_callback");
 		expect(FRESH_CALL_CALLBACK_TOOL.omp).not.toContain("entwurf_v2");
 		expect(FRESH_CALL_CALLBACK_TOOL.omp).not.toBe(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
-		expect(buildFreshCallPrompt({ backend: "omp", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"mcp__entwurf_bridge_entwurf_callback",
-		);
+		expect(
+			buildFreshCallPrompt({ backend: "omp", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain("mcp__entwurf_bridge_entwurf_callback");
 	});
 
 	const pdArgs = buildBackendArgs("pi-durable", COMPOSITION, PI_DURABLE_MODEL);
@@ -317,7 +317,9 @@ describe("argv dialects", () => {
 	it("[QK:FRESHCALL-PI-DURABLE-CALLBACK-DIALECT] pi-durable names the bridge verbs by their bare registered names — the contact registers them as its own tools", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL["pi-durable"]).toBe("entwurf_callback");
 		expect(FRESH_CALL_DELIVERY_TOOL["pi-durable"]).toBe("entwurf_v2");
-		expect(buildFreshCallPrompt({ backend: "pi-durable", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+		expect(
+			buildFreshCallPrompt({ backend: "pi-durable", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain(
 			"BEFORE THE TASK, and before reading files or running commands: call entwurf_callback with no arguments.",
 		);
 	});
@@ -328,7 +330,7 @@ describe("argv dialects", () => {
 });
 
 describe("first-turn framing", () => {
-	const prompt = buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE });
+	const prompt = buildFreshCallPrompt({ backend: "pi", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE });
 
 	it("[QK:FRESHCALL-CALLBACK-PRECEDES-TASK] the framing puts the callback instruction BEFORE the task, so a sibling that stalls in the task has already named itself", () => {
 		const callbackAt = prompt.indexOf("BEFORE THE TASK");
@@ -341,16 +343,16 @@ describe("first-turn framing", () => {
 		expect(prompt).toContain(GID);
 		expect(prompt).not.toContain(NONCE);
 		expect(prompt).toContain("with no arguments");
-		const codex = buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE });
+		const codex = buildFreshCallPrompt({ backend: "codex", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE });
 		expect(codex).toContain(NONCE);
 		expect(codex).toContain("entwurf_callback is refused on this rail");
 	});
 
 	it("names the backend's own callback tool (native entwurf_callback vs the MCP-namespaced one)", () => {
 		expect(prompt).toContain("entwurf_callback");
-		expect(buildFreshCallPrompt({ backend: "claude-code", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			FRESH_CALL_CALLBACK_TOOL["claude-code"],
-		);
+		expect(
+			buildFreshCallPrompt({ backend: "claude-code", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE }),
+		).toContain(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
 	});
 
 	/**
@@ -1027,7 +1029,13 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		expect(MODULE_SRC).not.toContain("params.callerNativeSessionId ?? params.callerGardenId");
 		// The prompt builder itself takes only the garden id — there is no thread parameter to
 		// pass one through, which is what makes the seam above the only place to get it wrong.
-		const prompt = buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE });
+		const prompt = buildFreshCallPrompt({
+			backend: "codex",
+			model: "m",
+			task: TASK,
+			callerGardenId: GID,
+			nonce: NONCE,
+		});
 		expect(prompt).toContain(GID);
 		expect(prompt).not.toContain("01a0a7f9");
 	});
