@@ -42,6 +42,14 @@ describe("parseOpenclawCitizensDeclaration", () => {
 		expect(parseOpenclawCitizensDeclaration(decl({ allow: [], freshKeyPrefix: PREFIX })).allow).toEqual([]);
 	});
 
+	it("[QK:OPENCLAW-BIN-CONFIGPATH-REFUSED] a gateway declaring both bin and configPath is refused by name", () => {
+		expect(() =>
+			parseOpenclawCitizensDeclaration(
+				decl({ gateways: [{ ...GW, bin: "/opt/oc/openclaw-shim", configPath: "/srv/oc/openclaw.json" }] }),
+			),
+		).toThrow(/declares both bin and configPath/);
+	});
+
 	it("carries no garden id: a gardenId key anywhere is refused", () => {
 		expect(() => parseOpenclawCitizensDeclaration(decl({ gardenId: "20261113T145250-0c9e3a" }))).toThrow(
 			OpenclawDeclarationError,
@@ -66,11 +74,6 @@ describe("parseOpenclawCitizensDeclaration", () => {
 		["relative bin", decl({ gateways: [{ ...GW, bin: "openclaw" }] }), /bin: must be an absolute, normalized/],
 		["unnormalized bin", decl({ gateways: [{ ...GW, bin: "/a/./oc" }] }), /bin: must be an absolute, normalized/],
 		["whitespace in bin", decl({ gateways: [{ ...GW, bin: "/a/o c" }] }), /bin: must not contain whitespace/],
-		[
-			"bin with configPath",
-			decl({ gateways: [{ ...GW, bin: "/opt/oc/openclaw-shim", configPath: "/srv/oc/openclaw.json" }] }),
-			/declares both bin and configPath/,
-		],
 		["key of another agent", decl({ allow: [{ ...KEY, sessionKey: "agent:ops:s1" }] }), /must start with/],
 		["bare agent head", decl({ allow: [{ ...KEY, sessionKey: "agent:main:" }] }), /must start with/],
 		["whitespace in key", decl({ allow: [{ ...KEY, sessionKey: "agent:main:a b" }] }), /whitespace/],

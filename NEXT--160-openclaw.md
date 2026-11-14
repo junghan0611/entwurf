@@ -13,19 +13,29 @@
     - 경계: fresh의 `openclawTuiLaunch`는 `bin`을 읽지 않는다(production 호출자 0, fresh preflight가 거절 중). 컨테이너 TUI는 docker exec `-it`가 필요해 별도 설계 — fresh 단계에서 다룬다.
   - [x] **S5.2 wrapper invalid 계약.** 플러그인 분류표는 이미 맞았다(exit 2 + `{"kind":"invalid"}` 한 줄 → invalid, 0줄 → indeterminate, `plugins/openclaw/dist/core.js` classifyEntryResult). 이번에 계약으로 고정했다: core.js 헤더에 "operator wrapper" 문단, manifest `entwurfBin`/`declPath` 문구(card §R2 정돈안), 옆 테스트 +5(wrapper 표 4행: invalid 한 줄 / bare exit 2 / ssh 255 / remote 1, 그리고 실제 child process wrapper가 foreign declPath를 invalid로 거절). 손 mutant(2→invalid 매핑 제거) → 3 fail. wrapper 자체는 운영 측(nixos-config) 소유이고 entwurf는 받는 쪽 규칙만 가진다.
   - [x] **S5.3 merge 전 문구 묶음 (flip 전 몫).** O1–O3 끝냄: O1 birth `--cwd`는 "absolute and normalized; existence not checked"(ENTWURF-CLI.json + install-surface 리터럴 + scripts/openclaw-birth.ts USAGE), O2 send exit 3 = scope 거절 또는 record 0개, 중복 native id는 strict listing이 throw → exit 1, O3 S9h 라벨·주석을 #153/#157/#160 amendment로 갱신(QK 접두사 불변, mutant는 signature 매칭). 남은 것: **BRANCH 문구 4곳 → flip 묶음** (ff08d4 결정 2026-11-14: 출하 문구는 merge 시점의 사실과 함께 바꾼다). NEXT 정리는 merge 직전.
-  - [ ] **S5.4 리뷰** ← NEXT. (독립 리뷰어, ff08d4 배치) → amendment 한 묶음.
-  - [ ] **S5.5 PARTIAL** (변경된 gate/mutant/matrix 그룹만, archived 단언 QK 포함) — **build 필요 지점: 여기서 멈추고 ff08d4에 보고.**
+  - [x] **S5.4 리뷰.** 1eed2c, Blocker 0 / Defect 1 / Observation 7 (원문 `/tmp/ff08d4-next/review-s5.md` sha fda970b4…, oracle 로컬). amendment 한 묶음(이 커밋):
+    - D1: 새 계약 넷에 QK + 커밋된 exact-once mutant. lane `openclaw`(`scripts/mutants/openclaw.json`, 4개, build 선언 없음), 실행 좌표 `check-openclaw-beside`(run.sh 함수 + ENTWURF-CLI.json 설명 + install-surface 카탈로그 리터럴 + check:contracts), `EXPECTED_LANE_MUTANTS.openclaw = 4`. QK: `OPENCLAW-BIN-CONFIGPATH-REFUSED`, `OPENCLAW-SEND-USES-PROBED-BIN`, `OPENCLAW-WRAPPER-INVALID-LINE`, `OPENCLAW-FRESH-TUI-REFUSES-BIN`. 손 실행으로 4/4 kill, 각각 자기 QK 제목에 귀속.
+    - O1: `openclawTuiLaunch`가 선언된 `bin`을 받으면 `openclaw-fresh-bin-not-honoured`로 throw(주석에 이유). 타입은 좁히지 않음.
+    - O2: plugin core.js wrapper 문단에 15s 여유 한 줄. wall-clock 측정은 lab/F 단계.
+    - O7: ff08d4가 #160 진행 댓글로 처리(issuecomment-6876807402).
+  - **S5.4 Observation (기록만, 이번에 고치지 않음):**
+    - O3: shim timeout kill은 argv0(shim)에만 간다. 운영 shim은 `exec docker exec -i …`, 래핑 셸 없음으로 둔다. kill 뒤 컨테이너 안 `chat.send`가 계속 도는지는 lab에서 잰다(도는 경우 거짓 실패 방향, 재시도 없음).
+    - O4: spawn 실패(ENOENT/EACCES)가 "exited 127: (empty)"로만 보인다(공용 runner `adapter.ts:81-82`). 고치려면 공용 runner 영향 범위부터.
+    - O5: 끝 슬래시 `bin`(`/opt/oc/`)을 파서가 받는다. probe에서 127/indeterminate로 드러남. 선택적 개선.
+    - O6: birth가 선언을 두 번 읽는다(scope 확인 + 어댑터 probe). 판정은 probe 쪽이라 거짓 birth 없음.
+  - [ ] **flip 묶음 전 목록화: 브랜치 본체 openclaw 테스트의 QK 0.** S3 범위 계약(선언 파서, scope 선택, native id, probe 분류·archived, send 분류, claim·envelope, birth, plugin claim·commit point) 중 어느 것에 QK+mutant가 필요한지 목록부터 만든다. 지금은 고치지 않는다. archived 단언(4184c5 b)도 이 목록에 들어간다.
+  - [ ] **S5.5 PARTIAL** ← NEXT. 실행 전에 멈추고 argv 그룹 목록을 ff08d4에 보낸다. 후보 그룹(각 `./run.sh check-gate-qualification --group '<argv JSON>' --receipt <repo 밖 절대경로>`): `["bash","run.sh","check-openclaw-beside"]`(4, build 없음), `["bash","run.sh","check-install-surface"]`(44, build 없음), `["bash","run.sh","check-gate-manifests"]`(52, build 없음 — lane 맵 변경). qualification은 격리 snapshot repo에서 돌고 실제 checkout을 쓰지 않는다(`scripts/check-gate-qualification.ts:30-36`). archived QK는 위 목록화 뒤에 추가.
   - [ ] **S5.6 frozen FULL** → **S5.7 exact-SHA CI.** build-bridge/check-pack/check:full/prepack은 GLG가 정한 재시작 창 안에서만.
   - [ ] **S5.8 oracle 적용** (GLG 승인 단계별): host shim(PATH 밖) + 선언 → SSH 키·forced command(8216f4 계획) → 플러그인 `--link` → 책상 열기(birth). oracle birth는 main 병합·flip·reader 재시작 뒤에만.
 
 # NOW
 
-- **현재 HEAD:** `51ed755a` (160-openclaw, main `0c058cea` merge 체크포인트, push 안 함). 이 checkout은 oracle 운영 설치이기도 하다.
+- **현재 HEAD:** S5.4 amendment 커밋(직전 `90eb6ca8`; merge 체크포인트 `51ed755a`). push 안 함. 이 checkout은 oracle 운영 설치이기도 하고, 운영 dist는 ff08d4가 clean tree에서만 build한다.
 - **금지 (GLG가 창을 정하기 전까지):** `pnpm run build-bridge`, `check-pack`, `check:full`, prepack을 일으키는 모든 것 — pi-durable 68bd94·145c2f가 dist로 돌고 있다. oracle store에 openclaw birth 금지. push 금지. `META_CITIZEN_BACKENDS`·`pi/entwurf-capabilities.json` 편집은 checkout src로 도는 bridge 전부를 throw시킨다(flip 경계, 아래 기록).
 - **운영 전제 정정:** 옛 "운영 10.9 / 8b18b55" 전제는 낡았다. 운영 버전 SSOT는 nixos-config `ORACLE.md`의 LIVE 줄 하나다 [read ORACLE.md:140, 2026-11-14]: OpenClaw **2026.11.3** · `847611d` · image `openclaw-custom:11.3-candidate-20261113`. 컨테이너 node v24.22.1 / sqlite 3.53.4 [상속: 8216f4 s5-ops-facts]. 따라서 "운영을 11.3으로 맞추는 일"은 이미 끝났다.
 - **경로 축 정정:** 옛 S5 줄의 "컨테이너 경로와 host 경로가 다르다"는 부분만 맞다. `~/repos/gh`, `~/.pi/agent`, `~/org`는 host와 같은 절대경로로도 마운트되어 있다 [측정 `docker inspect openclaw-gateway` Mounts, 2026-11-14]. 다른 것은 봇 workspace의 컨테이너 경로뿐이고, birth `--cwd`는 운영자 명시값(host 절대경로)으로 둔다. record cwd는 send envelope 표시에만 쓰인다.
 - **Tier 1/2 측정 (8216f4, 운영 컨테이너, 읽기 전용):** 컨테이너 CLI에 `--expect-url` 있음. 선언 url `ws://127.0.0.1:18789`로 `sessions.describe` 없는 key → `{"session":null}` rc0 1.56s, 틀린 url → rc1 "Gateway destination changed", state 쓰기 0 [상속: `/tmp/ff08d4-next/s5-f0-tier2.md` sha a6f5853c…, oracle 로컬]. A1(수신 = docker exec shim) 성립.
-- **다음 한 행동:** S5.4 독립 리뷰(리뷰어는 ff08d4가 배치). 범위: 51ed755a merge + c5323af3..HEAD.
+- **다음 한 행동:** 1eed2c의 amendment 재확인 → S5.5 PARTIAL 그룹 목록을 ff08d4에 보내고 승인 대기.
 - **역할 (2026-11-14):** 코디 = `20261113T043350-ff08d4`(Claude Code, oracle). 구현 = `20261114T193422-ee14c7`(이 문서의 writer). 운영 실행 = nixos-config 운영 담당(garden id는 코디가 앎). 운영 코디 68bd94, thinkpad 코디 b22677, thinkpad 검수 9fc008. 보고는 모두 ff08d4로. 커밋은 commit 스킬, push는 GLG.
 
 # S5 결정 (GLG 2026-11-14, ff08d4 중계) — 공개 정책: #160 issuecomment-6876392683

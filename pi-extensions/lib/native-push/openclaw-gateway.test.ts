@@ -180,7 +180,7 @@ describe("declared bin (#160 S5 1b)", () => {
 		expect(r.calls[0].opts?.env).toBeUndefined();
 	});
 
-	it("send runs the bin the probe confirmed, without re-reading the declaration", async () => {
+	it("[QK:OPENCLAW-SEND-USES-PROBED-BIN] send runs the bin the probe confirmed, without re-reading the declaration", async () => {
 		const r = runner({ code: 0, stdout: '{"runId":"entwurf-k1","status":"started","messageSeq":1}', stderr: "" });
 		let reads = 0;
 		const a = adapter(r, () => {

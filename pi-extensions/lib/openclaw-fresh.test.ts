@@ -95,6 +95,11 @@ describe("fresh key, create params, TUI argv", () => {
 		});
 		expect(openclawTuiLaunch("openclaw", "agent:main:entwurf-01", "m", {}).env).toEqual({});
 	});
+	it("[QK:OPENCLAW-FRESH-TUI-REFUSES-BIN] a gateway that declares bin is refused by name, never launched on the host binary", () => {
+		expect(() => openclawTuiLaunch("openclaw", "agent:main:entwurf-01", "m", { bin: "/opt/oc/openclaw-shim" })).toThrow(
+			/openclaw-fresh-bin-not-honoured/,
+		);
+	});
 });
 
 describe("openclawFreshPreflight", () => {

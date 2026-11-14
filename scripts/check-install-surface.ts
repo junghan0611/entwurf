@@ -588,6 +588,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh `openclaw-send)` arm -> scripts/openclaw-send.ts: --decl must equal openclawCitizensPath(), absent/broken declaration or invalid claim -> invalid receipt exit 2, wrong argv exit 2 with usage, receiveOpenclawClaim scope + record join -> rejected exit 3, runAndRenderEntwurfV2FromSurface -> dispatched exit 0/4 (openclawSendExitCode), uncaught -> 1 (#160)",
 		},
+		// #160 S5.4 D1: the mutant execution coordinate of the openclaw lane, right after the remote-pair one.
+		{
+			after: "  entwurf check-remote-pair-beside    # ",
+			line: "  entwurf check-openclaw-beside       # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the four OpenClaw beside tests (scope declaration, receive adapter, fresh launch, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs.",
+			receipt:
+				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-fresh and plugins/openclaw/core tests (#160 S5.4)",
+		},
 		{
 			after: "  entwurf openclaw-send               # ",
 			line: "  entwurf openclaw-birth              # #160, BRANCH candidate: the one writer of `openclaw` records. Checks the key against this host's openclaw-citizens.json, requires the declared Gateway's sessions.describe to answer alive, then upserts openclaw:<scope>:<sessionKey> idempotently (a re-birth attaches to the same garden id). --cwd is explicit, absolute and normalized; the directory's existence is not checked (no OpenClaw read RPC returns a session root). Prints one JSON line {action,gardenId,nativeSessionId,cwd}; any refusal throws (exit 1); wrong argv exit 2 (--scope <s> --session-key <agent:<id>:<key>> --cwd <absolute normalized path>)",

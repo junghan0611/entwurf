@@ -30,7 +30,8 @@
  * `declPath` that is not the host's) must print one `{"kind":"invalid","detail":…}` line and exit 2,
  * so it reads as `invalid` (not sent); a bare exit 2 with no line is `indeterminate`, as is any
  * transport failure (ssh 255, a remote 1), because nothing here can tell those apart from a send
- * that was admitted before its receipt was lost.
+ * that was admitted before its receipt was lost. The wrapper's own overhead must fit inside
+ * SEND_TIMEOUT_MS − OPENCLAW_SEND_ENTRY_WORST_MS (15s); otherwise the result is indeterminate.
  */
 
 import * as path from "node:path";

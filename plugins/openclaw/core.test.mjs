@@ -198,6 +198,14 @@ describe("operator wrapper receipt contract (#160 S5 §R2)", () => {
 		expect(classifyEntryResult(r).outcome).toBe(outcome);
 	});
 
+	it('[QK:OPENCLAW-WRAPPER-INVALID-LINE] a wrapper refusal is invalid only as one {"kind":"invalid"} line with exit 2; a bare exit 2 stays indeterminate', () => {
+		expect(classifyEntryResult({ code: 2, stdout: line({ kind: "invalid" }), stderr: "" })).toEqual({
+			outcome: "invalid",
+			detail: "",
+		});
+		expect(classifyEntryResult({ code: 2, stdout: "", stderr: "refused" }).outcome).toBe("indeterminate");
+	});
+
 	it("a wrapper process that refuses before the entry, through node spawn", () => {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-wrapper-"));
 		try {

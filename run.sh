@@ -1557,6 +1557,13 @@ check_remote_pair_beside() {
   run_vitest pi-extensions/lib/remote-pair-send.test.ts pi-extensions/lib/remote-pair-receive.test.ts pi-extensions/lib/remote-pair-roundtrip.test.ts pi-extensions/lib/remote-pair-transport.test.ts pi-extensions/lib/meta-mailbox-body.test.ts
 }
 
+check_openclaw_beside() {
+  # #160 S5.4: the execution coordinate for the OpenClaw claims (VERIFY 「Four rules」 rule 3). Not a
+  # discovery path — check-tests-beside-behavior already finds these files. Every openclaw QK lives
+  # in one of them, so one mutant re-runs these four files rather than every beside test.
+  run_vitest pi-extensions/lib/openclaw-citizens.test.ts pi-extensions/lib/native-push/openclaw-gateway.test.ts pi-extensions/lib/openclaw-fresh.test.ts plugins/openclaw/core.test.mjs
+}
+
 smoke_mux_fresh_call_live() {
   # LIVE acceptance for entwurf_fresh_call — OUT of pnpm check, needs LIVE=1, spends two model
   # turns. The one axis no deterministic gate reaches: a real window, a real runtime, a real first

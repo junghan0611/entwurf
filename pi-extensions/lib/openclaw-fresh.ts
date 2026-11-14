@@ -144,13 +144,23 @@ export function openclawSessionsCreateParams(key: string, nonce: string, provide
 /**
  * Card §2-5. The TUI opens exactly the created key; the framing is its first message ((c) unmeasured).
  * `env` is the one fixed variable the launch may carry: the declared gateway's `configPath`.
+ *
+ * A declared `bin` is not honoured here (#160 S5.4 O1): `bin` reaches a container Gateway through
+ * an operator shim, and a TUI there needs a separate design (an interactive `docker exec -it`), not
+ * the receive adapter's program. So a gateway that declares one is refused by name rather than
+ * launched on the host's `binary`, which would open a TUI against some other Gateway.
  */
 export function openclawTuiLaunch(
 	binary: string,
 	key: string,
 	framing: string,
-	gateway: { configPath?: string },
+	gateway: { configPath?: string; bin?: string },
 ): { argv: string[]; env: Record<string, string> } {
+	if (gateway.bin !== undefined) {
+		throw new OpenclawFreshArgvError(
+			`openclaw-fresh-bin-not-honoured: the gateway declares bin ${gateway.bin}; a container Gateway needs a separate TUI design`,
+		);
+	}
 	return {
 		argv: [binary, "tui", "--session", key, "--message", framing],
 		env: gateway.configPath ? { OPENCLAW_CONFIG_PATH: gateway.configPath } : {},

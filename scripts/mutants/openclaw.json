@@ -1,0 +1,50 @@
+{
+	"schemaVersion": 1,
+	"lane": "openclaw",
+	"mutants": [
+		{
+			"claim": "OPENCLAW-BIN-CONFIGPATH-REFUSED",
+			"title": "the declaration parser accepts a gateway with both bin and configPath, so the config path rides an env overlay that stops at the shim and is dropped silently",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["\tif (Object.hasOwn(obj, \"bin\") && Object.hasOwn(obj, \"configPath\")) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-BIN-CONFIGPATH-REFUSED]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-SEND-USES-PROBED-BIN",
+			"title": "the receive adapter's send runs the default openclaw instead of the bin the probe confirmed, so a send can reach a different Gateway than the one probed alive",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["openclawChatSendArgv(programOf(route), route, content, newKey())"],
+			"replace": ["openclawChatSendArgv(defaultBinary, route, content, newKey())"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-SEND-USES-PROBED-BIN]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-WRAPPER-INVALID-LINE",
+			"title": "the plugin stops reading exit 2 with one invalid receipt line as invalid, so a wrapper's clean pre-entry refusal reports 'may have been dispatched'",
+			"subject": "plugins/openclaw/dist/core.js",
+			"find": ["const KIND_FOR_CODE = { 0: \"dispatched\", 4: \"dispatched\", 3: \"rejected\", 2: \"invalid\" };"],
+			"replace": ["const KIND_FOR_CODE = { 0: \"dispatched\", 4: \"dispatched\", 3: \"rejected\" };"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-WRAPPER-INVALID-LINE]",
+			"signatureSource": "plugins/openclaw/core.test.mjs"
+		},
+		{
+			"claim": "OPENCLAW-FRESH-TUI-REFUSES-BIN",
+			"title": "the fresh TUI launch ignores a declared bin and launches the host binary, opening a TUI against some other Gateway than the container one the declaration names",
+			"subject": "pi-extensions/lib/openclaw-fresh.ts",
+			"find": ["\tif (gateway.bin !== undefined) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-FRESH-TUI-REFUSES-BIN]",
+			"signatureSource": "pi-extensions/lib/openclaw-fresh.test.ts"
+		}
+	]
+}
