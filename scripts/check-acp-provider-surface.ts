@@ -102,9 +102,15 @@ try {
 	const mod = await import(entryUrl);
 
 	const calls: Array<{ id: string; cfg: CapturedCfg }> = [];
+	const events: string[] = [];
 	const fakePi = {
 		registerProvider(id: string, cfg: CapturedCfg) {
 			calls.push({ id, cfg });
+		},
+		// #163: the entry closes a session's Claude child on compaction. Its behaviour is proven in
+		// pi-extensions/lib/acp/backend.summary-turn.test.ts; here only the registration count.
+		on(event: string) {
+			events.push(event);
 		},
 	};
 
@@ -117,6 +123,7 @@ try {
 		1,
 		`entry must register exactly once across two calls (idempotency) — got ${calls.length}`,
 	);
+	assert.deepEqual(events, ["session_compact"], `entry must subscribe to session_compact exactly once — got ${events}`);
 	const cap = calls[0];
 	assert.equal(cap.id, PROVIDER_ID, `entry registered the wrong provider id: ${cap.id}`);
 	assert.equal(cap.cfg.apiKey, ENTWURF_ACP_NO_AUTH_SENTINEL, "entry apiKey is not the no-auth sentinel");

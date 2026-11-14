@@ -48,6 +48,13 @@ export type AcpPiStreamState = {
 	openThinkingIndex?: number;
 	/** When false, tool/permission notices are suppressed (kept terse for smokes). */
 	showToolNotifications?: boolean;
+	/**
+	 * #163: no notice of any kind — tool, permission, display-only or lifecycle. Set only for
+	 * Pi's one-shot summary turn. Pi stores that summary as `contentText(response.content)`,
+	 * which joins every text block (pi-ai `dist/utils/text.js`) without reading a signature,
+	 * so a notice here would become part of the summary the session file keeps.
+	 */
+	quiet?: boolean;
 	observedTools?: Map<string, ObservedToolState>;
 	/**
 	 * RAW, UNINTERPRETED observations from this turn's `usage_update` notifications
@@ -162,7 +169,7 @@ function ensureThinkingBlock(state: AcpPiStreamState): number {
  * permission events — informational, NOT structured tool calls.
  */
 function pushNotice(state: AcpPiStreamState, text: string): void {
-	if (!state.showToolNotifications || !text.trim()) return;
+	if (state.quiet || !state.showToolNotifications || !text.trim()) return;
 	closeThinkingBlock(state);
 	closeTextBlock(state);
 	const index = state.output.content.length;
@@ -320,7 +327,7 @@ export const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
  * never replays into an ACP prompt nor perturbs the reuse-compat signature.
  */
 function pushDisplayOnlyNotice(state: AcpPiStreamState, text: string): void {
-	if (!state.showToolNotifications) return;
+	if (state.quiet || !state.showToolNotifications) return;
 	closeThinkingBlock(state);
 	closeTextBlock(state);
 	const index = state.output.content.length;
@@ -341,6 +348,7 @@ function pushDisplayOnlyNotice(state: AcpPiStreamState, text: string): void {
  *      reuse-compat signature (the two consumers filter on the signature).
  */
 export function pushAcpLifecycleNotice(state: AcpPiStreamState, text: string): void {
+	if (state.quiet) return;
 	const line = `\n[acp: ${sanitizeNoticeFragment(text, NOTICE_TITLE_MAX)}]\n`;
 	closeThinkingBlock(state);
 	closeTextBlock(state);

@@ -5,18 +5,19 @@
 # RAIL — 현재 좌표
 
 - [x] **1. claude-agent-acp 0.106.0 → 0.107.0.** C0 dist 비교, C1 bump, focused 게이트 rc=0. 영수증은 ROADMAP Dep bump ledger 2026-11-14 항목에 있다.
-- [ ] **2. 정확한 manual `/compact`.** ← CURRENT: 판별자와 one-shot 요약 턴을 구현하고, QK 두 개와 mutant를 만든다. 요약 턴을 한 번만 돌리고 retain하지 않는다. 저장되는 summary에는 bridge가 붙인 줄이 하나도 없어야 한다. compact 직후 기존 Claude 자식을 닫는다. 도구를 조인 세션에서도 동작해야 한다.
-- [ ] **3. Pi처럼 보이게 (#162 확장).** Claude가 뭘 하는지 세션에 보이게 한다. pi 사용감과의 차이를 메우는 최소 집합만 고른다. 후보는 ff08d4에게 먼저 보낸다.
+- [x] **2. 정확한 manual `/compact`.** 코드·QK 6개·mutant 6개(로컬 6/6 KILLED)·문서(rail §11-10, VERIFY 행) 완료. LIVE `/compact` n=1은 RAIL 4에서 한다.
+- [ ] **3. Pi처럼 보이게 (#162 확장).** ← CURRENT: M1~M3 설계안을 andenken 문법 대조표와 함께 ff08d4에게 먼저 보낸다. 승인 후 구현한다.
 - [ ] **4. 후보 검증과 착지.** 영향받는 PARTIAL → frozen FULL → 관련 LIVE n=1 → GLG의 commit/push 결정.
 
 범위 제외 (GLG 2026-11-14): `_session/steering` 주입, 정지 동사 노출. steer 쪽 결론은 "queued steer는 인터럽트가 아니다"라는 기존 계약을 유지하는 것이고, 정지 수단은 로컬 ESC다.
 
-현재 좌표: 1 완료 → 2 진행 → 3 → 4 착지
+현재 좌표: 1·2 완료 → 3 설계 대조 → 4 착지
 
 # NOW
 
 - **운영 (GLG 2026-11-14):** (A)로 진행한다. 이 체크아웃이 운영 pi의 원본이고, 작업하는 동안 pi ACP Claude는 GLG가 부르지 않는다. 앞으로 ff08d4가 요청하는 일은 진행한다.
-- **다음 (C2):** `backend.ts`의 preflight 앞에 판별자를 두고, 요약 턴을 one-shot 경로로 보낸다. 재료는 아래 §2에 있다.
+- **다음 (C3):** event-mapper notice 문법을 andenken `session-selection.ts:83-99` 문법과 표로 대조한다. M1은 기존 `[tool:start]` 문법 안에서 표시하는 쪽을 먼저 검토한다. 문법을 바꿔야 하면 구현 전에 ff08d4에게 올린다. 재료는 아래 §3에 있다.
+- **C2 메모:** 내 abandon 리팩터 때문에 기존 mutant `acp-prompt-lifecycle/IDLE-DEATH-ANNOUNCED`의 find를 고쳤다(로컬 KILLED 확인). 이 lane도 RAIL 4 PARTIAL에 넣는다. PARTIAL 대상 lane: `acp-set-model-readback`(새 6개), `acp-prompt-lifecycle`(find 수정 1개), SDK-surface 오라클.
 - **C1 메모:** 남은 `0.106.0` 언급은 날짜가 붙은 측정 기록이라 그대로 둔다(`backend-adapter.ts:378`, `tool-surface.ts:177`, `probe-cli-target.ts:96`; 해당 dist 파일은 0.107에서 diff가 없다). PARTIAL은 RAIL 4에서 한 번에 돈다. 그때 바뀐 SDK-surface 오라클도 포함한다.
 - **역할:**
   - b3fc7c: 이 체크아웃의 단일 작성자. GLG가 2026-11-14 이 세션에서 직접 승인했다.
@@ -74,5 +75,10 @@
   - **M2:** 결과 미리보기. 표시 전용(LIFECYCLE 서명)이고 최대 5줄·400바이트다. 실패하면 stderr 꼬리를 우선한다.
   - **M3:** 네이티브 compaction 수치를 `[compact] auto 812k→43k (3.1s)` 같은 한 줄로 보여 준다.
 - **미룸:** plan/TodoWrite, subagent_*/async_task_*, 턴 사이 알림, compaction_update capability.
-- **미확인 (ff08d4가 GLG에게 올림):** 임베딩 파이프라인이 서명 블록을 거르는지.
+- **andenken 결합 (전달받은 사실, 미검증):** 출처는 ff08d4 경유 6f5c09가 andenken HEAD `e5165ecc`를 읽은 것이다. 좌표는 andenken 리포 기준이다.
+  - oracle의 정상 writer는 control-v1 정책이다. lifecycle 서명 블록은 임베딩에서 빠진다(`session-selection.ts:32-38`, `:126-149`).
+  - 서명 없는 `[tool:start|done|failed|cancelled]`와 permission notice도 생산자 문법에 정확히 맞으면 빠진다(`:83-99`, `:141-143`). 그래서 notice 문법을 바꾸면 andenken 분류가 달라진다.
+  - `compaction.summary`는 그대로 청크화된다(`session-indexer.ts:681-703`). C2의 notice 0 요구가 임베딩 쪽에서도 확인됐다.
+  - 6f5c09 판단: 진행·경과시간·중복 미리보기·`[compact]` 수치 줄은 서명 처리에 동의한다. 실패 원인을 실어 나르는 텍스트가 미리보기뿐이라면 지우는 것은 별도 결정이다.
+  - andenken 수정은 범위 밖이다. 문법 변경이 필요하면 ff08d4에게 먼저 올린다.
 - **할 일:** C2가 끝나면 M1~M3을 구현한다. claude-agent-acp의 전 기능을 쓰는 것은 목표가 아니다.

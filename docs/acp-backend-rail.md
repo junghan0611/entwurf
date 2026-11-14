@@ -868,6 +868,34 @@ The adapter keeps its own turn-settlement bookkeeping internally, and our event 
 update kinds it does not handle (`event-mapper.ts:377-378`), so nothing above is a claim that
 Entwurf must replicate vendor internals. The reason to stay put is the five contracts, not a ledger.
 
+## 11-10. Pi's own summary is a one-shot, tool-less turn (#163)
+
+Pi summarizes for `/compact`, the compaction threshold, overflow recovery and `/tree` branch
+summaries through one call, `completeSummarization` (pi-coding-agent 1.5.2
+`dist/core/compaction/compaction.js:477-489`). That request declares no tools and carries
+`cacheRetention: "none"`; an ordinary agent-loop turn carries no `cacheRetention`. Until #163 the
+tool-surface preflight read the empty surface as "read/bash/edit/write excluded" and refused every
+summary on a Claude ACP model.
+
+- **Admission.** `isPiSummaryRequest` (`tool-surface.ts`) needs BOTH an empty replayed tool
+  surface and `cacheRetention === "none"`. An ordinary turn with every tool excluded keeps the
+  refusal. Pi's prompt text and session id are not read; Pi fills the id with a fresh `uuidv7()`.
+- **The turn.** A new child under the turn-scoped policy, closed after its one prompt whatever the
+  process policy says. `tools`, `mcpServers`, skill plugins and the permission allow list are all
+  empty. The operator's engraving carrier stays, rendered with an empty MCP list. No first-message
+  augment. Pi's summarization instructions arrive as a system message, which the transcript
+  flattening drops, so their text (`getCurrentSystemPrompt`) is sent as the first prompt block.
+  No notice of any kind: the summary Pi stores is exactly the model's text, and the session file
+  is the embedding source.
+- **After compaction.** `acp-provider.ts` subscribes to `session_compact` and closes that Pi
+  session's retained child at once (GLG 2026-11-14), unless a turn is in flight. The next turn
+  opens a new child from the compacted transcript.
+
+Proof: `pi-extensions/lib/acp/backend.summary-turn.test.ts` drives Pi's own `generateSummary` and
+`generateBranchSummary` through `streamAcpTurn`, so the request shape is Pi's, not a fixture's. A Pi
+upgrade that stops marking summaries with `cacheRetention: "none"` turns it red. Not covered here:
+the adapter's own compaction inside a prompt we sent (§11-8), and the threshold value.
+
 ## Open work
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;

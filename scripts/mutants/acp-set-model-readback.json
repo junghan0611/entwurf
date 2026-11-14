@@ -252,6 +252,72 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-CORTEX-TURN-DISABLED]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-TOOLLESS",
+			"title": "the summary turn keeps the operator's tool surface — Pi's tool-less summary request reaches a Claude child that can still run Read/Bash/Edit/Write while summarizing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\ttools: [],"],
+			"replace": ["\t\t\ttools: config.tools,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-TOOLLESS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-INSTRUCTIONS-RELAYED",
+			"title": "Pi's summarization instructions are dropped — the system message never reaches the wire, so Claude answers the bare conversation instead of writing Pi's checkpoint summary",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const instructions = getCurrentSystemPrompt(context.messages).trim();"],
+			"replace": ["const instructions = \"\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-INSTRUCTIONS-RELAYED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-NO-NOTICE",
+			"title": "the summary turn emits lifecycle and tool notices — `[acp:]`/`[tool:]` lines join the text Pi stores as compaction.summary, which is what gets embedded",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["state.quiet = true;"],
+			"replace": ["state.quiet = false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-NO-NOTICE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-NOT-RETAINED",
+			"title": "the summary child is retained under a process-scoped policy — every /compact leaves one more idle Claude process behind under a key nobody reuses",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["lifecyclePolicy: \"turn-scoped\","],
+			"replace": ["lifecyclePolicy: \"process-scoped\","],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-NOT-RETAINED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-REQUIRES-CACHE-RETENTION",
+			"title": "an empty tool surface alone admits the summary path — an ordinary turn with every tool excluded silently runs tool-less instead of refusing the unhonourable exclusion",
+			"subject": "pi-extensions/lib/acp/tool-surface.ts",
+			"find": ["return activeToolNames.length === 0 && cacheRetention === \"none\";"],
+			"replace": ["return activeToolNames.length === 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-REQUIRES-CACHE-RETENTION]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-CLOSES-CHILD",
+			"title": "a compaction leaves the conversation's Claude child running — the pre-compaction context stays resident until the next turn's prefix break, against GLG's close-right-after decision",
+			"subject": "pi-extensions/acp-provider.ts",
+			"find": ["closeRetainedAcpSession(ctx.sessionManager.getSessionId());"],
+			"replace": ["void ctx;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACT-CLOSES-CHILD]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
 		}
 	]
 }

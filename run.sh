@@ -1346,9 +1346,10 @@ check_acp_set_model_readback() {
   # MUTANT EXECUTION COORDINATE for scripts/mutants/acp-set-model-readback.json (#128): the claude
   # adapter refuses a set-model answer that does not name the requested model, before the prompt;
   # and (#142) pi's thinking level reaches Claude effort, set and read back before the prompt;
-  # and (#142) what a cancel leaves: the operator notice and the aborted-turn status in a rebuild.
+  # and (#142) what a cancel leaves: the operator notice and the aborted-turn status in a rebuild;
+  # and (#163) Pi's summary request as a one-shot tool-less turn, and the child closed on compaction.
   section "claude ACP set-model + effort readback (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts
 }
 
 check_acp_vendor_rejection() {

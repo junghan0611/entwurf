@@ -49,6 +49,7 @@ import {
 	appendAssistantMessageDiagnostic,
 	createAssistantMessageDiagnostic,
 	createAssistantMessageEventStream,
+	getCurrentSystemPrompt,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
 import {
@@ -91,7 +92,7 @@ import {
 	resolveLifecyclePolicy,
 	writeSessionRecord,
 } from "./session-store.js";
-import { assertExcludeToolsHonored } from "./tool-surface.js";
+import { assertExcludeToolsHonored, isPiSummaryRequest } from "./tool-surface.js";
 
 // Bootstrap boundaries ONLY. initialize / newSession / set-model are handshake
 // steps that make no model progress, so a stuck one is a dead session and a cold
@@ -453,6 +454,40 @@ let cleanupRegistered = false;
  * `process.once` would leak an EventEmitter listener per turn — GPT c617cb. The
  * handler is sync (the `exit` event forbids async work).
  */
+/**
+ * Close a retained session we are leaving on purpose: mark it retiring (so its exit is not
+ * announced as an unexpected end), drop it from the map, and tear its child down.
+ */
+function abandonRetainedSession(session: BridgeSession): void {
+	session.alive = false;
+	session.retiring = true;
+	if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
+	retainedChildren.delete(session.child);
+	session.connection.close?.();
+	teardownChild(session.child);
+}
+
+/**
+ * #163, GLG 2026-11-14: after a successful Pi compaction the retained Claude child of that Pi
+ * session is closed at once, not kept until the next turn's prefix break discards it. The next
+ * turn then opens a new child from Pi's compacted transcript (summary + kept tail) — the path
+ * `decideBootstrap` already takes when the stored prefix no longer matches.
+ *
+ * Keyed exactly as an ordinary turn keys its session: Pi passes its session manager's id as the
+ * stream `sessionId` (pi-coding-agent 1.5.2 `dist/core/sdk.js:276`), and `resolveSessionKey`
+ * turns that into `pi:<id>`. A busy or in-flight session is left alone — Pi aborts the running
+ * turn before compacting (`dist/core/agent-session.js:2327`), so a busy one is not the session
+ * that compaction left behind, and the prefix break still covers it. Returns whether a child
+ * was closed.
+ */
+export function closeRetainedAcpSession(piSessionId: string): boolean {
+	const key = `pi:${piSessionId}`;
+	const session = bridgeSessions.get(key);
+	if (!session || session.busy || inFlightKeys.has(key)) return false;
+	abandonRetainedSession(session);
+	return true;
+}
+
 function registerGlobalCleanup(): void {
 	if (cleanupRegistered) return;
 	cleanupRegistered = true;
@@ -1582,21 +1617,33 @@ export function streamAcpTurn(
 		// child will still expose (declared != actual), fail fast into the stream
 		// rather than lie to the model. Uses the RESOLVED tool surface (S2g) so an
 		// operator-narrowed `tools` is what the truthfulness check honors.
+		//
+		// pi 0.86 folded `Context.systemPrompt`/`Context.tools` into a leading
+		// `role:"system"` message (`normalizeContext`, pi-ai
+		// `utils/transcript.ts`), so a provider only ever sees a
+		// `TranscriptContext`. The active surface is therefore REPLAYED from the
+		// system messages — `getCurrentTools` applies every toolsAdded/toolsRemoved
+		// delta in order. No `?? [...PI_BUILTIN_BACKED_TOOLS]` fallback: under 0.86
+		// the old `context.tools` read was ALWAYS undefined, so that fallback
+		// silently declared the full builtin set and the truthfulness preflight
+		// could never fire (false green). An empty replayed list on an ordinary turn
+		// means the operator excluded everything — keep that honest and reject.
+		//
+		// #163: the one empty surface that is NOT refused is Pi's own summarization
+		// request (`isPiSummaryRequest`). It is honoured rather than refused: the
+		// summary turn below runs on a child that is given no tools at all, so the
+		// declared surface (none) is the actual one.
+		let summaryTurn: boolean;
 		try {
-			// pi 0.86 folded `Context.systemPrompt`/`Context.tools` into a leading
-			// `role:"system"` message (`normalizeContext`, pi-ai
-			// `utils/transcript.ts`), so a provider only ever sees a
-			// `TranscriptContext`. The active surface is therefore REPLAYED from the
-			// system messages — `getCurrentTools` applies every toolsAdded/toolsRemoved
-			// delta in order. No `?? [...PI_BUILTIN_BACKED_TOOLS]` fallback: under 0.86
-			// the old `context.tools` read was ALWAYS undefined, so that fallback
-			// silently declared the full builtin set and the truthfulness preflight
-			// could never fire (false green). An empty replayed list means the operator
-			// excluded everything — keep that honest and let the preflight reject.
 			const activeToolNames = getCurrentTools(context.messages).map((t) => t.name);
-			assertExcludeToolsHonored(activeToolNames, { backend: adapter.backend, tools: config.tools });
+			summaryTurn = isPiSummaryRequest(activeToolNames, opts?.cacheRetention);
+			if (!summaryTurn) assertExcludeToolsHonored(activeToolNames, { backend: adapter.backend, tools: config.tools });
 		} catch (err) {
 			finishError(err, false);
+			return;
+		}
+		if (summaryTurn) {
+			await runSummaryTurn(config, adapter, nativeModelId);
 			return;
 		}
 
@@ -1704,14 +1751,7 @@ export function streamAcpTurn(
 		// session (incompatible drift / stale-dead) — the model-lock throw already
 		// returned above, so this is never a "leave it alone" case. Close the old
 		// connection + child so it is not orphaned in retainedChildren (GPT blocker 2).
-		if (decision.path === "new" && existing) {
-			existing.alive = false;
-			existing.retiring = true;
-			if (bridgeSessions.get(sessionKey) === existing) bridgeSessions.delete(sessionKey);
-			retainedChildren.delete(existing.child);
-			existing.connection.close?.();
-			teardownChild(existing.child);
-		}
+		if (decision.path === "new" && existing) abandonRetainedSession(existing);
 
 		// Claim the key for the whole turn — atomic with the checks above (no await
 		// in between), so a concurrent first turn for the same key sees it in flight
@@ -1728,6 +1768,64 @@ export function streamAcpTurn(
 		}
 	});
 
+	// --- #163: Pi's summary request → a one-shot, tool-less child that is never retained
+	//
+	// What makes it a SUMMARY turn rather than an ordinary new one, each for a reason:
+	//   - No tools, no MCP, nothing pre-approved, no skill plugins: the request declares no tools,
+	//     and a summarizer that could still run Bash would act where Pi cannot see it (Pi's own
+	//     "Summarization attempted to call a tool" guard reads `toolCall` blocks, which ACP tool
+	//     calls never become).
+	//   - No notice of any kind (`state.quiet`): Pi keeps `contentText(response.content)` as the
+	//     summary, joining every text block, and that summary lands in the session file.
+	//   - No first-user augment: it is operator context for a working session, not for a summary.
+	//   - The operator's engraving carrier stays (identity/billing/memory containment are not a
+	//     working-session feature), rendered with the empty MCP list this child really has.
+	//   - Pi's summarization instructions arrive as a system message, which the transcript
+	//     flattening never forwards (context.ts `case "system"`). They are relayed here, verbatim,
+	//     through Pi's own renderer, as the first prompt block — for this one turn only.
+	//   - Never retained and never registered: it shares no state with the conversation's session.
+	//     It neither reads nor tears down `bridgeSessions`, whatever key it arrived with.
+	async function runSummaryTurn(
+		config: ResolvedAcpConfig,
+		adapter: AcpBackendAdapter,
+		nativeModelId: string,
+	): Promise<void> {
+		state.quiet = true;
+		const summaryConfig: ResolvedAcpConfig = {
+			...config,
+			tools: [],
+			mcpServers: [],
+			skillPlugins: [],
+			permissionAllow: [],
+		};
+		let engraving: string | null;
+		let thinkingValue: string | undefined;
+		try {
+			engraving = adapter.loadCarrier({ mcpServerNames: [], config: summaryConfig });
+			if (adapter.resolveThinking) {
+				thinkingValue = adapter.resolveThinking({
+					modelId: model.id,
+					reasoning: opts?.reasoning,
+					thinkingLevelMap: model.thinkingLevelMap,
+				});
+			}
+		} catch (err) {
+			finishError(err, false);
+			return;
+		}
+		const instructions = getCurrentSystemPrompt(context.messages).trim();
+		const params: BootstrapParams = {
+			cwd,
+			modelId: model.id,
+			bridgeConfigSignature: "",
+			contextMessageSignatures: [],
+			lifecyclePolicy: "turn-scoped",
+		};
+		await runNewTurn(params, [], engraving, summaryConfig, adapter, nativeModelId, thinkingValue, {
+			instructions,
+		});
+	}
+
 	// --- new session: spawn → initialize → newSession → setSessionConfigOption(model) → full transcript
 	async function runNewTurn(
 		params: BootstrapParams,
@@ -1737,6 +1835,8 @@ export function streamAcpTurn(
 		adapter: AcpBackendAdapter,
 		nativeModelId: string,
 		thinkingValue: string | undefined,
+		/** #163: set only by runSummaryTurn — relay these instructions, add no augment. */
+		summary?: { instructions: string },
 	): Promise<void> {
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
@@ -1756,7 +1856,8 @@ export function streamAcpTurn(
 			// talking to ended. Announced once (read-and-clear); the turn continues
 			// normally, since opening a fresh child for a NEW user turn is not a
 			// replay of anything.
-			const priorEnd = takeUnreportedChildEnd(sessionKey);
+			// A summary turn must not consume the conversation's end notice, whatever key it carries.
+			const priorEnd = summary ? undefined : takeUnreportedChildEnd(sessionKey);
 			if (priorEnd) {
 				pushAcpLifecycleNotice(
 					state,
@@ -1925,12 +2026,15 @@ export function streamAcpTurn(
 			// the pi Context, so it stays out of contextMessageSignatures (NEXT §S2d
 			// gate ②). `new`-only → reuse turns stay clean (once-only). Entwurf-spawned
 			// prompts that already carry cwd/AGENTS.md get that one section de-duped.
-			const prompt = prependNewPromptAugment(basePrompt, {
-				backend: adapter.backend,
-				cwd,
-				mcpServerNames: mcpServerNames(config),
-				emacsAgentSocket: process.env.PI_EMACS_AGENT_SOCKET?.trim() || undefined,
-			});
+			// #163: a summary turn carries Pi's summarization instructions instead.
+			const prompt: AcpTextBlock[] = summary
+				? [...(summary.instructions ? [{ type: "text" as const, text: summary.instructions }] : []), ...basePrompt]
+				: prependNewPromptAugment(basePrompt, {
+						backend: adapter.backend,
+						cwd,
+						mcpServerNames: mcpServerNames(config),
+						emacsAgentSocket: process.env.PI_EMACS_AGENT_SOCKET?.trim() || undefined,
+					});
 
 			// S2f visibility: about to send — say "sending" (not "sent") because the
 			// prompt could still sync-reject before the wire write; the next visible

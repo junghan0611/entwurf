@@ -21,7 +21,7 @@
 // strip-types fence is introduced.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { streamShellAcp } from "./lib/acp/backend.js";
+import { closeRetainedAcpSession, streamShellAcp } from "./lib/acp/backend.js";
 import { allCuratedModels } from "./lib/acp/backend-adapter.js";
 import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
 
@@ -62,6 +62,13 @@ export default function (pi: ExtensionAPI) {
 		// belongs to the operator's own backend CLI child (no-auth sentinel above);
 		// this plugin only orchestrates.
 		streamSimple: streamShellAcp,
+	});
+
+	// #163, GLG 2026-11-14: a successful compaction closes the Claude child of this Pi session at
+	// once. The next turn opens a new child from the compacted transcript (backend.ts
+	// `closeRetainedAcpSession`). A session that never used an ACP model has nothing to close.
+	pi.on("session_compact", (_event, ctx) => {
+		closeRetainedAcpSession(ctx.sessionManager.getSessionId());
 	});
 
 	// Mark only AFTER a successful registration. If allCuratedModels() (which

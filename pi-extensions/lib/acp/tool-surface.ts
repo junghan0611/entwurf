@@ -117,6 +117,29 @@ export function assertExcludeToolsHonored(activeToolNames: readonly string[], re
 	}
 }
 
+/**
+ * #163: is this Pi's own summarization request — the one tool-less turn the preflight above
+ * honours instead of refusing?
+ *
+ * Pi summarizes for `/compact`, the compaction threshold, overflow recovery and `/tree` branch
+ * summaries through one call (pi-coding-agent 1.5.2 `dist/core/compaction/compaction.js:476-489`,
+ * `completeSummarization`; branch summaries at `compaction/branch-summarization.js:233-237`). Its
+ * context declares no tools (`buildSummarizationContext`, `compaction.js:499-509`) and its options
+ * carry `cacheRetention: "none"` (`compaction.js:482`), which an ordinary agent-loop turn does not
+ * (pi-agent-core `dist/agent.js:306-330`).
+ *
+ * BOTH are required. An empty surface alone is also an operator who excluded every tool on an
+ * ordinary turn, which keeps today's refusal; `cacheRetention` alone is a request option, not a
+ * surface. Neither the summarization prompt's text nor a missing session id is read: Pi fills the
+ * id with a fresh `uuidv7()` (`compaction.js:481`), and matching its prompt would copy it.
+ * `cacheRetention` is a Pi convention, not a contract — the oracle beside this calls Pi's own
+ * `completeSummarization` so a Pi upgrade that drops it turns that test red rather than this
+ * path silently back into a refusal.
+ */
+export function isPiSummaryRequest(activeToolNames: readonly string[], cacheRetention: unknown): boolean {
+	return activeToolNames.length === 0 && cacheRetention === "none";
+}
+
 /** Inputs to the Claude `_meta` builder. */
 export interface ClaudeSessionMetaParams {
 	modelId?: string;
