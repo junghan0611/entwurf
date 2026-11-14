@@ -4,85 +4,71 @@
 
 # RAIL — 현재 좌표
 
-- [x] **1. claude-agent-acp 0.106.0 → 0.107.0.** C0 dist 비교, C1 bump, focused 게이트 rc=0. 영수증은 ROADMAP Dep bump ledger 2026-11-14 항목에 있다.
-- [x] **2. 정확한 manual `/compact`.** 코드·QK 10개·mutant 10개(로컬 10/10 KILLED, 02055a 리뷰 정정 포함)·문서(rail §11-10, VERIFY 행) 완료. LIVE `/compact` n=1은 RAIL 4에서 한다.
-- [x] **3. Pi처럼 보이게 (#162 확장).** M1 서명 `[tool:running] <확정 title>`, M2 서명 `[tool:output]`(5줄·400B, 실패는 꼬리), M3 `[acp: compaction …]`. QK 9개, mutant 9개(로컬 9/9 KILLED), rail §11-11과 VERIFY 행 추가.
-- [ ] **4. 후보 검증과 착지.** ← CURRENT: 영향받는 PARTIAL → frozen FULL → LIVE n=1(`/compact`, 가시성) → GLG의 commit/push 결정.
+- [x] **1. claude-agent-acp 0.106.0 → 0.107.0.** `7c98f8b4`. 영수증은 ROADMAP Dep bump ledger 2026-11-14 항목에 있다.
+- [x] **2. 정확한 manual `/compact`.** `5b7f7c24`과 리뷰 정정 `7eb200a9`. QK·mutant 10개. 계약은 `docs/acp-backend-rail.md` §11-10에 있다.
+- [x] **3. Pi처럼 보이게 (#162 확장).** `e96403ec`과 리뷰 정정 `f25c78de`(제어문자 정리, 미리보기 들여쓰기). QK·mutant 13개. 계약은 §11-11에 있다.
+- [ ] **4. 후보 검증과 착지.** ← PAUSED: 자원 부족(GLG 2026-11-14 "b가 집 짓고 있어서 자원이 없다. 이따가 하자"). 다음은 frozen FULL 재실행 → LIVE n=1 → GLG의 push 결정.
 
-범위 제외 (GLG 2026-11-14): `_session/steering` 주입, 정지 동사 노출. steer 쪽 결론은 "queued steer는 인터럽트가 아니다"라는 기존 계약을 유지하는 것이고, 정지 수단은 로컬 ESC다.
+범위 제외 (GLG 2026-11-14): `_session/steering` 주입, 정지 동사 노출. 정지 수단은 로컬 ESC다.
 
-현재 좌표: 1·2·3 완료 → 4 검증과 착지
+현재 좌표: 1·2·3 완료 → 4 PAUSED(FULL 재실행 대기)
 
 # NOW
 
-- **운영 (GLG 2026-11-14):** (A)로 진행한다. 이 체크아웃이 운영 pi의 원본이고, 작업하는 동안 pi ACP Claude는 GLG가 부르지 않는다. 앞으로 ff08d4가 요청하는 일은 진행한다.
-- **다음 (RAIL 4):** PARTIAL 대상 lane을 한 번 돌린다(아래 C2 메모). 그 다음 frozen FULL, 그 다음 LIVE n=1이다. 순서와 명령은 VERIFY.md를 따른다. LIVE는 GLG가 pi ACP Claude를 다시 켜는 시점과 맞춰야 하므로, 시작 전에 ff08d4를 거쳐 GLG에게 묻는다.
-- **C2 정정 (02055a 리뷰 → ff08d4 채택, 2026-11-14):** D1, O1, O2, O4를 반영하고 mutant 4개를 더했다(lane 31개, 로컬 10/10 KILLED).
-  - D1: in-flight 세션은 닫지 않는다. `busy`는 in-flight 구간 안에서만 켜지므로(`backend.ts` claim 구간, `busy: true` 두 곳) 조건 하나만 지우는 mutant는 동등 mutant다. 그래서 두 조건을 함께 지우는 mutant로 증명했다.
-  - O1: 요약 턴에서 pi가 abort하지 않았는데 `cancelled`가 오면 error로 봉인한다.
-  - O2: 요약 자식의 `settingSources`를 []로 둔다.
-  - O4: 판별자의 "도구 없음" 조건을 증명하는 mutant를 추가했다.
+- **다음 한 걸음:** GLG가 자원이 확보됐다고 하면 이 NEXT 커밋의 HEAD에서 frozen FULL을 다시 돌린다. 명령은 `pnpm run check:full`이고 5분 이상 걸린다. 도는 동안 worktree와 index를 움직이지 않는다. green이 나오면 ff08d4(또는 그 시점의 코디)에게 알린다.
+  - FULL 앞에 bridge dist가 stale이면 `check-bridge-delivery`가 red가 된다. 처방은 `pnpm run build-bridge`다. 이 dist는 운영 bridge의 실행 바이트이기도 하다. 그래서 먼저 임시 outDir로 `tsc -p mcp/entwurf-bridge/tsconfig.build.json --outDir <tmp>`를 돌리고, 운영 dist와 diff해서 무해한지 확인한 뒤 다시 빌드한다. 2026-11-14에 확인한 차이는 `tool-surface.js`의 `isPiSummaryRequest` export 하나였다.
+- **RAIL 4 기록 (2026-11-14, oracle):**
+  - PARTIAL green. head `f25c78de`, workSurfaceSha256 `59cf75be0f025d8d…`.
+    - `["bash","run.sh","check-acp-set-model-readback"]`: 44/44 killed, control ok, 464초, receiptSha256 `32bd052290f75afa…`
+    - `["bash","run.sh","check-acp-prompt-lifecycle"]`: 15/15 killed, control ok, 207초, receiptSha256 `e6cf8a16e881cebe…`
+    - 영수증은 oracle의 `/tmp/claude-1000/163-partial/`에 있다(휘발성 경로).
+    - SDK-surface 오라클을 gate로 쓰는 mutant 그룹은 없다. 그래서 PARTIAL 대상이 아니고, focused `check-acp-sdk-surface` rc=0이 그 증거다.
+  - 이 NEXT 커밋은 mutant 대상 파일을 바꾸지 않는다. 다만 HEAD와 work surface가 바뀐다. 그래서 위 PARTIAL은 `f25c78de` 후보의 측정으로 남고, FULL은 새 HEAD에서 돈다.
+  - FULL 1회차: rc=1(314초). `check-bridge-delivery`의 stale-dist 판정이었고 코드 결함은 아니다. 위 절차대로 확인한 뒤 `build-bridge` rc=0.
+  - FULL 2회차: Claude Code가 메모리 압박으로 백그라운드 셸을 종료했다(available 약 2.4GB). 판정 없음.
+- **그 다음: LIVE n=1.** GLG가 pi ACP Claude를 다시 켜야 한다. 시점은 코디가 GLG에게 묻는다. scratch 세션에서 다음을 측정한다.
+  - 수동 `/compact`: summary가 저장되는지, summary에 notice 줄이 0인지, compact 직후 기존 Claude 자식이 닫히는지, 다음 턴이 새 자식을 열고 그 프롬프트에 요약이 들어가는지.
+  - O6: 요약 자식의 `_meta.claudeCode.options.tools: []`가 실제로 도구 0으로 해석되는지(요약 자식이 도구를 부를 수 없는지).
+  - 가시성: Bash가 "Terminal"에서 명령 이름으로 바뀌는 `[tool:running]` 줄, `[tool:output]` 미리보기(성공은 앞, 실패는 꼬리), 네이티브 compaction이 일어나면 `[acp: compaction …]` 줄.
+- **LIVE 때의 사용감 점검 (자문역 a30dda 제안, 결재 조건 아님):** 평소 일 한 건을 ACP로 끝낸 뒤 GLG에게 세 가지를 묻는다.
+  1. 기다리는 동안 Claude가 무엇을 하는지 알았나.
+  2. ESC 뒤에 상태를 알고 이어서 말할 수 있었나.
+  3. compact 뒤에 최신 결정, 남은 일, 끝난 일이 구분됐나.
+  - 불편은 "하려던 일 / 화면 / 관측 / 수습" 네 칸으로 기록한다.
+  - 관찰 항목: 턴이 끝난 뒤에도 살아 있는 서브에이전트나 백그라운드 작업이 보이지 않는 사각.
 - **Observation (기록만, 작업 아님):**
-  - O3: 오라클은 pi `sdk`/`modelRuntime` 구간(`agent.streamFunction`이 provider로 가는 길)을 덮지 않는다. streamFn을 직접 꽂는다.
+  - O3: 요약 오라클은 pi `sdk`/`modelRuntime` 구간을 덮지 않는다. streamFn을 직접 꽂는다.
   - O5: `/new`나 fork 뒤에 `session_compact`의 sessionId 키가 어긋날 때 무해한 no-op인지는 확인하지 않았다.
-  - C3 리뷰(02055a → ff08d4, 2026-11-14)에서 나온 Observation:
-    - O-2: 미리보기 본문은 pi-tui가 Markdown으로 해석할 수 있다.
-    - O-3: Read/Edit 출력에서 fence를 벗긴 뒤에도 `'`가 남을 수 있다.
-    - O-4: 바이트 자르기는 grapheme이 아니라 code point 경계에서 한다.
-    - O-5: title이 여러 번 바뀌는 reporter는 running 줄을 여러 번 낼 수 있다.
-  - M2b: done/failed summary의 `[fence]console …` 꼴은 replay 텍스트라 이번에 바꾸지 않는다(ff08d4 2026-11-14).
-- **C2 메모:** 내 abandon 리팩터 때문에 기존 mutant `acp-prompt-lifecycle/IDLE-DEATH-ANNOUNCED`의 find를 고쳤다(로컬 KILLED 확인). 이 lane도 RAIL 4 PARTIAL에 넣는다. PARTIAL 대상 lane: `acp-set-model-readback`(#163 새 19개, 합계 40), `acp-prompt-lifecycle`(find 수정 1개), SDK-surface 오라클.
-- **LIVE `/compact` n=1 측정 항목 (RAIL 4):** summary가 저장되는지, summary에 notice가 0인지, compact 직후 기존 자식이 닫히는지, 다음 턴이 새 자식을 여는지. 그리고 O6: `_meta.claudeCode.options.tools: []`가 실제로 도구 0으로 해석되는지(요약 자식이 도구를 부를 수 없는지).
-- **C1 메모:** 남은 `0.106.0` 언급은 날짜가 붙은 측정 기록이라 그대로 둔다(`backend-adapter.ts:378`, `tool-surface.ts:177`, `probe-cli-target.ts:96`; 해당 dist 파일은 0.107에서 diff가 없다). PARTIAL은 RAIL 4에서 한 번에 돈다. 그때 바뀐 SDK-surface 오라클도 포함한다.
-- **역할:**
-  - b3fc7c: 이 체크아웃의 단일 작성자. GLG가 2026-11-14 이 세션에서 직접 승인했다.
-  - ff08d4: 실무 코디. 결론·체크포인트·블로커·가시성 후보를 받는다.
-  - 02055a: 논의 전용. 체크아웃에 쓰지 않는다.
+  - O-2: 미리보기 본문은 pi-tui가 Markdown으로 해석할 수 있다.
+  - O-3: Read/Edit 출력에서 fence를 벗긴 뒤에도 `'`가 남을 수 있다.
+  - O-4: 바이트 자르기는 grapheme이 아니라 code point 경계에서 한다.
+  - O-5: title이 여러 번 바뀌는 reporter는 running 줄을 여러 번 낼 수 있다.
+  - M2b: done/failed summary의 `[fence]console …` 꼴은 replay 텍스트라 바꾸지 않았다(ff08d4 2026-11-14).
+  - 제어문자 정리는 pi 범위에 DEL·C1 제거를 더한 것이다. 엄격히 pi와 같은 범위를 원하면 `event-mapper.ts`의 `CONTROL_CHARS` 한 줄을 바꾸면 된다. `ACP-PREVIEW-MATCHES-PI`가 그 차이를 명시적으로 대조한다.
+- **역할 (2026-11-14 기준):**
+  - b3fc7c: 이 체크아웃의 단일 작성자(GLG 승인). 이 NEXT 커밋 뒤 GLG 지시로 retire되고, 기록은 보존된다.
+  - ff08d4: 실무 코디. 체크포인트·블로커는 여기로 보낸다.
+  - 02055a: 논의·독립 리뷰 전용. 체크아웃에 쓰지 않는다.
   - 68bd94: 운영 코디. GLG에게 DM하는 것은 68bd94뿐이다.
+  - a30dda(sol): 자문역.
 - **손대지 말 것:**
   - push(GLG 승인 시에만), `--no-verify`, worktree
   - operator 설정·훅·profile, credential 읽기
   - 자동 compaction 기준 논의·확대(GLG: "지금 논의하지 않음")
   - steer 주입, 정지 동사
-  - #160(openclaw)
+  - #160(openclaw), andenken 리포(GLG가 처리한다. 읽기 전용 열람만 승인됐었다)
   - 이 브랜치의 `NEXT.md`(main lane 문서)
 
 # 체크포인트별 재료
 
-## 2. manual /compact (GLG 기준: 단순하고 명확하게, 매우 정확하게)
+## 2. manual /compact
 
-- **GLG 결정:**
-  - compact 뒤 기존 Claude 자식은 바로 닫는다.
-  - 운영자가 도구를 조인 세션(pi-shell-acp 시절 설정)도 요약 턴을 받는다.
-  - 요약 턴의 말이 engraving carrier나 augment에 잡아 둔 내용과 어긋나지 않게 한다.
-  - 임베딩 대상은 pi 세션 파일이다. 그래서 summary에 bridge가 붙인 줄이 0이어야 하는 것은 필수다.
-- **코드로 확인한 것:**
-  - manual과 auto는 같은 `_runDefaultCompaction`을 탄다(pi-coding-agent 1.5.2 `agent-session.js:2302-2305`, manual은 `:2383`).
-  - 요약 요청에는 도구가 없다(`compaction.js:499-509`). 그래서 ACP preflight에서 거절된다(`backend.ts:1596-1597`, `tool-surface.ts:98-118`). fa4d552f(v0.24.0)부터 이렇다.
-  - 요약 키는 새 `uuidv7()`라서(`compaction.js:479-483`) `pi:<uuid>` 키가 된다.
-  - 다음 턴은 prefix가 깨져서 기존 child를 닫고(`backend.ts:1702-1711`), 새 child에 augment, 요약, 남긴 꼬리를 보낸다(`backend.ts:1921-1932`).
-  - system 메시지는 버려진다(`context.ts:110`).
-  - `[acp:]`와 `[tool:*]` 알림 줄이 `contentText`에 섞인다(event-mapper.ts:343-352, :164-172; pi-ai `utils/text.js:2-9`).
-- **설계 방향 (ff08d4·02055a 리뷰 반영):**
-  - **판별자:** `options.cacheRetention === "none"`이면서 replay된 active 도구가 비어 있어야 한다.
-    - `"none"`은 요약 요청에만 붙는다(`compaction.js:482`). 일반 loop config에는 없다(pi-agent-core `agent.js:306-330`).
-    - "sessionId 없음"은 쓸 수 없다. pi가 `?? uuidv7()`로 채운다.
-    - 판별이 모호하면 지금처럼 거부한다. 도구를 모두 끈 세션의 일반 턴도 계속 거부한다.
-  - **범위:** branch summary(`/tree`, `branch-summarization.js:233-237`)도 같은 경로를 타므로 같이 증명한다.
-  - **one-shot 턴:** tools, MCP, permissionAllow, augment, notice를 모두 0으로 하고 retain하지 않는다.
-  - **지시 전달:**
-    - carrier: 운영자 engraving을 그대로 두고 MCP 목록만 빈 목록으로 렌더한다.
-    - 요약 지시: context의 system 텍스트를 읽어 wire의 첫 user 블록 앞에 붙인다. 문구를 복사하지 않고, `context.ts:110`은 그대로 둔다.
-    - `_meta.systemPrompt`에 요약 지시를 넣는 relay 안은 철회됐다. 슬롯이 하나뿐이고 그 자리를 engraving이 쓴다.
-  - **기존 자식:** `session_compact` 시점에 닫는다.
-  - **QK oracle:** 설치된 pi의 `completeSummarization`을 실제로 호출해, provider가 받는 options를 캡처한다. `cacheRetention`은 pi 내부 관례라서 pi 버전 drift를 잡기 위해서다.
-- **증명:**
-  - QK ① 요약 형태의 컨텍스트 → `_meta.tools=[]`, `mcpServers=[]`, 비보존, summary 텍스트에 notice 0.
-  - QK ② compact 이후 컨텍스트 → 자식 정리 + new 경로, 프롬프트에 요약 포함.
-  - 각 QK에 exact-once mutant를 둔다. 그 뒤 scratch 세션에서 LIVE `/compact` n=1.
-- **자세한 근거:** 02055a 댓글 [6871961225](https://github.com/junghan0611/entwurf/issues/163#issuecomment-6871961225) §1.
+- 계약, 판별자, 요약 턴의 모양, compact 뒤 정리는 `docs/acp-backend-rail.md` §11-10과 VERIFY의 "Pi's summary request (#163)" 행에 있다.
+- 오라클은 `pi-extensions/lib/acp/backend.summary-turn.test.ts`다. 설치된 pi의 `generateSummary`와 `generateBranchSummary`를 `streamAcpTurn`으로 구동한다.
+- 진단 근거는 02055a 댓글 [6871961225](https://github.com/junghan0611/entwurf/issues/163#issuecomment-6871961225) §1에 있다.
 
-## 3. 가시성 최소 집합 (완료, GLG: "pi가 동작하듯이")
+## 3. 가시성 최소 집합 (GLG: "pi가 동작하듯이")
 
-- 계약과 andenken 결합은 `docs/acp-backend-rail.md` §11-11에 있다. 증거는 VERIFY의 "Tool visibility (#163)" 행에 있다.
+- 계약과 andenken `control-v1` 결합(HEAD `e5165ecc` 기준)은 `docs/acp-backend-rail.md` §11-11에 있다. 증거는 VERIFY의 "Tool visibility (#163)" 행에 있다.
+- 오라클은 `pi-extensions/lib/acp/event-mapper.test.ts`다. 모든 mutant의 실행 좌표는 `check-acp-set-model-readback`이다(lane 44개).
 - **미룸:** plan/TodoWrite, subagent_*/async_task_*, 턴 사이 알림, compaction_update capability.
