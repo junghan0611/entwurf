@@ -899,6 +899,32 @@ Proof: `pi-extensions/lib/acp/backend.summary-turn.test.ts` drives Pi's own `gen
 upgrade that stops marking summaries with `cacheRetention: "none"` turns it red. Not covered here:
 the adapter's own compaction inside a prompt we sent (§11-8), and the threshold value.
 
+## 11-11. What a running turn shows (#162, #163)
+
+The mapper's tool lines come in two kinds, and the kind is a contract with two readers outside
+this file.
+
+| Line | Signed | Replayed into a new session | Reuse signature |
+|---|---|---|---|
+| `[tool:start\|done\|failed\|cancelled] <title>[ — <summary>]`, `[permission:<d>] <title>` | no | yes | yes |
+| `[tool:running] <title>[ — <elapsed>]`, `[tool:output] <title>` + preview, `[acp: …]` | yes | no | no |
+
+- `[tool:running] <title>` without elapsed time names a call once its title is known: a Bash call
+  opens as "Terminal" and its command arrives as a title-only update. A beat in the same update
+  already names the title, so it prints alone.
+- `[tool:output]` shows at most 5 lines and 400 UTF-8 bytes of a finished call's output, with each
+  line passed through the notice sanitizer: the head on success, the tail on failure. When the
+  whole output fits on the one-line summary, it is not shown.
+- `[acp: compaction <trigger>[ failed] <pre>[→<post>][ in <duration>]]` reports the backend's own
+  compaction from the `rawOutput` facts of its `compact` tool call, once per compaction.
+
+The second reader is andenken's `control-v1` selection (andenken `session-selection.ts`, read at
+`e5165ecc`, 2026-11-14). It drops every signed lifecycle block whatever its text, and drops an
+unsigned block only when it is exactly one sanitized `[tool:start|done|failed|cancelled]` or
+`[permission:*]` line. An unsigned line with a new label, or a changed unsigned grammar, is
+embedded. So a new tool line is signed, and changing the unsigned grammar goes to GLG first;
+andenken is not changed from here.
+
 ## Open work
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;

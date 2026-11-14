@@ -362,6 +362,111 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT]",
 			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-TITLE-SHOWN",
+			"title": "a call's concrete title is never shown while it runs — the operator reads 'Terminal' until the command has finished",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": [
+				"\t\tpushDisplayOnlyNotice(state, `\\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\\n`);"
+			],
+			"replace": ["\t\tvoid title;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-TITLE-SHOWN]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-TITLE-ONCE",
+			"title": "an update carrying both a new title and a progress beat prints two running lines for one event",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\telapsed === undefined &&\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-TITLE-ONCE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-TITLE-REPEAT-SILENT",
+			"title": "every title update prints a running line — a repeated title shows the same command again",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": [
+				"\t\tsanitizeNoticeFragment(update.title, NOTICE_TITLE_MAX) !== sanitizeNoticeFragment(previous.title, NOTICE_TITLE_MAX)"
+			],
+			"replace": ["\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-TITLE-REPEAT-SILENT]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-PREVIEW",
+			"title": "a finished tool shows no output preview — the operator sees only the one-line summary, as before",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\t\tconst preview = previewOf(summary, failed);"],
+			"replace": ["\t\t\tconst preview = undefined as string | undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-PREVIEW]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-FAILURE-TAIL",
+			"title": "a failure previews the head of its output — the stderr and exit reason at the end are cut off",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\tconst shown = failed ? lines.slice(-PREVIEW_MAX_LINES) : lines.slice(0, PREVIEW_MAX_LINES);"],
+			"replace": ["\tconst shown = lines.slice(0, PREVIEW_MAX_LINES);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-FAILURE-TAIL]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-BOUNDED",
+			"title": "a preview is bounded by lines only — a few very long lines put kilobytes of output on screen",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\treturn clipBytes(shown.join(\"\\n\"), PREVIEW_MAX_BYTES, failed);"],
+			"replace": ["\treturn shown.join(\"\\n\");"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-BOUNDED]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACTION-LINE",
+			"title": "the backend's own compaction shows no numbers — only the bare start/done tool pair",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\tpushAcpLifecycleNotice(state, parts.join(\" \"));"],
+			"replace": ["\tvoid parts;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACTION-LINE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACTION-ONCE",
+			"title": "an enriching terminal update prints a second compaction line for the same compaction",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\tif (observed.compactionShown) return;"],
+			"replace": ["\tif (observed.compactionShown === null) return;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACTION-ONCE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACTION-FAILED",
+			"title": "a failed compaction reads like a successful one — its line never says failed",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": [
+				"\tif (facts.error !== undefined && facts.error !== null && facts.error !== \"\") parts.push(\"failed\");"
+			],
+			"replace": ["\tvoid facts.error;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACTION-FAILED]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
 		}
 	]
 }

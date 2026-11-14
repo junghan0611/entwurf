@@ -28,6 +28,9 @@ import type { AssistantMessage, AssistantMessageEventStream } from "@earendil-wo
 
 const NOTICE_TITLE_MAX = 80;
 const NOTICE_SUMMARY_MAX = 160;
+/** #163 M2: a result preview shows at most this many lines and UTF-8 bytes of output. */
+const PREVIEW_MAX_LINES = 5;
+const PREVIEW_MAX_BYTES = 400;
 
 /** Identity fields for the running assistant message. */
 export interface AcpStreamIdentity {
@@ -39,6 +42,8 @@ export interface AcpStreamIdentity {
 type ObservedToolState = {
 	title: string;
 	status?: string;
+	/** #163 M3: the compaction line for this call was already shown. */
+	compactionShown?: boolean;
 };
 
 export type AcpPiStreamState = {
@@ -268,8 +273,11 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 	const updateContent = Array.isArray(update?.content) ? (update.content as unknown[]) : undefined;
 
 	if (update.sessionUpdate === "tool_call") {
-		observedTools.set(toolCallId, { title, status });
+		const observed: ObservedToolState = { title, status };
+		observedTools.set(toolCallId, observed);
 		pushNotice(state, `\n[tool:start] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n`);
+		// The adapter opens a compaction it saw only at its end as one terminal `tool_call`.
+		if (isTerminalToolStatus(status)) pushCompactionLine(state, update, observed);
 		return;
 	}
 
@@ -285,7 +293,22 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 	// display-only, like a lifecycle notice: elapsed beats depend on wall time, so
 	// they stay out of transcript replay and the reuse-compat signature.
 	const elapsed = elapsedSecondsOf(update);
-	if (elapsed !== undefined && !isTerminalToolStatus(status) && !isTerminalToolStatus(previous?.status)) {
+	const running = !isTerminalToolStatus(status) && !isTerminalToolStatus(previous?.status);
+	// #163 M1: what is running, once it is known. The first `tool_call` is sent before the input
+	// has streamed, so a Bash call opens as "Terminal" (claude-agent-acp 0.107.0
+	// `tool-calls/reporters/bash.js:22`) and the command arrives later as a title-only update.
+	// One display-only line names it. A beat in the same update already names the title, so
+	// that update shows the beat alone; a repeated title shows nothing.
+	if (
+		running &&
+		elapsed === undefined &&
+		previous !== undefined &&
+		typeof update.title === "string" &&
+		sanitizeNoticeFragment(update.title, NOTICE_TITLE_MAX) !== sanitizeNoticeFragment(previous.title, NOTICE_TITLE_MAX)
+	) {
+		pushDisplayOnlyNotice(state, `\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n`);
+	}
+	if (elapsed !== undefined && running) {
 		pushDisplayOnlyNotice(
 			state,
 			`\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)} — ${formatElapsed(elapsed)}\n`,
@@ -294,6 +317,7 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 	if (status && status !== previous?.status) {
 		const summary = firstTextContent(update?.rawOutput) ?? firstTextContent(updateContent);
 		const suffix = summary ? ` — ${sanitizeNoticeFragment(summary, NOTICE_SUMMARY_MAX)}` : "";
+		const failed = status !== "completed" || rawOutputHasError(update?.rawOutput);
 		if (status === "completed") {
 			const label = rawOutputHasError(update?.rawOutput) ? "tool:failed" : "tool:done";
 			pushNotice(state, `\n[${label}] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}${suffix}\n`);
@@ -302,9 +326,109 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 		} else if (status === "cancelled") {
 			pushNotice(state, `\n[tool:cancelled] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}${suffix}\n`);
 		}
+		if (isTerminalToolStatus(status) && summary) {
+			const preview = previewOf(summary, failed);
+			if (preview) {
+				pushDisplayOnlyNotice(
+					state,
+					`\n[tool:output] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n${preview}\n`,
+				);
+			}
+		}
 	}
 
-	observedTools.set(toolCallId, { title, status });
+	const observed: ObservedToolState = { title, status, compactionShown: previous?.compactionShown };
+	observedTools.set(toolCallId, observed);
+	if (isTerminalToolStatus(status)) pushCompactionLine(state, update, observed);
+}
+
+/** The output inside one wrapping code fence; the adapter sends a command's output as "```console\n…\n```". */
+function unfence(text: string): string {
+	const fenced = /^```[^\n]*\n([\s\S]*?)\n?```\s*$/.exec(text);
+	return fenced ? fenced[1] : text;
+}
+
+/** Keep `text` within `maxBytes` UTF-8 bytes, cutting at a character boundary from the head or the tail. */
+function clipBytes(text: string, maxBytes: number, fromTail: boolean): string {
+	if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+	const chars = Array.from(text);
+	if (fromTail) chars.reverse();
+	const kept: string[] = [];
+	let bytes = Buffer.byteLength("…", "utf8");
+	for (const ch of chars) {
+		const size = Buffer.byteLength(ch, "utf8");
+		if (bytes + size > maxBytes) break;
+		kept.push(ch);
+		bytes += size;
+	}
+	if (fromTail) kept.reverse();
+	return fromTail ? `…${kept.join("")}` : `${kept.join("")}…`;
+}
+
+/**
+ * #163 M2: a short look at what a finished tool returned, as Pi shows a tool's output. At most
+ * PREVIEW_MAX_LINES lines and PREVIEW_MAX_BYTES bytes, each line passed through the notice
+ * sanitizer. A failure shows the TAIL, where a command's stderr and its exit status end up
+ * (`stdout` then `stderr`, `reporters/bash.js`); a success shows the head. Nothing when the whole
+ * output already fits on the terminal notice's one line.
+ */
+function previewOf(raw: string, failed: boolean): string | undefined {
+	const lines = unfence(raw)
+		.split("\n")
+		.map((line) => sanitizeNoticeFragment(line, PREVIEW_MAX_BYTES));
+	while (lines.length > 0 && lines[0] === "") lines.shift();
+	while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+	if (lines.length === 0) return undefined;
+	if (lines.length === 1 && lines[0].length <= NOTICE_SUMMARY_MAX) return undefined;
+	const omitted = lines.length > PREVIEW_MAX_LINES;
+	const shown = failed ? lines.slice(-PREVIEW_MAX_LINES) : lines.slice(0, PREVIEW_MAX_LINES);
+	if (omitted) {
+		if (failed) shown.unshift("…");
+		else shown.push("…");
+	}
+	return clipBytes(shown.join("\n"), PREVIEW_MAX_BYTES, failed);
+}
+
+function formatTokens(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+	if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+	return String(n);
+}
+
+/**
+ * #163 M3: the backend's own compaction, in numbers. claude-agent-acp reports it as a synthetic
+ * tool call whose `_meta.claudeCode.toolName` is "compact", and gives a client without the AIR
+ * extension the facts as `rawOutput: {trigger, preTokens, postTokens?, durationMs?, error?}`
+ * (0.107.0 `tool-calls/reporters/compaction.js` `finished`, `context-compaction.js:366-376`). One
+ * lifecycle line per compaction, whichever terminal update carries the facts first; a field that
+ * is absent is left out. Shown like the other `[acp: …]` lines, whatever the tool-notice setting.
+ */
+function pushCompactionLine(
+	state: AcpPiStreamState,
+	update: Record<string, unknown>,
+	observed: ObservedToolState,
+): void {
+	if (observed.compactionShown) return;
+	const meta = update?._meta as { claudeCode?: { toolName?: unknown } } | undefined;
+	if (meta?.claudeCode?.toolName !== "compact") return;
+	const facts = update?.rawOutput as
+		| { trigger?: unknown; preTokens?: unknown; postTokens?: unknown; durationMs?: unknown; error?: unknown }
+		| undefined;
+	if (!facts || typeof facts !== "object" || Array.isArray(facts)) return;
+	const parts = ["compaction"];
+	if (typeof facts.trigger === "string" && facts.trigger) parts.push(facts.trigger);
+	if (facts.error !== undefined && facts.error !== null && facts.error !== "") parts.push("failed");
+	const pre = typeof facts.preTokens === "number" ? formatTokens(facts.preTokens) : undefined;
+	const post = typeof facts.postTokens === "number" ? formatTokens(facts.postTokens) : undefined;
+	if (pre && post) parts.push(`${pre}→${post}`);
+	else if (pre) parts.push(pre);
+	if (typeof facts.durationMs === "number" && facts.durationMs >= 0) {
+		const seconds = facts.durationMs / 1000;
+		parts.push(`in ${seconds < 60 ? `${seconds.toFixed(1)}s` : formatElapsed(seconds)}`);
+	}
+	if (parts.length === 1) return;
+	observed.compactionShown = true;
+	pushAcpLifecycleNotice(state, parts.join(" "));
 }
 
 /** Push a permission-decision notice (informational text, not a tool call). */
