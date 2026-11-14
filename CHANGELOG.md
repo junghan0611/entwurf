@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.14-herdr.0.53.1 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.53.1` runtime and its measured npm sha512; it is not a new core release. Core 0.53.0 was tagged but never published to npm, so the previous pin is 0.52.0 (`v2026.11.12-herdr.0.52.0`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically. The install guidance, the support-contract rows and the durable supply note now name the published 0.53.1.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `45ea17e4d8f94b836c0b52cc9191fd6f0749610af0c8069343c17e01fb1557e5` matches the accepted core artifact byte for byte; independently computed sha512 matches the npm integrity and this lock. The publication moved `latest` to 0.53.1 and left `repair` at the value recorded before publication. Core `v0.53.1`, its accepted artifact and npm bytes are unchanged.
+- In a private sandbox (private HOME, XDG roots and agent directory), `pi install npm:@junghanacs/entwurf@0.53.1` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the four curated Claude models with no provider error. Pi warned that the host-provided packages should be peer dependencies; that is recorded, not changed here.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.53.1, a source swap, a real Herdr registration, public-ref installation, a vendor model turn or an operating-host upgrade.
+- On the candidate over `563b9334f786` with work surface `34fa94b760db`, the affected `check-dep-versions` PARTIAL killed 5/5 with both controls green (receipt `a8a5983dc548`); it is not kill-power measured on the eventual snapshot SHA. Exact pushed-SHA CI requires its own receipt.
+
 ## 0.53.1 — 2026-11-14
 
 ### What an npm user gets

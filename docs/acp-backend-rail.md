@@ -190,22 +190,22 @@ What "supported" means here, per declaration class. The classes are kept apart o
 undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
-and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK and Claude adapter rows
-equal the published 0.36.1–0.37.1 manifests (`claude-agent-acp 0.90.0`, `@agentclientprotocol/sdk
-1.8.0`); 0.31.0–0.36.0 shipped `0.85.1` / `1.6.0` and 0.30.0 shipped `0.79.0` / `1.4.0`
-(`[측정 2026-10-16]` `git show <tag>:package.json`). The transitive Claude Agent SDK `0.3.296`
-row has no direct manifest entry; its bump is recorded in CHANGELOG 0.36.1 (#128) and the ROADMAP
-Dep bump ledger. 0.38.0 (#145) changes only the pi SDK set; the ACP rows are unchanged from 0.37.1
-through the published 0.52.0. #142 landed `0.106.0` / `2.6.0` / `0.3.322` on main; #163 moves the
-adapter to `0.107.0` and the transitive SDK to `0.3.323` (wire SDK unchanged). No npm release carries
-either set, so the rows below are not a shipped manifest.
+and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK, Claude adapter and transitive Claude
+Agent SDK rows equal the published 0.53.1 (`[측정 2026-11-14]` `git show v0.53.1:package.json` and
+its lockfile): #142 landed `0.106.0` / `2.6.0` / `0.3.322` and #163 moved the adapter to `0.107.0`
+and the transitive SDK to `0.3.323` (wire SDK unchanged). 0.53.0 carried the #142 set but was tagged
+and never published to npm. Before that, 0.36.1–0.52.0 shipped `claude-agent-acp 0.90.0` /
+`@agentclientprotocol/sdk 1.8.0` with the transitive `0.3.296` (CHANGELOG 0.36.1, #128; 0.38.0, #145,
+changed only the pi SDK set); 0.31.0–0.36.0 shipped `0.85.1` / `1.6.0` and 0.30.0 shipped `0.79.0` /
+`1.4.0` (`[측정 2026-10-16]` `git show <tag>:package.json`). The transitive row has no direct manifest
+entry; its bumps are recorded in the ROADMAP Dep bump ledger.
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 ships (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
+| pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 and 0.53.1 ship (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
 | ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry) |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.107.0` | **exact**, bundled | #163 bump over #142's 0.106.0, unshipped (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.107.0` | **exact**, bundled | #163 bump over #142's 0.106.0, first published in 0.53.1 (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.323` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
