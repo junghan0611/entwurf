@@ -8,8 +8,14 @@
 		"additionalProperties": false,
 		"required": ["entwurfBin", "declPath", "scope"],
 		"properties": {
-			"entwurfBin": { "type": "string", "description": "Absolute path of the installed `entwurf` launcher." },
-			"declPath": { "type": "string", "description": "Absolute path of this host's openclaw-citizens.json." },
+			"entwurfBin": {
+				"type": "string",
+				"description": "Absolute path, as the Gateway process sees it, of the program that runs `entwurf openclaw-send` on the host that owns the garden store: the launcher itself, or an operator wrapper that reaches it. A wrapper refusing before the entry prints one {\"kind\":\"invalid\"} line and exits 2."
+			},
+			"declPath": {
+				"type": "string",
+				"description": "Absolute path of the store host's openclaw-citizens.json. The entry refuses any other path; it selects nothing."
+			},
 			"scope": { "type": "string", "description": "This Gateway's scope label, as declared in openclaw-citizens.json." }
 		}
 	},

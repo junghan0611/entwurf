@@ -22,6 +22,15 @@
  * 0 dispatched, 4 dispatched with a reported error, 3 scope/record refusal, 2 invalid. Anything
  * else — 1, 124 (timeout), null, more or fewer lines, a kind that disagrees with the code — is
  * `indeterminate`: the entry may or may not have dispatched. No retry.
+ *
+ * Behind an operator wrapper (#160 S5 §R2, Gateway in a container, entry on the host): the
+ * configured `entwurfBin` is then the wrapper, not the launcher, and the host side fixes which
+ * declaration the entry reads — `declPath` selects nothing and is at most compared. The wrapper
+ * owes this file the same receipt rule. A refusal it makes BEFORE reaching the entry (for example a
+ * `declPath` that is not the host's) must print one `{"kind":"invalid","detail":…}` line and exit 2,
+ * so it reads as `invalid` (not sent); a bare exit 2 with no line is `indeterminate`, as is any
+ * transport failure (ssh 255, a remote 1), because nothing here can tell those apart from a send
+ * that was admitted before its receipt was lost.
  */
 
 import * as path from "node:path";

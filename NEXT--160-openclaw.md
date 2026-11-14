@@ -8,11 +8,11 @@
 - [x] **S3. 구현.** 0c9e3a(flip 포함), 4184c5 리뷰 Blocker 0, Defect 3 반영.
 - [~] **S4. LIVE (lab).** 왕복, busy steer, reset 뒤 같은 garden id, fresh (c)(d) 측정. 남은 것: fresh (a) 표시면, (b) agent-policy 폭, TUI 바인딩 증명. release stop 유지.
 - [~] **S5. oracle 운영 Docker 봇 연결.** ← CURRENT. 설계 카드와 GLG 결정은 끝났다(아래 "S5 결정"). 구현 단계:
-  - [x] **S5.0 merge·RED.** main `0c058cea` 37커밋 merge → `51ed755a`(충돌 0, ff08d4 승인 2026-11-14). 이름 붙은 RED 두 개: ① `check-harness-admission-parity` openclaw(GLG: 그냥 둠, flip 묶음에서만 닫힘) ② `check-capability-bundle-reach` B3(dist 미빌드, build-bridge 창에서 닫힘). 영수증 `/tmp/ff08d4-next/impl-status.md`(oracle 로컬).
+  - [x] **S5.0 merge·RED.** main `0c058cea` 37커밋 merge → `51ed755a`(충돌 0, ff08d4 승인 2026-11-14). 이름 붙은 RED 두 개: ① `check-harness-admission-parity` openclaw(GLG: 그냥 둠, flip 묶음에서만 닫힘) ② ~~`check-capability-bundle-reach` B3~~ — CLOSED: ff08d4가 GLG 승인으로 20:24:26 build-bridge, bundle-reach PASS(39) [상속: ff08d4 메시지]. build-bridge는 ff08d4 담당, 구현자는 돌리지 않는다. 영수증 `/tmp/ff08d4-next/impl-status.md`(oracle 로컬).
   - [x] **S5.1 1b: 선언별 `bin` 절대경로.** gateway 항목에 optional `bin`(absolute + normalized). 수신 어댑터 probe가 그 경로를 argv0로 쓰고 route에 찍어, send는 선언을 다시 읽지 않고 같은 program을 쓴다. `bin`+`configPath`는 파서가 이름 붙은 오류로 거절. DELIVERY.md OpenClaw 행 갱신. V3 불변. 옆 테스트 +8(파서 4, 어댑터 3, 수용 1), 손 mutant 2개 kill(거절 제거 → 1 fail, route.bin 무시 → 2 fail). focused gate green: lint, typecheck, tests-beside-behavior 1204, native-push-adapter, v2-contract, v2-production, meta-session, install-surface.
     - 경계: fresh의 `openclawTuiLaunch`는 `bin`을 읽지 않는다(production 호출자 0, fresh preflight가 거절 중). 컨테이너 TUI는 docker exec `-it`가 필요해 별도 설계 — fresh 단계에서 다룬다.
-  - [ ] **S5.2 wrapper invalid 계약.** ← NEXT. 컨테이너 배치의 `entwurfBin`은 SSH wrapper이고 `declPath`는 아무것도 고르지 않는다. wrapper 거절은 `{"kind":"invalid","detail":…}` 한 줄 + exit 2(그래야 플러그인이 indeterminate가 아니라 invalid로 분류, `plugins/openclaw/dist/core.js:111-112`). 플러그인 쪽 계약 테스트와 manifest 문구.
-  - [ ] **S5.3 merge 전 문구 묶음.** "#160, BRANCH candidate" 4곳, O1–O3, manifest `entwurfBin`/`declPath` 문구, NEXT 정리.
+  - [x] **S5.2 wrapper invalid 계약.** 플러그인 분류표는 이미 맞았다(exit 2 + `{"kind":"invalid"}` 한 줄 → invalid, 0줄 → indeterminate, `plugins/openclaw/dist/core.js` classifyEntryResult). 이번에 계약으로 고정했다: core.js 헤더에 "operator wrapper" 문단, manifest `entwurfBin`/`declPath` 문구(card §R2 정돈안), 옆 테스트 +5(wrapper 표 4행: invalid 한 줄 / bare exit 2 / ssh 255 / remote 1, 그리고 실제 child process wrapper가 foreign declPath를 invalid로 거절). 손 mutant(2→invalid 매핑 제거) → 3 fail. wrapper 자체는 운영 측(nixos-config) 소유이고 entwurf는 받는 쪽 규칙만 가진다.
+  - [ ] **S5.3 merge 전 문구 묶음.** ← NEXT. "#160, BRANCH candidate" 4곳(ENTWURF-CLI.json 2 + check-install-surface.ts 리터럴 2), O1–O3, NEXT 정리. (manifest 문구는 S5.2에서 끝냄.)
   - [ ] **S5.4 리뷰** (독립 리뷰어, ff08d4 배치) → amendment 한 묶음.
   - [ ] **S5.5 PARTIAL** (변경된 gate/mutant/matrix 그룹만, archived 단언 QK 포함) — **build 필요 지점: 여기서 멈추고 ff08d4에 보고.**
   - [ ] **S5.6 frozen FULL** → **S5.7 exact-SHA CI.** build-bridge/check-pack/check:full/prepack은 GLG가 정한 재시작 창 안에서만.
@@ -25,7 +25,7 @@
 - **운영 전제 정정:** 옛 "운영 10.9 / 8b18b55" 전제는 낡았다. 운영 버전 SSOT는 nixos-config `ORACLE.md`의 LIVE 줄 하나다 [read ORACLE.md:140, 2026-11-14]: OpenClaw **2026.11.3** · `847611d` · image `openclaw-custom:11.3-candidate-20261113`. 컨테이너 node v24.22.1 / sqlite 3.53.4 [상속: 8216f4 s5-ops-facts]. 따라서 "운영을 11.3으로 맞추는 일"은 이미 끝났다.
 - **경로 축 정정:** 옛 S5 줄의 "컨테이너 경로와 host 경로가 다르다"는 부분만 맞다. `~/repos/gh`, `~/.pi/agent`, `~/org`는 host와 같은 절대경로로도 마운트되어 있다 [측정 `docker inspect openclaw-gateway` Mounts, 2026-11-14]. 다른 것은 봇 workspace의 컨테이너 경로뿐이고, birth `--cwd`는 운영자 명시값(host 절대경로)으로 둔다. record cwd는 send envelope 표시에만 쓰인다.
 - **Tier 1/2 측정 (8216f4, 운영 컨테이너, 읽기 전용):** 컨테이너 CLI에 `--expect-url` 있음. 선언 url `ws://127.0.0.1:18789`로 `sessions.describe` 없는 key → `{"session":null}` rc0 1.56s, 틀린 url → rc1 "Gateway destination changed", state 쓰기 0 [상속: `/tmp/ff08d4-next/s5-f0-tier2.md` sha a6f5853c…, oracle 로컬]. A1(수신 = docker exec shim) 성립.
-- **다음 한 행동:** S5.2 wrapper invalid 계약(플러그인 쪽 분류 테스트 + manifest 문구). focused gate만.
+- **다음 한 행동:** S5.3 merge 전 문구 묶음. 단, "BRANCH candidate" 문구 교체는 출하 문구라서 merge 시점이 확정될 때 하는 편이 맞다 — 코디에게 시점을 확인한다. focused gate만.
 - **역할 (2026-11-14):** 코디 = `20261113T043350-ff08d4`(Claude Code, oracle). 구현 = `20261114T193422-ee14c7`(이 문서의 writer). 운영 실행 = nixos-config 운영 담당(garden id는 코디가 앎). 운영 코디 68bd94, thinkpad 코디 b22677, thinkpad 검수 9fc008. 보고는 모두 ff08d4로. 커밋은 commit 스킬, push는 GLG.
 
 # S5 결정 (GLG 2026-11-14, ff08d4 중계) — 공개 정책: #160 issuecomment-6876392683

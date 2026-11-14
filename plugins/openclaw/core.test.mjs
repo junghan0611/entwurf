@@ -176,6 +176,58 @@ describe("classifyEntryResult", () => {
 	});
 });
 
+describe("operator wrapper receipt contract (#160 S5 §R2)", () => {
+	it.each([
+		[
+			"a wrapper refusing a foreign declPath with one invalid line + exit 2 is invalid (not sent)",
+			{ code: 2, stdout: line({ kind: "invalid", detail: "declPath is not the host declaration" }), stderr: "" },
+			"invalid",
+		],
+		[
+			"a wrapper refusing with a bare exit 2 is indeterminate",
+			{ code: 2, stdout: "", stderr: "refused" },
+			"indeterminate",
+		],
+		[
+			"an ssh transport failure (255) is indeterminate",
+			{ code: 255, stdout: "", stderr: "Connection refused" },
+			"indeterminate",
+		],
+		["a remote 1 with no receipt is indeterminate", { code: 1, stdout: "", stderr: "" }, "indeterminate"],
+	])("%s", (_n, r, outcome) => {
+		expect(classifyEntryResult(r).outcome).toBe(outcome);
+	});
+
+	it("a wrapper process that refuses before the entry, through node spawn", () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-wrapper-"));
+		try {
+			const wrapper = path.join(dir, "fake-wrapper.mjs");
+			// Compares the plugin's declPath with the one the host fixes; never reaches an entry.
+			fs.writeFileSync(
+				wrapper,
+				`const HOST_DECL = "/home/op/.pi/agent/openclaw-citizens.json";
+if (process.argv[2] !== "openclaw-send" || process.argv[3] !== "--decl" || process.argv[4] !== HOST_DECL) {
+	process.stdout.write(JSON.stringify({kind:"invalid",detail:"wrapper: --decl must be "+HOST_DECL})+"\\n");
+	process.exit(2);
+}
+process.exit(99);`,
+			);
+			const run = (argv, opts) => {
+				const r = spawnSync(process.execPath, [wrapper, ...argv.slice(1)], { input: opts.input, encoding: "utf8" });
+				return { code: r.status, stdout: r.stdout, stderr: r.stderr };
+			};
+			const claim = buildClaim(CONFIG, ctx(), { target: TARGET, message: "hi" });
+			expect(
+				classifyEntryResult(
+					run([CONFIG.entwurfBin, "openclaw-send", "--decl", "/home/node/.pi/agent/x.json"], { input: claim }),
+				),
+			).toEqual({ outcome: "invalid", detail: "wrapper: --decl must be /home/op/.pi/agent/openclaw-citizens.json" });
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("a real child process as the entry", () => {
 	it("stdin claim → stdout receipt → exit code, through node spawn", () => {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-plugin-"));
