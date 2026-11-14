@@ -8,15 +8,25 @@ not what it was told to claim. It is a blind pass, so run it before the session 
 not measured", not as a failure; nothing requires re-asking.
 
 Order of a verification session:
+### Why this exists
 
-1. **Core interview** (below): paste Q-B0 and Q-B0-CARRIER, then grade them with the answer guide.
-2. **Follow-up questions** as the operator sees fit; the optional rounds further down are a menu, not a checklist.
+GLG's account: GLG used Claude inside pi and liked how it felt. When Anthropic changed its plan policy so that a subscription plan could no longer be used with pi, GLG started pi-shell-acp, this package's ancestor, a month before the change took effect ([GLG's note](https://notes.junghanacs.com/botlog/20260427T183210)). The goal was not "Claude through ACP works" but "Claude running through pi ACP keeps the feel and discipline it had in pi."
+
+That goal needs three things from the bridge, and this interview checks them:
+- **A pi-sized tool surface.** The rail narrows Claude Code's tools to Read, Bash, Edit and Write (`DEFAULT_CLAUDE_TOOLS`, `pi-extensions/lib/acp/tool-surface.ts:34`) and removes the rest by name (`DEFAULT_CLAUDE_DISALLOWED_TOOLS`, `tool-surface.ts:52`). The one-shot summary turn overrides tools with `[]` (`backend.ts:1810-1819`); SDK 0.3.323 `sdk.mjs` passes an array as `--tools <join>`, else `--tools=default`, and the disallowed list is inherited. Not measured: whether the CLI reads an empty `--tools` value as "all default tools off".
+- **No second memory axis.** Claude Code's own memory is off (`autoMemoryEnabled: false`, `tool-surface.ts:196`, `overlay.ts:123`), so memory is pi's transcript and the operator's own tools.
+- **A known system message.** The operator can see what the model is told (the prefix, plus the engraving when configured) instead of trusting a claim.
+
+GLG asks the questions in person and reads the answers, because the judgement is whether this is Claude *as pi uses it*: in GLG's words, whether it put down the Swiss-made MacGyver knife (a Swiss-army knife) and carries one screwdriver, the image from GLG's essay [힣의 드라이버](https://notes.junghanacs.com/botlog/20260423T141759). It is a blind pass for that reason: a session that has read the answers in VERIFY.md can recite them.
+
+What it cannot show is long-running work. #162 (a long tool that showed nothing for minutes) and #163 (a steer or stop that reached a busy ACP turn tens of minutes late, with a refused `/compact` bundled in later) appeared only in real work. BASELINE gates identity and surface, not quality, and it is run now and then, so the operator need not repeat the whole interview each time.
+
+
+1. **Core interview** (below): paste Q-B0 and Q-B0-CARRIER, then grade them with the grading notes below.
+2. **Follow-up questions** as the operator sees fit. The retired optional rounds are in [docs/baseline-receipts.md](./docs/baseline-receipts.md) (read on GitHub; that file is not in the npm package).
 3. **Hand over VERIFY.md**: ask the session to read it in full and run §1B itself.
 
-Claude is the supported ACP backend. Cortex ACP is disabled; its former interview
-below is retained as history, not an instruction to start a session.
-Antigravity (`agy`) and Codex are native-push citizens rather than ACP backends and therefore
-have separate citizen/round-trip baselines; neither is part of this ACP operator interview.
+Claude is the supported ACP backend. Cortex ACP is disabled, and the Antigravity (`agy`) interview is paused with native push (#152); both are kept as retired material in [docs/baseline-receipts.md](./docs/baseline-receipts.md). Codex and `agy` are native-push citizens rather than ACP backends, so they have separate citizen/round-trip baselines outside this interview.
 Recorded host evidence and support verdicts are at the end of this file.
 
 ---
@@ -69,7 +79,7 @@ Also: (a) if asked to commit something to memory, how do you handle it; (b) can 
 **Q-B0-CARRIER — which surface each fact came from**
 
 - **PASS** — Each cited fact is placed on the surface it came from, or honestly marked as unknown or inferred. A model may not see the wire roles directly, so it should keep "I see this", "the source says this" and "I infer this" apart. The surfaces:
-  - the system prompt (on Claude ACP: the SDK's one-line identity prefix, measured on the 0.64.0 adapter and not re-measured on 0.106.0, plus the engraving when one is configured; the shipped default is `pi-extensions/lib/acp/prompts/engraving.md`, and an emptied file is a deliberate opt-out);
+  - the system prompt (on Claude ACP: the SDK's one-line identity prefix, measured on the 0.64.0 adapter and not re-measured on the current 0.107.0, plus the engraving when one is configured; the shipped default is `pi-extensions/lib/acp/prompts/engraving.md`, and an emptied file is a deliberate opt-out);
   - the first-user prepend (the bridge identity line, the tool-truth rule, and `~/AGENTS.md` / the cwd `AGENTS.md` when present, subject to the 50 KiB cut and duplicate-cwd rule; VERIFY.md §1A.0);
   - the tool schema (native tools and `mcp__<server>__<tool>` entries);
   - separate system-reminder blocks, if any.
@@ -80,104 +90,17 @@ Also: (a) if asked to commit something to memory, how do you handle it; (b) can 
 
 ---
 
-## Optional rounds — copy-paste
+The optional rounds, the question-ID table and the per-question answer guide (Q-L1..Q-MCP) are retired material in [docs/baseline-receipts.md](./docs/baseline-receipts.md).
 
-Each round is a Korean / English pair. Paste a whole block into the session as a single user message. These go beyond the core
-interview; run them when a carrier, memory or MCP regression is suspected.
-
-### Round 1 (optional) — engraving + read-class tools
-
-**Korean**
-
-~~~
-[Q-L1] 당신이 받은 최상위 지침(system prompt)에 entwurf 인그레이빙 텍스트가 박혀 있는지 답하라. 박혀 있으면 그 부분만 quote 하고, user/context/docs에서 본 것과 구분하라.
-
-[Q-L3] 백엔드의 read-class native tool들을 한 번씩 시험 호출해라. 어느 것이라도 "denied by admin policy" 같은 거부 응답이 나오면 보고하라.
-~~~
-
-**English**
-
-~~~
-[Q-L1] Is the entwurf engraving text present in your highest-priority instruction surface (system prompt)? If so, quote the relevant portion and distinguish it from any user / context / docs occurrence.
-
-[Q-L3] Invoke each of the backend's read-class native tools at least once. Report any "denied by admin policy" (or equivalent) refusal.
-~~~
-
----
-
-### Round 2 (optional) — memory path + context discovery + containment + MCP
-
-**Korean**
-
-~~~
-[Q-L2] 백엔드 바이너리가 자기 글로벌 설정 / 메모리 디렉터리를 어디서 읽나? 해당 backend의 config-dir 환경변수 값과 그 값이 가리키는 실제 경로를 답하라. 운영자의 native 설정 디렉터리와 같은지 다른지 명시. 추측 말고 `echo $<ENV_VAR>`로 확인해도 된다.
-
-[Q-L4] 백엔드는 보통 cwd → parent → home 순으로 project-memory 파일을 찾아 로드한다. 현재 환경에서: (1) cwd에 있나? (2) 부모 체인에 있나? (3) 홈(~)에 있나? 세 위치 모두 보고하고, 그 파일들이 *로드돼 있다고 느끼는지*도 답하라.
-
-[Q-L5R] 어떤 도구도 사용하지 말고 너 자신의 기억으로만 답하라. 이번 세션의 system prompt + 첫 user message를 *제외하고*, 그 이전(다른 세션) 내용으로 회상하는 게 있나? 주의: cwd에 MEMORY.md가 디스크에 있어도 그건 너의 메모리가 아니라 일반 파일이다 — 읽기 전엔 "모름".
-
-[Q-L5W] 이번 세션에서 어떤 메모리 파일을 작성했나? backend-native memory 파일(CLAUDE.md 등)을 만든 적 있나? 운영자가 "기억하라"고 하면 어디에 저장할 것인가?
-
-[Q-MCP] 현재 세션에 연결된 MCP 서버를 모두 enumerate. 이름만.
-~~~
-
-**English**
-
-~~~
-[Q-L2] Where does the backend binary read its global config / memory directory from? Report the backend's config-dir env var and the actual path it points at. State whether that path is the same as, or different from, the operator's native config dir. Verify with `echo $<ENV_VAR>` if needed.
-
-[Q-L4] Backends walk cwd → parent → home for their project-memory file. In this environment: (1) does cwd contain it? (2) any match up the parent chain? (3) one in ~? Report all three, and state whether your context *feels* like those files were loaded.
-
-[Q-L5R] Without using any tool, answer from your own memory only. Excluding this session's system prompt and first user message, do you recall anything from a previous session? Note: a MEMORY.md on disk in cwd is not *your* memory — it is a regular file. Without reading it you do not know its contents; classify as "don't know".
-
-[Q-L5W] What memory files did you write this session? Have you created any backend-native memory file (CLAUDE.md, etc.)? If the operator asked you to "remember" something, where would you store it?
-
-[Q-MCP] Enumerate all MCP servers connected in this session. Names only.
-~~~
-
----
-
-## How to use
-
-Each question carries a **stable ID** so a future operator can spot a
-regression quickly. IDs do not change across releases; the expected
-answer may evolve. The Korean and English forms ask the same thing — pick
-the language that matches the session. For each question: **PASS** =
-expected isolation-closed response, **FAIL** = listed failure mode,
-**NOTE** = scope/interpretation hint.
-
-| ID | Layer / Topic |
-|----|---------------|
-| Q-B0 | Baseline harness recognition & carrier separation |
-| Q-B0-CARRIER | Surface attribution of each cited fact; memory handling; skill-visible capability |
-| Q-L1 | Carrier-isolation — engraving in the system-prompt slot |
-| Q-L2 | Operator memory path — binary's config-dir resolution |
-| Q-L3 | Tool surface — backend-native allowlist / policy |
-| Q-L4 | Hierarchical context discovery — backend-native project memory |
-| Q-L5R | Memory recall — cross-session persistence, read side |
-| Q-L5W | Memory write — this-session writes + storage destination |
-| Q-MCP | MCP enumerate — whitelist closure |
-
-> **Layer naming.** `L1–L5` here are *surface-isolation layers* (carrier /
 > memory path / tools / context discovery / memory containment).
 > VERIFY.md's `L0–L5` are *evidence-quality levels*; DELIVERY.md's `D0–D8`
 > are *native async-delivery capability levels*. Same letters, different
 > axes — context disambiguates.
 
-> **Backend scope.** `Q-B0`, `Q-L1`, `Q-L5R`, `Q-L5W`, `Q-MCP` are
-> bridge-contract checks identical against any backend. `Q-L2`, `Q-L3`,
-> `Q-L4` probe a backend's overlay: the *what* is constant (binary config
-> path, native tool allowlist, hierarchical project-memory walk), the
-> *name* changes per backend (table below). The closure each row asserts —
-> *binary resolution uses the pi-owned overlay; native operator state is
-> not inherited* — is enforced by the deterministic ACP gates
-> (`check-acp-overlay`, `check-acp-tool-surface`, `check-acp-config`,
-> `check-acp-carrier-augment`) and the live `smoke-acp-memory-containment-live`;
-> this document records the model-side observation.
 
 ## Claude-specific surface
 
-The core interview and the optional rounds are the Claude reference baseline.
+The core interview is the Claude reference baseline; its expected surface:
 
 | Slot | Expected Claude surface |
 |---|---|
@@ -185,97 +108,6 @@ The core interview and the optional rounds are the Claude reference baseline.
 | Read-class tools (Q-L3) | `Read`, `Bash` (ls/find/grep) |
 | Project memory (Q-L4) | `CLAUDE.md` / `.claude/`, not inherited through the overlay |
 | Native memory write (Q-L5W) | none; do not create `CLAUDE.md`, hooks, or agents as a memory substitute |
-
----
-
-## Answer guide
-
-Per-question PASS / FAIL / NOTE for the optional rounds. Q-B0 and Q-B0-CARRIER are graded with the core interview above.
-
-### Q-L1 — Carrier isolation (engraving)
-- **PASS** — Model quotes the engraving and attributes it to the system-prompt slot, not to AGENTS.md or the first-user prepend.
-- **FAIL** — The configured engraving is missing or mutated, or it is attributed to the wrong carrier. An emptied engraving file is a deliberate opt-out; there the PASS is "no engraving in the system slot".
-- **Proves** — Claude's identity carrier (`_meta.systemPrompt`) reaches the slot the bridge expects. (Carrier separation detail: VERIFY.md §1A.0.)
-
-### Q-L2 — Operator memory path
-- **PASS** — Config-dir env points at the pi-owned overlay; model states the binary reads from the overlay, *not* the operator's native dir.
-- **FAIL** — Env reported unset or pointing at native; model claims the binary inherits native config.
-- **NOTE** — The overlay isolates settings, memory and project history, not authentication: a tight symlink whitelist lets the child reuse the operator's existing Claude credentials and caches (`pi-extensions/lib/acp/overlay.ts`). Seeing those links is by design. Q-L2 tests the *binary's resolution path*. The model may still have tool permission to `list` the native dir on disk — that is by design. Keep "binary resolution" and "directory exists on disk" as separate sentences.
-
-### Q-L3 — Read-class tool surface
-- **PASS** — All read-class tools execute; zero policy denials.
-- **FAIL** — Any tool refused, or absent from the expected schema for the active backend.
-
-### Q-L4 — Hierarchical context discovery
-- **PASS** — No backend project-memory file in any of the three locations, *or* (if one exists for unrelated reasons) the model reports it is not in its context.
-- **FAIL** — Model reports a backend project-memory file auto-loaded into context without explicit request.
-- **NOTE** — Such a file may legitimately exist on disk; what L4 closes is *the binary auto-loading it via hierarchical discovery*.
-
-### Q-L5R — Memory recall (read side)
-- **PASS** — Model reports no recall of its own beyond what arrived in this session. Anything the operator supplied, or that a retrieval tool returned this session, is named with its source. It distinguishes "files on disk I haven't read" from "memory I directly hold".
-- **FAIL** — Claims to remember details from a previous session that did not arrive in this prompt or through a named retrieval; conflates "I read a file" with "I remember from before".
-- **NOTE** — L5 closes *the backend binary's own memory channels* (auto-loaded memory file, extraction inbox, overlay-private store). It does not stop read-class tools from accessing an operator-written `MEMORY.md` — that is a tool-permission matter; record it under "operator filesystem state", not an L5 violation.
-
-### Q-L5W — Memory write
-- **PASS** — No backend-native memory file was written this session, and any external record it wrote was one the operator asked for (`~/org/` Denote / botlog / llmlog). It points to those external surfaces, with `semantic-memory` for retrieval, and does *not* propose backend-native memory files or any backend-internal memory subsystem.
-- **FAIL** — Model wrote a backend-native memory file, or an unrequested record, this session; proposes a backend-native memory file or subsystem (Anthropic memory editor, codex `~/.codex/memories`, gemini autoMemory).
-- **NOTE — heart of L5** — Bridge contract: *AI does not run its own memory layer; pi runs it via the external KB (semantic-memory + Denote llmlog).*
-
-### Q-MCP — MCP enumerate
-- **PASS** — Exactly the servers the operator declared in `entwurfProvider.mcpServers`; on the default configuration that is one, `entwurf-bridge`.
-- **FAIL** — A server the operator did not declare appears (ambient leak).
-- **REPORT** — A declared server with no callable tool in the schema is recorded as exactly that. Whether it is connected (a server exposing no tools leaves no trace either), and why, stays undetermined.
-- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation. The current bridge lists nine tools (since 0.41.0), including the manual `entwurf_register_native` fallback; MCP enumeration asks for the server name, not a stale tool count.
-
----
-
-## Native-citizen baseline — Antigravity / agy (shipped)
-
-This is not an ACP overlay interview, and while agy native push is paused (#152) it is an
-optional diagnostic run on request, not a release-cut requirement (VERIFY criterion 7).
-Run it in a **fresh agy conversation** after
-`install-agy-bridge`, `install-agy-statusline`, and `install-agy-hooks`, with all
-three doctors green. `PreInvocation` is the earliest lifecycle event, so a brief
-`🪛 ? agy` before the first model invocation is honest; after that first invocation
-the same conversation must have a garden id.
-
-| ID | Check | PASS | FAIL |
-|---|---|---|---|
-| Q-AGY-BIRTH | Automatic birth | First invocation creates/attaches one record by native `conversationId`; statusline becomes `🪛 <garden-id> agy`. | Manual cwd matching or `entwurf_register_native` is required for normal birth; a new id appears on every turn. |
-| Q-AGY-SELF | Sender identity | `entwurf_self` reports the same garden id, `origin=meta-session`, `agentId=meta-session/antigravity`, and, while native push is paused (#152), `replyable:false` with a reason naming the pause and no probe run. | Anonymous `external-mcp`, unbacked marker accepted, model name substituted into `agentId`, or mailbox evidence used to infer replyability. |
-| Q-AGY-SEND | Outbound attribution | `entwurf_v2` from agy reaches a sibling carrying that same sender garden id; while native push is paused (#152) the sender is `replyable:false`. | Receiver sees unknown host/wrong garden id, or sender ambiguity is silently guessed. |
-| Q-AGY-REPLY | Same-conversation reply (paused, #152) | While the pause holds, a sibling's `entwurf_v2(target=<agy-gid>, intent=fire-and-forget)` returns `native-push-paused` with nothing probed or sent, and the agy record is unchanged. When the pause lifts: the message direct-injects into the same live agy conversation. | New conversation/spawn, mailbox file/doorbell, a probe or send while paused, or a cosmetic delivered result with no live native route. |
-| Q-AGY-OWNERSHIP | Install scope | MCP owns one server plus one narrow `mcp(entwurf-bridge/<tool>)` rule per normal-path tool (`entwurf_v2`, `entwurf_peers`, `entwurf_self`) and nothing else; statusline owns its subtree; hooks own one named hook. | Installer broadens YOLO policy (`command(*)`, `unsandboxed(*)`), grants tools it does not need (`entwurf_inbox_read`, `entwurf_register_native`), or overwrites unrelated settings/hooks. |
-| Q-AGY-CONCURRENCY | Evidence boundary | Separate agy processes have separate pid/start-key markers; same-pid concurrent model invocation is explicitly reported unsupported. | Claims that one pid can safely identify two simultaneously invoking conversations. |
-
-The replyability formula is **record-backed identity AND live native-push probe**; while agy native push is paused (#152) the probe does not run and agy replyability is false by name.
-There is intentionally no receiver marker, `watchArmed`, mailbox, or resume
-authority (no rail has one since the visible-first cut). The model field may exist in the meta-record/status display,
-but `agentId=meta-session/antigravity` is the stable sender contract.
-
-Recorded operator evidence (2026-07-13, before the #152 pause; not current reply evidence): automatic birth → gid/statusline → MCP
-send with record-backed sender identity → same-gid native-push reply passed on a
-live conversation; three simultaneous agy processes produced three distinct pid
-and sender markers. This is live evidence for that host, not proof of unsupported
-same-process concurrency.
-
----
-
-## Cortex baseline (historical)
-
-Cortex ACP is disabled. These former questions are retained only to interpret old
-receipts; do not start a Cortex session to run them.
-
-| ID | Check | PASS | FAIL |
-|---|---|---|---|
-| Q-CX-ID | Backend identity | Identifies Cortex and the selected enforced model; does not claim to be Claude Code. | Reports the Claude backend or an unenforced/default model. |
-| Q-CX-TOOLS | Native surface | Reports Cortex-native tools; garden tools arrive only through `entwurf-bridge`. | Lists Claude's `Read/Bash/Edit/Write` allowlist as its native surface. |
-| Q-CX-MCP | Bridge projection | `entwurf-bridge` is reachable through the overlay-private `cortex/mcp.json`; no ambient operator MCP catalog appears. | Bridge absent, or unrelated operator MCP servers leak in. |
-| Q-CX-CARRIER | Context carrier | Says Cortex has no system-prompt engraving carrier; engraving/context arrived in the first-user augment. | Claims `_meta.systemPrompt` delivered the engraving. |
-| Q-CX-HOME | Containment | Distinguishes isolated HOME from the real operator HOME restored only for the bridge; `CORTEX_HOME` is absent. | Claims broad operator home/config inheritance or a present `CORTEX_HOME`. |
-
-The old LIVE smoke is retired and refuses by name; the current deterministic
-`check-acp-cortex` checks disabled admission instead of the old positive contract.
 
 ---
 
@@ -306,24 +138,24 @@ outside the experimental preview (rows below).
 | Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
 | Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |
 | macOS Claude meta-bridge | NOT CERTIFIED — pending physical host | No physical-Mac doctor yet; a CI runner has no Claude login. Physical-host rental remains unscheduled; no cut has carried it. |
-| 0.23.1 release acceptance (observer-amended) | accepted by GLG | `pnpm run check:full` P4 exit 0 (577 s); second aggregate `release-gate --cut` at `/tmp/entwurf-release-gate-0.23.1-retry.UIFctR` reached MUST 23/1/0 and BEHAVIOR 1/0, with only `smoke-codex-fresh-live` red because luna dropped `$`/`@` sigils in its relay (`release-gate.log:6156-6157`). The observer-amended standalone cell reran that exact leg with Codex `gpt-5.6-terra`, Pi `openai-codex/gpt-5.6-luna`: 66 assertions, exit 0; A app-server PID `3969303` `$227` ≠ fixture S `$231`; artifact `.probe-artifacts/codex-fresh-live-eZmf6p/`; pipe-pane stdout sha256 `56ee73e046e16fa95ef093fccf037670bf28b53a054bb5eec2a3b3b3ff08d93a`. Luna sigil handling is a post-cut issue, not a production-byte change. |
-| 0.24.0 release acceptance (observer-amended) | accepted by GLG | `pnpm run build-bridge` then `pnpm run check:full` P4 exit 0 (594 s) on the prepared tree; aggregate `release-gate --cut` at `/tmp/entwurf-release-gate-0.24.0.anVBvk` (1h34m) reached MUST 22/2/0 and BEHAVIOR 1/0 with `check-gate-qualification` 739/739 killed at the candidate (`release-gate.log:5507`). The two MUST reds: `smoke-codex-fresh-live` (the Pi→Codex `<placeholder>` template relay audited for byte equality, ROADMAP 0.24.0 follow-up #3, same class as the 0.23.1 amendment) and `smoke-entwurf-chain-live` — delivery A→B (`entwurf_v2 control-socket → sent`) and B→C (B's sender envelope in C's stream) both landed, then hop 3 (ACP `claude-sonnet-5`) declined the relay on principle, naming the scratch `AGENTS.md` authority as self-vouching content (`release-gate.log:5841`); the same class hop 1 refused on the 0.22.0 gate (`f5d6e10`), not rerun (a second run is a coin flip on a model's judgement), ROADMAP follow-up #5. Standalone LIVE before the aggregate, each once with ambient identity stripped: mux-fresh-call 39/39, mux-lifecycle 81/81, omp-receive 11/11, herdr-fresh-call 31/32 after `149bef7` (the red is a claude child that called back and never attempted delivery, follow-up #1), omp-fresh 21/21 after `install-omp-bridge` (stale v1 birth unit on the host, doctor named it). P9 after the aggregate: 548 → 546 dirs, 2 roots / 756K reclaimed, operator store and control-socket dir unchanged. GLG: "릴리즈 하는데 문제 없는것 같은데? 기록하고 진행하자." |
-| Native Codex Linux caller-DIRECTORY axis (current; #95 lane C) | **certified** | 2026-09-16, Codex 0.153.4: 65-assertion LIVE, exit 0, at `b3e07dc` with a clean worktree. Same host and topology as the lane B row below (app-server `737636` in A `$30/@41/%45`; initial Pi `20260916T154902-556eb5` `$2/@58`, Codex `20260916T155037-10ddaa` `$2/@59`, Codex-opened Pi `20260916T155102-9add8a` `$2/@61`, `seat-source=codex-title-anchor`). **hop 1 (cwd requested):** pane `#{pane_current_path}` = rollout `session_meta.cwd` = record cwd = requested scratch = `/tmp/entwurf-codex-fresh-live-db65N2`, against app-server cwd `/home/junghan/repos/gh/entwurf` read from `/proc/737636/cwd`. **hop 2 (cwd NOT requested):** the outbound Pi's pane, its own birth-written record and the Codex caller's record all read that same scratch, and its receipt names the caller-record rule. Artifact `.probe-artifacts/codex-fresh-live-w4yJBw/`; stdout `.probe-artifacts/lane-c-live-20260916T154900.log` sha256 `712050e7a8cf03ece98e7f34029ae98a92e9b2a7fd96aff87d0c1e6ba2ee9af2`. Cleanup reclaimed `@58`/`@59`/`@61` with no failure; records and transcripts preserved; app-server and `$30` untouched. 65 and 56 are different contracts — lane C added the cwd axis on top of lane B. Long floors (qualification body, frozen `check:full`) NOT run at this SHA; GLG decides host vs CI. |
-| Native Codex Linux caller-seat topology (current; #95 lane B) | **certified** | 2026-09-16, Codex 0.153.4: 56-assertion LIVE, exit 0. App-server `737636` alone in session A `$30/@41/%45`; initial Pi `20260916T144205-e876ff` `$2/@46`, omitted-placement Codex `20260916T144230-d050d7` `$2/@47`, Codex-opened Pi `$2/@48`. A ≠ S is the decisive half: the app-server env names A, so S can only have come from the caller's pane title — receipt `seat-source=codex-title-anchor`. Artifact `.probe-artifacts/codex-fresh-live-nYcGC1/run-stdout.log` sha256 `ed60c2bd…`; the 43-assertion hop-1 run that measured the D1 retirement is kept at `codex-fresh-live-4aFCDD/run-stdout.log` sha256 `8392a603…`. Cleanup reclaimed `@46`/`@47`/`@48` with no failure; app-server and `$30` untouched. |
-| Native Codex Linux home topology (PAST CONTRACT — #95 D1 retired the fixed home 2026-09-16) | **certified** for 0.21.0 as shipped | 2026-09-12, Codex 0.153.4: 57-assertion explicit-home LIVE. Initial Pi `$150/@397`; operator app-server `$158/@390/%390`; omitted-placement Codex `$158/@398`; Codex-opened Pi `$158/@399`; exact callbacks and addressed delivery both ways. Receipt and digest: `DELIVERY.md`. Deterministic closure of that axis: qualification 460/460 across 43 lanes with origin/snapshot purity green, then frozen full floor exit 0 in 506s — both pre-amendment. **Observer-amended acceptance, 2026-09-12:** standalone LIVE 48 assertions exit 0, source audit `initial-pi=3/3`/`codex=3/3` completed exact, initial Pi `$150/@431`, Codex `$158/@432`, Codex-opened Pi `$158/@433`, all three reclaimed by their own source receipts; artifact `.probe-artifacts/codex-fresh-live-fZccoK/`. The 48 and 57 counts are different contracts, not a regression. **Release acceptance at that same fingerprint:** `check:full` exit 0 502s, LIVE release gate `--cut` MUST 24/0/0 · BEHAVIOR 1/0/0 · `cut: OK`, `check-gate-qualification` 475/475 across 43 lanes with origin purity green, and the aggregate's Codex leg repeating the 48-assertion acceptance (artifact `codex-fresh-live-2oId4C`). Unrestricted attached-TUI placement remains unsupported and unclaimed. |
+| 0.23.1 release acceptance (observer-amended) | accepted by GLG | `check:full` exit 0; aggregate `release-gate --cut` MUST 23/1/0 with only the Codex relay leg red, then that leg re-run standalone green (66 assertions). Full row: receipts, Superseded section. |
+| 0.24.0 release acceptance (observer-amended) | accepted by GLG | `check:full` exit 0; aggregate `release-gate --cut` MUST 22/2/0, both reds re-measured standalone. Full row: receipts, Superseded section. |
+| Native Codex Linux caller-DIRECTORY axis (current; #95 lane C) | **certified** | 2026-09-16, Codex 0.153.4: 65-assertion LIVE, exit 0, at `b3e07dc`; cwd requested and not requested both joined to the record. Full row: receipts, Superseded section. |
+| Native Codex Linux caller-seat topology (current; #95 lane B) | **certified** | 2026-09-16, Codex 0.153.4: 56-assertion LIVE, exit 0; seat taken from the caller's pane title (`seat-source=codex-title-anchor`). Full row: receipts, Superseded section. |
+| Native Codex Linux home topology (PAST CONTRACT — #95 D1 retired the fixed home 2026-09-16) | **certified** for 0.21.0 as shipped | 2026-09-12, Codex 0.153.4: 57-assertion explicit-home LIVE; superseded by the two rows above. Full row: receipts, Superseded section. |
 | Darwin install fence (meta/copilot/omp-bridge + omp-receive) | portable (Linux or Darwin) | Four installers accept Darwin; python3/node/harness presence holds the seat, not the platform name. A Darwin install is not a rail receipt. |
 | Doctor fail-closed on unreadable environ | Linux measured; Darwin unmeasured | Copilot launch-flag and omp identity-carrier: missing `/proc/<pid>/environ` as predicate INPUT is `UNVERIFIABLE` (non-green), not a benign note. omp distinguishes `pgrep` exit 1 (absent) from exit 2 (enumeration failed); copilot distinguishes ENOENT/ESRCH (gone) from other errno (read denied). |
 | setup on uncertified platform with harness present | named non-green | All 13 harness units ask `harness_rail_certified_platform()`; uncertified → FAIL whose wording is not "install failed". Harness-absent Darwin setup (the CI cell) can still be computed green. |
 | macOS physical-host probe | shipped, unrun on a Mac | `scripts/raw-macos-measure/` — `/bin/sh`, cells M1–M9, 3.5 s; needs neither entwurf install nor login. Still unmeasured: Darwin foreign-process environ (`ps -Eww`) and whether macOS `python3` is a CommandLineTools stub. |
-| WSL2 Entwurf-only install + zero-token Pi citizen (GitHub Actions `windows-2025` runner, not a physical machine) | shape-only | Experimental, non-voting CI (not read by the release oracle): 2026-10-18, `.github/workflows/wsl2-install-surface.yml` run 39098773010 @ `b03d646` ([#78 receipt](https://github.com/junghan0611/entwurf/issues/78#issuecomment-6245947301)). Guest kernel `6.18.40.1-microsoft-standard-WSL2`, host `wsl --list --verbose` VERSION 2, guest fstype quoted raw as `ext2/ext3`. The run's packed tgz digest is equal across producer, host and guest; guest Node 24.18.1; harness-absent `setup` green with protected auth/harness state unchanged. Pi 1.3.0 (sha512 pinned to the registry integrity) wired by `setup`: one V3 record whose filename is its gid, a gid-keyed control socket with a native connect, `peer-facts` alive; only `get_state` was sent and no `agent_start` was observed. Pi creating an empty `auth.json` is not a login. It certifies no harness rail. Linux-guest runtime evidence only: not native-Windows evidence, and not a substitute for the required Linux CI jobs. |
+| WSL2 Entwurf-only install + zero-token Pi citizen (GitHub Actions `windows-2025` runner, not a physical machine) | shape-only | Experimental, non-voting CI: 2026-10-18, `wsl2-install-surface.yml` run 39098773010 @ `b03d646` ([#78 receipt](https://github.com/junghan0611/entwurf/issues/78#issuecomment-6245947301)). Full row: receipts, Superseded section. |
 | WSL2 delivery, non-pi harnesses, vendor turn, physical user machine | unverified | No receipt. Authentication and model turns were deliberately excluded from the CI cells' scope (not a CI impossibility); non-pi harnesses, delivery, fresh/resume and physical machines are unmeasured. |
-| native Windows experimental preview: Pi citizen + `entwurf_v2` delivery (GitHub Actions `windows-2025` x64 runner, Node 24.18.1, Pi 1.3.0; ships in core 0.39.0; the evidence below is the feature-branch CI artifact at `3b65bdc`, and the released tarball's own Windows cells are preview run 39146098592 @ `551402c`) | shape-only | Released tarball: preview run 39146098592 @ `551402c` installed the core 0.39.0 tarball (sha256 `1d5693241b8c…`) and its eight cells (L0, L0c, R1, R2, T1, N1, B1, D1) PASS, with a faux model and no vendor turn. The text that follows is the earlier feature-branch receipt (same addon sha256 `9837893521ec…`, not the release pack). Experimental, non-voting CI (not read by the release oracle): 2026-10-18, `.github/workflows/windows-native-preview.yml` run 39123555360 @ `3b65bdc`, with the required `ci.yml` four jobs green at the same SHA (run 39123555224). Build: MSVC (VS 2026, toolset v145, SDK 10.0.26100.0), two builds byte-identical (`entwurf_win.node` sha256 `9837893521ec…`), imports advapi32 + kernel32 with `node.exe` the only delay-load; node-gyp 13.1.0 and the Node headers/`node.lib` pinned. The pack carries exactly the addon and its manifest; npm installed it into a sandboxed consumer prefix; Pi came from a tarball checked against its pinned SRI. Six addon cells PASS (final-component reparse and non-regular refusals on the read handle, no connect through a symlink to a pipe, one-deadline timeout with reclaim, pipe-name stability and loader refusals). B1: two `pi --entwurf-control` citizens, one V3 record each, record-derived pipes alive through the product probe, `peer-facts` alive, graceful exit with both addresses dead afterwards. D1: A's model called `entwurf_v2` toward B's garden id with a nonce; A's receipt `control-socket → sent`, B's model context and B's transcript `entwurf-message` entry from A carry it. The model is an offline pi-ai `fauxProvider`: no vendor turn and no comprehension claim. The transcript fact is the harness's assertion; the raw transcript is not archived. The run used the elevated Administrators owner branch, so user-SID-only privacy is not measured. Pi's `peerDependencies` warning was observed, not waived. Not evidence for any other harness on Windows. |
+| native Windows experimental preview: Pi citizen + `entwurf_v2` delivery (GitHub Actions `windows-2025` x64 runner, Pi 1.3.0; ships in core 0.39.0) | shape-only | Released tarball: preview run 39146098592 @ `551402c`, eight cells (L0, L0c, R1, R2, T1, N1, B1, D1) PASS with a faux model and no vendor turn. Experimental, non-voting CI. Full row: receipts, Superseded section. |
 | native Windows: own pre-existing pipe-name birth refusal, record link/rename syscalls, descendant cleanup after a forced kill, cross-user, mixed elevation, remote callers, user-SID-only privacy, physical user machine | unverified | No receipt; the preview cells name these as unmeasured. |
-| Remote pair (#107): one declared pi-durable pair, Linux server ↔ Linux notebook over operator SSH (feature branch, not a release) | one LIVE exchange recorded (L4, one pair, one run) | 2026-10-20, both hosts at branch commit `e632294`; that commit's exact-SHA CI run 39202248407 was green on all four jobs. B's native `entwurf_v2` → one SSH → A `remote-pair-receive` → A mailbox enqueue `2026-10-19T22-19-47-662Z-13c897.msg`; A's one reply → B inbox read at `2026-10-19T22:20:24.837Z`, with the matching nonce `107-live-20261020T071937-B-A-6e42d1`. Before the send, the selected compiled bridge hash, the post-build bridge start and the record/owner/sender joins were checked on both hosts; the user reopened both visible sessions. Receipt: [#107](https://github.com/junghan0611/entwurf/issues/107#issuecomment-6278665895). |
+| Remote pair (#107): one declared pi-durable pair, Linux server ↔ Linux notebook over operator SSH (feature branch, not a release) | one LIVE exchange recorded (L4, one pair, one run) | 2026-10-20, branch commit `e632294` (exact-SHA CI run 39202248407 green): one send over SSH, one reply, matching nonce. Full row: receipts, Superseded section. |
 | Remote pair: OFF target, negative paths over real SSH, other rails, more than one pair, non-Linux hosts, GUI rendering of the received envelope | unverified | No receipt. The deterministic and installed cells (VERIFY) do not stand for these. |
 | native Windows: other harnesses, `setup` and the `.sh` bins, fresh/resume, mux/Herdr/ACP, ARM64, records over 16 MiB, reparse-backed store folders | UNSUPPORTED | Outside the preview's scope by decision; the preview loader refuses an install without the Windows addon by name. |
 
-Dated n=1 host runs (#147, #157) are in [docs/baseline-receipts.md](./docs/baseline-receipts.md).
+Dated n=1 host runs (#147, #157), the full text of the shortened rows above and retired material are in [docs/baseline-receipts.md](./docs/baseline-receipts.md) (read it on GitHub; the file is not in the npm package).
 
 Notes on the release-host certification table above:
 

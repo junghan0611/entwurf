@@ -6,17 +6,17 @@
 
 - [x] **1. 0.53.0 cut.** tag `v0.53.0`(`72975b0`)과 GitHub release(2026-11-13)까지 했다. npm에는 게시하지 않는다(GLG 결정). 2026-11-14 측정으로 npm `latest`는 0.52.0이다.
 - [x] **2. #163 브랜치 `fix/163-acp-control`.** claude-agent-acp 0.107.0 `7c98f8b4`, 정확한 manual `/compact` `5b7f7c24`·`7eb200a9`, Pi 같은 가시성 `e96403ec`·`f25c78de`. PARTIAL green(`f25c78de`), frozen FULL green(`17244d48`, rc=0, 1011s).
-- [ ] **3. land.** ← CURRENT: main으로 fast-forward한 뒤 push하고 exact-SHA CI를 확인한다. GLG가 승인했다(2026-11-14 16:1x KST, ff08d4 전달: "main land도 하면 된다. npm publish 전까지 쭉 가 봐").
-- [ ] **4. 전역 설치 → ACP Opus 5.5로 BASELINE·VERIFY 검수.** 수동 `/compact` 셀과 가시성을 본다. 하지 못한 셀은 UNMEASURED로 명시한다.
+- [x] **3. land.** main=origin/main=`7a100e89`, exact-SHA CI run 43570025312 의 4개 job 모두 success, 브랜치 `fix/163-acp-control` 삭제(b3fc7c 보고, ff08d4 전달).
+- [ ] **4. 전역 설치 → ACP Opus 5.5로 BASELINE·VERIFY 검수.** 수동 `/compact` 셀과 가시성을 본다. 하지 못한 셀은 UNMEASURED로 명시한다. ← CURRENT (문서 커밋 BASELINE/VERIFY 다이어트 + WHY + /compact 셀 이후 02055a R2R).
 - [ ] **5. prepare → make.** 문서·WHY 절·VERIFY compact 셀·CHANGELOG·버전 0.53.1. 작성자 바통은 Sonnet `20261114T155010-f17cd8`이 받는다. make의 M0 FULL이 prepared HEAD를 다시 덮는다. npm publish는 GLG가 직접 한다.
 
-현재 좌표: 1·2 완료 → 3 land(push·exact-SHA CI) → 4 실사용 검수 → 5 prepare/make
+현재 좌표: 1·2·3 완료 → 4 실사용 검수(CURRENT) → 5 prepare/make
 
 # NOW
 
 - **다음 한 걸음:** main push의 exact-SHA CI 4개 job이 green이면 land가 닫힌다. 브랜치 `fix/163-acp-control`은 원격 반영을 확인한 뒤 지운다. 이 브랜치는 원격에 push된 적이 없다. 그 뒤 작성자 바통은 Sonnet(prepare 문서)에게 갔다가 b3fc7c(P4/P5 floor와 make)에게 돌아온다. Codex app-server는 ff08d4가 별도 tmux에서 띄우고, pid와 모델 triple을 전달한다.
 - **RAIL 4 LIVE 항목:**
-  - 수동 `/compact`는 c0–c6로 본다. 설계는 02055a, 초안은 oracle `/tmp/glg-0531/VERIFY-compact-cell.md`(휘발성)다.
+  - 수동 `/compact`는 c0–c6로 본다. 설계는 02055a, 셀 본문은 VERIFY.md §1B.7a이고 사전 점검 스크립트는 docs/baseline-receipts.md에 있다.
     - c0: would-compact 모양과 요약 자식 1–2개.
     - c1: summary에 `[acp:`·`[tool:`·제어문자가 없다.
     - c2: 다음 프롬프트 전에 옛 자식이 닫힌다.

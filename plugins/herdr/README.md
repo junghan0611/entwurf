@@ -101,7 +101,7 @@ is the correct behaviour for a workbench — persistent identity is not its job.
   (no record/host cwd fallback); pi-durable's native session is reserved for one launched child to
   adopt (#157 B3); Claude Code uses the record session id/cwd without restoring model or permission
   flags. The call submits no prompt. Called from inside Herdr it reopens a **pi** citizen in a new
-  Herdr tab beside the caller (#157 G1a, dated native-Pi n=1 in [BASELINE](../../BASELINE.md), not
+  Herdr tab beside the caller (#157 G1a, dated native-Pi n=1 in [BASELINE receipts](../../docs/baseline-receipts.md), not
   release acceptance) and a **pi-durable** one through one layout request (#157 B3, n=1 on a
   pre-final candidate, not release acceptance), and a **Claude Code** one through one layout request
   (#157 stage 4, two n=1 runs on pre-final candidates, recall measured only in the second, not release acceptance); it never

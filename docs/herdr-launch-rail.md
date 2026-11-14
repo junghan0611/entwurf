@@ -386,7 +386,7 @@ XDG 루트 어디에도 없다 — **도구를 두 번 성공시킨 자식조차
 
 ## 16. pi-durable — `layout.apply` 한 번, #157 A-L1
 
-> **상태: source 계약과 후보별 증거를 구분한다.** 이 절은 beside test와 기존 게이트가 재는 계약이다. 이전 A-L1 R13의 공개 pi-durable fresh n=1과 A-L1x R2의 공개 Pi caller-cwd n=1은 [BASELINE](../BASELINE.md)의 날짜·subject·한계로 별도 기록했다. 후속 B3 owner-fence/supply가 합성된 현재 후보의 Native LIVE나 stage3 acceptance로 승계하지 않는다. G2/G3 raw 관측(herdr 0.9.5 aarch64, `[blob 2ecf19a9]` 고정본 소스, 바이너리 번들 schema protocol 22)은 설계 근거다. vendor encoder(`responses.rs`)와 Layout schema 원천 파일은 읽지 않았다.
+> **상태: source 계약과 후보별 증거를 구분한다.** 이 절은 beside test와 기존 게이트가 재는 계약이다. 이전 A-L1 R13의 공개 pi-durable fresh n=1과 A-L1x R2의 공개 Pi caller-cwd n=1은 [BASELINE receipts](./baseline-receipts.md)의 날짜·subject·한계로 별도 기록했다. 후속 B3 owner-fence/supply가 합성된 현재 후보의 Native LIVE나 stage3 acceptance로 승계하지 않는다. G2/G3 raw 관측(herdr 0.9.5 aarch64, `[blob 2ecf19a9]` 고정본 소스, 바이너리 번들 schema protocol 22)은 설계 근거다. vendor encoder(`responses.rs`)와 Layout schema 원천 파일은 읽지 않았다.
 
 - **왜 다른 길인가.** herdr에는 pi-durable agent kind가 없다. `--kind pi`로 위장하면 herdr가 pi 프로그램을 그 이름으로 띄운다. 문서화된 CLI에는 layout mutation이 없고, argv **벡터**를 새 tab에서 exec하는 herdr 면은 `layout.apply`뿐이다(app-api-layouts.rs:117-140, pane.rs:2456-2500 — shell도 PTY 키 입력도 없다). 그래서 이 branch는 herdr CLI를 한 번도 부르지 않는다.
 - **세 집합, 한 곳.** `scripts/herdr-rails.mjs`가 `HERDR_AGENT_START_BACKENDS`(pi, claude-code — `HERDR_AGENT_KIND`·`HERDR_CANONICAL_EXECUTABLE`의 key는 이것뿐), `HERDR_LAYOUT_LAUNCH_BACKENDS`(pi-durable), 그 합집합 `HERDR_FRESH_CALL_BACKENDS`(admission·거절 hint·metadata가 읽는다)를 따로 적는다. 두 launch 집합은 서로소다.
@@ -418,7 +418,7 @@ XDG 루트 어디에도 없다 — **도구를 두 번 성공시킨 자식조차
 
 ## 17. same-id pi-durable resume — `layout.apply` 한 번, #157 B3
 
-> **상태: source 계약과 후보별 증거를 구분한다.** 결정론 증명은 이 절이 이름 붙인 beside test와 로컬 FULL/package floor다. 공개 Herdr resume n=1은 최종 후보보다 앞선 후보(82b5ec36, 합성 fixture caller, [BASELINE](../BASELINE.md))에서 잰 것이고, 최종 후보의 Native LIVE·tmux 경로·release gate로 승계하지 않는다.
+> **상태: source 계약과 후보별 증거를 구분한다.** 결정론 증명은 이 절이 이름 붙인 beside test와 로컬 FULL/package floor다. 공개 Herdr resume n=1은 최종 후보보다 앞선 후보(82b5ec36, 합성 fixture caller, [BASELINE receipts](./baseline-receipts.md))에서 잰 것이고, 최종 후보의 Native LIVE·tmux 경로·release gate로 승계하지 않는다.
 
 - **소유.** record·per-gid lock·owner fence 예약(reserve)·철회(withdraw)·adoption observation은 `entwurf-v2-visible-resume.ts`의 것이다. 이 레일은 launch만 한다. 공통 rail root의 `launchHerdrResume`이 backend `pi-durable`을 §15의 agent start가 아니라 `herdrPiDurableResumeCall`로 보낸다 — herdr에 pi-durable agent kind가 없는 이유(§16)가 그대로다.
 - **요청.** §16의 layout primitive를 그대로 쓰는 `layout.apply` 한 번. command는 `[<pkg>/run.sh, "pi-durable", "--entwurf-adopt", <닫힌 context>]`이고 그 argv는 v2가 예약에서 만든 그대로 통과한다. cwd는 예약된 record의 cwd, env map은 정확히 identity scrub(`PI_SESSION_ID: ""`, `PI_AGENT_ID: ""`)과 고정 다섯 이름(`PI_CODING_AGENT_DIR`과 네 `ENTWURF_META_*_DIR`)이다. callback·nonce·task·prompt·model은 없다. `--entwurf-adopt`는 bridge 전용 launch이지 운영자 selector가 아니다.

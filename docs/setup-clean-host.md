@@ -995,7 +995,7 @@ real initial Pi outside `codex`, then omitted-placement Codex and outbound Pi in
 callbacks and addressed delivery both ways. `DELIVERY.md` owns that 57-assertion receipt, its four
 coordinates, and its digest as history. The caller-seat re-run is **accepted** — 2026-09-16, 56
 assertions for the seat topology and 65 for the caller-DIRECTORY axis, both exit 0 — and it, not the
-fixed home, is the current contract (`DELIVERY.md`, `BASELINE.md:37-38`, `VERIFY.md` release
+fixed home, is the current contract (`DELIVERY.md`, BASELINE.md's release-host table (Codex caller-seat rows), `VERIFY.md` release
 acceptance).
 
 `entwurf_fresh_call` accepts backend `codex` — supported in 0.21.0 — and requires an explicit model. Its
@@ -1191,7 +1191,7 @@ Non-empty `skillPlugins` auto-adds `Skill` to `tools` and `Skill(*)` to
 path or missing `.claude-plugin/plugin.json` before starting the session; the
 SDK, not the bridge, validates plugin.json contents and SKILL.md bodies.
 Start a fresh Claude session and ask it to list callable skills. The operator
-judgement is `Q-SKILL-CALLABLE` in [VERIFY](../VERIFY.md).
+judgement is asking the session which skills it can call; it is not a named row in [VERIFY](../VERIFY.md).
 This is Claude-only; Codex uses native `~/.codex/skills/` passthrough.
 [agent-config](https://github.com/junghan0611/agent-config) is a real multi-harness
 consumer, not a requirement for this setup.
@@ -1237,6 +1237,7 @@ knobs. One fixed exception on the Claude ACP rail: its adapter's idle `/compact`
 turn on an idle session) is turned off inline (`settings.idleCompaction: false`), because pi would
 not see that turn; in-prompt auto-compaction stays the backend's, and a managed settings tier would
 still win over the inline value ([rail §Capability posture](./acp-backend-rail.md#capability-posture)).
+Pi's own summaries on a Claude ACP model (`/compact`, the threshold, overflow recovery, `/tree`) are not that backend compaction: each runs as a one-shot tool-less turn on a new child, and the session's retained child is closed after a compaction ([rail §11-10](./acp-backend-rail.md)).
 The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
 session included) with `[entwurf:usage]` diagnostics. Near limit choose a visible
 action: clear, open a new session with a different model, or let the backend
