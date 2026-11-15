@@ -969,11 +969,19 @@ async function main(): Promise<void> {
 			const at = text.indexOf("reports ONE");
 			const blurb = at < 0 ? "" : text.slice(at, at + 900);
 			if (!/acceptance boundary/i.test(blurb)) missing.push(`${rel}: control receiver acceptance boundary`);
-			for (const b of ["sent", "queued-steer", "queued-follow-up", "accepted-unknown-boundary"]) {
-				if (!blurb.includes(b)) missing.push(`${rel}: boundary ${b}`);
+			// #163 R2: four named boundaries plus the two a receiver answers when it cannot name one.
+			for (const b of [
+				"sent",
+				"queued-steer",
+				"queued-follow-up",
+				"steer-in-turn",
+				"accepted-unknown-boundary",
+				"steer-unknown",
+			]) {
+				if (!blurb.includes(`\`${b}\``)) missing.push(`${rel}: boundary ${b}`);
 			}
-			if (!blurb.includes("those four, or `mailbox-enqueued` on a re-resolved mailbox leg"))
-				missing.push(`${rel}: the four receiver boundaries and the explicitly re-resolved mailbox leg`);
+			if (!blurb.includes("A dead first socket may re-resolve to `mailbox-enqueued`"))
+				missing.push(`${rel}: the explicitly re-resolved mailbox leg`);
 			if (!/mailbox ENQUEUE/i.test(blurb)) missing.push(`${rel}: mailbox enqueue receipt`);
 			if (!/native-push INJECTION/i.test(blurb)) missing.push(`${rel}: native-push injection`);
 			if (!/rejection|rejected/i.test(blurb)) missing.push(`${rel}: rejection`);
@@ -983,8 +991,39 @@ async function main(): Promise<void> {
 			}
 		}
 		ok(
-			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] the tool description names each rail's own result — the control receiver's four acceptance boundaries (or mailbox-enqueued on an explicitly re-resolved mailbox leg), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
+			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] the tool description names each rail's own result — the control receiver's four acceptance boundaries and two unknowns (or mailbox-enqueued on an explicitly re-resolved mailbox leg), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
 			missing.length === 0,
+		);
+	}
+
+	// ── #163 R2: an unknown boundary carries its own instruction ──
+	// `accepted-unknown-boundary` and `steer-unknown` mean the sender cannot know whether the receiver
+	// took the message. Delivery is at most once only if the caller does not send it again, so every
+	// caller-facing site that names an unknown must say so beside it — not merely somewhere in the text.
+	{
+		const sites = [
+			{
+				rel: "ENTWURF.json tools.entwurf_v2.descriptions.mcp",
+				text: ENTWURF_TOOL_GUIDANCE.entwurf_v2.descriptions.mcp,
+			},
+			{ rel: "ENTWURF.json tools.entwurf_v2.parameters.mode", text: ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode },
+			{
+				rel: "pi-extensions/lib/entwurf-v2-contract-schema.ts",
+				text: await fs.readFile(path.join(REPO, "pi-extensions/lib/entwurf-v2-contract-schema.ts"), "utf8"),
+			},
+		];
+		const gaps: string[] = [];
+		for (const { rel, text } of sites) {
+			const at = text.indexOf("`steer-unknown`");
+			if (at < 0) {
+				gaps.push(`${rel}: names no steer-unknown`);
+				continue;
+			}
+			if (!/never resend/i.test(text.slice(at, at + 120))) gaps.push(`${rel}: no never-resend beside steer-unknown`);
+		}
+		ok(
+			`[QK:SEND-OUTCOME-UNKNOWN-NO-RESEND] every caller-facing site that names \`steer-unknown\` says, within 120 characters of it, never to resend — an unknown acceptance is the one outcome where a second send can deliver twice (gaps: ${JSON.stringify(gaps)})`,
+			gaps.length === 0,
 		);
 	}
 
@@ -1009,7 +1048,9 @@ async function main(): Promise<void> {
 		];
 		const axes: { name: string; holds: (t: string) => boolean }[] = [
 			{ name: "names both queues", holds: (t) => /steering/i.test(t) && /follow-?ups?\b/i.test(t) },
-			{ name: "says neither is an interrupt", holds: (t) => /(neither|not)\s+(is\s+)?an?\s+interrupt/i.test(t) },
+			// #163 R2: "neither is an interrupt" stopped being true once a steer can be taken in-turn and
+			// cut generation short; what holds on every runtime is that neither cancels or stops anything.
+			{ name: "says neither cancels or stops a turn", holds: (t) => /neither\s+cancels\s+or\s+stops/i.test(t) },
 			{ name: "says a later steer overtakes an earlier follow_up", holds: (t) => /overtakes/i.test(t) },
 			{
 				name: "says the queues are volatile and an abort drops them",
@@ -1023,12 +1064,30 @@ async function main(): Promise<void> {
 					? ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode
 					: await fs.readFile(path.join(REPO, rel), "utf8");
 			for (const axis of axes) if (!axis.holds(text)) gaps.push(`${rel}: ${axis.name}`);
-			if (/steer \((?:interrupt|immediate)|interrupt the current turn|steer = interrupt/i.test(text)) {
+			if (
+				/steer \((?:interrupt|immediate)|interrupt the current turn|steer = interrupt|neither\s+is\s+an\s+interrupt/i.test(
+					text,
+				)
+			) {
 				gaps.push(`${rel}: still claims steer interrupts`);
 			}
 		}
 		ok(
-			`[QK:SEND-PROSE-NO-INTERRUPT] every caller-facing description of \`mode\` names BOTH queues, says neither is an interrupt, says a later steer overtakes an earlier follow_up, and says both are volatile so an abort drops them — and none of them still claims an interrupt. A caller chooses a mode from this text alone (gaps: ${JSON.stringify(gaps)})`,
+			`[QK:SEND-PROSE-NO-INTERRUPT] every caller-facing description of \`mode\` names BOTH queues, says neither cancels or stops a turn, says a later steer overtakes an earlier follow_up, and says both are volatile so an abort drops them — and none of them still claims an interrupt. A caller chooses a mode from this text alone (gaps: ${JSON.stringify(gaps)})`,
+			gaps.length === 0,
+		);
+	}
+
+	// ── #163 R2: the root mode text names what an in-turn steer does to the reply it lands in ──
+	// Only the root text (the one every caller reads) states it; the contract comment speaks of the
+	// native queues alone and the pi schema copy is checked by the axes above.
+	{
+		const mode = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode;
+		const gaps: string[] = [];
+		if (!/step boundary/i.test(mode)) gaps.push("step boundary");
+		if (!/cut short/i.test(mode)) gaps.push("cut short");
+		ok(
+			`[QK:SEND-PROSE-STEP-BOUNDARY] the root \`mode\` text says a steer taken in-turn enters at the next step boundary and can cut short text being generated — a caller choosing steer learns it may visibly break the reply it lands in, without reading it as a cancel (missing: ${JSON.stringify(gaps)})`,
 			gaps.length === 0,
 		);
 	}

@@ -258,14 +258,34 @@
 			"title": "the caller-facing outcome list drops the native-push rail, so a caller reading the one blurb it reads before dispatching is told the control rail's vocabulary covers a rail that answers with a direct injection instead",
 			"subject": "ENTWURF.json",
 			"find": [
-				"native-push INJECTION, a rejection, or lock-dirty. A receipt is not a reply or proof of reading. A local final is not delivery:"
+				"Native-push (probe-alive citizen): a native-push INJECTION into its conversation; native-push has NO mailbox."
 			],
-			"replace": [
-				"a rejection, or lock-dirty. A receipt is not a reply or proof of reading. A local final is not delivery:"
-			],
+			"replace": ["Native-push (probe-alive citizen): native-push has NO mailbox."],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-OUTCOME-UNKNOWN-NO-RESEND",
+			"title": "the outcome list still names `steer-unknown` but drops the instruction beside it, so a caller who cannot tell whether the receiver took the steer sends it again and may deliver it twice",
+			"subject": "ENTWURF.json",
+			"find": ["`steer-unknown` (a steer left, acceptance unknown). Never resend on an unknown. A dead"],
+			"replace": ["`steer-unknown` (a steer left, acceptance unknown). A dead"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-OUTCOME-UNKNOWN-NO-RESEND]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-PROSE-STEP-BOUNDARY",
+			"title": "the root `mode` text keeps the in-turn steer but drops that it can cut short text being generated, so a caller is not told a steer may visibly break the reply it lands in",
+			"subject": "ENTWURF.json",
+			"find": ["enters at the next step boundary and can cut short text being generated;"],
+			"replace": ["enters at the next step boundary;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-PROSE-STEP-BOUNDARY]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{

@@ -22,9 +22,11 @@
 			"title": "MCP long description reverts to the false \"socket paths take a per-target lock\" claim",
 			"subject": "ENTWURF.json",
 			"find": [
-				"A control-socket-DOMAIN dispatch takes a target lock; mailbox and native-push rails are lock-free. mode "
+				"A control-socket-DOMAIN dispatch takes a target lock and may end lock-dirty; mailbox and native-push rails are lock-free. mode "
 			],
-			"replace": ["LOCK POLICY: socket paths take a per-target lock; the mailbox path does not. mode "],
+			"replace": [
+				"LOCK POLICY: socket paths take a per-target lock and may end lock-dirty; the mailbox path does not. mode "
+			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2SURF-MCP-LOCK-DOMAIN]",
@@ -132,9 +134,9 @@
 			"claim": "V2SURF-DESC-FITS-HOST-CAP",
 			"title": "the v2 tool description grows back past the host's 2048-char cap — the INTENT contract is silently cut off before the model that must choose an intent ever reads it",
 			"subject": "ENTWURF.json",
-			"find": ["Send, reply or hand off to an existing garden id; the decider selects the live rail "],
+			"find": ["Send, reply or hand off to an existing garden id. The decider reads the target's live rail "],
 			"replace": [
-				"Send, reply or hand off to an existing garden id; the decider selects the live rail PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING "
+				"Send, reply or hand off to an existing garden id. The decider reads the target's live rail PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING "
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,

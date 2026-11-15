@@ -244,6 +244,10 @@ const reviewedToolsR19: ReviewedAmendmentLayer = {
 const reviewedR20 = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-20.json", import.meta.url), "utf8"),
 ) as ReviewedAmendmentLayer & { previousRevision: number };
+// #163 R2: the entwurf_v2 MCP description is replaced whole and its mode parameter rewritten; full literals.
+const reviewedR21 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-21.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -397,6 +401,10 @@ function currentExpectations() {
 		"tools.entwurf_v2.descriptions.mcp",
 		"tools.entwurf_v2.parameters.intent",
 	]);
+	expect(reviewedR21.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_v2.descriptions.mcp",
+		"tools.entwurf_v2.parameters.mode",
+	]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -410,6 +418,7 @@ function currentExpectations() {
 		reviewedToolsR18,
 		reviewedToolsR19,
 		reviewedR20,
+		reviewedR21,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -455,7 +464,8 @@ function currentExpectations() {
 	// Revision 16's cwd parameter is a new key. Revision 17's two resume descriptions were already in the union
 	// (revision 12); its resume target parameter is a new key. Revision 18's four descriptions were all already in
 	// the union, so it adds none. Revision 19's two resume descriptions were too, so it adds none either.
-	expect(declaredKeys.size).toBe(17);
+	// Revision 21's mcp description was already in the union; its mode parameter is a new key.
+	expect(declaredKeys.size).toBe(18);
 	return { metadata, runtime, declaredKeys };
 }
 
@@ -496,7 +506,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR19.revision).toBe(19);
 		expect(reviewedR20.previousRevision).toBe(reviewedR19.revision);
 		expect(reviewedR20.revision).toBe(20);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR20.revision);
+		expect(reviewedR21.previousRevision).toBe(reviewedR20.revision);
+		expect(reviewedR21.revision).toBe(21);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR21.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {
@@ -641,8 +653,8 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		}
 		expect([...changed].sort()).toEqual([...declaredKeys].sort());
 		expect(allKeys.size).toBe(34);
-		expect(changed.size).toBe(17);
-		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(17);
+		expect(changed.size).toBe(18);
+		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(16);
 	});
 
 	it("[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS] actual tools/list matches reviewed descriptions with original full structures/schema/annotations and no metadata", async () => {
