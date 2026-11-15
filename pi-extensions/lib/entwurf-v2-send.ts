@@ -32,7 +32,7 @@
  * `releaseLock` throw never MASKS a send failure — the original error wins (5b).
  */
 
-import type { AcceptanceBoundary } from "./control-send-receipt.ts";
+import type { AcceptanceBoundary, AcceptanceDiagnostic } from "./control-send-receipt.ts";
 import type { ExecutionPlan } from "./entwurf-v2-decider.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import {
@@ -79,6 +79,8 @@ export interface RpcSendResult {
 	 * and absent on the mailbox rail, which has no turn-injection boundary to report and answers
 	 * with a durable file receipt instead. */
 	boundary?: AcceptanceBoundary;
+	/** #163 S7: the normalized diagnostic beside a `steer-*` boundary (control-send-receipt). */
+	diagnostic?: AcceptanceDiagnostic;
 }
 
 /** The same-lock one-shot re-resolve result (5c-2b implements the resolver; 5c-2a
@@ -135,6 +137,8 @@ export interface ControlSocketSendResult {
 	 * Absent on the mailbox fallback leg (no turn-injection boundary exists there) and on
 	 * rejected/failed. */
 	boundary?: AcceptanceBoundary;
+	/** #163 S7: the receiver's diagnostic beside that boundary, carried to the surface. */
+	diagnostic?: AcceptanceDiagnostic;
 }
 
 // A drive step's verdict: the terminal outcome, plus the original error to RETHROW on
@@ -148,6 +152,7 @@ interface SendDrive {
 	messagePath?: string;
 	/** #120 P2 acceptance boundary from a socket leg (see `ControlSocketSendResult`). */
 	boundary?: AcceptanceBoundary;
+	diagnostic?: AcceptanceDiagnostic;
 }
 
 /**
@@ -201,6 +206,7 @@ export async function executeControlSocketSend(
 		rejectReason: drive.rejectReason,
 		messagePath: drive.messagePath,
 		boundary: drive.boundary,
+		diagnostic: drive.diagnostic,
 	};
 }
 
@@ -221,7 +227,9 @@ async function driveSend(plan: ControlSocketPlan, lock: LockClaim, deps: Control
 	}
 	// A completed RPC: ack ⇒ sent; in-band refusal ⇒ rejected, NO fallback. Preserve
 	// its receiver error verbatim when supplied; do not make a reason up when absent.
-	return result.success ? { outcome: "sent", boundary: requireBoundary(result) } : inBandRejected(result);
+	return result.success
+		? { outcome: "sent", boundary: requireBoundary(result), diagnostic: result.diagnostic }
+		: inBandRejected(result);
 }
 
 /**
@@ -266,7 +274,9 @@ async function driveDeadFallback(
 			// connect failure finalizes as failed (no further fallback).
 			try {
 				const r = await deps.sendOverSocket(rePlan);
-				return r.success ? { outcome: "fallback-sent", boundary: requireBoundary(r) } : inBandRejected(r);
+				return r.success
+					? { outcome: "fallback-sent", boundary: requireBoundary(r), diagnostic: r.diagnostic }
+					: inBandRejected(r);
 			} catch (err) {
 				return { outcome: "failed", error: err };
 			}

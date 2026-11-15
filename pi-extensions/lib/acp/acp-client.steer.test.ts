@@ -9,6 +9,7 @@
  * The connection is a scripted fake; nothing spawns an adapter or reaches a network.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CONTROL_RPC_DEFAULT_TIMEOUT_MS } from "../entwurf-control-rpc.ts";
 import { ACP_STEER_ANSWER_TIMEOUT_MS, type AcpSteerParams, requestAcpSteer } from "./acp-client.ts";
 
 const CELL_A_INJECTED = { outcome: "injected" };
@@ -68,7 +69,37 @@ describe("requestAcpSteer", () => {
 		const err = fake(async () => {
 			throw new Error("Session not found");
 		});
-		expect(await requestAcpSteer(err.conn, "s", "t")).toEqual({ kind: "rejected", detail: "Session not found" });
+		expect(await requestAcpSteer(err.conn, "s", "t")).toEqual({
+			kind: "request-rejected",
+			detail: "Session not found",
+		});
+	});
+
+	it("[QK:ACP-STEER-FAILURE-NAMED-BY-CONNECTION] a failed steer is connection-closed only when the connection is closed; a JSON-RPC error answer on an open connection is request-rejected with its code", async () => {
+		// The SDK rejects a JSON-RPC error answer with a RequestError (code, message) and every
+		// pending request with "ACP connection closed" when the connection closes (jsonrpc.js).
+		const rpcError = Object.assign(new Error("Session not found"), { code: -32002 });
+		const open = fake(async () => {
+			throw rpcError;
+		});
+		expect(await requestAcpSteer({ ...open.conn, isClosed: () => false }, "s", "t")).toEqual({
+			kind: "request-rejected",
+			detail: "-32002 Session not found",
+		});
+		const closed = fake(async () => {
+			throw new Error("ACP connection closed");
+		});
+		expect(await requestAcpSteer({ ...closed.conn, isClosed: () => true }, "s", "t")).toEqual({
+			kind: "connection-closed",
+			detail: "ACP connection closed",
+		});
+	});
+
+	it("[QK:ACP-STEER-BOUND-BELOW-SENDER] the steer answer bound sits well inside the sender's control RPC timeout, so a silent backend is answered steer-unknown before the sender gives up", () => {
+		// Measured answers are <= 4.3 ms (probe 2, n=24). The margin covers the rest of the receiver's
+		// send handling and the socket round trip; the sender constant is the one `send` really uses.
+		const RECEIVER_MARGIN_MS = 2_000;
+		expect(ACP_STEER_ANSWER_TIMEOUT_MS + RECEIVER_MARGIN_MS).toBeLessThanOrEqual(CONTROL_RPC_DEFAULT_TIMEOUT_MS);
 	});
 
 	it("[QK:ACP-STEER-TIMEOUT-LATE-QUIET] with no answer the call settles as timeout at the bound; a late answer changes nothing, and the prompt is never cancelled or torn down", async () => {

@@ -122,3 +122,81 @@ export function describeUnknownBoundary(data: unknown): string | undefined {
 	if (flat === "") return "empty boundary";
 	return flat.length > UNKNOWN_DIAGNOSTIC_MAX ? `${flat.slice(0, UNKNOWN_DIAGNOSTIC_MAX)}…` : flat;
 }
+
+/**
+ * #163 S7 — the reasons a receiver may give for `steer-unknown`, closed. A token outside this set is
+ * read as `unrecognized`, never repeated (provisional, like the two boundary names).
+ */
+export const STEER_UNKNOWN_REASONS = [
+	"timeout",
+	"connection-closed",
+	"request-rejected",
+	"seam-threw",
+	"answer-unrecognized",
+] as const;
+export type SteerUnknownReason = (typeof STEER_UNKNOWN_REASONS)[number];
+
+/** How much of a receiver's free-text detail may reach a caller's status line. */
+export const ACCEPTANCE_DETAIL_MAX = 120;
+
+/**
+ * What a receiver said BESIDE a `steer-*` boundary that the caller has to see (#163 S7, SOL D1):
+ * why acceptance is unknown, or that the record of an injected steer did not land. Normalized at
+ * the wire seam — closed tokens plus a bounded, single-line detail — so another process's payload
+ * is never carried raw. Admission is unchanged: these ride a SUCCESS.
+ */
+export interface AcceptanceDiagnostic {
+	/** `steer-unknown`: the receiver's reason, or `unrecognized`. */
+	reason?: SteerUnknownReason | "unrecognized";
+	/** `steer-in-turn`: the record did not land as `ok`. */
+	record?: "skipped-binding-changed" | "failed" | "unrecognized";
+	/** Bounded, single-line free text from the receiver. */
+	detail?: string;
+}
+
+function boundDetail(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is stripped
+	const flat = value.replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
+	if (flat === "") return undefined;
+	return flat.length > ACCEPTANCE_DETAIL_MAX ? `${flat.slice(0, ACCEPTANCE_DETAIL_MAX)}…` : flat;
+}
+
+/** SENDER SIDE. Read the diagnostic beside a `steer-*` boundary; `undefined` when there is none. */
+export function parseAcceptanceDiagnostic(
+	boundary: AcceptanceBoundary,
+	data: unknown,
+): AcceptanceDiagnostic | undefined {
+	if (typeof data !== "object" || data === null) return undefined;
+	const d = data as { reason?: unknown; record?: unknown; detail?: unknown };
+	if (boundary === "steer-unknown") {
+		const reason = (STEER_UNKNOWN_REASONS as readonly unknown[]).includes(d.reason)
+			? (d.reason as SteerUnknownReason)
+			: "unrecognized";
+		const detail = boundDetail(d.detail);
+		return detail === undefined ? { reason } : { reason, detail };
+	}
+	if (boundary === "steer-in-turn") {
+		if (d.record === "ok") return undefined;
+		if (d.record === "skipped-binding-changed") return { record: "skipped-binding-changed" };
+		if (typeof d.record === "string" && d.record.startsWith("failed:")) {
+			const detail = boundDetail(d.record.slice("failed:".length));
+			return detail === undefined ? { record: "failed" } : { record: "failed", detail };
+		}
+		return { record: "unrecognized" };
+	}
+	return undefined;
+}
+
+/** The caller-facing annotation for a diagnostic, e.g. ` (backend acceptance unknown: timeout …)`. */
+export function renderAcceptanceDiagnostic(diagnostic: AcceptanceDiagnostic | undefined): string {
+	if (diagnostic === undefined) return "";
+	const detail = diagnostic.detail === undefined ? "" : ` — ${diagnostic.detail}`;
+	if (diagnostic.reason !== undefined) {
+		return ` (backend acceptance unknown: ${diagnostic.reason}${detail}; it may have been injected — do not resend blindly)`;
+	}
+	if (diagnostic.record === "skipped-binding-changed") return " (record skipped: the receiver's binding changed)";
+	if (diagnostic.record === "failed") return ` (record failed${detail})`;
+	if (diagnostic.record === "unrecognized") return " (record status unrecognized)";
+	return "";
+}

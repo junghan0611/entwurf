@@ -110,7 +110,7 @@ export async function deliverControlSend<Binding extends { nativeSessionId: stri
 					// The seam threw: whether a request left is unknown, so this is never re-queued.
 					effect = {
 						effect: "unknown",
-						reason: "connection-closed",
+						reason: "seam-threw",
 						detail: err instanceof Error ? err.message : String(err),
 					};
 				}

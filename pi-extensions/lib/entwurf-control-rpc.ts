@@ -214,12 +214,19 @@ export async function fetchControlSocketRuntimeInfo(
 	return parseGetInfoResponseData(result.response.data);
 }
 
+/**
+ * The default bound on one control-socket RPC round trip, which the v2 `send` uses (it passes no
+ * timeout). A receiver step that awaits inside `send` must finish well within it — the ACP steer
+ * answer bound is held below it ([QK:ACP-STEER-BOUND-BELOW-SENDER]).
+ */
+export const CONTROL_RPC_DEFAULT_TIMEOUT_MS = 5000;
+
 export async function sendRpcCommand(
 	socketPath: string,
 	command: RpcCommand,
 	options: RpcClientOptions = {},
 ): Promise<{ response: RpcResponse }> {
-	const { timeout = 5000 } = options;
+	const { timeout = CONTROL_RPC_DEFAULT_TIMEOUT_MS } = options;
 	if (process.platform === "win32") return await sendPipeRpcCommand(socketPath, command, timeout);
 
 	return new Promise((resolve, reject) => {

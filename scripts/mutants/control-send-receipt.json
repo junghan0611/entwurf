@@ -66,10 +66,8 @@
 			"claim": "SEND-BOUNDARY-CARRIED",
 			"title": "the primary leg reports a fixed `sent` instead of the boundary the receiver actually named, so every busy acceptance reads as a direct trigger again",
 			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
-			"find": [
-				"\treturn result.success ? { outcome: \"sent\", boundary: requireBoundary(result) } : inBandRejected(result);"
-			],
-			"replace": ["\treturn result.success ? { outcome: \"sent\", boundary: \"sent\" } : inBandRejected(result);"],
+			"find": ["\t\t? { outcome: \"sent\", boundary: requireBoundary(result), diagnostic: result.diagnostic }"],
+			"replace": ["\t\t? { outcome: \"sent\", boundary: \"sent\", diagnostic: result.diagnostic }"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-BOUNDARY-CARRIED]",
@@ -79,10 +77,8 @@
 			"claim": "SEND-FALLBACK-KEEPS-BOUNDARY",
 			"title": "a re-resolved socket drops the boundary it was handed, so a first socket that died and a second that was BUSY come out reading as a delivery — the route axis erasing the receipt axis",
 			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
-			"find": [
-				"\t\t\t\treturn r.success ? { outcome: \"fallback-sent\", boundary: requireBoundary(r) } : inBandRejected(r);"
-			],
-			"replace": ["\t\t\t\treturn r.success ? { outcome: \"fallback-sent\", boundary: \"sent\" } : inBandRejected(r);"],
+			"find": ["\t\t\t\t\t? { outcome: \"fallback-sent\", boundary: requireBoundary(r), diagnostic: r.diagnostic }"],
+			"replace": ["\t\t\t\t\t? { outcome: \"fallback-sent\", boundary: \"sent\", diagnostic: r.diagnostic }"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-FALLBACK-KEEPS-BOUNDARY]",
@@ -115,10 +111,10 @@
 			"title": "the sender surface renders the internal route word again instead of the receiver's boundary, putting `control-socket → sent` back on a message that is sitting in a queue",
 			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
 			"find": [
-				"\t\t\t\t\treturn { text: `entwurf_v2 control-socket → ${boundary}${route}${enqueued}`, isError: false };"
+				"\t\t\t\t\treturn { text: `entwurf_v2 control-socket → ${boundary}${note}${route}${enqueued}`, isError: false };"
 			],
 			"replace": [
-				"\t\t\t\t\treturn { text: `entwurf_v2 control-socket → ${o.outcome}${route}${enqueued}`, isError: false };"
+				"\t\t\t\t\treturn { text: `entwurf_v2 control-socket → ${o.outcome}${note}${route}${enqueued}`, isError: false };"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,
@@ -441,7 +437,7 @@
 		},
 		{
 			"claim": "CONTROL-STEER-AFTER-AWAIT-IDLE",
-			"title": "the fallback keeps the busy reading from before the await, so a turn that ended meanwhile gets a steer queued with nobody to drain it",
+			"title": "the fallback keeps the busy reading from before the await, so a receiver that is idle now is sent steer options and answered queued-steer — a wrong receipt for what the SDK starts directly",
 			"subject": "pi-extensions/lib/control-steer.ts",
 			"find": ["\tconst idleNow = deps.isIdle();"],
 			"replace": ["\tconst idleNow = input.mode === \"steer\" ? false : deps.isIdle();"],
@@ -463,6 +459,36 @@
 			"gate": ["bash", "run.sh", "check-control-send-receipt"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-STEER-IN-TURN]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-SEAM-THREW-NAMED",
+			"title": "a seam that throws is named connection-closed, so an implementation fault reads as a lost transport",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\t\t\t\t\treason: \"seam-threw\","],
+			"replace": ["\t\t\t\t\t\treason: \"connection-closed\","],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-SEAM-THREW-NAMED]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "SEND-STEER-DIAGNOSTIC-REACHES-SURFACE",
+			"title": "the sender drops what the receiver said beside a steer-* boundary, so a record failure or the reason a steer's acceptance is unknown never reaches the caller",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": ["\t\t\t\t\tconst note = renderAcceptanceDiagnostic(o.diagnostic);"],
+			"replace": ["\t\t\t\t\tconst note = renderAcceptanceDiagnostic(undefined);"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE]",
 			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
 			"build": {
 				"argv": ["bash", "scripts/build-bridge.sh"],

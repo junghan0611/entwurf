@@ -498,7 +498,9 @@ export async function steerBusyAcpSession(
 			return { effect: "unknown", reason: "answer-unrecognized", detail: r.detail };
 		case "timeout":
 			return { effect: "unknown", reason: "timeout", detail: r.detail };
-		case "rejected":
+		case "request-rejected":
+			return { effect: "unknown", reason: "request-rejected", detail: r.detail };
+		case "connection-closed":
 			return { effect: "unknown", reason: "connection-closed", detail: r.detail };
 	}
 }

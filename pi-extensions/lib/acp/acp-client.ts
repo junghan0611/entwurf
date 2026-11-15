@@ -106,6 +106,11 @@ export interface AcpConnectionLike {
 	 * through {@link requestAcpSteer}, which owns the params, the answer reading and the bound.
 	 */
 	steer?(params: AcpSteerParams): Promise<unknown>;
+	/**
+	 * Whether the underlying connection has closed (#163 S7). Lets a failed steer say
+	 * `connection-closed` only when that is what happened; a fake without it is never "closed".
+	 */
+	isClosed?(): boolean;
 }
 
 /** The `_session/steering` request entwurf sends (claude-agent-acp 0.107.0 `v1/steering.js:18-40`). */
@@ -125,10 +130,19 @@ export type AcpSteerResult =
 	| { kind: "promptRequired" }
 	| { kind: "unrecognized"; detail: string }
 	| { kind: "timeout"; detail: string }
-	| { kind: "rejected"; detail: string };
+	/** The request failed while the connection was still open (a JSON-RPC error answer, a send failure). */
+	| { kind: "request-rejected"; detail: string }
+	/** The request failed and the connection is closed. */
+	| { kind: "connection-closed"; detail: string };
 
-/** How long to wait for the steer ANSWER. Measured round trips were 2–3 ms (adapter probe cells A–C). */
-export const ACP_STEER_ANSWER_TIMEOUT_MS = 5_000;
+/**
+ * How long to wait for the steer ANSWER. Measured answers: n=24, 1.2 / 2.2 / 4.3 ms (min / median /
+ * max) across idle, between tools, during a tool, during generation, a pending permission, a 12k
+ * body and an output flood (#163 adapter probe 2). It MUST stay well below the sender's control
+ * RPC timeout (`CONTROL_RPC_DEFAULT_TIMEOUT_MS`): otherwise the sender gives up first, reads a
+ * plain send failure, and may resend a steer that was injected ([QK:ACP-STEER-BOUND-BELOW-SENDER]).
+ */
+export const ACP_STEER_ANSWER_TIMEOUT_MS = 1_000;
 
 /**
  * Send ONE steer and read its answer (#163 S7).
@@ -143,7 +157,7 @@ export const ACP_STEER_ANSWER_TIMEOUT_MS = 5_000;
  *   twice and causes no effect.
  */
 export function requestAcpSteer(
-	conn: Pick<AcpConnectionLike, "steer">,
+	conn: Pick<AcpConnectionLike, "steer" | "isClosed">,
 	sessionId: string,
 	text: string,
 	timeoutMs: number = ACP_STEER_ANSWER_TIMEOUT_MS,
@@ -170,14 +184,26 @@ export function requestAcpSteer(
 		try {
 			pending = Promise.resolve(conn.steer?.(params));
 		} catch (err) {
-			settle({ kind: "rejected", detail: err instanceof Error ? err.message : String(err) });
+			settle(readSteerFailure(conn, err));
 			return;
 		}
 		pending.then(
 			(answer) => settle(readSteerAnswer(answer)),
-			(err) => settle({ kind: "rejected", detail: err instanceof Error ? err.message : String(err) }),
+			(err) => settle(readSteerFailure(conn, err)),
 		);
 	});
+}
+
+/**
+ * Name a failed steer request by the connection's actual state (#163 S7, 1eed2c D2): closed →
+ * `connection-closed`; still open → `request-rejected` (a JSON-RPC error answer carries its code).
+ * Either way whether the backend took the steer is unknown — the adapter can throw after its push.
+ */
+function readSteerFailure(conn: Pick<AcpConnectionLike, "isClosed">, err: unknown): AcpSteerResult {
+	const message = err instanceof Error ? err.message : String(err);
+	if (conn.isClosed?.() === true) return { kind: "connection-closed", detail: message };
+	const code = (err as { code?: unknown } | null)?.code;
+	return { kind: "request-rejected", detail: typeof code === "number" ? `${code} ${message}` : message };
 }
 
 /** Read one steer answer. Pure. Only the two measured outcomes are definite. */
@@ -241,6 +267,7 @@ export function connectAcpClient(stream: Stream, handlers: AcpClientHandlers): A
 		},
 		// #163 S7: the adapter's steering extension; params (incl. `_meta`) come from requestAcpSteer.
 		steer: (params) => agent.request("_session/steering", params as never),
+		isClosed: () => conn.signal.aborted,
 		close: (error) => {
 			// Best-effort by contract (see AcpConnectionLike.close): a teardown-path
 			// close that threw would mask the turn's real error and skip the child

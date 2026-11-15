@@ -152,7 +152,7 @@ describe("deliverControlSend — busy steer through the ACP seam", () => {
 	});
 
 	it("[QK:CONTROL-STEER-UNKNOWN-NEVER-REQUEUES] an unknown outcome is never queued, recorded or retried", async () => {
-		for (const reason of ["timeout", "connection-closed", "answer-unrecognized"] as const) {
+		for (const reason of ["timeout", "connection-closed", "request-rejected", "answer-unrecognized"] as const) {
 			const w = world({ seam: async () => ({ effect: "unknown", reason, detail: "d" }) });
 			await w.send();
 			expect(w.sent).toEqual([]);
@@ -166,6 +166,23 @@ describe("deliverControlSend — busy steer through the ACP seam", () => {
 				},
 			]);
 		}
+	});
+
+	it("[QK:CONTROL-STEER-SEAM-THREW-NAMED] a seam that throws is answered steer-unknown seam-threw — not connection-closed — with nothing queued or recorded", async () => {
+		const w = world({
+			seam: async () => {
+				throw new Error("seam bug");
+			},
+		});
+		await w.send();
+		expect([w.sent, w.entries]).toEqual([[], []]);
+		expect(w.responses).toEqual([
+			{
+				success: true,
+				data: { boundary: "steer-unknown", reason: "seam-threw", detail: "seam bug", wants_reply: true },
+				error: undefined,
+			},
+		]);
 	});
 
 	it("[QK:CONTROL-STEER-RECORD-FAILURE-IS-DIAGNOSTIC] a record failure after injection is a receipt diagnostic — not a failure, not a queue entry, not a second try", async () => {
@@ -210,6 +227,20 @@ describe("deliverControlSend — what the await changes (design §2.4, v2.1)", (
 		expect([inj.sent, inj.entries, inj.responses]).toEqual([[], [], [SKIPPED]]);
 		const fb = await changedDuringAwait(swap, { effect: "prompt-required" });
 		expect([fb.sent, fb.entries, fb.responses]).toEqual([[], [], [STALE]]);
+		// SOL O2: the same binding object, but the context or the native session id moved on.
+		for (const drift of [
+			(w: ReturnType<typeof world>) => {
+				w.state.context = { name: "ctx-B" };
+			},
+			(w: ReturnType<typeof world>) => {
+				w.state.sessionId = "N-B";
+			},
+		]) {
+			const i = await changedDuringAwait(drift, { effect: "injected" });
+			expect([i.sent, i.entries, i.responses]).toEqual([[], [], [SKIPPED]]);
+			const f = await changedDuringAwait(drift, { effect: "prompt-required" });
+			expect([f.sent, f.entries, f.responses]).toEqual([[], [], [STALE]]);
+		}
 	});
 
 	it("[QK:CONTROL-STEER-AFTER-AWAIT-CLOSING] a close or retire during the await: the same — no queue, no record on a session that is going away", async () => {
@@ -244,7 +275,7 @@ describe("deliverControlSend — what the await changes (design §2.4, v2.1)", (
 		expect(b.responses).toEqual([{ success: false, data: undefined, error: "compacting" }]);
 	});
 
-	it("[QK:CONTROL-STEER-AFTER-AWAIT-IDLE] same binding, the turn ended during the await: the fallback re-reads idle and sends a direct trigger answered sent", async () => {
+	it("[QK:CONTROL-STEER-AFTER-AWAIT-IDLE] same binding, the turn ended during the await: the fallback re-reads idle and sends a direct trigger answered sent — not steer options with a queued-steer receipt", async () => {
 		const d = deferredSeam();
 		const w = world({ seam: d.seam });
 		const pending = w.send();

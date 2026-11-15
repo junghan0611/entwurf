@@ -19,8 +19,13 @@ import {
 	describeUnknownBoundary,
 	isObservedBoundary,
 	parseAcceptanceBoundary,
+	parseAcceptanceDiagnostic,
 	sendReceiptBoundary,
 } from "./control-send-receipt.ts";
+import type { LockClaim } from "./entwurf-v2-lock.ts";
+import { makeProductionEntwurfV2Deps } from "./entwurf-v2-production.ts";
+import type { ControlSocketPlan } from "./entwurf-v2-send.ts";
+import { renderEntwurfV2Result } from "./entwurf-v2-surface.ts";
 
 describe("control-send-receipt", () => {
 	it("[QK:SEND-RECEIPT-IDLE-IS-SENT] an idle receiver's acceptance is `sent`, whichever mode was asked for", () => {
@@ -116,5 +121,91 @@ describe("control-send-receipt", () => {
 		expect(long?.length ?? 0, "truncated").toBeLessThanOrEqual(81);
 		expect(long ?? "", "no newline reaches a status line").not.toContain("\n");
 		expect(describeUnknownBoundary({ boundary: { nested: "object" } }), "shape, never content").toBe("object");
+	});
+});
+
+/**
+ * #163 S7 (SOL D1): what a receiver says BESIDE a steer-* boundary reaches the caller. The path is
+ * the production one — the factory's control-socket hand reading a wire answer, then the surface
+ * that renders it — with only the socket and the lock release faked. The wire answers are the
+ * review probe's (`review-s7-impl-sol-receipt-probe.log`), where all three rendered as a bare
+ * boundary.
+ */
+describe("steer diagnostics, wire to surface", () => {
+	const GID = "20261115T000000-aabbcc";
+	const plan = {
+		transport: "control-socket",
+		action: "send",
+		targetGardenId: GID,
+		socketPath: "/TEST-ONLY/socket",
+		mode: "steer",
+		wantsReply: false,
+		message: "fixture",
+	} as unknown as ControlSocketPlan;
+	const lock = {
+		gardenId: GID,
+		pid: 4242,
+		hostname: "fixture",
+		createdAt: "2026-11-15T00:00:00Z",
+		nonce: "deadbeefcafef00d",
+		owner: "entwurf_v2",
+		lockPath: "/TEST-ONLY/lock",
+	} as unknown as LockClaim;
+	async function rendered(data: unknown) {
+		let sends = 0;
+		const deps = makeProductionEntwurfV2Deps({
+			senderProvider: () => undefined,
+			lockDir: "/TEST-ONLY/locks",
+			sessionsDir: "/TEST-ONLY/sessions",
+			mailboxDir: "/TEST-ONLY/mailbox",
+			controlSocketDir: "/TEST-ONLY/control",
+			seams: {
+				sendRpc: async () => {
+					sends++;
+					return { response: { type: "response", command: "send", success: true, data } };
+				},
+				releaseLock: () => ({ ok: true }),
+			},
+		} as never);
+		const result = await deps.executor.sendControl(plan, lock);
+		const out = renderEntwurfV2Result({
+			kind: "executed",
+			outcome: { transport: "control-socket", ...result },
+		} as never);
+		return { ...out, sends };
+	}
+
+	it("[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE] the unknown reason and detail, a record failure and a skipped record reach the caller's line — still a success, sent once", async () => {
+		const unknown = await rendered({ boundary: "steer-unknown", reason: "timeout", detail: "ANSWER-DEADLINE" });
+		expect(unknown).toMatchObject({ isError: false, sends: 1 });
+		expect(unknown.text).toContain("→ steer-unknown (backend acceptance unknown: timeout — ANSWER-DEADLINE;");
+		expect(unknown.text).toContain("do not resend blindly");
+		const failed = await rendered({ boundary: "steer-in-turn", record: "failed:RECORD-WRITE-FAILURE" });
+		expect(failed).toMatchObject({ isError: false, sends: 1 });
+		expect(failed.text).toContain("→ steer-in-turn (record failed — RECORD-WRITE-FAILURE)");
+		const skipped = await rendered({ boundary: "steer-in-turn", record: "skipped-binding-changed" });
+		expect(skipped.text).toContain("→ steer-in-turn (record skipped: the receiver's binding changed)");
+		const ok = await rendered({ boundary: "steer-in-turn", record: "ok" });
+		expect(ok.text.endsWith("→ steer-in-turn")).toBe(true);
+	});
+
+	it("the diagnostic is normalized: closed reason tokens, a bounded single-line detail, nothing raw", () => {
+		expect(parseAcceptanceDiagnostic("steer-unknown", { reason: "rm -rf", detail: 7 })).toEqual({
+			reason: "unrecognized",
+		});
+		for (const reason of ["timeout", "connection-closed", "request-rejected", "seam-threw", "answer-unrecognized"]) {
+			expect(parseAcceptanceDiagnostic("steer-unknown", { reason })).toEqual({ reason });
+		}
+		const long = parseAcceptanceDiagnostic("steer-unknown", {
+			reason: "timeout",
+			detail: `${"x".repeat(500)}\nsecond\u0007line`,
+		});
+		expect(long?.detail?.length ?? 0).toBeLessThanOrEqual(121);
+		expect(long?.detail ?? "").not.toContain("\n");
+		expect(long?.detail ?? "").not.toContain(String.fromCharCode(7));
+		expect(parseAcceptanceDiagnostic("steer-in-turn", { record: { nested: true } })).toEqual({
+			record: "unrecognized",
+		});
+		expect(parseAcceptanceDiagnostic("queued-steer", { reason: "timeout", record: "failed:x" })).toBeUndefined();
 	});
 });

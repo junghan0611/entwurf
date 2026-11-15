@@ -23,6 +23,8 @@
  *    present value of the wrong shape, which is a configuration error the caller refuses by name.
  */
 
+import type { SteerUnknownReason } from "./control-send-receipt.js";
+
 /** What one busy-steer attempt came to (#163 S7 design §2.3). */
 export type AcpSteerEffect =
 	/** No request was sent. */
@@ -32,7 +34,7 @@ export type AcpSteerEffect =
 	/** One request; the running turn took it as input. */
 	| { effect: "injected" }
 	/** One request; whether the backend took it is unknown. Never retried, never re-queued. */
-	| { effect: "unknown"; reason: "timeout" | "connection-closed" | "answer-unrecognized"; detail: string };
+	| { effect: "unknown"; reason: SteerUnknownReason; detail: string };
 
 export interface AcpSteerSeamV1 {
 	readonly version: 1;

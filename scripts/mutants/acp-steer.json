@@ -52,9 +52,7 @@
 			"claim": "ACP-STEER-LATE-REJECT-QUIET",
 			"title": "the steer request stops handling a rejected answer, so a rejection after the bound escapes as an unhandled rejection",
 			"subject": "pi-extensions/lib/acp/acp-client.ts",
-			"find": [
-				"\t\t\t(err) => settle({ kind: \"rejected\", detail: err instanceof Error ? err.message : String(err) }),"
-			],
+			"find": ["\t\t\t(err) => settle(readSteerFailure(conn, err)),"],
 			"replace": ["\t\t\tundefined,"],
 			"gate": ["bash", "run.sh", "check-acp-steer"],
 			"timeoutSeconds": 600,
@@ -120,10 +118,10 @@
 		},
 		{
 			"claim": "ACP-STEER-SEAM-DUPLICATE-REFUSED",
-			"title": "a different seam silently replaces an old value that is not a version-1 seam, so the control socket consults a map no backend owns",
+			"title": "a different seam silently overwrites an old value that is not a version-1 seam, so the control socket consults a map no backend owns",
 			"subject": "pi-extensions/lib/acp-steer-seam.ts",
 			"find": ["\t\tif (old === null) throw duplicate(\"the registered value is not a version-1 seam\");\n"],
-			"replace": [""],
+			"replace": ["\t\tif (old === null) {\n\t\t\th[ACP_STEER_SEAM_KEY] = seam;\n\t\t\treturn;\n\t\t}\n"],
 			"gate": ["bash", "run.sh", "check-acp-steer"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-SEAM-DUPLICATE-REFUSED]",
@@ -163,6 +161,28 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-SEAM-RELOAD-BUSY-REFUSED]",
 			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-FAILURE-NAMED-BY-CONNECTION",
+			"title": "a failed steer on an open connection is named connection-closed, so an operator reads a live transport as gone",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": ["\tif (conn.isClosed?.() === true) return { kind: \"connection-closed\", detail: message };"],
+			"replace": ["\tif (conn.isClosed?.() !== undefined) return { kind: \"connection-closed\", detail: message };"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-FAILURE-NAMED-BY-CONNECTION]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-BOUND-BELOW-SENDER",
+			"title": "the steer answer bound equals the sender's RPC timeout, so the sender gives up first, reads a plain failure and may resend an injected steer",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": ["export const ACP_STEER_ANSWER_TIMEOUT_MS = 1_000;"],
+			"replace": ["export const ACP_STEER_ANSWER_TIMEOUT_MS = 5_000;"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-BOUND-BELOW-SENDER]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
 		}
 	]
 }

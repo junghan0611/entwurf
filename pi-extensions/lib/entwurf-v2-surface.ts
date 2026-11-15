@@ -23,6 +23,7 @@ import {
 	ENTWURF_REJECT_HINTS,
 	ENTWURF_SLOTTED_REJECT_HINTS,
 } from "./agent-guidance.ts";
+import { renderAcceptanceDiagnostic } from "./control-send-receipt.ts";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { DispatchInput, EntwurfV2Mode } from "./entwurf-v2-decider.ts";
 import { makeProductionEntwurfV2Deps, type ProductionEntwurfV2Opts } from "./entwurf-v2-production.ts";
@@ -178,7 +179,11 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 					// mailbox file that was never written.
 					const boundary =
 						o.boundary ?? (o.outcome === "fallback-sent" ? "mailbox-enqueued" : "accepted-unknown-boundary");
-					return { text: `entwurf_v2 control-socket → ${boundary}${route}${enqueued}`, isError: false };
+					// #163 S7 (SOL D1): what the receiver said beside a steer-* boundary — why its
+					// acceptance is unknown, or that the steer's record did not land — already
+					// normalized at the wire seam. Still a success: admission does not change.
+					const note = renderAcceptanceDiagnostic(o.diagnostic);
+					return { text: `entwurf_v2 control-socket → ${boundary}${note}${route}${enqueued}`, isError: false };
 				}
 				return {
 					text: `entwurf_v2 control-socket → ${o.outcome}${reason}${enqueued}`,

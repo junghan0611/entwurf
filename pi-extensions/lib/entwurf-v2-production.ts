@@ -29,7 +29,7 @@
  * claiming "no conflict". The decider's later `inspectSocket` probe is a SEPARATE step.
  */
 
-import { describeUnknownBoundary, parseAcceptanceBoundary } from "./control-send-receipt.ts";
+import { describeUnknownBoundary, parseAcceptanceBoundary, parseAcceptanceDiagnostic } from "./control-send-receipt.ts";
 import {
 	type RpcClientOptions,
 	type RpcCommand,
@@ -336,7 +336,10 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 						`${shape === undefined ? "" : ` (${shape})`}\n`,
 				);
 			}
-			return { success: response.success, error: response.error, boundary };
+			// #163 S7 (SOL D1): what the receiver said beside a steer-* boundary, normalized here
+			// (closed tokens + bounded detail) so the caller sees it and nothing raw rides further.
+			const diagnostic = boundary === undefined ? undefined : parseAcceptanceDiagnostic(boundary, response.data);
+			return { success: response.success, error: response.error, boundary, diagnostic };
 		},
 		classifyConnect: io.classifyConnect,
 		releaseLock: release,

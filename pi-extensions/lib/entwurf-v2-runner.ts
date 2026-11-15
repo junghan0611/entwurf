@@ -28,7 +28,7 @@
  * lets the hand's `decideReleasePolicy` fail loud on a mis-pairing.
  */
 
-import type { AcceptanceBoundary } from "./control-send-receipt.ts";
+import type { AcceptanceBoundary, AcceptanceDiagnostic } from "./control-send-receipt.ts";
 import type {
 	DispatchDecision,
 	DispatchInput,
@@ -80,6 +80,8 @@ export type ExecutedOutcome =
 			/** #120 P2: the receiver's acceptance boundary. The SURFACE renders this, not
 			 * `outcome` — that one names the route/release leg, which an operator cannot act on. */
 			boundary?: AcceptanceBoundary;
+			/** #163 S7: the receiver's normalized diagnostic beside a `steer-*` boundary. */
+			diagnostic?: AcceptanceDiagnostic;
 	  }
 	| { transport: "meta-mailbox"; success: true; messagePath?: string }
 	// native-push carries `retried` so the surface can note the 1-shot re-probe retry fired.
@@ -148,6 +150,7 @@ export async function executeDispatch(
 						rejectReason: r.rejectReason,
 						messagePath: r.messagePath,
 						boundary: r.boundary,
+						diagnostic: r.diagnostic,
 					},
 				};
 			} catch (err) {
