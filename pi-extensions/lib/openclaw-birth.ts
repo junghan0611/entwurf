@@ -21,8 +21,8 @@
  * operator's `--cwd`, and the fresh composition passes the create reply's `entry.sessionRoot`
  * (coordinator decision 2026-11-13).
  *
- * S3 flip boundary: `upsert` is injected because the record backend `openclaw` is not yet a
- * `MetaBackend`; production wiring (`upsertMetaSession({backend:"openclaw", …})`) is a flip line.
+ * `upsert` is injected so this decision stays testable without a store; production wiring
+ * (`scripts/openclaw-birth.ts`) passes `upsertMetaSession({ backend: "openclaw", … })`.
  */
 
 import * as path from "node:path";

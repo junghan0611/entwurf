@@ -60,7 +60,7 @@ function adapter(
 const ALIVE = JSON.stringify({ session: { key: "agent:main:s1m1", sessionId: "2de2", hasActiveRun: false } });
 
 describe("probe", () => {
-	it("runs sessions.describe with --expect-url, the declared config for that call only, no token", async () => {
+	it("[QK:OPENCLAW-PROBE-EXPECT-URL] runs sessions.describe with --expect-url, the declared config for that call only, no token — without the pin the vendor CLI would answer from whichever Gateway its config names", async () => {
 		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
 		expect(await adapter(r).probe(ID)).toEqual({ status: "alive", route: { ...ROUTE, deskPin: "unknown" } });
 		expect(r.calls).toEqual([
@@ -101,12 +101,16 @@ describe("probe", () => {
 		["missing binary 127", { code: 127, stdout: "", stderr: "ENOENT" }],
 		["not JSON", { code: 0, stdout: "hello", stderr: "" }],
 		["no session member", { code: 0, stdout: "{}", stderr: "" }],
-		["another key", { code: 0, stdout: JSON.stringify({ session: { key: "agent:main:main" } }), stderr: "" }],
 	])("%s is indeterminate, never dead", async (_n, answer) => {
 		expect((await adapter(runner(answer)).probe(ID)).status).toBe("indeterminate");
 	});
 
-	it("an archived session is indeterminate, naming archived — the Gateway refuses new work on it (S4 o3.txt)", async () => {
+	it("[QK:OPENCLAW-PROBE-KEY-MATCH] a describe that answers for another key is indeterminate, never alive — another session's liveness must not admit this record", async () => {
+		const other = JSON.stringify({ session: { key: "agent:main:main" } });
+		expect((await adapter(runner({ code: 0, stdout: other, stderr: "" })).probe(ID)).status).toBe("indeterminate");
+	});
+
+	it("[QK:OPENCLAW-PROBE-ARCHIVED] an archived session is indeterminate, naming archived — the Gateway refuses new work on it (S4 o3.txt)", async () => {
 		const archived = JSON.stringify({
 			session: { key: "agent:main:s1m1", visibility: "shared", archived: true, archivedAt: 1794555974305 },
 		});
@@ -285,7 +289,7 @@ describe("declared bin (#160 S5 1b)", () => {
 });
 
 describe("send", () => {
-	it("chat.send steer with an entwurf idempotency key; is not retriable", async () => {
+	it("[QK:OPENCLAW-SEND-IDEMPOTENT-NOT-RETRIABLE] chat.send steer with an entwurf idempotency key; is not retriable — a replayed send would deliver twice", async () => {
 		const r = runner({ code: 0, stdout: '{"runId":"entwurf-k1","status":"started","messageSeq":1}', stderr: "" });
 		const a = adapter(r);
 		expect(a.retriable).toBe(false);
@@ -332,7 +336,7 @@ describe("send", () => {
 		await expect(adapter(runner(answer)).send(ROUTE, ID, "m")).rejects.toThrow(/native-push send failed/);
 	});
 
-	it("refuses a route that is not this record's key, before any vendor call", async () => {
+	it("[QK:OPENCLAW-SEND-ROUTE-IS-RECORD] refuses a route that is not this record's key, before any vendor call", async () => {
 		const r = runner({ code: 0, stdout: '{"status":"ok"}', stderr: "" });
 		await expect(adapter(r).send({ ...ROUTE, sessionKey: "agent:main:main" }, ID, "m")).rejects.toThrow(/route key/);
 		expect(r.calls).toEqual([]);

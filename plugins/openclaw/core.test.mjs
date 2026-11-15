@@ -40,7 +40,7 @@ function ctx(over = {}) {
 }
 
 describe("timeout (review D2)", () => {
-	it("the plugin waits longer than the entry's worst path, so a slow-but-live entry is not indeterminate", () => {
+	it("[QK:OPENCLAW-PLUGIN-OUTWAITS-ENTRY] the plugin waits longer than the entry's worst path, so a slow-but-live entry is not read as failed and sent again", () => {
 		expect(OPENCLAW_SEND_ENTRY_WORST_MS).toBe(79_500);
 		expect(SEND_TIMEOUT_MS).toBeGreaterThan(OPENCLAW_SEND_ENTRY_WORST_MS);
 	});

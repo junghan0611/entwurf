@@ -328,6 +328,74 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-HOME-RECEIPT-NOT-FUTURE]",
 			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PROBE-KEY-MATCH",
+			"title": "the describe classifier stops comparing the answered key, so another session's describe reads as this record alive and birth or send admits a session nobody asked about",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": [
+				"\tif (typeof s !== \"object\" || Array.isArray(s) || (s as Record<string, unknown>).key !== sessionKey) {"
+			],
+			"replace": ["\tif (typeof s !== \"object\" || Array.isArray(s)) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-KEY-MATCH]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PROBE-ARCHIVED",
+			"title": "an archived session reads alive again, so birth mints a garden id for a session the Gateway refuses new work on and the sender is falsely replyable",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\tif ((s as Record<string, unknown>).archived === true) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-ARCHIVED]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PROBE-EXPECT-URL",
+			"title": "the describe argv drops --expect-url, so the vendor CLI answers from whichever Gateway its config names instead of the declared one",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\t\t\"sessions.describe\",", "\t\t\"--json\",", "\t\t\"--expect-url\",", "\t\troute.url,"],
+			"replace": ["\t\t\"sessions.describe\",", "\t\t\"--json\","],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-EXPECT-URL]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-SEND-IDEMPOTENT-NOT-RETRIABLE",
+			"title": "the adapter declares itself retriable, so a send whose acceptance is unknown may be replayed and delivered twice (Rule 10)",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\t\tretriable: false,"],
+			"replace": ["\t\tretriable: true,"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-SEND-IDEMPOTENT-NOT-RETRIABLE]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-SEND-ROUTE-IS-RECORD",
+			"title": "send no longer checks the route against the record's own key, so a route for another session delivers this record's message there",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\t\t\tif (parseOpenclawNativeSessionId(nativeSessionId).sessionKey !== route.sessionKey) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-SEND-ROUTE-IS-RECORD]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PLUGIN-OUTWAITS-ENTRY",
+			"title": "the plugin gives up before the entry's worst path, so a slow send that may still deliver is read as failed and sent again",
+			"subject": "plugins/openclaw/dist/core.js",
+			"find": ["export const SEND_TIMEOUT_MS = 90_000;"],
+			"replace": ["export const SEND_TIMEOUT_MS = 60_000;"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PLUGIN-OUTWAITS-ENTRY]",
+			"signatureSource": "plugins/openclaw/core.test.mjs"
 		}
 	]
 }
