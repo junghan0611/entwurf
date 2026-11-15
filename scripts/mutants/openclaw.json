@@ -304,6 +304,19 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-HOME-RECEIPT-ROW-INVENTORY]",
 			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-RESET-KEEPS-GARDEN",
+			"title": "the receive probe binds its route to the vendor's sessionId, so a reset or compaction under the same key moves the address and the send goes to a key that no longer exists",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\t\t\treturn { status: \"alive\", route: { ...route, deskPin: judgeOpenclawDeskPin(r.stdout) } };"],
+			"replace": [
+				"\t\t\treturn {\n\t\t\t\tstatus: \"alive\",\n\t\t\t\troute: { ...route, sessionKey: `${route.sessionKey}#${String((parseJsonObject(r.stdout)?.session as Record<string, unknown>)?.sessionId)}`, deskPin: judgeOpenclawDeskPin(r.stdout) },\n\t\t\t};"
+			],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-RESET-KEEPS-GARDEN]",
+			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
 		}
 	]
 }

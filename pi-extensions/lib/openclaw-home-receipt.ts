@@ -47,9 +47,10 @@ export const OPENCLAW_HOME_RECEIPT_ROWS = [
 
 /**
  * Rows a first admission may report as `unmeasured`, with a reason (#160 S6.5 proposal, ee14c7).
- * `compactReset`: whether the vendor keeps consuming on the same key after ITS compaction is an
- * OpenClaw-owned observation the contract left open (delta §3); Entwurf's side of it is proven
- * deterministically. `resources`: lab client residue across an ssh/exec boundary may not be
+ * `compactReset`: Entwurf's side — a vendor generation change under one key keeps the route, the
+ * birth and the send join on the same garden — is closed deterministically by
+ * QK OPENCLAW-RESET-KEEPS-GARDEN (openclaw-birth.test.ts); `unmeasured` here covers only the vendor's
+ * own LIVE behaviour, whether it keeps consuming on that key after ITS compaction (delta §3). `resources`: lab client residue across an ssh/exec boundary may not be
  * observable on every lab; the runner's own child bound is proven deterministically. Every other row
  * — the behaviours and the three required evidences (visibility, model/policy, send scope) — must pass.
  */

@@ -4,8 +4,10 @@
  * the flip cell); the probe is a stand-in for the receive adapter's describe probe.
  */
 import { describe, expect, it } from "vitest";
+import { createOpenclawGatewayAdapter } from "./native-push/openclaw-gateway.ts";
 import { birthOpenclawCitizen, type OpenclawBirthDeps } from "./openclaw-birth.ts";
 import { type OpenclawHomeRecord, parseOpenclawCitizensDeclaration } from "./openclaw-citizens.ts";
+import { parseOpenclawClaim, receiveOpenclawClaim } from "./openclaw-send.ts";
 
 const DECL = parseOpenclawCitizensDeclaration(
 	JSON.stringify({
@@ -166,5 +168,97 @@ describe("birthOpenclawCitizen", () => {
 			/does not confirm/,
 		);
 		expect(h.store.size).toBe(0);
+	});
+});
+
+/**
+ * #160 S6.5 (GLG: "compact, reset 뒤 유지는 코드 레벨에서는 괜찮다는 것 정도는 검수가 되어야"):
+ * Entwurf's side of compact/reset, closed deterministically. The vendor's session generation
+ * (sessionId, lifecycleRevision) changes under one fixed key; the address must not. Fixture shape is
+ * the lab's sessions.describe (s6-lab-m1-m5.md: key agent:main:s6pin-ca8f49, pinned with a numeric
+ * pinnedAt). The relayed ids were truncated (68d6622e-…, d14a339d-…), so only their leading groups
+ * are the lab's and the rest is synthetic.
+ */
+describe("a vendor generation change under one key keeps the garden", () => {
+	const KEY_LAB = "agent:main:s6pin-ca8f49";
+	const LAB = parseOpenclawCitizensDeclaration(
+		JSON.stringify({
+			version: 1,
+			gateways: [{ scope: "lab", url: "ws://127.0.0.1:18811" }],
+			allow: [{ scope: "lab", agentId: "main", sessionKey: KEY_LAB }],
+		}),
+	);
+	const describeAt = (sessionId: string, lifecycleRevision: string) =>
+		JSON.stringify({ session: { key: KEY_LAB, sessionId, lifecycleRevision, pinned: true, pinnedAt: 1794707048719 } });
+	const BEFORE = describeAt("68d6622e-0000-4000-8000-000000000001", "d14a339d-0000-4000-8000-000000000001");
+	const AFTER = describeAt("68d6622e-0000-4000-8000-0000000000aa", "d14a339d-0000-4000-8000-0000000000bb");
+
+	it("[QK:OPENCLAW-RESET-KEEPS-GARDEN] after the vendor's sessionId and lifecycleRevision change, probe gives the same route, birth re-attaches the same garden and the send entry joins that garden", async () => {
+		let answer = BEFORE;
+		const store = new Map<string, string>();
+		const records = (): OpenclawHomeRecord[] =>
+			[...store].map(([nativeSessionId, gardenId]) => ({ gardenId, backend: "openclaw", nativeSessionId }));
+		const adapter = createOpenclawGatewayAdapter({
+			runner: { exec: async () => ({ code: 0, stdout: answer, stderr: "" }) },
+			readDeclaration: () => LAB,
+			listIdentities: records,
+		});
+		const birthDeps: OpenclawBirthDeps = {
+			readDeclaration: () => LAB,
+			listIdentities: records,
+			probe: async (id) => {
+				const p = await adapter.probe(id);
+				return p.status === "alive"
+					? { status: "alive", deskPin: p.route.backend === "openclaw" ? (p.route.deskPin ?? "unknown") : "unknown" }
+					: p;
+			},
+			upsert: (id) => {
+				const existing = store.get(id);
+				if (existing) return { action: "attach", gardenId: existing };
+				store.set(id, "20261115T040000-c0ffee");
+				return { action: "create", gardenId: "20261115T040000-c0ffee" };
+			},
+		};
+		const native = `openclaw:lab:${KEY_LAB}`;
+
+		const born = await birthOpenclawCitizen({ scope: "lab", sessionKey: KEY_LAB, cwd: "/lab/ws" }, birthDeps);
+		const routeBefore = await adapter.probe(native);
+
+		answer = AFTER; // the vendor reset or compacted: a new generation under the same key
+		const routeAfter = await adapter.probe(native);
+		expect(routeAfter).toEqual(routeBefore);
+		expect(routeAfter).toMatchObject({ status: "alive" });
+
+		const again = await birthOpenclawCitizen({ scope: "lab", sessionKey: KEY_LAB, cwd: "/lab/ws" }, birthDeps);
+		expect(again).toEqual({ ...born, action: "attach" });
+		expect(store.size).toBe(1);
+
+		const sent: string[] = [];
+		const receipt = await receiveOpenclawClaim(
+			parseOpenclawClaim(
+				JSON.stringify({
+					v: 1,
+					scope: "lab",
+					agentId: "main",
+					sessionKey: KEY_LAB,
+					target: "20261015T085719-9fc008",
+					message: "after reset",
+					wantsReply: true,
+				}),
+			),
+			LAB,
+			{
+				listIdentities: () => records().map((r) => ({ ...r, cwd: "/lab/ws" })),
+				replyable: async (r) => (await adapter.probe(r.nativeSessionId)).status === "alive",
+				dispatch: async (_params, sender) => {
+					sent.push(sender.sessionId);
+					return { isError: false, text: "ok" };
+				},
+			},
+		);
+		expect(receipt).toMatchObject({ kind: "dispatched" });
+		expect(sent).toEqual([born.gardenId]);
+		// Contrast — another key on the same home is refused, not re-attached: that is
+		// the OPENCLAW-BIRTH-HOME-GATE cell above (openclaw-home-already-addressed).
 	});
 });
