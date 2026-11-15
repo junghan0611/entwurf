@@ -60,6 +60,74 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-LATE-REJECT-QUIET]",
 			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-CAPABILITY-GATED",
+			"title": "the backend reads steering as supported unless it is explicitly false, so an adapter that never advertised it is sent an extension request",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\treturn meta?.steering?.supported === true;"],
+			"replace": ["\treturn meta?.steering?.supported !== false;"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-CAPABILITY-GATED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-BUSY-ONLY",
+			"title": "steerBusy no longer checks for a prompt on the wire, so a steer with no running turn reaches a stale window or throws",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (!window) return { effect: \"not-sent\", reason: \"no-busy-window\" };"],
+			"replace": ["\tif (!window) return { effect: \"injected\" };"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-BUSY-ONLY]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-NEW-TURN-REACHABLE",
+			"title": "the busy window opens only for a session already in the reuse map, so a Pi session's first turn can never be steered",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tconst closeSteerWindow = openAcpSteerWindow(session.key, {"],
+			"replace": [
+				"\tconst closeSteerWindow = !bridgeSessions.has(session.key) ? () => {} : openAcpSteerWindow(session.key, {"
+			],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-NEW-TURN-REACHABLE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-WINDOW-OWNER-CLEANUP",
+			"title": "the busy window is never closed when the prompt ends, so a later steer reaches a finished turn's connection",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tcloseSteerWindow();"],
+			"replace": ["\t\tvoid closeSteerWindow;"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-WINDOW-OWNER-CLEANUP]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-WINDOW-OWNER-ONLY",
+			"title": "closing a busy window removes whatever is under the key, so an older turn closing late deletes a newer turn's window",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (steerWindows.get(key)?.owner === owner) steerWindows.delete(key);"],
+			"replace": ["\t\tsteerWindows.delete(key);"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-WINDOW-OWNER-ONLY]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-SEAM-DUPLICATE-REFUSED",
+			"title": "a second steer seam silently replaces the first, so the control socket consults another backend instance's window map",
+			"subject": "pi-extensions/lib/acp-steer-seam.ts",
+			"find": ["\tif (existing !== undefined) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-SEAM-DUPLICATE-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
 		}
 	]
 }

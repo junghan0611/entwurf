@@ -21,9 +21,10 @@
 // strip-types fence is introduced.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { closeRetainedAcpSession, streamShellAcp } from "./lib/acp/backend.js";
+import { ACP_STEER_SEAM, closeRetainedAcpSession, streamShellAcp } from "./lib/acp/backend.js";
 import { allCuratedModels } from "./lib/acp/backend-adapter.js";
 import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
+import { registerAcpSteerSeam } from "./lib/acp-steer-seam.js";
 
 // Idempotent registration guard. pi may evaluate an extension entry more than
 // once across a runtime; registering the provider twice would replace its model
@@ -70,6 +71,10 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_compact", (_event, ctx) => {
 		closeRetainedAcpSession(ctx.sessionManager.getSessionId());
 	});
+
+	// #163 S7: offer the control socket a way to steer this process's busy ACP turns. Registered
+	// after the provider; a second backend instance's seam is refused by name (acp-steer-seam).
+	registerAcpSteerSeam(ACP_STEER_SEAM);
 
 	// Mark only AFTER a successful registration. If allCuratedModels() (which
 	// fail-fasts on an unowned/duplicate curated id, and whose claude rows carry a

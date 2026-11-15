@@ -52,11 +52,13 @@ import {
 	getCurrentSystemPrompt,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
+import type { AcpSteerEffect, AcpSteerSeamV1 } from "../acp-steer-seam.js";
 import {
 	type AcpClientHandlers,
 	type AcpConnectionLike,
 	type AcpPromptResponse,
 	connectAcpClient,
+	requestAcpSteer,
 } from "./acp-client.js";
 import { prependNewPromptAugment } from "./augment.js";
 import {
@@ -317,6 +319,8 @@ interface BridgeSession {
 	thinkingValue?: string;
 	alive: boolean;
 	busy: boolean;
+	/** #163 S7: the adapter advertised `_meta.steering.supported === true` at initialize. */
+	steeringSupported?: boolean;
 	/** Mutable per-turn router — see the CRITICAL note in the file header. */
 	activePromptHandler?: (event: AcpBridgeEvent) => void;
 	/**
@@ -439,6 +443,71 @@ interface BridgeSession {
 }
 
 const bridgeSessions = new Map<string, BridgeSession>();
+
+/**
+ * #163 S7: the busy-steer windows, keyed like `bridgeSessions` (`pi:<id>`) but kept apart from it.
+ * `bridgeSessions` is the REUSE authority and a NEW turn enters it only on success, so a NEW turn's
+ * prompt would be unreachable there. A window is open exactly while a prompt is on the wire
+ * (`awaitAcpPromptTurn`, which every path — new, rebuild, reuse — goes through), carries the
+ * connection and ACP session it was opened with, and is removed only by the turn that opened it.
+ */
+export interface AcpSteerWindow {
+	connection: AcpConnectionLike;
+	acpSessionId: string;
+	steering: boolean;
+}
+const steerWindows = new Map<string, AcpSteerWindow & { owner: symbol }>();
+
+/** Open a window for `key`; the returned close removes it only while it is still this one's. */
+export function openAcpSteerWindow(key: string, window: AcpSteerWindow): () => void {
+	const owner = Symbol("acp-steer-window");
+	steerWindows.set(key, { ...window, owner });
+	return () => {
+		if (steerWindows.get(key)?.owner === owner) steerWindows.delete(key);
+	};
+}
+
+/** Read `_meta.steering.supported === true` from an initialize answer. Anything else is unsupported. */
+export function readSteeringSupported(initializeAnswer: unknown): boolean {
+	const meta = (initializeAnswer as { _meta?: { steering?: { supported?: unknown } } } | null | undefined)?._meta;
+	return meta?.steering?.supported === true;
+}
+
+/**
+ * Steer the busy ACP turn of Pi session `piSessionId` (#163 S7). Sends at most ONE request, on the
+ * window's own connection and ACP session — never a replacement child, never a retry — and never
+ * cancels or tears down the running prompt. The control socket reaches this through the
+ * `acp-steer-seam`.
+ */
+export async function steerBusyAcpSession(
+	piSessionId: string,
+	text: string,
+	timeoutMs?: number,
+): Promise<AcpSteerEffect> {
+	const window = steerWindows.get(`pi:${piSessionId}`);
+	if (!window) return { effect: "not-sent", reason: "no-busy-window" };
+	if (!window.steering) return { effect: "not-sent", reason: "steering-unsupported" };
+	if (!window.connection.steer) return { effect: "not-sent", reason: "no-steer-method" };
+	const r = await requestAcpSteer(window.connection, window.acpSessionId, text, timeoutMs);
+	switch (r.kind) {
+		case "injected":
+			return { effect: "injected" };
+		case "promptRequired":
+			return { effect: "prompt-required" };
+		case "unrecognized":
+			return { effect: "unknown", reason: "answer-unrecognized", detail: r.detail };
+		case "timeout":
+			return { effect: "unknown", reason: "timeout", detail: r.detail };
+		case "rejected":
+			return { effect: "unknown", reason: "connection-closed", detail: r.detail };
+	}
+}
+
+/** This backend module's one steer seam object; the provider registers it (acp-steer-seam). */
+export const ACP_STEER_SEAM: AcpSteerSeamV1 = Object.freeze({
+	version: 1 as const,
+	steerBusy: (piSessionId: string, text: string) => steerBusyAcpSession(piSessionId, text),
+});
 const retainedChildren = new Set<AcpChildLike>();
 // sessionKeys with a prompt currently in flight. A NEW turn does not enter
 // bridgeSessions until it succeeds, so without this a second concurrent FIRST
@@ -889,9 +958,16 @@ async function awaitAcpPromptTurn(
 		else signal.addEventListener("abort", onAbort, { once: true });
 	}
 
+	// #163 S7: the prompt is on the wire from here — a remote steer may reach this turn until it ends.
+	const closeSteerWindow = openAcpSteerWindow(session.key, {
+		connection: session.connection,
+		acpSessionId: promptArgs.sessionId,
+		steering: session.steeringSupported === true,
+	});
 	try {
 		return await Promise.race([session.connection.prompt(promptArgs), lifecycle]);
 	} finally {
+		closeSteerWindow();
 		if (graceTimer) clearTimeout(graceTimer);
 		signal?.removeEventListener("abort", onAbort);
 		session.notifyChildGone = undefined;
@@ -1973,7 +2049,7 @@ export function streamAcpTurn(
 			);
 			spawned.once("error", () => onChildGone(sess));
 
-			await withTimeout(
+			const initialized = await withTimeout(
 				"initialize",
 				connection.initialize({
 					protocolVersion: PROTOCOL_VERSION,
@@ -1982,6 +2058,8 @@ export function streamAcpTurn(
 				}),
 				INITIALIZE_TIMEOUT_MS,
 			);
+			// #163 S7: only an adapter that advertises steering is ever sent one.
+			session.steeringSupported = readSteeringSupported(initialized);
 
 			// Tool-narrowed session meta (S2b) + the billing carrier (S2d-1c). The
 			// carrier is the SAME rendered engraving folded into configSig above;

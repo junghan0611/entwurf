@@ -3442,7 +3442,7 @@ let manifestCount: number;
 		"acp-overlay": 1,
 		"acp-prompt-lifecycle": 15,
 		"acp-set-model-readback": 44,
-		"acp-steer": 5,
+		"acp-steer": 11,
 		"acp-stop-reason": 7,
 		"acp-stream-hooks": 10,
 		"acp-usage-accounting": 12,

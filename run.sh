@@ -1574,7 +1574,7 @@ check_acp_steer() {
   # #163 S7: the execution coordinate for the ACP steer claims (VERIFY 「Four rules」 rule 3). Not a
   # discovery path — check-tests-beside-behavior already finds these files; one steer mutant re-runs
   # only the steer beside tests rather than every beside test.
-  run_vitest pi-extensions/lib/acp/acp-client.steer.test.ts
+  run_vitest pi-extensions/lib/acp/acp-client.steer.test.ts pi-extensions/lib/acp/backend.steer.test.ts
 }
 
 check_native_push_runner() {
