@@ -53,6 +53,19 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCUT-HELP-POINTER]",
 			"signatureSource": "scripts/check-fresh-cut-gate.sh"
+		},
+		{
+			"claim": "FRESHCUT-OPENCLAW-CLOSED-QUIESCED",
+			"title": "the quiesce gate probes a closed OpenClaw desk like any other, so its still-alive Gateway session refuses every cut and a landlord home traps the generation",
+			"subject": "scripts/meta-bridge-fresh-cut.ts",
+			"find": [
+				"\t\t\tif (identity.backend === OPENCLAW_BACKEND && openclawDeskClosed(identity.nativeSessionId)) continue;"
+			],
+			"replace": ["\t\t\tif (false) continue;"],
+			"gate": ["bash", "run.sh", "check-fresh-cut-gate"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCUT-OPENCLAW-CLOSED-QUIESCED]",
+			"signatureSource": "scripts/check-fresh-cut-gate.sh"
 		}
 	]
 }

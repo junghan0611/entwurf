@@ -1289,6 +1289,97 @@ case "$out" in
   *) bad "H6b the refusal did not name the failed scan" "$out" ;;
 esac
 
+# H7–H9 — an OpenClaw landlord home (#160 S6.5). Its pinned desk stays alive while the Gateway
+# keeps it, so "dead" never arrives on its own: the operator's door is the scope declaration. A
+# desk that left it (or with no declaration) is refused by scope on send AND receive, so it is
+# quiesced without a probe; a desk still declared is probed exactly like any native-push citizen.
+# The vendor CLI is the declared absolute `bin`, a fake here, so nothing reaches a real Gateway.
+OC_DECL="$(dirname "$ENTWURF_META_SESSIONS_DIR")/openclaw-citizens.json"
+cat > "$SANDBOX/npfake/openclaw-alive" <<'SH'
+#!/bin/sh
+echo '{"session":{"key":"agent:main:desk","pinned":true,"pinnedAt":1794707048719}}'
+SH
+cat > "$SANDBOX/npfake/openclaw-down" <<'SH'
+#!/bin/sh
+echo 'gateway unreachable' >&2
+exit 1
+SH
+chmod +x "$SANDBOX/npfake/openclaw-alive" "$SANDBOX/npfake/openclaw-down"
+seed_openclaw() {
+  mkdir -p "$ENTWURF_META_SESSIONS_DIR"
+  cat > "$ENTWURF_META_SESSIONS_DIR/20261115T000000-cccc08.meta.json" <<'JSON'
+{
+  "schemaVersion": 3,
+  "gardenId": "20261115T000000-cccc08",
+  "backend": "openclaw",
+  "nativeSessionId": "openclaw:lab:agent:main:desk",
+  "cwd": "/tmp/proj",
+  "model": null,
+  "transcriptPath": null,
+  "createdAt": "2026-11-15T00:00:00.000Z",
+  "recordUpdatedAt": "2026-11-15T00:00:00.000Z"
+}
+JSON
+}
+oc_decl() { # $1 = closed | <fake bin name>
+  if [ "$1" = closed ]; then
+    printf '{"version":1,"gateways":[{"scope":"lab","url":"ws://127.0.0.1:18811","bin":"%s"}],"allow":[]}\n' "$SANDBOX/npfake/openclaw-alive" > "$OC_DECL"
+  else
+    printf '{"version":1,"gateways":[{"scope":"lab","url":"ws://127.0.0.1:18811","bin":"%s"}],"allow":[{"scope":"lab","agentId":"main","sessionKey":"agent:main:desk"}]}\n' "$SANDBOX/npfake/$1" > "$OC_DECL"
+  fi
+}
+
+# H7 — the closed desk: allow removed, the fake Gateway would still answer ALIVE. It must cut.
+reset_world empty; seed_openclaw; oc_decl closed
+set +e
+out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+if [ "$rc" = 0 ] && [ -n "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "H7 a CLOSED OpenClaw desk (allow removed) is quiesced without a probe — the cut proceeds though its Gateway session is alive"
+else
+  bad "H7 a closed OpenClaw desk blocked the cut, so a landlord home would trap every generation [QK:FRESHCUT-OPENCLAW-CLOSED-QUIESCED]" "$out"
+fi
+# H7b — no declaration at all is closed too.
+reset_world empty; seed_openclaw; rm -f "$OC_DECL"
+set +e
+out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+if [ "$rc" = 0 ]; then
+  ok "H7b with no OpenClaw declaration the desk is closed and the cut proceeds"
+else
+  bad "H7b an undeclared OpenClaw desk blocked the cut" "$out"
+fi
+
+# H8 — the same desk still declared and alive: LIVE, nothing moves.
+reset_world empty; seed_openclaw; oc_decl openclaw-alive
+store_before="$(store_bytes)"
+set +e
+out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  case "$out" in
+    *LIVE*native-push*openclaw*) ok "H8 a DECLARED, alive OpenClaw desk refuses the cut as LIVE and moves nothing" ;;
+    *) bad "H8 the declared live OpenClaw desk was refused but not named LIVE" "$out" ;;
+  esac
+else
+  bad "H8 the cut archived a declared, alive OpenClaw desk's address" "$out"
+fi
+
+# H9 — declared but the Gateway cannot be asked: UNCERTAIN, never quiesced.
+reset_world empty; seed_openclaw; oc_decl openclaw-down
+set +e
+out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  case "$out" in
+    *UNCERTAIN*openclaw*) ok "H9 a declared OpenClaw desk whose Gateway cannot answer is UNCERTAIN and refuses the cut" ;;
+    *) bad "H9 the unprovable declared desk was not reported UNCERTAIN" "$out" ;;
+  esac
+else
+  bad "H9 a declared OpenClaw desk that could not be probed was treated as quiesced" "$out"
+fi
+rm -f "$OC_DECL"
+
 # H5 — WIRING: the verdict must come from the adapter probe the DISPATCH uses. A cut
 # that re-implemented liveness (or asked only about markers) is the regression.
 if grep -q 'resolveNativePushAdapter(' "$REPO/scripts/meta-bridge-fresh-cut.ts" &&

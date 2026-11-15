@@ -123,6 +123,13 @@ import {
 	processStartKey,
 } from "../pi-extensions/lib/meta-session.ts";
 import { resolveNativePushAdapter } from "../pi-extensions/lib/native-push/adapter.ts";
+import {
+	OPENCLAW_BACKEND,
+	openclawCitizensPath,
+	parseOpenclawNativeSessionId,
+	readOpenclawCitizens,
+	selectOpenclawScope,
+} from "../pi-extensions/lib/openclaw-citizens.ts";
 import { probeSocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
 function usage(code: number): never {
@@ -378,7 +385,30 @@ function inspectMarkers(
  * `register_native` mints it a record in the NEW generation. That is re-birth under a
  * NEW garden id, never continuity of the old one — the policy's first sentence, working
  * as designed. The archived record is never read again.
+ *
+ * A CLOSED OPENCLAW DESK IS QUIESCED (#160 S6.5). An OpenClaw home is a landlord home: its
+ * pinned desk stays alive as long as the Gateway keeps it, so "dead" never arrives on its own
+ * and a probe-only rule would refuse every cut forever. The operator's door is the scope
+ * declaration: once a desk's key has left it (or no declaration exists), the send entry and the
+ * receive probe both refuse that address by scope, so Entwurf serves no conversation through it —
+ * nothing a cut could sever. Such a record counts as quiesced without a probe. A desk still
+ * declared is probed as before (alive → LIVE, anything not dead → UNCERTAIN), and a declaration
+ * that cannot be read, or a native id that cannot be parsed, is UNCERTAIN. The procedure is the
+ * cut policy's own: close the desk (remove its allow), cut, and birth again in the new
+ * generation under a NEW garden id. Other native-push backends are judged exactly as before.
  */
+/**
+ * Is this OpenClaw desk closed — refused by scope on both send and receive? Absent declaration or
+ * an undeclared (scope, agentId, key) is closed. Throws on a broken declaration or a native id that
+ * does not parse; the caller turns that into UNCERTAIN, never into quiesced.
+ */
+function openclawDeskClosed(nativeSessionId: string): boolean {
+	const id = parseOpenclawNativeSessionId(nativeSessionId);
+	const decl = readOpenclawCitizens(openclawCitizensPath());
+	if (decl === null) return true;
+	return !("gateway" in selectOpenclawScope(decl, id.scope, id.agentId, id.sessionKey));
+}
+
 async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViolation[]> {
 	const violations: QuiesceViolation[] = [];
 	const label = "native-push conversation";
@@ -414,6 +444,7 @@ async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViola
 		let status: string;
 		let reason: string;
 		try {
+			if (identity.backend === OPENCLAW_BACKEND && openclawDeskClosed(identity.nativeSessionId)) continue;
 			const probe = await resolveNativePushAdapter(identity.backend).probe(identity.nativeSessionId);
 			status = probe.status;
 			reason =

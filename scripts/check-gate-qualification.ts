@@ -3482,7 +3482,7 @@ let manifestCount: number;
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
 		"fresh-call-dispatch": 18,
-		"fresh-cut": 4,
+		"fresh-cut": 5,
 		"gate-qualification": 10,
 		"herdr-placement": 13,
 		"herdr-plugin": 26,
