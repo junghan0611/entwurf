@@ -89,8 +89,8 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallToolDialect, string> = {
 	// `mcp_entwurf-bridge_lab_echo` in `tool_call.name` and in the model's own listing (#167).
 	// `[LIVE n=1, 2026-11-16]` a real `entwurf/agy-gemini-3.8-flash` sibling (garden
 	// `20261116T060223-a1f47f`) called `mcp_entwurf-bridge_entwurf_callback` and
-	// `mcp_entwurf-bridge_entwurf_v2` by these names — the digit survives. The peers spelling
-	// follows the same rule and is owed its first LIVE observation.
+	// `mcp_entwurf-bridge_entwurf_v2` by these names — the digit survives. A second LIVE sibling
+	// (`20261116T071432-d8da36`, n=1) called `entwurf_peers` under the same rule (its own report).
 	"agy-acp": "mcp_entwurf-bridge_entwurf_callback",
 };
 

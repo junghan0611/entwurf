@@ -7,14 +7,16 @@
 - [x] **1. land.** main `1255adbb`, CI 4 job green(2026-11-15 22:09 KST push, GLG 요청).
 - [x] **2. landlord-home receipt.** `1255adbb` 위에서 11행 측정(10 pass, compactReset unmeasured), `check-openclaw-home-receipt` green. 정본 `~/.local/share/entwurf-lab/160/receipt-0.55.0-1255adbb/receipt.json`. visibility는 chat.history + GLG의 OpenClaw 노드 앱 관측.
 - [x] **3. prepare 0.55.0.** FULL green(seal cd1bbd97, 1025s), `release-gate --cut` MUST 25/0/0 cut OK(3회차; 1·2회차 red는 stale installed writer와 OMP gave-up 로그 — CHANGELOG Release evidence). 원래 계획: CHANGELOG·버전·문서 → 리뷰(bc72e5) → build-bridge → frozen `check:full` → `release-gate --cut`(Codex triple + `ENTWURF_OPENCLAW_HOME_RECEIPT`/`_TARGET`) → release-prep 커밋.
-- [ ] **4. make → publish.** ← CURRENT: make(prepared HEAD push, exact-SHA CI, candidate, tag, GitHub release)는 GLG 2026-11-15 "npm publish 전까지 쭉 진행" 범위. publish는 GLG가 직접.
-- [ ] **5. Herdr re-pin.** publish 뒤 `plugins/herdr/runtime-lock.json`을 npm 0.55.0 측정 바이트로 다시 pin하고 snapshot tag(prepare 동안은 herdr-checkout carrier).
+- [x] **4. make → publish.** make 완료: main `40ff473d`, exact-SHA CI run 43730621013 green, Windows preview run 43731910023, candidate `~/.local/state/entwurf-releases/0.55.0-40ff473dd88d/candidate.b9MKgr/junghanacs-entwurf-0.55.0.tgz`(sha256 `7908bb49…98a3c`, container acceptance PASS), tag `v0.55.0`, GitHub release, U0 receipt `publish-u0.7OwVgF`. GLG가 npm에 직접 publish했다(2026-11-16 `npm view` dist-tags latest=0.55.0). publish U2/U3 registry proof는 아직 하지 않았다.
+- [ ] **5. Herdr re-pin.** ← CURRENT: publish 뒤 `plugins/herdr/runtime-lock.json`을 npm 0.55.0 측정 바이트로 다시 pin하고 snapshot tag(prepare 동안은 herdr-checkout carrier).
+- [x] **6. #167 agy ACP backend.** 브랜치 `167-agy-acp`(`5504cbd8` + 후속 문서 커밋)를 main에 land. `entwurf/agy-gemini-{4-hydrogen,4-argon,3.8-flash}`, fresh/resume 입장, global skillPlugins 투영, cwd AGENTS 중복 제거. 증거: PARTIAL 3그룹 green, frozen FULL green(1012s), LIVE n=1(fresh 왕복 a1f47f, 운영 HOME 스킬 투영 d8da36), 리뷰 4패스 Blocker 0, #167 영수증 댓글. 알려진 제한(백그라운드 고아 D6, 넓은 native 표면)은 `docs/acp-backend-rail.md`.
 
 # NOW
 
 - **receipt와 HEAD:** receipt의 candidate는 `1255adbb`(prepare 커밋의 부모)다. prepare 커밋 전에 다른 커밋을 넣으면 receipt가 무효가 되어 11행을 다시 재야 한다.
 - **역할 (2026-11-15):** ff08d4 코디·prepare, bc72e5(ACP Opus) 리뷰, 8216f4 운영(OpenClaw Gateway). OpenClaw 책상 `agent:main:entwurf` = garden `20261115T215046-12438c`.
 - **운영 관찰:**
+  - oracle의 pi는 이 checkout을 package로 로드한다(`pi.extensions`가 `.ts` 소스). 새로 뜨는 pi는 미커밋 작업트리를 그대로 쓰고, 편집 중간 상태에서 뜨면 entwurf provider 전체가 등록에 실패할 수 있다. MCP bridge는 dist라 `build-bridge` 전까지 src/dist가 어긋난다(#167 리뷰 895788 관찰, #165 맥락).
   - 새 backend를 store에 처음 쓰기 전에는 installed writer 전부(`doctor-codex-birth`는 helper bytes staleness를 보지 않으므로 `install-state.json`의 unit 버전도), omp·copilot doctor를 확인한다. 0.55.0 cut에서 Codex birth helper(0.41.1)·OMP·Copilot receive가 `openclaw` record를 보고 store 쓰기를 거절했다.
   - `doctor-omp-receive`는 receive 로그에 남은 `arm-gave-up` 줄을 평생 센다. 한 번의 실패가 영구 RED가 된다(0.55.0 cut에서 로그를 보존용 이름으로 바꿔 넘김).
   - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정한다. daemon 복원은 GLG가 결정한다.
