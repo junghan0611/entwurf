@@ -697,16 +697,26 @@ async function main(): Promise<void> {
 		// direct trigger and of a message rotting in a queue nobody drains.
 		ok(
 			"[QK:SEND-RECEIVER-EMITS-BOUNDARY] the control-socket `send` answers with the typed boundary its own state produces, and with no bare `delivered` / unconsumed `deliveredAs` beside it — a field that is true of every outcome tells a sender nothing, and there is no sender left that reads those two",
-			(() => {
-				// Scoped to the RPC ANSWER, not the whole file: `deliveredAs` also appears in the
-				// (separately owned, #120 Part 2) sent-message renderer, and a whole-file ban here
-				// would make this claim fail for a reason it is not about.
-				const at = code.indexOf('respond(true, "send"');
-				const answer = at < 0 ? "" : code.slice(at, code.indexOf(");", at));
+			await (async () => {
+				// #163 S7: the send decision lives in lib/control-steer.ts and the extension only routes
+				// `send` there (its success answer is the module's `respond`). Scoped to the module's
+				// SUCCESS ANSWERS, not a whole file: `deliveredAs` also appears in the (separately owned,
+				// #120 Part 2) sent-message renderer, and a whole-file ban would fail for another reason.
+				const steerSrc = await fs.readFile(path.join(path.dirname(CONTROL_SRC), "lib", "control-steer.ts"), "utf8");
+				const steer = steerSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+				const sendAt = code.indexOf('if (command.type === "send")');
+				const sendBlock = sendAt < 0 ? "" : code.slice(sendAt);
+				const routed =
+					/await deliverControlSend\(/.test(sendBlock) && /respond\(success, "send", data, error\)/.test(sendBlock);
+				const answers = [...steer.matchAll(/deps\.respond\(true, \{[^}]*\}/g)].map((m) => m[0]);
 				return (
-					/boundary:\s*sendReceiptBoundary\(\{\s*idle:\s*isIdle,\s*mode\s*\}\)/.test(answer) &&
-					!/\bdelivered:\s*true/.test(answer) &&
-					!/\bdeliveredAs\b/.test(answer)
+					routed &&
+					/const boundary: ObservedBoundary = sendReceiptBoundary\(\{ idle: idleNow, mode: input\.mode \}\);/.test(
+						steer,
+					) &&
+					answers.some((a) => /\{ boundary, wants_reply/.test(a)) &&
+					answers.length > 0 &&
+					answers.every((a) => !/\bdelivered:\s*true/.test(a) && !/\bdeliveredAs\b/.test(a))
 				);
 			})(),
 		);

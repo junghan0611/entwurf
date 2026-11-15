@@ -73,9 +73,9 @@ import type { TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, MessageRenderer } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Box, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
+import { lookupAcpSteerSeam } from "./lib/acp-steer-seam.js";
 import {
 	type CompactionGuard,
-	compactionSendReject,
 	createCompactionGuard,
 	noteCompactionBefore,
 	noteCompactionTerminal,
@@ -90,8 +90,8 @@ import {
 	retireResponseEnvelope,
 	startOrRebindControlServer,
 } from "./lib/control-retire.js";
-import { sendReceiptBoundary } from "./lib/control-send-receipt.js";
 import { CONTROL_SOCKET_SUFFIX, defaultControlSocketDir } from "./lib/control-socket-path.js";
+import { deliverControlSend } from "./lib/control-steer.js";
 import {
 	attachAcceptedSocketDisconnectPolicy,
 	formatSenderInfoBlock,
@@ -633,15 +633,6 @@ async function handleCommand(
 			}
 		}
 
-		const compactionReject = compactionSendReject(state.compaction, {
-			idle: ctx.isIdle(),
-			hasAgentSignal: ctx.signal !== undefined,
-		});
-		if (compactionReject) {
-			respond(false, "send", undefined, compactionReject);
-			return;
-		}
-
 		// wants_reply defaults to false (etiquette marker, not transport contract).
 		// It surfaces a "(wants reply)" badge on the receiver render so the
 		// human/agent at either end sees that the sender wants a conversational
@@ -662,46 +653,27 @@ async function handleCommand(
 		const senderInfoBlock = sender ? formatSenderInfoBlock(sender, wantsReply) : "";
 
 		const mode = command.mode ?? "steer";
-		const isIdle = ctx.isIdle();
-		const customMessage = {
-			customType: SESSION_MESSAGE_TYPE,
-			content: message + senderInfoBlock,
-			display: true,
-		};
-
-		// Crash-loud: a pi.sendMessage throw (queue refusal, internal invariant
-		// violation, …) used to fall through unhandled and silently drop the
-		// connection — the caller would see only a vague timeout. We catch and
-		// surface the failure on the RPC channel so the sender knows the message
-		// did NOT enter the receiver's queue.
-		try {
-			if (isIdle) {
-				pi.sendMessage(customMessage, { triggerTurn: true });
-			} else {
-				pi.sendMessage(customMessage, {
-					triggerTurn: true,
-					deliverAs: mode === "follow_up" ? "followUp" : "steer",
-				});
-			}
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : String(error);
-			respond(false, "send", undefined, `pi.sendMessage failed: ${msg}`);
-			return;
-		}
-
-		// #120 P2: the receiver reports the BOUNDARY it actually observed — `sent` for an idle
-		// direct trigger, `queued-steer` / `queued-follow-up` for the two in-process queues — and
-		// nothing else. The bare `delivered:true` that used to lead this payload is GONE rather
-		// than kept for compatibility: it was equally true of all three states and therefore said
-		// nothing, which is the bare `delivered` DELIVERY.md refuses by name. The `deliveredAs`
-		// beside it had no consumer at all. Skew is safe in both directions without a translator —
-		// an old sender keys on `response.success` and never reads `data`, and a new sender reads
-		// an old receiver's payload as `accepted-unknown-boundary`, the honest name for an
-		// acceptance it cannot classify.
-		respond(true, "send", {
-			boundary: sendReceiptBoundary({ idle: isIdle, mode }),
-			wants_reply: wantsReply,
-		});
+		// #163 S7: the guards, their order and the busy-steer seam live in one module (control-steer);
+		// this handler only supplies the facts and the effects. #120 P2's receipt rule is unchanged:
+		// the receiver reports the boundary it actually observed.
+		await deliverControlSend(
+			{ content: message + senderInfoBlock, message, sender, wantsReply, mode },
+			{
+				isIdle: () => ctx.isIdle(),
+				hasAgentSignal: () => ctx.signal !== undefined,
+				compaction: state.compaction,
+				binding: () => state.binding,
+				context: () => state.context,
+				closing: () => state.closing || state.retireRequested,
+				sessionId: () => ctx.sessionManager.getSessionId(),
+				lookupSeam: () => lookupAcpSteerSeam(),
+				sendMessage: (m, o) => pi.sendMessage(m, o),
+				appendEntry: (t, d) => pi.appendEntry(t, d),
+				customType: SESSION_MESSAGE_TYPE,
+				now: () => new Date().toISOString(),
+				respond: (success, data, error) => respond(success, "send", data, error),
+			},
+		);
 		return;
 	}
 

@@ -128,6 +128,19 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-SEAM-DUPLICATE-REFUSED]",
 			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-DELTA-INTACT",
+			"title": "the injected steer is recorded as a context message instead of a plain entry, so the next turn's reuse signatures shift and a rebuild replays the steer",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\tdeps.appendEntry(STEER_ENTRY_TYPE, {"],
+			"replace": [
+				"\t\tdeps.sendMessage({ customType: STEER_ENTRY_TYPE, content: input.message, display: true }, { triggerTurn: true });\n\t\tvoid ({"
+			],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-DELTA-INTACT]",
+			"signatureSource": "pi-extensions/lib/acp/steer-record.test.ts"
 		}
 	]
 }

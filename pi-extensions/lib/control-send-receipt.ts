@@ -42,7 +42,17 @@
  */
 
 /** The closed boundary set, in the order a reader should learn them. */
-export const ACCEPTANCE_BOUNDARIES = ["sent", "queued-steer", "queued-follow-up", "accepted-unknown-boundary"] as const;
+export const ACCEPTANCE_BOUNDARIES = [
+	"sent",
+	"queued-steer",
+	"queued-follow-up",
+	// #163 S7, provisional names (final names at the wrap-up, never kept as aliases):
+	// a busy ACP turn took the steer as input (not proof the model saw it; no tool is stopped) …
+	"steer-in-turn",
+	// … or the steer request left and whether the backend took it is unknown (never retried).
+	"steer-unknown",
+	"accepted-unknown-boundary",
+] as const;
 
 export type AcceptanceBoundary = (typeof ACCEPTANCE_BOUNDARIES)[number];
 
@@ -66,7 +76,13 @@ export function sendReceiptBoundary(input: { idle: boolean; mode: "steer" | "fol
 
 /** Is this an acceptance a receiver could have observed about itself? */
 export function isObservedBoundary(value: unknown): value is ObservedBoundary {
-	return value === "sent" || value === "queued-steer" || value === "queued-follow-up";
+	return (
+		value === "sent" ||
+		value === "queued-steer" ||
+		value === "queued-follow-up" ||
+		value === "steer-in-turn" ||
+		value === "steer-unknown"
+	);
 }
 
 /**

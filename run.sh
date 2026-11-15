@@ -1159,7 +1159,7 @@ check_control_send_receipt() {
   # #159 adds the three delivery-input seams here as a shared mutant coordinate; discovery remains
   # the beside glob. This reuses the existing gate instead of adding a second help/catalog surface.
   section "control-socket acceptance and received guidance (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/control-send-receipt.test.ts pi-extensions/entwurf-control.test.ts pi-extensions/lib/entwurf-v2-mailbox.test.ts pi-extensions/lib/entwurf-v2-native-push.test.ts
+  run_vitest pi-extensions/lib/control-send-receipt.test.ts pi-extensions/lib/control-steer.test.ts pi-extensions/entwurf-control.test.ts pi-extensions/lib/entwurf-v2-mailbox.test.ts pi-extensions/lib/entwurf-v2-native-push.test.ts
 }
 
 check_control_retire() {
@@ -1574,7 +1574,7 @@ check_acp_steer() {
   # #163 S7: the execution coordinate for the ACP steer claims (VERIFY 「Four rules」 rule 3). Not a
   # discovery path — check-tests-beside-behavior already finds these files; one steer mutant re-runs
   # only the steer beside tests rather than every beside test.
-  run_vitest pi-extensions/lib/acp/acp-client.steer.test.ts pi-extensions/lib/acp/backend.steer.test.ts
+  run_vitest pi-extensions/lib/acp/acp-client.steer.test.ts pi-extensions/lib/acp/backend.steer.test.ts pi-extensions/lib/acp/steer-record.test.ts
 }
 
 check_native_push_runner() {

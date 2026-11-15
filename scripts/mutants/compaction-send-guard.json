@@ -71,18 +71,18 @@
 		{
 			"claim": "COMPACT-SEND-WIRE",
 			"title": "the send path skips the leaf and still calls pi.sendMessage during compaction",
-			"subject": "pi-extensions/entwurf-control.ts",
+			"subject": "pi-extensions/lib/control-steer.ts",
 			"find": [
-				"\t\tconst compactionReject = compactionSendReject(state.compaction, {",
-				"\t\t\tidle: ctx.isIdle(),",
-				"\t\t\thasAgentSignal: ctx.signal !== undefined,",
-				"\t\t});",
-				"\t\tif (compactionReject) {",
-				"\t\t\trespond(false, \"send\", undefined, compactionReject);",
-				"\t\t\treturn;",
-				"\t\t}"
+				"\tconst compactionReject = compactionSendReject(deps.compaction, {",
+				"\t\tidle: deps.isIdle(),",
+				"\t\thasAgentSignal: deps.hasAgentSignal(),",
+				"\t});",
+				"\tif (compactionReject) {",
+				"\t\tdeps.respond(false, undefined, compactionReject);",
+				"\t\treturn;",
+				"\t}"
 			],
-			"replace": ["\t\t// compaction send guard removed"],
+			"replace": ["\t// compaction send guard removed"],
 			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:COMPACT-SEND-WIRE]",

@@ -85,7 +85,24 @@ describe("control-send-receipt", () => {
 			sendReceiptBoundary({ idle: false, mode: "follow_up" }),
 		];
 		expect(new Set(produced).size, "the three observable boundaries are distinct").toBe(3);
-		expect(ACCEPTANCE_BOUNDARIES.length, "the set is closed at four").toBe(4);
+		expect(ACCEPTANCE_BOUNDARIES.length, "the set is closed at six: #120's four and #163's two provisional").toBe(6);
+	});
+
+	it("[QK:SEND-RECEIPT-STEER-IN-TURN] the two #163 receiver values are observable and read back as themselves; the queue classifier never produces them and idle still wins", () => {
+		for (const value of ["steer-in-turn", "steer-unknown"]) {
+			expect(isObservedBoundary(value), `${value} is a boundary a receiver can observe`).toBe(true);
+			expect(parseAcceptanceBoundary({ boundary: value, record: "ok" }), `${value} reads back as itself`).toBe(value);
+		}
+		// They come only from the busy-steer decision (control-steer), never from the queue classifier.
+		const queued = [true, false].flatMap((idle) =>
+			(["steer", "follow_up"] as const).map((mode) => sendReceiptBoundary({ idle, mode })),
+		);
+		expect(queued).not.toContain("steer-in-turn");
+		expect(queued).not.toContain("steer-unknown");
+		expect(sendReceiptBoundary({ idle: true, mode: "steer" })).toBe("sent");
+		expect(parseAcceptanceBoundary({ boundary: "steer-later" }), "a value outside the set stays unknown").toBe(
+			"accepted-unknown-boundary",
+		);
 	});
 
 	it("the unknown diagnostic is bounded and single-line — a peer's payload is untrusted input", () => {

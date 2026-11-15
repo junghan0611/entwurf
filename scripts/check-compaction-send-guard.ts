@@ -34,6 +34,9 @@ function ok(label: string, cond: boolean): void {
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LEAF_SRC = readFileSync(path.join(REPO, "pi-extensions/lib/compaction-send-guard.ts"), "utf8");
 const CONTROL_SRC = readFileSync(path.join(REPO, "pi-extensions/entwurf-control.ts"), "utf8");
+// #163 S7: the send decision (this guard included) moved into lib/control-steer.ts; the extension
+// only routes `send` there and supplies `state.compaction`.
+const STEER_SRC = readFileSync(path.join(REPO, "pi-extensions/lib/control-steer.ts"), "utf8");
 
 function stripComments(src: string): string {
 	return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
@@ -41,6 +44,7 @@ function stripComments(src: string): string {
 
 const leafCode = stripComments(LEAF_SRC);
 const controlCode = stripComments(CONTROL_SRC);
+const steerCode = stripComments(STEER_SRC);
 
 ok("event-armed token is compacting", COMPACTION_SEND_REJECT === "compacting");
 ok("quiet-unknown token is busy, not compacting", BUSY_SEND_REJECT === "busy");
@@ -105,16 +109,18 @@ ok(
 ok(
 	"[QK:COMPACT-SEND-WIRE] resident imports the leaf, consults it before pi.sendMessage, and refuses with the returned token",
 	(() => {
-		const imported =
-			/from "\.\/lib\/compaction-send-guard\.js"/.test(CONTROL_SRC) && /compactionSendReject/.test(controlCode);
+		const imported = /from "\.\/compaction-send-guard\.js"/.test(STEER_SRC) && /compactionSendReject/.test(steerCode);
 		const sendIdx = controlCode.indexOf('if (command.type === "send")');
 		if (sendIdx < 0) return false;
 		const sendBlock = controlCode.slice(sendIdx);
-		const consult = sendBlock.search(/compactionSendReject\s*\(/);
-		const sendMessage = sendBlock.search(/pi\.sendMessage\s*\(/);
-		const ordered = consult >= 0 && sendMessage >= 0 && consult < sendMessage;
-		const refused = /respond\(\s*false,\s*"send",\s*undefined,\s*compactionReject\s*\)/.test(controlCode);
-		return imported && ordered && refused;
+		const routed = /deliverControlSend\(/.test(sendBlock) && /compaction:\s*state\.compaction/.test(sendBlock);
+		const entry = steerCode.indexOf("export async function deliverControlSend");
+		const body = entry < 0 ? "" : steerCode.slice(entry);
+		const consult = body.search(/compactionSendReject\s*\(/);
+		const sendMessage = steerCode.search(/deps\.sendMessage\s*\(/);
+		const ordered = consult >= 0 && sendMessage >= 0 && consult < body.search(/queueNow\(input, deps\)/);
+		const refused = /deps\.respond\(\s*false,\s*undefined,\s*compactionReject\s*\)/.test(steerCode);
+		return imported && routed && ordered && refused;
 	})(),
 );
 

@@ -12,7 +12,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-IDLE-IS-SENT]",
 			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "SEND-RECEIPT-BUSY-STEER-IS-QUEUED",
@@ -24,7 +27,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-BUSY-STEER-IS-QUEUED]",
 			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "SEND-RECEIPT-BUSY-FOLLOWUP-IS-QUEUED",
@@ -36,7 +42,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-BUSY-FOLLOWUP-IS-QUEUED]",
 			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "SEND-RECEIPT-UNKNOWN-IS-ACCEPTED-NOT-SENT",
@@ -48,7 +57,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-UNKNOWN-IS-ACCEPTED-NOT-SENT]",
 			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "SEND-BOUNDARY-CARRIED",
@@ -90,9 +102,9 @@
 		{
 			"claim": "SEND-RECEIVER-EMITS-BOUNDARY",
 			"title": "the receiver goes back to answering with a bare `delivered:true`, which was equally true of a direct trigger and of a message rotting in a queue — the bare `delivered` DELIVERY.md refuses by name, and the sender is left with nothing to render",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\t\tboundary: sendReceiptBoundary({ idle: isIdle, mode }),"],
-			"replace": ["\t\t\tdelivered: true,"],
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\tdeps.respond(true, { boundary, wants_reply: input.wantsReply });"],
+			"replace": ["\tdeps.respond(true, { delivered: true, wants_reply: input.wantsReply });"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:SEND-RECEIVER-EMITS-BOUNDARY]",
@@ -192,7 +204,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:VITEST-TEST-DIR-ON-THE-FLOOR]",
 			"signatureSource": "run.sh",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "PI-CORE-PIN-TRACKS-FLOOR",
@@ -237,7 +252,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:VITEST-TEST-DIR-HAS-COORDINATE]",
 			"signatureSource": "run.sh",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "SEND-OUTCOME-LIST-NAMES-EVERY-RAIL",
@@ -264,7 +282,10 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-RECEIVED-REPLY-GUIDANCE]",
 			"signatureSource": "pi-extensions/entwurf-control.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "MAILBOX-RECEIVED-REPLY-GUIDANCE",
@@ -276,7 +297,10 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:MAILBOX-RECEIVED-REPLY-GUIDANCE]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-mailbox.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "NATIVE-PUSH-RECEIVED-REPLY-GUIDANCE",
@@ -288,7 +312,162 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:NATIVE-PUSH-RECEIVED-REPLY-GUIDANCE]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-native-push.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-INJECTED-SKIPS-QUEUE",
+			"title": "an injected steer is also queued, so the running turn gets it now and Pi delivers it again after the turn",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\t\t\t\tconst record = sameBinding ? recordSteer(input, deps) : \"skipped-binding-changed\";"],
+			"replace": [
+				"\t\t\t\t\tconst record = sameBinding ? recordSteer(input, deps) : \"skipped-binding-changed\";\n\t\t\t\t\tqueueNow(input, deps);"
+			],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-INJECTED-SKIPS-QUEUE]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-FALLBACK-QUEUES",
+			"title": "a steer the backend did not take is dropped instead of queued, so a not-sent or prompt-required steer never arrives",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\t\t\tconst again = compactionSendReject(deps.compaction, {"],
+			"replace": ["\t\t\t\treturn;\n\t\t\t\tconst again = compactionSendReject(deps.compaction, {"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-FALLBACK-QUEUES]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-FOLLOWUP-NEVER-INJECTS",
+			"title": "a follow_up is sent into the running turn like a steer, so a message meant for after the turn interrupts it",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\tif (input.mode === \"steer\" && !deps.isIdle()) {"],
+			"replace": ["\tif (!deps.isIdle()) {"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-FOLLOWUP-NEVER-INJECTS]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-UNKNOWN-NEVER-REQUEUES",
+			"title": "a steer whose outcome is unknown falls back to the queue, so a steer the turn may already hold is delivered twice",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\t\t\tif (effect.effect === \"unknown\") {"],
+			"replace": ["\t\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-UNKNOWN-NEVER-REQUEUES]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-RECORD-FAILURE-IS-DIAGNOSTIC",
+			"title": "a record failure after injection escapes as a handler failure, so an injected steer is reported as never sent",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\treturn `failed:${err instanceof Error ? err.message : String(err)}`;"],
+			"replace": ["\t\tthrow err;"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-RECORD-FAILURE-IS-DIAGNOSTIC]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-AFTER-AWAIT-BOUND",
+			"title": "the post-await check ignores a binding swap, so the new session gets a record (or a queued steer) meant for the old one",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["deps.binding() === bound && !deps.closing() && deps.context() === ctx"],
+			"replace": ["!deps.closing() && deps.context() === ctx"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-AFTER-AWAIT-BOUND]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-AFTER-AWAIT-CLOSING",
+			"title": "the post-await check ignores a close or retire, so a session going away is written to or queued",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["deps.binding() === bound && !deps.closing() && deps.context() === ctx"],
+			"replace": ["deps.binding() === bound && deps.context() === ctx"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-AFTER-AWAIT-CLOSING]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-AFTER-AWAIT-COMPACTING",
+			"title": "the fallback after the await skips the compaction guard, so a steer is queued into a compacting session",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\t\t\t\tif (again) {"],
+			"replace": ["\t\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-AFTER-AWAIT-COMPACTING]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "CONTROL-STEER-AFTER-AWAIT-IDLE",
+			"title": "the fallback keeps the busy reading from before the await, so a turn that ended meanwhile gets a steer queued with nobody to drain it",
+			"subject": "pi-extensions/lib/control-steer.ts",
+			"find": ["\tconst idleNow = deps.isIdle();"],
+			"replace": ["\tconst idleNow = input.mode === \"steer\" ? false : deps.isIdle();"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CONTROL-STEER-AFTER-AWAIT-IDLE]",
+			"signatureSource": "pi-extensions/lib/control-steer.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "SEND-RECEIPT-STEER-IN-TURN",
+			"title": "the sender stops recognising the two #163 receipt values, so a steer the turn took reads as an unknown acceptance",
+			"subject": "pi-extensions/lib/control-send-receipt.ts",
+			"find": ["\t\tvalue === \"steer-unknown\""],
+			"replace": ["\t\tvalue === \"steer-unknown-x\""],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-RECEIPT-STEER-IN-TURN]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		}
 	]
 }
