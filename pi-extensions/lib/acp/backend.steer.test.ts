@@ -277,15 +277,68 @@ describe("busy steer through the ACP turn driver (#163 S7)", () => {
 		expect(await backend.steerBusyAcpSession("S-owner", "m")).toMatchObject({ reason: "no-busy-window" });
 	});
 
-	it("[QK:ACP-STEER-SEAM-DUPLICATE-REFUSED] a second, different seam is refused by name; the same seam again is a no-op; a wrong-shaped value reads as invalid", () => {
+	it("[QK:ACP-STEER-SEAM-DUPLICATE-REFUSED] the same seam again is a no-op; a different seam over an old value that is not a version-1 seam is refused by name and leaves it in place; a wrong-shaped value reads as invalid", () => {
 		const host = {};
-		const seam: AcpSteerSeamV1 = { version: 1, steerBusy: async () => ({ effect: "injected" }) };
+		const seam: AcpSteerSeamV1 = {
+			version: 1,
+			steerBusy: async () => ({ effect: "injected" }),
+			hasOpenWindow: () => false,
+		};
 		registerAcpSteerSeam(seam, host);
 		registerAcpSteerSeam(seam, host);
 		expect(lookupAcpSteerSeam(host)).toEqual({ kind: "ok", seam });
-		expect(() => registerAcpSteerSeam({ ...seam }, host)).toThrow(/^acp-steer-seam-duplicate: /);
 		expect(lookupAcpSteerSeam({})).toEqual({ kind: "absent" });
-		const bad = { [Symbol.for("entwurf.acp.steer.v1")]: { version: 2, steerBusy: () => {} } };
+		const broken = { version: 1, steerBusy: async () => ({ effect: "injected" }) };
+		const old = { [Symbol.for("entwurf.acp.steer.v1")]: broken };
+		expect(() => registerAcpSteerSeam(seam, old)).toThrow(/^acp-steer-seam-duplicate: .*not a version-1 seam/);
+		expect(old[Symbol.for("entwurf.acp.steer.v1")]).toBe(broken);
+		expect(lookupAcpSteerSeam(old)).toMatchObject({ kind: "invalid" });
+		const bad = {
+			[Symbol.for("entwurf.acp.steer.v1")]: { version: 2, steerBusy: () => {}, hasOpenWindow: () => false },
+		};
 		expect(lookupAcpSteerSeam(bad)).toMatchObject({ kind: "invalid" });
+	});
+
+	it("[QK:ACP-STEER-SEAM-RELOAD-IDLE-REPLACES] a different seam replaces an old one whose backend has no prompt in flight (a reload); the real backend's seam reports idle once its turn ended", async () => {
+		const next: AcpSteerSeamV1 = {
+			version: 1,
+			steerBusy: async () => ({ effect: "injected" }),
+			hasOpenWindow: () => false,
+		};
+		const host = {};
+		registerAcpSteerSeam(backend.ACP_STEER_SEAM, host);
+		const w = makeWorld({ _meta: MEASURED_INITIALIZE_META });
+		const { done } = await w.startTurn("S-reload-idle");
+		w.gate.release?.();
+		await done;
+		expect(backend.ACP_STEER_SEAM.hasOpenWindow()).toBe(false);
+		registerAcpSteerSeam(next, host);
+		expect(lookupAcpSteerSeam(host)).toEqual({ kind: "ok", seam: next });
+	});
+
+	it("[QK:ACP-STEER-SEAM-RELOAD-BUSY-REFUSED] a different seam over an old one with a prompt in flight is refused by name and the old seam stays — as is an old seam whose answer throws", async () => {
+		const next: AcpSteerSeamV1 = {
+			version: 1,
+			steerBusy: async () => ({ effect: "injected" }),
+			hasOpenWindow: () => false,
+		};
+		const host = {};
+		registerAcpSteerSeam(backend.ACP_STEER_SEAM, host);
+		const w = makeWorld({ _meta: MEASURED_INITIALIZE_META });
+		const { done } = await w.startTurn("S-reload-busy");
+		expect(backend.ACP_STEER_SEAM.hasOpenWindow()).toBe(true);
+		expect(() => registerAcpSteerSeam(next, host)).toThrow(/^acp-steer-seam-duplicate: .*prompt in flight/);
+		expect(lookupAcpSteerSeam(host)).toEqual({ kind: "ok", seam: backend.ACP_STEER_SEAM });
+		w.gate.release?.();
+		await done;
+		const throwing: AcpSteerSeamV1 = {
+			...next,
+			hasOpenWindow: () => {
+				throw new Error("gone");
+			},
+		};
+		const h2 = {};
+		registerAcpSteerSeam(throwing, h2);
+		expect(() => registerAcpSteerSeam(next, h2)).toThrow(/^acp-steer-seam-duplicate: /);
 	});
 });

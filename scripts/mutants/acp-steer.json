@@ -120,10 +120,10 @@
 		},
 		{
 			"claim": "ACP-STEER-SEAM-DUPLICATE-REFUSED",
-			"title": "a second steer seam silently replaces the first, so the control socket consults another backend instance's window map",
+			"title": "a different seam silently replaces an old value that is not a version-1 seam, so the control socket consults a map no backend owns",
 			"subject": "pi-extensions/lib/acp-steer-seam.ts",
-			"find": ["\tif (existing !== undefined) {"],
-			"replace": ["\tif (false) {"],
+			"find": ["\t\tif (old === null) throw duplicate(\"the registered value is not a version-1 seam\");\n"],
+			"replace": [""],
 			"gate": ["bash", "run.sh", "check-acp-steer"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-SEAM-DUPLICATE-REFUSED]",
@@ -141,6 +141,28 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-DELTA-INTACT]",
 			"signatureSource": "pi-extensions/lib/acp/steer-record.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-SEAM-RELOAD-IDLE-REPLACES",
+			"title": "every old seam reads as busy, so a reload of an idle backend throws and the provider fails to register",
+			"subject": "pi-extensions/lib/acp-steer-seam.ts",
+			"find": ["\t\treturn old.hasOpenWindow() !== false;"],
+			"replace": ["\t\treturn true;"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-SEAM-RELOAD-IDLE-REPLACES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-SEAM-RELOAD-BUSY-REFUSED",
+			"title": "a different seam replaces an old one with a prompt in flight, so the control socket loses that prompt's window",
+			"subject": "pi-extensions/lib/acp-steer-seam.ts",
+			"find": ["\t\tif (reportsOpenWindow(old)) throw duplicate(\"its backend has a prompt in flight\");\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-SEAM-RELOAD-BUSY-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.steer.test.ts"
 		}
 	]
 }

@@ -37,7 +37,10 @@ async function steerEffectsAsEntries(): Promise<SessionEntry[]> {
 			context: () => null,
 			closing: () => false,
 			sessionId: () => "N",
-			lookupSeam: () => ({ kind: "ok", seam: { version: 1, steerBusy: async () => ({ effect: "injected" }) } }),
+			lookupSeam: () => ({
+				kind: "ok",
+				seam: { version: 1, steerBusy: async () => ({ effect: "injected" }), hasOpenWindow: () => true },
+			}),
 			sendMessage: (m) =>
 				out.push({
 					...stamp(out.length),

@@ -857,9 +857,12 @@ idle → `promptRequired`, nothing started.
    `{outcome:"promptRequired"}`; any other shape (`startedNewTurn` included) is `unrecognized`, a
    value, not a throw. A late answer or late rejection after the bound is ignored.
 3. **Seam.** `acp-provider.ts` registers one frozen `ACP_STEER_SEAM` under
-   `Symbol.for("entwurf.acp.steer.v1")` (`lib/acp-steer-seam.ts`); a second, different seam is
-   refused by name (`acp-steer-seam-duplicate`), and a wrong-shaped one makes the send fail as
-   `acp-steer-seam-invalid` with nothing queued. A steer window exists only while a prompt is in
+   `Symbol.for("entwurf.acp.steer.v1")` (`lib/acp-steer-seam.ts`). A different seam replaces the
+   old one only while the old one reports no open window (`hasOpenWindow()`, a reload); over a
+   prompt in flight or a broken old value it is refused by name (`acp-steer-seam-duplicate`). A
+   replaced instance's later prompt is not reachable, so its steer takes the Pi queue — no false
+   success, no double delivery. The real Pi `/reload` path is not measured. A wrong-shaped seam
+   makes the send fail as `acp-steer-seam-invalid` with nothing queued. A steer window exists only while a prompt is in
    flight: `awaitAcpPromptTurn` opens it before the race and its owner closes it in `finally`.
 4. **Exactly one path.** At most one adapter attempt, never a retry, and never both the injection
    and the Pi queue. Only "nothing reached the turn" (`not-sent`: no busy window, steering

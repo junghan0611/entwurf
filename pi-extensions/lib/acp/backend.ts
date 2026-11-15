@@ -507,6 +507,7 @@ export async function steerBusyAcpSession(
 export const ACP_STEER_SEAM: AcpSteerSeamV1 = Object.freeze({
 	version: 1 as const,
 	steerBusy: (piSessionId: string, text: string) => steerBusyAcpSession(piSessionId, text),
+	hasOpenWindow: () => steerWindows.size > 0,
 });
 const retainedChildren = new Set<AcpChildLike>();
 // sessionKeys with a prompt currently in flight. A NEW turn does not enter

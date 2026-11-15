@@ -75,13 +75,13 @@
       1. `5b3eb121` acp-client `requestAcpSteer`: 늘 `idleBehavior:"promptRequired"`, 5 s 상한, 늦은 답과 늦은 reject는 무시.
       2. `2951083b` backend: capability 읽기, prompt마다 owner-checked steer window, `ACP_STEER_SEAM`(`Symbol.for("entwurf.acp.steer.v1")`, 다른 객체는 `acp-steer-seam-duplicate`).
       3. `14db2928` `lib/control-steer.ts` `deliverControlSend`로 send 판정 추출(코디 승인). 결정표는 v2.1 그대로이고, 임시 receipt 두 값 `steer-in-turn`·`steer-unknown`을 쓴다. 기록은 plain entry `entwurf-steer-in-turn`이다.
-      4. 문서 커밋: rail §11-9 채택으로 다시 씀, DELIVERY acceptance 표 임시 두 행 + probe 측정 단락, 이 기록.
-    - 새 실행 좌표 `check-acp-steer`(lane `acp-steer` 12). `control-send-receipt` lane은 +10(build-bridge 선언 동일)으로 33. QK와 mutant는 1:1이고, 새 mutant는 전부 손으로 kill해 각자 QK에 귀속을 확인했다.
+      4. `115cc426` 문서: rail §11-9 채택으로 다시 씀, DELIVERY acceptance 표 임시 두 행 + probe 측정 단락, 이 기록. 뒤이어 seam reload 좁은 예외 커밋.
+    - 새 실행 좌표 `check-acp-steer`(lane `acp-steer` 14). `control-send-receipt` lane은 +10(build-bridge 선언 동일)으로 33. QK와 mutant는 1:1이고, 새 mutant는 전부 손으로 kill해 각자 QK에 귀속을 확인했다.
     - 추출 때문에 기존 원문 모양 검사 둘(`SEND-RECEIVER-EMITS-BOUNDARY` @check-entwurf-v2-surface, `COMPACT-SEND-WIRE` @check-compaction-send-guard)과 그 mutant의 subject를 control-steer.ts로 옮겼다. 그래서 affected PARTIAL에 이 두 그룹이 더해진다.
     - `entwurf-control.test.ts`는 기존 compiled bridge로 돌아 green이지만, 새 send 판정을 거치지 않는다. build 금지라 다시 build하지 않았다.
     - **마무리 묶음으로 넘김:** 최종 receipt 이름, ENTWURF.json 열거("those four")와 `mode` 문구(SEND-PROSE-NO-INTERRUPT 축), sender 쪽 `steer-unknown` 렌더링.
     - **이연:** entry renderer, 로컬 TUI steer(§6), 생성 중 선점 LIVE cell.
-    - **열린 질문:** extension reload 때 seam 중복 throw를 그대로 둘지 — 코디에게 물었고, 아직 답이 없다.
+    - **seam reload (ff08d4 결정 2026-11-15, 좁은 예외):** 옛 seam이 `hasOpenWindow()`로 열린 window가 없다고 답할 때만 다른 객체로 교체한다. 바쁘거나 모양이 깨졌거나 답하다 throw하면 예전처럼 `acp-steer-seam-duplicate`로 throw한다. QK는 `ACP-STEER-SEAM-RELOAD-IDLE-REPLACES`와 `-BUSY-REFUSED` 둘이고, `-DUPLICATE-REFUSED`는 깨진 옛 값 쪽으로 좁혔다. lane `acp-steer`는 14가 됐다. 실제 pi `/reload` 경로는 측정하지 않았다.
 
 # NOW
 

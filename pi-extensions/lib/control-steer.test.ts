@@ -55,6 +55,7 @@ function world(
 									steers.push(text);
 									return seam(text);
 								},
+								hasOpenWindow: () => true,
 							},
 						},
 		sendMessage: (m, o) => sent.push({ content: m.content, options: o }),

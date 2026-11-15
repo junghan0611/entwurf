@@ -73,7 +73,8 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// #163 S7: offer the control socket a way to steer this process's busy ACP turns. Registered
-	// after the provider; a second backend instance's seam is refused by name (acp-steer-seam).
+	// after the provider. Another backend instance's seam is replaced only while it has no prompt in
+	// flight; otherwise this throws by name (acp-steer-seam). The Pi /reload path is not measured.
 	registerAcpSteerSeam(ACP_STEER_SEAM);
 
 	// Mark only AFTER a successful registration. If allCuratedModels() (which
