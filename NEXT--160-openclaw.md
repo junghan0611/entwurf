@@ -69,8 +69,19 @@
   - [x] **S7.0 ACP 측정 (n=1).** STEER-PROBE-21b4c2, receiver ee14c7: steer와 follow_up 모두 6개 도구 경계를 넘지 못했고, prompt가 끝난 뒤 송신 순서대로 각자 한 턴씩 들어왔다(`/tmp/ff08d4-next/steer-probe/RESULT.md`, oracle 로컬; 결정적인 줄은 #163 댓글에 있다).
   - [x] **S7.1 native Pi 기준선 (n=1).** receiver SOL(a30dda). steer는 첫 도구 경계(tick 1 직후)에 들어왔고, follow_up은 prompt가 끝난 뒤에 들어왔다. 비대칭이 양쪽 측정으로 닫혔다(#163 issuecomment-6887813050).
   - [x] **S7.2 정적 판독 + adapter 측정.** 1eed2c. 판독: `/tmp/ff08d4-next/issue163-design-read.md`(fba8342b…). 측정은 GLG 승인 LIVE 예외였고, adapter를 직접 구동했으며 ~/.claude/projects에 transcript 3개가 남았다(지우지 않음). 결과: `issue163-adapter-probe.md`(6f8c3217…). claude-agent-acp 0.107.0은 steering supported이다. 도구 사이에 보내면 `injected`이고 모델이 다음 도구 직전에 본다. foreground sleep 중에 보내면 `injected`이지만 도구는 끝까지 돌고, 끝난 뒤에 본다(stop 아님). idle이면 `promptRequired`이고 아무것도 시작하지 않는다. 방향 A의 전제가 성립한다. 우리 쪽 빈칸은 다섯이다: capability 읽기, steer 요청 경로, control→ACP seam, 이중 전달 정책, receipt 값. 가장 큰 함정은 주입한 steer를 Pi transcript에 user 메시지로 남기면 다음 delta가 깨지는 것이다(context.ts:169-184). 그래서 문맥 밖 기록으로 남긴다.
-  - [ ] **S7.3 설계 (1eed2c, /tmp/ff08d4-next/s7-design.md) → SOL 리뷰.** SOL 1차(41afdb8, `review-s7-design-sol.md` sha 2eb264ae…): Blocker 1 / Defect 2 / Observation 2. B1 await 앞뒤 binding·garden·closing·idle 재검사, D1 fallback 분리(no-send·promptRequired만 재큐, injected·모호는 재큐 0, at-most-one), D2 "interrupt 아님" 문구를 cancel/stop과 backend 선점으로 구분. (a) transcript 밖 기록은 SDK projection으로 확인됨. → 1eed2c가 설계 v2 작성 중, 뒤이어 SOL 짧은 재리뷰. 작업 트리에는 쓰지 않는다. 새 receipt 값의 이름과 ENTWURF.json 열거 갱신은 GLG가 운영 코디와 마무리할 때 함께 정한다(GLG 2026-11-15).
-  - [ ] **S7.4 구현 (ee14c7) → 리뷰 → PARTIAL.** **순서(GLG 2026-11-15): "앞서 하던것 마무리 되고 검증 되면 이걸 진행하자."** S6.5가 재리뷰와 affected PARTIAL까지 통과한 뒤에 시작한다(조건 충족: S6.5 PARTIAL-c green, 391a5500). 작업 트리에 쓰는 형제는 한 번에 하나로 둔다.
+  - [x] **S7.3 설계 (1eed2c, /tmp/ff08d4-next/s7-design.md) → SOL 리뷰.** 닫힘: v2.1(sha 094e22f3…)이 정본이다. SOL 재리뷰 `review-s7-design-sol-b.md`(6bddd592…) F1을 ff08d4가 반영했다. SOL 1차(41afdb8, `review-s7-design-sol.md` sha 2eb264ae…): Blocker 1 / Defect 2 / Observation 2. B1 await 앞뒤 binding·garden·closing·idle 재검사, D1 fallback 분리(no-send·promptRequired만 재큐, injected·모호는 재큐 0, at-most-one), D2 "interrupt 아님" 문구를 cancel/stop과 backend 선점으로 구분. (a) transcript 밖 기록은 SDK projection으로 확인됨. → 1eed2c가 설계 v2 작성 중, 뒤이어 SOL 짧은 재리뷰. 작업 트리에는 쓰지 않는다. 새 receipt 값의 이름과 ENTWURF.json 열거 갱신은 GLG가 운영 코디와 마무리할 때 함께 정한다(GLG 2026-11-15).
+  - [~] **S7.4 구현 (ee14c7) → 리뷰 → PARTIAL.** **순서(GLG 2026-11-15): "앞서 하던것 마무리 되고 검증 되면 이걸 진행하자."** S6.5가 재리뷰와 affected PARTIAL까지 통과한 뒤에 시작한다(조건 충족: S6.5 PARTIAL-c green, 391a5500). 작업 트리에 쓰는 형제는 한 번에 하나로 둔다.
+    - **ee14c7 checkpoint 네 개(baseline e0c639f6, push·build 없음).**
+      1. `5b3eb121` acp-client `requestAcpSteer`: 늘 `idleBehavior:"promptRequired"`, 5 s 상한, 늦은 답과 늦은 reject는 무시.
+      2. `2951083b` backend: capability 읽기, prompt마다 owner-checked steer window, `ACP_STEER_SEAM`(`Symbol.for("entwurf.acp.steer.v1")`, 다른 객체는 `acp-steer-seam-duplicate`).
+      3. `14db2928` `lib/control-steer.ts` `deliverControlSend`로 send 판정 추출(코디 승인). 결정표는 v2.1 그대로이고, 임시 receipt 두 값 `steer-in-turn`·`steer-unknown`을 쓴다. 기록은 plain entry `entwurf-steer-in-turn`이다.
+      4. 문서 커밋: rail §11-9 채택으로 다시 씀, DELIVERY acceptance 표 임시 두 행 + probe 측정 단락, 이 기록.
+    - 새 실행 좌표 `check-acp-steer`(lane `acp-steer` 12). `control-send-receipt` lane은 +10(build-bridge 선언 동일)으로 33. QK와 mutant는 1:1이고, 새 mutant는 전부 손으로 kill해 각자 QK에 귀속을 확인했다.
+    - 추출 때문에 기존 원문 모양 검사 둘(`SEND-RECEIVER-EMITS-BOUNDARY` @check-entwurf-v2-surface, `COMPACT-SEND-WIRE` @check-compaction-send-guard)과 그 mutant의 subject를 control-steer.ts로 옮겼다. 그래서 affected PARTIAL에 이 두 그룹이 더해진다.
+    - `entwurf-control.test.ts`는 기존 compiled bridge로 돌아 green이지만, 새 send 판정을 거치지 않는다. build 금지라 다시 build하지 않았다.
+    - **마무리 묶음으로 넘김:** 최종 receipt 이름, ENTWURF.json 열거("those four")와 `mode` 문구(SEND-PROSE-NO-INTERRUPT 축), sender 쪽 `steer-unknown` 렌더링.
+    - **이연:** entry renderer, 로컬 TUI steer(§6), 생성 중 선점 LIVE cell.
+    - **열린 질문:** extension reload 때 seam 중복 throw를 그대로 둘지 — 코디에게 물었고, 아직 답이 없다.
 
 # NOW
 
@@ -79,7 +90,7 @@
 - **운영 전제 정정:** 옛 "운영 10.9 / 8b18b55" 전제는 낡았다. 운영 버전 SSOT는 nixos-config `ORACLE.md`의 LIVE 줄 하나다 [read ORACLE.md:140, 2026-11-14]: OpenClaw **2026.11.3** · `847611d` · image `openclaw-custom:11.3-candidate-20261113`. 컨테이너 node v24.22.1 / sqlite 3.53.4 [상속: 8216f4 s5-ops-facts]. 따라서 "운영을 11.3으로 맞추는 일"은 이미 끝났다.
 - **경로 축 정정:** 옛 S5 줄의 "컨테이너 경로와 host 경로가 다르다"는 부분만 맞다. `~/repos/gh`, `~/.pi/agent`, `~/org`는 host와 같은 절대경로로도 마운트되어 있다 [측정 `docker inspect openclaw-gateway` Mounts, 2026-11-14]. 다른 것은 봇 workspace의 컨테이너 경로뿐이고, birth `--cwd`는 운영자 명시값(host 절대경로)으로 둔다. record cwd는 send envelope 표시에만 쓰인다.
 - **Tier 1/2 측정 (8216f4, 운영 컨테이너, 읽기 전용):** 컨테이너 CLI에 `--expect-url` 있음. 선언 url `ws://127.0.0.1:18789`로 `sessions.describe` 없는 key → `{"session":null}` rc0 1.56s, 틀린 url → rc1 "Gateway destination changed", state 쓰기 0 [상속: `/tmp/ff08d4-next/s5-f0-tier2.md` sha a6f5853c…, oracle 로컬]. A1(수신 = docker exec shim) 성립.
-- **다음 한 행동 (2026-11-15 12:50 KST):** S6.5 코드 후보 `391a5500`이 리뷰 B0/D0/O0과 PARTIAL-c를 통과했다. 이어서 6f5c09에게 SHA를 전달(peek enum mirror) → SOL이 s7-design.md 리뷰 → 6개 결정 확정(receipt 이름은 GLG·운영 코디 마무리 때) → ee14c7이 S7 구현. 운영 dist rebuild 여부는 GLG 결정. FULL·push·birth 금지 유지.
+- **다음 한 행동 (2026-11-15):** S7.4 checkpoint 4까지 ee14c7이 커밋했다. 코디가 tree를 동결하고 리뷰를 보낸 뒤 affected PARTIAL을 돌린다: check-acp-steer, check-control-send-receipt, check-entwurf-v2-surface, check-compaction-send-guard. 운영 dist rebuild 여부는 GLG가 정한다. FULL·push·birth 금지는 유지한다.
 - **역할 (2026-11-14):** 코디 = `20261113T043350-ff08d4`(Claude Code, oracle). 구현 = `20261114T193422-ee14c7`(이 문서의 writer). 운영 실행 = nixos-config 운영 담당(garden id는 코디가 앎). 운영 코디 68bd94, thinkpad 코디 b22677, thinkpad 검수 9fc008. 보고는 모두 ff08d4로. 커밋은 commit 스킬, push는 GLG.
 
 # S5 결정 (GLG 2026-11-14, ff08d4 중계) — 공개 정책: #160 issuecomment-6876392683

@@ -819,54 +819,84 @@ already emitted a `usage_update` at `compact_boundary` and 0.75.1 still does
 
 Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-measure/README.md`.
 
-## 11-9. A steer reaches an ACP receiver one child turn late (#120 P5, measurement only)
+## 11-9. A busy ACP receiver takes a remote steer inside its turn (#163 S7; was #120 P5)
 
-`entwurf_v2 mode:"steer"` injects into the receiver's pi steering queue; it is not an ACP concept.
-On a NATIVE pi receiver that queue is drained seconds later, and on an ACP receiver it is drained
-one whole child turn later. The difference is not a different drain point — it is the same one.
+**Adopted (#163 S7, provisional receipt names).** A control-socket `send` with `mode:"steer"` to a
+BUSY receiver whose running turn is an ACP prompt is put into that backend turn through the
+adapter's private `_session/steering` request, instead of waiting in Pi's steering queue for the
+whole prompt to end. The decision lives in one place, `pi-extensions/lib/control-steer.ts`
+`deliverControlSend`; `entwurf-control.ts` only calls it. Everything else keeps the old path:
+`follow_up`, an idle receiver, a native Pi receiver (no seam registered), and the fallbacks below.
+
+### What was measured, and why the old path is late
 
 `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` `dist/agent-loop.js:141` awaits `streamAssistantResponse`
 once per turn, and the steering drain is `:186`, after the `turn_end` emit at `:185`. For this rail
-that one await is `pi-extensions/lib/acp/backend.ts:815` —
+that one await is `backend.ts` `awaitAcpPromptTurn` —
 `await Promise.race([session.connection.prompt(promptArgs), lifecycle])` — so it spans the entire
-`session/prompt` round trip. The child's own tool calls and subagent turns are invisible to pi, so
-pi cannot reach `:186` until the child turn ends. Same code path as native, one long await.
+`session/prompt` round trip. The child's own tool calls are invisible to pi, so pi cannot reach
+`:186` until the child turn ends. `[QK:PI-QUEUE-NO-MIDFLIGHT-MERGE]` (`test/pi-queue.oracle.test.ts`)
+proves that mechanism on the installed vendor. `[측정 n=1, 2026-11-15, STEER-PROBE-21b4c2]` an ACP
+receiver held both a steer and a follow_up across six tool boundaries and took each as its own turn
+after the prompt ended; a native Pi receiver took the steer at its first tool boundary (#163
+issuecomment-6887743866, 6887813050). That asymmetry is what S7 closes.
 
-That is a property, not a silent failure: the sender's receipt already says `queued-steer` and
-`DELIVERY.md` already states that both queues are volatile and unordered against each other, so
-nothing here is promised and then quietly not delivered. `[QK:PI-QUEUE-NO-MIDFLIGHT-MERGE]`
-(`test/pi-queue.oracle.test.ts`) proves the mechanism on the installed vendor: a message queued
-while a turn is in flight never joins that turn and arrives as a later one. The delay's SIZE is
-that turn's duration, which the same cell fixes by construction.
+`[측정 n=1, adapter driven directly, claude-agent-acp 0.107.0]` (1eed2c, `issue163-adapter-probe.md`):
+between tools → `injected`, the model sees it before its next tool; during a foreground
+`sleep 30` → `injected`, the tool runs to its end and the model sees the steer after it (no stop);
+idle → `promptRequired`, nothing started.
 
-**Forwarding is not adopted here.** The dated `[측정 2026-09-22]` SDK-method enumeration
-and private-extension observation below belong to the then-installed oracle, not a
-0.85.1 runtime measurement: `AGENT_METHODS` and `CLIENT_METHODS` contained zero entries
-matching `steer`; `_session/steering` was a PRIVATE vendor extension in
-`@agentclientprotocol/claude-agent-acp@0.79.0` (`dist/acp-agent.js:163`, handler at `:7792`),
-client→agent, advertised through `InitializeResponse._meta.steering.supported`.
-The current boundary is our client's lack of a steering path, not a claim that the
-old vendor coordinates describe the current pin. Our client sends `initialize`, `session/new`,
-`session/prompt`, `session/set_config_option` and `session/cancel` (`acp-client.ts:138-149`) and
-has no steering path at all.
+### The path (the five contracts the earlier text named, now owned)
 
-Adopting it would mean owning five things this driver does not own today, each a new contract
-rather than a wiring change:
+1. **Capability.** The `initialize` answer's top-level `_meta.steering.supported === true`
+   (`backend.ts` `readSteeringSupported`) is the only yes; anything else is `steering-unsupported`
+   and the steer takes the Pi queue.
+2. **Request and answer.** `acp-client.ts` `requestAcpSteer` sends one request, ALWAYS with
+   `_meta.steering.idleBehavior:"promptRequired"` so an idle backend never starts a detached turn,
+   bounded by `ACP_STEER_ANSWER_TIMEOUT_MS` (5 s). It reads `{outcome:"injected"}` and
+   `{outcome:"promptRequired"}`; any other shape (`startedNewTurn` included) is `unrecognized`, a
+   value, not a throw. A late answer or late rejection after the bound is ignored.
+3. **Seam.** `acp-provider.ts` registers one frozen `ACP_STEER_SEAM` under
+   `Symbol.for("entwurf.acp.steer.v1")` (`lib/acp-steer-seam.ts`); a second, different seam is
+   refused by name (`acp-steer-seam-duplicate`), and a wrong-shaped one makes the send fail as
+   `acp-steer-seam-invalid` with nothing queued. A steer window exists only while a prompt is in
+   flight: `awaitAcpPromptTurn` opens it before the race and its owner closes it in `finally`.
+4. **Exactly one path.** At most one adapter attempt, never a retry, and never both the injection
+   and the Pi queue. Only "nothing reached the turn" (`not-sent`: no busy window, steering
+   unsupported, no steer method; or `promptRequired`) falls back to the queue — and only if, after
+   the await, the binding, context, native session id and closing state are what they were and
+   the compaction guard still passes. Otherwise the send fails `target-stale` or with the guard's
+   own reason. The fallback re-reads idle, so a turn that ended during the await gets a direct
+   trigger answered `sent`.
+5. **Receipt.** `steer-in-turn` (the backend's running turn accepted it — the model has NOT
+   necessarily read it yet) and `steer-unknown` (a request left and its acceptance is unknown:
+   `timeout`, `connection-closed`, `answer-unrecognized`; it may have been injected, so it is
+   never re-queued and must not be resent blindly). Both names are provisional; DELIVERY.md
+   carries the rows.
 
-1. reading the `_meta.steering.supported` capability, and deciding what a backend without it is;
-2. a typed schema and version fence for a request that is outside the SDK's method set, so a
-   private extension changing shape is a named refusal rather than a silent no-op;
-3. a backend-specific concurrent-request seam from the control extension to a live ACP connection —
-   today a turn is one in-flight `prompt`, and this adds a second request during it;
-4. an exactly-once / ordering policy that picks the outer pi queue or the vendor injection but never
-   both, since those are two independent orderings that currently do not meet;
-5. a receipt mapping for the extension's outcomes — `injected`, `promptRequired`, `startedNewTurn` —
-   plus the idle race, cancel and release meanings behind them. (`idleBehavior:"promptRequired"`
-   lets a host refuse the detached `startedNewTurn` path, but that opt-in is itself a new contract.)
+### What this does and does not mean
 
-The adapter keeps its own turn-settlement bookkeeping internally, and our event mapper ignores
-update kinds it does not handle (`event-mapper.ts:377-378`), so nothing above is a claim that
-Entwurf must replicate vendor internals. The reason to stay put is the five contracts, not a ledger.
+- **No cancel or stop.** Neither mode asks the receiver to cancel its turn or a running tool; a
+  tool in progress runs to its end. Stop is a separate verb and out of scope (#163, decision of 2026-11-14).
+- **Backend generation preemption is possible.** `[판독, not measured]` the adapter preempts the
+  current generation when it injects with `priority:"now"` and continues the SAME prompt as a
+  steered cycle; one prompt still settles once. That is not a receiver cancel, but it is a
+  difference from native Pi, whose steer never cuts a generation. A steer that arrives while the
+  model is thinking or writing text is unmeasured.
+- **Volatile, like the queue.** An injected steer is cancelled with its turn on Esc/cancel —
+  the same grade as `queued-steer`'s "an abort clears the queue".
+- **Record outside the context; rebuild loss.** An injected steer is recorded once as a plain
+  custom entry `entwurf-steer-in-turn` (`appendEntry`), only on the binding it was sent for. It is
+  in the session JSONL, but not in the LLM projection, the next turn's delta or the reuse
+  signatures (`[QK:ACP-STEER-DELTA-INTACT]`, through Pi's real `buildSessionContext`). The cost
+  accepted for stage 1: a NEW child rebuilt from the transcript does not receive the steer's text;
+  the assistant output that followed it remains, the instruction itself is not restored. A record
+  failure is a receipt diagnostic (`record: "failed:<msg>"`), never a failed send. No entry
+  renderer is registered yet; the entry shows with Pi's default.
+- **Local TUI steer is unchanged.** A steer typed into the receiver's own TUI still takes Pi's
+  queue boundary (after the ACP prompt). Only the control-socket path uses the seam.
+- **Fallback boundary.** Whatever falls back is exactly the old `queued-steer` (or `sent`) and keeps
+  the old timing: it can still wait for the whole ACP prompt.
 
 ## 11-10. Pi's own summary is a one-shot, tool-less turn (#163)
 
