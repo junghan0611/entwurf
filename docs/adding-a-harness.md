@@ -711,8 +711,10 @@ rule are both executable rather than remembered:
   instance. This applies from OMP onward; it does not retroactively redesign the operator-metered
   exclusion Copilot's visible fresh was accepted under. A landlord home replaces only this bullet:
   its first release owes `check-openclaw-home-receipt` green in the MUST tier — the
-  candidate-attributed receipt of the replacement behaviours above, which refuses an empty receipt,
-  another candidate's and one naming another home. The cross-harness leg below and the offline,
+  candidate-attributed receipt of the replacement behaviours above. It is strict at every level,
+  names the measured configuration, must postdate the candidate's commit, points each passing row at
+  an evidence file whose sha256 is checked, and is judged against the home the operator names
+  outside the receipt; only rows the contract leaves open may be `unmeasured`, with a reason. The cross-harness leg below and the offline,
   package and exact-SHA floors are unchanged.
 - **LIVE, the cross-harness leg (GLG directive, 2026-08-31):** clause 7 proves the new harness
   against the bridge caller; it does not prove one live model turn CROSSING harnesses in either

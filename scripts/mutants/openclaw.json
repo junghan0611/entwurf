@@ -182,8 +182,8 @@
 			"claim": "OPENCLAW-HOME-RECEIPT-REFUSES",
 			"title": "the landlord-home release step accepts a receipt measured on another candidate, so an old lab run stands in for the head being cut",
 			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
-			"find": ["\t} else if (head !== candidateHead) {"],
-			"replace": ["\t} else if (false) {"],
+			"find": ["} else if (head !== ctx.candidateHead) {"],
+			"replace": ["} else if (false) {"],
 			"gate": ["bash", "run.sh", "check-openclaw-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-HOME-RECEIPT-REFUSES]",
@@ -227,6 +227,83 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-BIRTH-REFUSES-UNKNOWN-PIN]",
 			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-STRICT-KEYS",
+			"title": "the receipt judge stops checking a pass row's keys, so an unmeasured flag or any stray field inside a row rides through green",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["\t\t\t\texactKeys(row, [\"result\", \"evidence\"], at, problems);"],
+			"replace": ["\t\t\t\tvoid row;"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-STRICT-KEYS]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-CONFIG",
+			"title": "the receipt judge no longer binds the configuration to the target's scope, so a receipt measured on another Gateway scope stands",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["if (m && c.scope !== m[1])"],
+			"replace": ["if (false)"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-CONFIG]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-EVIDENCE-DIGEST",
+			"title": "the receipt judge accepts evidence whose file does not carry the stated digest, so an old or edited file stands in",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["else if (actual !== ev.sha256)"],
+			"replace": ["else if (false)"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-EVIDENCE-DIGEST]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-MEASURED-AFTER-COMMIT",
+			"title": "the receipt judge accepts a measurement taken before the candidate existed, so an earlier lab run is relabelled with a new head",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["} else if (!(Date.parse(measuredAt) > ctx.candidateCommittedAtMs)) {"],
+			"replace": ["} else if (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-MEASURED-AFTER-COMMIT]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-UNMEASURED-ALLOWLIST",
+			"title": "the receipt judge lets any row be unmeasured, so a first admission can ship with consume or reply never measured",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["if (!OPENCLAW_HOME_RECEIPT_UNMEASURED_ALLOWED.includes(name)) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-UNMEASURED-ALLOWLIST]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-EXPECTED-TARGET",
+			"title": "the receipt judge trusts the receipt's own target, so a receipt that names another home throughout stands",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["\tif (target !== ctx.expectedTarget) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-EXPECTED-TARGET]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-ROW-INVENTORY",
+			"title": "a required row leaves the production inventory, so a first admission no longer owes model/policy evidence",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["\t\"modelPolicy\",\n\t\"sendScope\","],
+			"replace": ["\t\"sendScope\","],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-ROW-INVENTORY]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
 		}
 	]
 }
