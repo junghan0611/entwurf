@@ -158,8 +158,8 @@ Claude ACP 0.85.1 can reject a prompt with the wire SDK's `RequestError`, code `
 failed. Some tools may already have run. This is an RPC failure, not a successful
 `stopReason`, and a failed tool notification alone is not a turn settlement. The code
 is JSON-RPC's internal error; the kind is Claude's extension vocabulary, not a standard
-retry permission. AIR session-failure metadata remains capability-gated off by
-`clientCapabilities: {}`.
+retry permission. AIR session-failure metadata remains capability-gated off: since #163 S8
+entwurf declares only `clientCapabilities: { session: { compaction: {} } }`, and no AIR capability.
 
 Only the Claude adapter declares `readPromptRejection`. The common loop passes the
 once-resolved adapter at the two prompt catches, not at bootstrap failures, and skips
@@ -242,7 +242,8 @@ credential proxying, or a second harness inside pi.
 
 ### Capability posture
 
-`clientCapabilities: {}` is the support posture, not an oversight. Optional upstream features do not
+`clientCapabilities: { session: { compaction: {} } }` (since #163 S8; `{}` before it) is the support posture, not an
+oversight: the one declared capability is the compaction contract (§11-8-a). Optional upstream features do not
 become reachable merely because an adapter ships them — but they stay out of reach for **two
 different reasons, and collapsing them would hide a real risk**:
 
@@ -262,8 +263,8 @@ different reasons, and collapsing them would hide a real risk**:
 - **Advertised but never called — 0.76.0 adds exactly one.** Upstream #1111 puts a
   `recommendedValue` on AIR config options, and it is **opt-in**: the adapter turns it on only
   when `initialize`'s `clientCapabilities._meta.jetbrains.air.capabilities` names
-  `recommendedValue`. entwurf sends `clientCapabilities: {}` (`backend.ts:1758`), so
-  `useRecommendedValue` is false on every branch. The label normalization, the `default` row and
+  `recommendedValue`. entwurf declares no AIR capability (only `session.compaction`, since
+  #163 S8), so `useRecommendedValue` is false on every branch. The label normalization, the `default` row and
   the effort selector that ride it are unreachable for a second, independent reason as well:
   `[측정 2026-09-10]` `git grep -c configOptions pi-extensions/lib/acp/` is **0**, and entwurf
   has never set `EFFORT_CONFIG_ID`, which is the other gate on the SDK-side `applyFlagSettings`.
@@ -322,8 +323,9 @@ different reasons, and collapsing them would hide a real risk**:
   0.79.0 has 17, and the two new ones are exactly these). Gate one: the lifecycle's
   `presentation` is `clientSupportsCompactionUpdates(this.clientCapabilities) ? "compaction_update"
   : "tool_call"` (`dist/acp-agent.js:1875-1879`), and that predicate reads
-  `capabilities?.session?.compaction` — entwurf sends `clientCapabilities: {}` (`backend.ts:1758`),
-  so we keep the 0.75.0 `tool_call` presentation §11-8 already measured. The replay path
+  `capabilities?.session?.compaction` — entwurf sent `clientCapabilities: {}` then, so it kept
+  the 0.75.0 `tool_call` presentation §11-8 measured. Since #163 S8 it declares
+  `session.compaction` and takes `compaction_update` instead (§11-8-a). The replay path
   (`:5082`) is guarded by the same predicate at `:4915`. Gate two, independent: our mapper's
   update switch has a `default: break` — "unknown update kinds are ignored (forward-compatible)"
   (`event-mapper.ts:311-313`, `:377-378`). The "map every terminal reason, unknown is an error" rule
@@ -332,7 +334,7 @@ different reasons, and collapsing them would hide a real risk**:
 - **0.78.0's checkpoint file-change report and AIR diff counts are both behind the AIR gate.**
   `supportsAgentFileChangeReport` is `clientSupportsAirCapability(capabilities, "agentFileChangeReport")`
   (`dist/file-change-audit.js:27-29` 직독), and `air-extension.js`'s only delta is one added
-  constant `AIR_DIFF_STATS_KEY` (full-file `diff`, one line). Same `clientCapabilities: {}`
+  constant `AIR_DIFF_STATS_KEY` (full-file `diff`, one line). Same no-AIR-capability
   argument as the 0.76.0 `recommendedValue` entry — re-measured, not inherited.
 - **0.79.0's shell-command permission prompts reach our permission handler's INPUT and change no
   decision.** The change reorders options: when the CLI hints `defaultToNo` (new in 0.79.0 —
@@ -348,7 +350,7 @@ different reasons, and collapsing them would hide a real risk**:
 - **0.77.0–0.79.0's remaining fixes are unreachable under our capability posture.** The
   AskUserQuestion multi-select/custom-text fixes (#1031, #1131) require form elicitation:
   the adapter computes `disallowedTools = elicitationSupport.form ? [] : ["AskUserQuestion"]`
-  from `clientCapabilities.elicitation.form`, which our `{}` leaves false, so AskUserQuestion is
+  from `clientCapabilities.elicitation.form`, which entwurf does not declare, so AskUserQuestion is
   disabled on every session we open. The TaskList regex fix (#1006) is internal parsing. #1128's
   tool names land on `presentation.toolCall._meta.claudeCode` on the permission-request path
   (`dist/acp-agent.js:5317-5325`), which our handler ignores; our `titleForTool` already read
@@ -648,8 +650,8 @@ reuse signature. That same rendered string is what `bridgeConfigSignature` folds
 `buildSessionMeta` sends; normalizing it at either hop desynchronizes the wire from the
 signature.
 
-`clientCapabilities` intentionally remains empty. Terminal-output widgets and nested
-subagent transcripts are therefore not requested. Enabling either is a separate
+`clientCapabilities` declares only `session.compaction` (#163 S8, §11-8-a). Terminal-output
+widgets and nested subagent transcripts are therefore not requested. Enabling either is a separate
 rendering contract, not a capability bit flip.
 
 ### Cortex Code audit (D1–D10)
@@ -825,7 +827,8 @@ Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-meas
 declares `clientCapabilities.session.compaction`, so claude-agent-acp 0.107.0 reports a compaction
 as `compaction_update {compactionId, status}` with the summary on the terminal update (or as
 `compaction_summary_chunk`s), and the occupancy around it as `usage_update.used` (measured: probe
-cell C2). The mapper's tool-call handling and its `[QK:ACP-COMPACTION-LINE/ONCE/FAILED]` stay as a
+cell C2). The capability goes to every adapter's `initialize`; only the claude adapter is
+live-measured with it. The mapper's tool-call handling and its `[QK:ACP-COMPACTION-LINE/ONCE/FAILED]` stay as a
 defensive contract for an adapter that ignores the capability; they write no record. Retiring
 them is out of S8's scope.
 
@@ -839,8 +842,10 @@ adapter's own idle compaction is off (`idleCompaction: false`, `[QK:ACP-CLAUDE-N
 
 **What is recorded.** For each compaction of a prompt, one plain custom entry
 `entwurf-acp-compaction` is written at that prompt's `message_end`, just before the assistant
-message (`lib/acp/compaction-record.ts`, `compaction-writer.ts`). Its values are what Entwurf
-observed, not what the backend reported:
+message — by Pi's order of extension `message_end` then persist, read in the SDK
+(`agent-session.js:810-826`), not run (`lib/acp/compaction-record.ts`, `compaction-writer.ts`).
+`status`, `summary` and `error` are what the backend reported; the token counts and times are
+what Entwurf observed:
 
 - `status` is the adapter's own terminal status; `unterminated` means only that no terminal was
   observed (the adapter closes an open compaction as `cancelled` at a turn boundary, so this is
@@ -859,8 +864,9 @@ observed, not what the backend reported:
 
 Only a compaction inside the prompt window is recorded: a `session/load` replay re-emits past
 summaries under other ids and is not. Pi's own summary turn and a turn with no Pi session id
-record nothing. The display line (`[acp: compaction completed 969k→19k, 64s observed]`) carries
-facts only and waits for the `after`, the next compaction or the window close.
+record nothing: their compactions are held only for that turn's display line and never deposited
+for a `message_end` (the summary text passes through that turn's memory; it is not kept after it).
+The display line (`[acp: compaction completed 969k→19k, 1m4s observed]`) carries facts only and waits for the `after`, the next compaction or the window close.
 
 **Information, not context (AGENTS Rule 9).** The record is outside Pi's model-context projection,
 and Entwurf never reads it into a prompt, a rebuild or a backend session
@@ -873,16 +879,16 @@ own summary and what followed; a child built anew from the host transcript remem
 transcript, which never held the child's internal tool results. The record shows where the live
 child's memory became a summary, but a rebuild does not receive it. Unchanged and approved: a Pi
 compaction closes the child and the next turn builds a new one from the compacted host context.
-What is refused is injecting anything into a live child, or using a recorded summary as rebuild
-input. Since Pi's threshold reads the child's occupancy, the host transcript a rebuild would
+What is refused is injecting the recorded compaction facts or summary into a live child, or
+using a recorded summary as rebuild input. Since Pi's threshold reads the child's occupancy, the host transcript a rebuild would
 send is not measured by anything; a very long session's rebuild can exceed the window and then
 fails with the overflow diagnostic.
 
 **A lost record is visible, within limits.** Writing never fails the turn. A record that cannot be
 written, or one the backend had to drop because no `message_end` took it, is reported once as a
-UI warning when there is a UI and once on stderr, never with the summary. The backend says a drop
-on stderr at the moment it happens; the UI hears of it only through a later take of the same
-session. Headless, stderr is the only trace (accepted boundary, GLG 2026-11-15). There is no
+UI warning when there is a UI and once on stderr by the writer, never with the summary. A drop has
+a stderr line of its own as well, from the backend at the moment it drops — two stages, one line
+each; the UI hears of a drop only through a later take of the same session. Headless, stderr is the only trace (accepted boundary, GLG 2026-11-15). There is no
 viewer for the stored summary yet: it is kept like Pi's own compaction summary, but not shown like
 one.
 

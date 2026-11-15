@@ -1391,8 +1391,12 @@ export function streamAcpTurn(
 			state.compaction.windowOpen = true;
 		};
 	}
+	/** #163 S8: set once this turn's records were deposited (a seal followed by a catch is two calls). */
+	let compactionDeposited = false;
 	/** #163 S8: after finalize — keep this prompt's records for its message_end, report what was not kept. */
 	function depositCompaction(): void {
+		if (compactionDeposited) return;
+		compactionDeposited = true;
 		const fenced = state.compactionFencedOut ?? 0;
 		if (fenced > 0) {
 			process.stderr.write(`[acp] ignored ${fenced} compaction update(s) outside the prompt window\n`);

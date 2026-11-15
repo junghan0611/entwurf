@@ -172,6 +172,30 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-COMPACT-LOSS-VISIBLE]",
 			"signatureSource": "pi-extensions/lib/acp/compaction-roundtrip.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-DEPOSIT-ONCE",
+			"title": "a turn that throws after its seal deposits its records twice, so a saved compaction is later reported dropped or written twice",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (compactionDeposited) return;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-DEPOSIT-ONCE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-WINDOW-CLOSE-LINE-IN-STREAM",
+			"title": "the collector is closed after the turn's terminal event, so the window-close line comes after <done> instead of in the answer",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\tstate.compactionRecords = state.compaction.close();"],
+			"replace": [
+				"\t\tconst collector = state.compaction;\n\t\tqueueMicrotask(() => {\n\t\t\tstate.compactionRecords = collector.close();\n\t\t});"
+			],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-WINDOW-CLOSE-LINE-IN-STREAM]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
 		}
 	]
 }

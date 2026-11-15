@@ -98,9 +98,13 @@ const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 }));
 
 /** A world whose connection speaks `script.bootstrap` during newSession and `script.prompt` with the prompt on the wire. */
-function makeWorld(script: { bootstrap?: unknown[]; prompt?: unknown[] }) {
+function makeWorld(
+	script: { bootstrap?: unknown[]; prompt?: unknown[] },
+	shape: { turnScoped?: boolean; closeThrows?: boolean } = {},
+) {
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
 	const initializeParams: unknown[] = [];
+	let closeThrew = false;
 	const deps: AcpTurnDeps = {
 		spawnChild: () => {
 			const pipe = () => ({ destroy() {}, unref() {} });
@@ -138,10 +142,17 @@ function makeWorld(script: { bootstrap?: unknown[]; prompt?: unknown[] }) {
 					return { stopReason: "end_turn" } as AcpPromptResponse;
 				},
 				cancel: () => {},
-				close: () => {},
+				close: () => {
+					// Once, right after the seal: the catch's own close then succeeds (the production close
+					// is best-effort and never throws; this stands in for any throw after the seal).
+					if (shape.closeThrows && !closeThrew) {
+						closeThrew = true;
+						throw new Error("close failed after the seal");
+					}
+				},
 			};
 		},
-		lifecyclePolicy: () => "process-scoped",
+		lifecyclePolicy: () => (shape.turnScoped ? "turn-scoped" : "process-scoped"),
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,
@@ -167,11 +178,19 @@ function makeWorld(script: { bootstrap?: unknown[]; prompt?: unknown[] }) {
 		} as Parameters<typeof backend.streamAcpTurn>[2];
 		let shown = "";
 		let sealed = "";
+		/** The stream's own event order: text deltas by content, then the terminal. */
+		const order: string[] = [];
+		let final: { content: Array<{ type: string; text?: string }> } | undefined;
 		for await (const e of backend.streamAcpTurn(sonnet(), ctx, options, deps)) {
-			if (e.type === "text_delta") shown += e.delta;
+			if (e.type === "text_delta") {
+				shown += e.delta;
+				order.push(e.delta);
+			}
+			if (e.type === "done") final = e.message as never;
+			if (e.type === "done" || e.type === "error") order.push(`<${e.type}>`);
 			if (e.type === "done" || e.type === "error") sealed = e.type;
 		}
-		return { shown, sealed };
+		return { shown, sealed, order, final };
 	};
 	return { deps, initializeParams, turn };
 }
@@ -254,6 +273,9 @@ describe("the ACP child's compactions through the turn driver (#163 S8)", () => 
 		expect(backend.takeAcpCompactionRecords("S-summary-uuid").records).toEqual([]);
 		expect((s.value as { shown: string }).shown).not.toContain("compaction");
 		expect((s.value as { shown: string }).shown).not.toContain("SUMMARY-MARK");
+		// v5.2 §2: the summary turn's text is the same as with no compaction frame at all.
+		const plainSummary = await makeWorld({}).turn({ sessionId: "S-summary-uuid-2", summary: true });
+		expect((s.value as { shown: string }).shown).toBe(plainSummary.shown);
 
 		const cwd = makeWorld({ prompt: c2Frames("IN-CWD") });
 		const c = await stderrLines(() => cwd.turn({}));
@@ -281,5 +303,30 @@ describe("the ACP child's compactions through the turn driver (#163 S8)", () => 
 			droppedBefore: [{ compactionId: "STRANDED", status: "completed" }],
 		});
 		expect(backend.takeAcpCompactionRecords("S-drop")).toEqual({ records: [], droppedBefore: [] });
+	});
+
+	it("[QK:ACP-COMPACT-WINDOW-CLOSE-LINE-IN-STREAM] a terminal with no usage after it: the line goes out when the prompt answers, in the stream before <done> and in the final content, without the summary", async () => {
+		const frames = c2Frames("NO-AFTER").filter((f) => f.sessionUpdate !== "usage_update");
+		const w = makeWorld({ prompt: frames });
+		const out = await w.turn({ sessionId: "S-window-close" });
+		const lineAt = out.order.findIndex((d) => d.includes("compaction completed"));
+		const doneAt = out.order.indexOf("<done>");
+		expect(lineAt).toBeGreaterThanOrEqual(0);
+		expect(doneAt).toBeGreaterThan(lineAt);
+		const content = (out.final?.content ?? []).map((b) => b.text ?? "").join("");
+		expect(content).toContain("compaction completed");
+		expect(content).not.toContain("SUMMARY-MARK");
+		const [record] = backend.takeAcpCompactionRecords("S-window-close").records;
+		expect(record.tokensAfter).toBeNull();
+	});
+
+	it("[QK:ACP-COMPACT-DEPOSIT-ONCE] a turn that throws after its seal (close fails) deposits its records once: one record, and no false drop at the next window", async () => {
+		const throwing = makeWorld({ prompt: c2Frames("SEAL-THEN-THROW") }, { turnScoped: true, closeThrows: true });
+		await throwing.turn({ sessionId: "S-deposit-once" });
+		expect(backend.takeAcpCompactionRecords("S-deposit-once").records).toHaveLength(1);
+		const next = makeWorld({}, { turnScoped: true });
+		const { lines } = await stderrLines(() => next.turn({ sessionId: "S-deposit-once" }));
+		expect(lines.filter((l) => l.includes("dropped"))).toEqual([]);
+		expect(backend.takeAcpCompactionRecords("S-deposit-once")).toEqual({ records: [], droppedBefore: [] });
 	});
 });
