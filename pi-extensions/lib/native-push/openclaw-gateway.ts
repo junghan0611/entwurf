@@ -83,6 +83,14 @@ export interface OpenclawRoute {
 	/** The declared absolute `bin`; absent → the adapter's default program. */
 	readonly bin?: string;
 	readonly sessionKey: string;
+	/**
+	 * The described session's `pinnedAt` (epoch ms) when the Gateway reports one. OpenClaw 2026.11.3
+	 * puts it on the session row only for a pinnable session that is pinned (openclaw@847611d
+	 * src/gateway/session-utils-row.ts:417-418, :484-486; `sessions.describe` answers that row,
+	 * src/gateway/server-methods/sessions-read-by-key.ts:22-80). Read by birth (#160 S6 §1b); send
+	 * ignores it. An absent or non-numeric value is "not pinned", never guessed.
+	 */
+	readonly pinnedAt?: number;
 }
 
 export interface OpenclawGatewayAdapterDeps {
@@ -145,6 +153,14 @@ function parseJsonObject(stdout: string): Record<string, unknown> | null {
 	} catch {
 		return null;
 	}
+}
+
+/** The `pinnedAt` of an alive `sessions.describe` answer, when it is a finite number. Pure. */
+export function describedPinnedAt(stdout: string): number | undefined {
+	const s = parseJsonObject(stdout)?.session;
+	if (s === null || typeof s !== "object" || Array.isArray(s)) return undefined;
+	const v = (s as Record<string, unknown>).pinnedAt;
+	return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
 
 /** Classify a `sessions.describe` result for `sessionKey`. Pure. */
@@ -240,7 +256,9 @@ export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): 
 				timeoutMs: OPENCLAW_PROBE_TIMEOUT_MS,
 			});
 			const verdict = classifyOpenclawDescribe(r.code, r.stdout, r.stderr, route.sessionKey);
-			return verdict === "alive" ? { status: "alive", route } : verdict;
+			if (verdict !== "alive") return verdict;
+			const pinnedAt = describedPinnedAt(r.stdout);
+			return { status: "alive", route: pinnedAt === undefined ? route : { ...route, pinnedAt } };
 		},
 
 		async send(route, nativeSessionId, content) {

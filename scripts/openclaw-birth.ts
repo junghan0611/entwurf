@@ -49,7 +49,11 @@ const result = await birthOpenclawCitizen(
 			return listAllMetaIdentities(readActiveStoreEntries(dir), makeStoreRecordReader(dir), { mode: "strict" })
 				.identities;
 		},
-		probe: (nativeSessionId) => resolveNativePushAdapter(OPENCLAW_BACKEND).probe(nativeSessionId),
+		probe: async (nativeSessionId) => {
+			const p = await resolveNativePushAdapter(OPENCLAW_BACKEND).probe(nativeSessionId);
+			if (p.status !== "alive") return p;
+			return { status: "alive", pinnedAt: p.route.backend === "openclaw" ? p.route.pinnedAt : undefined };
+		},
 		upsert: (nativeSessionId, cwd) => {
 			const r = upsertMetaSession({ input: { backend: OPENCLAW_BACKEND, nativeSessionId, cwd } });
 			return { action: r.action, gardenId: r.record.gardenId };

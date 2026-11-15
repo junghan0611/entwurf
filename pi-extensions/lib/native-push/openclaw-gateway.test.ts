@@ -159,6 +159,19 @@ describe("probe", () => {
 		expect(r.calls).toEqual([]);
 	});
 
+	it("[QK:OPENCLAW-PROBE-READS-PINNED-AT] an alive describe carries the session's numeric pinnedAt onto the route, and only a finite number counts", async () => {
+		const pinned = JSON.stringify({
+			session: { key: "agent:main:s1m1", sessionId: "2de2", pinned: true, pinnedAt: 1763100000000 },
+		});
+		const a = await adapter(runner({ code: 0, stdout: pinned, stderr: "" })).probe(ID);
+		expect(a).toEqual({ status: "alive", route: { ...ROUTE, pinnedAt: 1763100000000 } });
+		for (const pinnedAt of [undefined, null, "1763100000000", Number.NaN]) {
+			const out = JSON.stringify({ session: { key: "agent:main:s1m1", pinned: true, pinnedAt } });
+			const b = await adapter(runner({ code: 0, stdout: out, stderr: "" })).probe(ID);
+			expect(b).toEqual({ status: "alive", route: ROUTE });
+		}
+	});
+
 	it("a broken declaration throws by name (Rule 15), with no vendor call", async () => {
 		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
 		await expect(

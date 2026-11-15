@@ -155,6 +155,28 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-PROBE-HOME-GATE]",
 			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-BIRTH-REQUIRES-PIN",
+			"title": "birth writes a record for a desk the Gateway reports unpinned, so OpenClaw's maintenance may archive the garden's only mailbox",
+			"subject": "pi-extensions/lib/openclaw-birth.ts",
+			"find": ["\tif (probe.pinnedAt === undefined) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-BIRTH-REQUIRES-PIN]",
+			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PROBE-READS-PINNED-AT",
+			"title": "the receive probe drops the described pinnedAt, so birth refuses every desk as unpinned, or reads any non-number as pinned",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\treturn typeof v === \"number\" && Number.isFinite(v) ? v : undefined;"],
+			"replace": ["\treturn v === undefined || v === null ? undefined : Number(v);"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-READS-PINNED-AT]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
 		}
 	]
 }

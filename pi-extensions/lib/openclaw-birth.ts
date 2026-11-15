@@ -45,9 +45,10 @@ export interface OpenclawBirthDeps {
 	readDeclaration: () => OpenclawCitizensDeclaration | null;
 	/** The active records — including ones whose key has left the declaration (#160 S6 §7 (2)). */
 	listIdentities: () => readonly OpenclawHomeRecord[];
+	/** The receive adapter's probe; an alive answer carries the session's `pinnedAt` when pinned. */
 	probe: (
 		nativeSessionId: string,
-	) => Promise<{ status: "alive" } | { status: "dead" | "indeterminate"; reason: string }>;
+	) => Promise<{ status: "alive"; pinnedAt?: number } | { status: "dead" | "indeterminate"; reason: string }>;
 	upsert: (nativeSessionId: string, cwd: string) => { action: "create" | "attach"; gardenId: string };
 }
 
@@ -99,6 +100,15 @@ export async function birthOpenclawCitizen(
 	if (probe.status !== "alive") {
 		throw new OpenclawBirthError(
 			`openclaw-birth: Gateway ${picked.gateway.url} does not confirm ${id.sessionKey} (${probe.status}: ${probe.reason}); no record written`,
+		);
+	}
+
+	// The desk must be pinned (#160 S6 §1b, GLG): OpenClaw keeps a pinned session out of its
+	// maintenance archive. This closes that one automatic archive path; it does not guarantee the
+	// session against deletion, an unpin or another Gateway.
+	if (probe.pinnedAt === undefined) {
+		throw new OpenclawBirthError(
+			`openclaw-birth: openclaw-desk-not-pinned: ${id.sessionKey} is alive but not pinned on ${picked.gateway.url}; pin it first (sessions.patch {"key":…,"pinned":true}); no record written`,
 		);
 	}
 

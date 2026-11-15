@@ -26,7 +26,7 @@ const MOVED = parseOpenclawCitizensDeclaration(
 
 function deps(
 	status: "alive" | "dead" | "indeterminate" = "alive",
-	opts: { decl?: typeof DECL; existing?: OpenclawHomeRecord[] } = {},
+	opts: { decl?: typeof DECL; existing?: OpenclawHomeRecord[]; pinnedAt?: number | null } = {},
 ) {
 	const store = new Map<string, string>();
 	const order: string[] = [];
@@ -44,7 +44,10 @@ function deps(
 		},
 		probe: async (id) => {
 			order.push(`probe ${id}`);
-			return status === "alive" ? { status } : { status, reason: "r" };
+			if (status !== "alive") return { status, reason: "r" };
+			// A pinned desk unless the cell says otherwise (null = the Gateway reports no pinnedAt).
+			const pinnedAt = opts.pinnedAt === undefined ? 1763100000000 : opts.pinnedAt;
+			return pinnedAt === null ? { status } : { status, pinnedAt };
 		},
 		upsert: (id, cwd) => {
 			order.push(`upsert ${id} ${cwd}`);
@@ -104,6 +107,15 @@ describe("birthOpenclawCitizen", () => {
 			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, twice.d),
 		).rejects.toThrow(/openclaw-home-ambiguous/);
 		expect(twice.store.size).toBe(0);
+	});
+
+	it("[QK:OPENCLAW-BIRTH-REQUIRES-PIN] an alive desk the Gateway reports without pinnedAt is refused as openclaw-desk-not-pinned and nothing is written", async () => {
+		const h = deps("alive", { pinnedAt: null });
+		await expect(
+			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, h.d),
+		).rejects.toThrow(/openclaw-desk-not-pinned: agent:main:s1m1 .*no record written/);
+		expect(h.order).toEqual(["decl", "list", "probe openclaw:lab:agent:main:s1m1"]);
+		expect(h.store.size).toBe(0);
 	});
 
 	it.each([
