@@ -819,6 +819,73 @@ already emitted a `usage_update` at `compact_boundary` and 0.75.1 still does
 
 Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-measure/README.md`.
 
+### 11-8-a. The child's own compaction, recorded in the host session (#163 S8)
+
+**Since S8 the tool-call presentation above is no longer the production path.** `initialize` now
+declares `clientCapabilities.session.compaction`, so claude-agent-acp 0.107.0 reports a compaction
+as `compaction_update {compactionId, status}` with the summary on the terminal update (or as
+`compaction_summary_chunk`s), and the occupancy around it as `usage_update.used` (measured: probe
+cell C2). The mapper's tool-call handling and its `[QK:ACP-COMPACTION-LINE/ONCE/FAILED]` stay as a
+defensive contract for an adapter that ignores the capability; they write no record. Retiring
+them is out of S8's scope.
+
+**Two compactors, and why Pi cannot be the owner.** Pi compacts only at a turn boundary, when the
+occupancy it reads (`usage.totalTokens` = the child's `used`, `[QK:ACP-CONTEXT-OCCUPANCY-PRESERVED]`)
+exceeds `contextWindow − reserveTokens` (983,616 on the 1M window). The child compacts inside a
+prompt (observed once at 969k, mid-prompt, 2026-11-15). Inside one long ACP prompt the child
+compacts first whatever Pi's setting is, and a Pi compaction does not shrink the live child's
+context — only closing it and building a new child does (`[QK:ACP-COMPACT-CLOSES-CHILD]`). The
+adapter's own idle compaction is off (`idleCompaction: false`, `[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]`).
+
+**What is recorded.** For each compaction of a prompt, one plain custom entry
+`entwurf-acp-compaction` is written at that prompt's `message_end`, just before the assistant
+message (`lib/acp/compaction-record.ts`, `compaction-writer.ts`). Its values are what Entwurf
+observed, not what the backend reported:
+
+- `status` is the adapter's own terminal status; `unterminated` means only that no terminal was
+  observed (the adapter closes an open compaction as `cancelled` at a turn boundary, so this is
+  rare: a dead child, or a terminal that arrived after the prompt window closed).
+- `promptWasCompactCommand` is the observed fact that the prompt was `/compact` — not a cause. The
+  adapter gives a non-AIR client no cause, and a `/compact` prompt can also hold an automatic
+  compaction.
+- `tokensBefore` / `tokensAfter` carry their source and observation time; a value not observed is
+  null. `tokensAfter` is the adapter's report right after the compaction (a 0 there, the adapter's
+  fallback, is null). It is not the next turn's occupancy or budget: in two probe runs the next
+  prompt reported about 15k more; the cause was not measured.
+- `observedIntervalMs` is the receipt interval, not a backend duration; null when the start was
+  not seen.
+- `summary` is the adapter's text as received, with `summarySource` `terminal` or `chunks` (the
+  streamed raw API text) and `summaryChars`.
+
+Only a compaction inside the prompt window is recorded: a `session/load` replay re-emits past
+summaries under other ids and is not. Pi's own summary turn and a turn with no Pi session id
+record nothing. The display line (`[acp: compaction completed 969k→19k, 64s observed]`) carries
+facts only and waits for the `after`, the next compaction or the window close.
+
+**Information, not context (AGENTS Rule 9).** The record is outside Pi's model-context projection,
+and Entwurf never reads it into a prompt, a rebuild or a backend session
+(`[QK:ACP-COMPACT-SUMMARY-NOT-IN-CHILD]`, `-NOT-IN-PI-CONTEXT`, `-NOT-IN-TEXT`). That proof covers
+Entwurf's code; whether tools outside Entwurf that read session files read custom entries was
+not examined. Pi emits `entry_appended` for it, so an RPC/JSON consumer sees it by design.
+
+**The two memories still differ on a rebuild (stated boundary).** The live child remembers its
+own summary and what followed; a child built anew from the host transcript remembers the host
+transcript, which never held the child's internal tool results. The record shows where the live
+child's memory became a summary, but a rebuild does not receive it. Unchanged and approved: a Pi
+compaction closes the child and the next turn builds a new one from the compacted host context.
+What is refused is injecting anything into a live child, or using a recorded summary as rebuild
+input. Since Pi's threshold reads the child's occupancy, the host transcript a rebuild would
+send is not measured by anything; a very long session's rebuild can exceed the window and then
+fails with the overflow diagnostic.
+
+**A lost record is visible, within limits.** Writing never fails the turn. A record that cannot be
+written, or one the backend had to drop because no `message_end` took it, is reported once as a
+UI warning when there is a UI and once on stderr, never with the summary. The backend says a drop
+on stderr at the moment it happens; the UI hears of it only through a later take of the same
+session. Headless, stderr is the only trace (accepted boundary, GLG 2026-11-15). There is no
+viewer for the stored summary yet: it is kept like Pi's own compaction summary, but not shown like
+one.
+
 ## 11-9. A busy ACP receiver takes a remote steer inside its turn (#163 S7; was #120 P5)
 
 **Adopted (#163 S7, provisional receipt names).** A control-socket `send` with `mode:"steer"` to a

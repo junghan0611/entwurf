@@ -94,6 +94,16 @@
     - **재리뷰 (965ba297):** SOL `review-s7-impl-sol-b.md` 1aa3d3b9… B0/D0/O3, 1eed2c `review-s7-impl-1eed2c-b.md` 594d3768… B0/D0/O4. Observation(timeout 고정 지점을 production send 호출에도, rail n 표기 n=2·n=1, detail 상한 121자 문구, wire→surface fixture를 실제 executeDispatch로)은 S8 묶음에서 함께 닫는다. lock-dirty에서 부가 진단이 사라지는 것은 현 범위로 수용.
     - **S7 PARTIAL (candidate 965ba297).** 2026-11-15 05:58–06:08Z, HEAD 동결, 그룹마다 1회, 실패·재시도 0. 6그룹 모두 passed, control ok, treeClean·porcelainClean, candidate.head·seal.headAfter = 965ba297, claimCount 1611. 72/72 KILLED: `check-acp-steer` 16/16, `check-control-send-receipt` 19/19, `check-entwurf-v2-surface` 20/20, `check-compaction-send-guard` 7/7, `check-entwurf-v2-send` 5/5, `check-entwurf-v2-production` 5/5. receipt `/tmp/ff08d4-next/partial-s7/<group>.json`(oracle 로컬, ff08d4가 직접 읽음). PARTIAL은 FULL 통과가 아니고, 출하 정지선은 그대로다.
 
+- [~] **S8. #163 ACP 컴팩트 정보 갭 (이 브랜치에서).** GLG 2026-11-15: "pi 수동 컴팩트와 동일한 수준로서 정보의 갭은 없길", "클로드코드 세션에 밀어넣는게 아니라, pi 세션에 정보 격차 해소". ACP만 다룬다. 설계 정본: `/tmp/ff08d4-next/s8-design.v5-final.md`(e7d0e694) + v5.1(73e6eff4) + v5.2(ecf190c3). 리뷰: 68bd94·Fable v5/v5.1/v5.2. 측정: probe C1/C2(adapter 직접, `s8-probe-raw/`). GLG 결정: U1 폐기(Pi는 컴팩트 주체가 될 수 없음), S1 전문 → K1(`session.compaction` 선언), Rule 9 문구 B, headless는 stderr-only.
+  - **구현 (ee14c7, 기준 cbb0dd9f):**
+    - CP1 `a8fb10c0`: S7 Observation — production send timeout 명시(`SEND-RPC-USES-SENDER-BOUND`), fixture가 실제 executeDispatch를 지남(`SEND-STEER-DIAGNOSTIC-RUNNER-FORWARDS`), rail n=2/n=1과 121자, lock-dirty 진단 경계.
+    - CP2 `5ad87b4b`: K1 선언, prompt별 수집기(`lib/acp/compaction-record.ts`: status, 관측 provenance, summary와 summarySource), window fence, 수집 단계 범위, after까지 미루는 표시 줄, 떠도는 기록의 stderr 버림과 take/droppedBefore. 새 lane `acp-compaction`, 좌표 `check-acp-compaction`.
+    - CP3 `93e070c4`: provider message_end → `compaction-writer.ts` → plain custom entry `entwurf-acp-compaction`(assistant 메시지 앞). 손실은 UI notify + stderr. 실제 SessionManager 저장 → 다시 열기 → projection roundtrip 증명. `check-acp-provider-surface` 구독 고정을 두 개로 바꿈.
+    - CP4: AGENTS Rule 9에 B 한 문장, rail §11-8-a(두 컴팩트 주체와 Pi가 주체가 될 수 없는 이유, 기록의 뜻, Rule 9 경계, 재구성 갈라짐 경계, 손실 가시화 범위, viewer 없음), 이 기록.
+  - **설계와 다른 곳:** QK `ACP-COMPACT-DISCARD-STDERR`를 LOSS-VISIBLE에서 떼어 냈다(claim:QK 1:1). PROMPT-FENCE는 mapper 셀이 mutant를 죽인다(NEW 경로에서는 bootstrap frame이 턴 state에 닿지 않음, #142 handler 설치 시점).
+  - **판독으로만 닫은 것:** §5.1 /new·resume·fork 뒤 sessionId 일치(agent-session-runtime.js:128-250 → sdk.js:276). 테스트는 "다른 id의 take는 빈 값"을 고정한다.
+  - **남은 것:** 리뷰(68bd94, Fable) → affected PARTIAL. Rule 9를 반복하는 6곳(CONTRIBUTING:11,24 / DELIVERY:21 / README:222,228 / rail:240 / adding-a-harness:65)은 판독했고, 모두 "Entwurf는 hydration하지 않는다"로 여전히 참이라 바꾸지 않았다.
+
 # NOW
 
 - **현재 HEAD:** S5.5b 기록 커밋(NEXT만). 코드 후보는 `f13c3e99`(PARTIAL-b 통과, 운영 dist도 이 코드로 build됨 [상속: ff08d4]). push 안 함. 이 checkout은 oracle 운영 설치이기도 하고, 운영 dist는 ff08d4가 clean tree에서만 build한다.
@@ -101,7 +111,7 @@
 - **운영 전제 정정:** 옛 "운영 10.9 / 8b18b55" 전제는 낡았다. 운영 버전 SSOT는 nixos-config `ORACLE.md`의 LIVE 줄 하나다 [read ORACLE.md:140, 2026-11-14]: OpenClaw **2026.11.3** · `847611d` · image `openclaw-custom:11.3-candidate-20261113`. 컨테이너 node v24.22.1 / sqlite 3.53.4 [상속: 8216f4 s5-ops-facts]. 따라서 "운영을 11.3으로 맞추는 일"은 이미 끝났다.
 - **경로 축 정정:** 옛 S5 줄의 "컨테이너 경로와 host 경로가 다르다"는 부분만 맞다. `~/repos/gh`, `~/.pi/agent`, `~/org`는 host와 같은 절대경로로도 마운트되어 있다 [측정 `docker inspect openclaw-gateway` Mounts, 2026-11-14]. 다른 것은 봇 workspace의 컨테이너 경로뿐이고, birth `--cwd`는 운영자 명시값(host 절대경로)으로 둔다. record cwd는 send envelope 표시에만 쓰인다.
 - **Tier 1/2 측정 (8216f4, 운영 컨테이너, 읽기 전용):** 컨테이너 CLI에 `--expect-url` 있음. 선언 url `ws://127.0.0.1:18789`로 `sessions.describe` 없는 key → `{"session":null}` rc0 1.56s, 틀린 url → rc1 "Gateway destination changed", state 쓰기 0 [상속: `/tmp/ff08d4-next/s5-f0-tier2.md` sha a6f5853c…, oracle 로컬]. A1(수신 = docker exec shim) 성립.
-- **다음 한 행동 (2026-11-15 15:10 KST):** S7.4는 PARTIAL green(965ba297)이다. 다음은 S8(ACP 컴팩트 정보 갭, GLG 2026-11-15 "pi 수동 컴팩트와 동일한 수준로서 정보의 갭은 없길", ACP만): ee14c7 설계 v3(`/tmp/ff08d4-next/s8-design.md`) → 운영 코디 68bd94·Fable 8200c5 리뷰(GLG 지정) → 구현 → PARTIAL. S7 Observation도 S8 묶음에서 닫는다. 출하는 마무리 묶음 뒤다(정지선 위). 운영 dist rebuild 여부는 GLG가 정한다. FULL·push·birth 금지는 유지한다.
+- **다음 한 행동 (2026-11-15):** S8 구현 CP1–CP4를 ee14c7이 커밋했다(cbb0dd9f 위). 코디가 동결 → 리뷰(68bd94, Fable) → affected PARTIAL. 출하 정지선(S7 마무리 묶음 전 merge·release 없음)은 그대로다. FULL·push·birth 금지는 유지한다.
 - **역할 (2026-11-14):** 코디 = `20261113T043350-ff08d4`(Claude Code, oracle). 구현 = `20261114T193422-ee14c7`(이 문서의 writer). 운영 실행 = nixos-config 운영 담당(garden id는 코디가 앎). 운영 코디 68bd94, thinkpad 코디 b22677, thinkpad 검수 9fc008. 보고는 모두 ff08d4로. 커밋은 commit 스킬, push는 GLG.
 
 # S5 결정 (GLG 2026-11-14, ff08d4 중계) — 공개 정책: #160 issuecomment-6876392683
