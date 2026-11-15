@@ -127,6 +127,17 @@ describe("probe", () => {
 		expect(r.calls).toEqual([]);
 	});
 
+	it("[QK:OPENCLAW-CLOSED-DECL-REFUSES-PROBE] a closed declaration (empty allow) is indeterminate naming openclaw-scope-not-declared, never dead, with no vendor call", async () => {
+		const closed = parseOpenclawCitizensDeclaration(
+			JSON.stringify({ version: 1, gateways: [{ scope: "lab", url: "ws://127.0.0.1:18811" }], allow: [] }),
+		);
+		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
+		const res = await adapter(r, () => closed).probe(ID);
+		expect(res).toMatchObject({ status: "indeterminate" });
+		expect("reason" in res && res.reason).toMatch(/^openclaw-scope-not-declared: /);
+		expect(r.calls).toEqual([]);
+	});
+
 	it("a broken declaration throws by name (Rule 15), with no vendor call", async () => {
 		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
 		await expect(

@@ -12,7 +12,6 @@ const DECL = parseOpenclawCitizensDeclaration(
 		version: 1,
 		gateways: [{ scope: "lab", url: "ws://127.0.0.1:18811" }],
 		allow: [{ scope: "lab", agentId: "main", sessionKey: "agent:main:s1m1" }],
-		freshKeyPrefix: { scope: "lab", agentId: "main", prefix: "agent:main:entwurf-" },
 	}),
 );
 
@@ -63,13 +62,6 @@ describe("birthOpenclawCitizen", () => {
 		const b = await birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, h.d);
 		expect(b).toMatchObject({ action: "attach", gardenId: a.gardenId });
 		expect(h.store.size).toBe(1);
-	});
-
-	it("a fresh-prefix key is admitted", async () => {
-		const h = deps();
-		await expect(
-			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:entwurf-n1", cwd: "/lab/ws" }, h.d),
-		).resolves.toMatchObject({ nativeSessionId: "openclaw:lab:agent:main:entwurf-n1" });
 	});
 
 	it.each([

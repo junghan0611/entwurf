@@ -326,7 +326,7 @@
 				{
 					"synopsis": "check-openclaw-beside",
 					"column": 38,
-					"summary": "#160 mutant execution coordinate (VERIFY rule 3): run_vitest over the four OpenClaw beside tests (scope declaration, receive adapter, fresh launch, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs."
+					"summary": "#160 mutant execution coordinate (VERIFY rule 3): run_vitest over the six OpenClaw beside tests (scope declaration, receive adapter, birth, send claim, send entry round trip, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs."
 				},
 				{
 					"synopsis": "check-native-push-runner",

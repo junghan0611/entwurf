@@ -7,10 +7,10 @@
  * declared but has no record is not a citizen; a record whose key has left the declaration is
  * refused by scope on both send and receive, and its record is preserved (Hard Rule 8).
  *
- * Two forms of scope, one rule:
- *  - `allow`: exact (scope, agentId, sessionKey) triples — an existing fixed session;
- *  - `freshKeyPrefix`: one (scope, agentId, prefix) — keys a fresh launcher may create.
- * Entwurf never rewrites this file (a writer would make it a second ledger).
+ * One form of scope: `allow`, exact (scope, agentId, sessionKey) triples — the fixed mailbox of an
+ * existing bot home whose lifecycle its Gateway owns (#160 S6, landlord-home). An empty `allow` is a
+ * valid CLOSED declaration: every key is refused by scope and no record changes. Entwurf never
+ * creates a session here and never rewrites this file (a writer would make it a second ledger).
  *
  * `scope` is an operator-chosen label for ONE Gateway state root. OpenClaw session keys are
  * unique only inside one Gateway's state root (S2 card §1: two Gateways may both hold
@@ -67,22 +67,15 @@ export interface OpenclawAllowedKey {
 	sessionKey: string;
 }
 
-export interface OpenclawFreshKeyPrefix {
-	scope: string;
-	agentId: string;
-	prefix: string;
-}
-
 export interface OpenclawCitizensDeclaration {
 	gateways: readonly OpenclawGateway[];
 	allow: readonly OpenclawAllowedKey[];
-	freshKeyPrefix?: OpenclawFreshKeyPrefix;
 }
 
 export type OpenclawScopeRejectReason = "openclaw-scope-not-declared";
 
 export type OpenclawScopeSelection =
-	| { gateway: OpenclawGateway; via: "allow" | "fresh-prefix" }
+	| { gateway: OpenclawGateway }
 	| { reason: OpenclawScopeRejectReason; detail: string };
 
 // ── field grammar ────────────────────────────────────────────────────────────
@@ -194,26 +187,11 @@ function parseAllow(raw: unknown, what: string): OpenclawAllowedKey {
 	};
 }
 
-function parsePrefix(raw: unknown, what: string): OpenclawFreshKeyPrefix {
-	const obj = requireObject(raw, what);
-	requireKeys(obj, ["agentId", "prefix", "scope"], [], what);
-	const agentId = requireOpenclawAgentId(obj.agentId, `${what}.agentId`);
-	// A prefix is a key head: the same grammar as a key, so `agent:<id>:` alone (every key of the
-	// agent) is refused — the fresh scope must be narrower than the agent.
-	return {
-		scope: requireOpenclawScope(obj.scope, `${what}.scope`),
-		agentId,
-		prefix: requireOpenclawSessionKey(obj.prefix, agentId, `${what}.prefix`),
-	};
-}
-
 /**
  * Set rules over the whole file, independent of order: scopes and urls are unique among gateways
  * (two labels for one Gateway would mint two citizens for one session — compared as parsed URL
  * text, so `localhost` vs `127.0.0.1`, or two routes to one Gateway, are NOT caught: a named
- * boundary, review O4); every allow/prefix scope
- * names a declared gateway; no exact triple twice; and the two forms stay disjoint — an allowed
- * fixed key may not also fall under the fresh prefix, so each key's admission has one reason.
+ * boundary, review O4); every allow scope names a declared gateway; and no exact triple twice.
  */
 function checkSets(decl: OpenclawCitizensDeclaration, what: string): void {
 	const scopes = new Set<string>();
@@ -232,14 +210,7 @@ function checkSets(decl: OpenclawCitizensDeclaration, what: string): void {
 		const t = `${a.scope}\u0000${a.sessionKey}`;
 		if (triples.has(t)) fail(at, `duplicate key ${a.sessionKey} in scope ${a.scope}`);
 		triples.add(t);
-		const p = decl.freshKeyPrefix;
-		if (p && p.scope === a.scope && a.sessionKey.startsWith(p.prefix)) {
-			fail(at, `key ${a.sessionKey} also falls under freshKeyPrefix ${p.prefix}; the two forms must be disjoint`);
-		}
 	});
-	if (decl.freshKeyPrefix && !scopes.has(decl.freshKeyPrefix.scope)) {
-		fail(`${what}.freshKeyPrefix`, `scope ${decl.freshKeyPrefix.scope} names no declared gateway`);
-	}
 }
 
 export function parseOpenclawCitizensDeclaration(text: string): OpenclawCitizensDeclaration {
@@ -251,7 +222,7 @@ export function parseOpenclawCitizensDeclaration(text: string): OpenclawCitizens
 		fail(what, `not JSON (${err instanceof Error ? err.message : String(err)})`);
 	}
 	const obj = requireObject(raw, what);
-	requireKeys(obj, ["allow", "gateways", "version"], ["freshKeyPrefix"], what);
+	requireKeys(obj, ["allow", "gateways", "version"], [], what);
 	if (obj.version !== OPENCLAW_DECLARATION_VERSION) {
 		fail(what, `"version" must be ${OPENCLAW_DECLARATION_VERSION} (got ${JSON.stringify(obj.version)})`);
 	}
@@ -263,12 +234,7 @@ export function parseOpenclawCitizensDeclaration(text: string): OpenclawCitizens
 		gateways: obj.gateways.map((g, i) => parseGateway(g, `${what}.gateways[${i}]`)),
 		allow: obj.allow.map((a, i) => parseAllow(a, `${what}.allow[${i}]`)),
 	};
-	if (Object.hasOwn(obj, "freshKeyPrefix")) {
-		decl.freshKeyPrefix = parsePrefix(obj.freshKeyPrefix, `${what}.freshKeyPrefix`);
-	}
-	if (decl.allow.length === 0 && !decl.freshKeyPrefix) {
-		fail(what, `declares no key: "allow" is empty and there is no "freshKeyPrefix"`);
-	}
+	// An empty `allow` is accepted: it is the closed declaration (S6 §7), not a broken file.
 	checkSets(decl, what);
 	return decl;
 }
@@ -322,11 +288,7 @@ export function selectOpenclawScope(
 		};
 	}
 	if (decl.allow.some((a) => a.scope === scope && a.agentId === agentId && a.sessionKey === sessionKey)) {
-		return { gateway, via: "allow" };
-	}
-	const p = decl.freshKeyPrefix;
-	if (p && p.scope === scope && p.agentId === agentId && sessionKey.startsWith(p.prefix)) {
-		return { gateway, via: "fresh-prefix" };
+		return { gateway };
 	}
 	return {
 		reason: "openclaw-scope-not-declared",

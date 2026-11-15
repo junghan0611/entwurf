@@ -591,9 +591,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// #160 S5.4 D1: the mutant execution coordinate of the openclaw lane, right after the remote-pair one.
 		{
 			after: "  entwurf check-remote-pair-beside    # ",
-			line: "  entwurf check-openclaw-beside       # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the four OpenClaw beside tests (scope declaration, receive adapter, fresh launch, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs.",
+			line: "  entwurf check-openclaw-beside       # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the six OpenClaw beside tests (scope declaration, receive adapter, birth, send claim, send entry round trip, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs.",
 			receipt:
-				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-fresh and plugins/openclaw/core tests (#160 S5.4)",
+				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-birth, openclaw-send, openclaw-send-roundtrip and plugins/openclaw/core tests (#160 S5.4, S6.5)",
 		},
 		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the openclaw one.
 		{

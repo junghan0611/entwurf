@@ -139,6 +139,20 @@ function bodies(): string[] {
 		: [];
 }
 
+/** Every file under the store with its bytes, to prove a refusal changed no record. */
+function storeBytes(): Record<string, string> {
+	const out: Record<string, string> = {};
+	const walk = (d: string) => {
+		for (const n of fs.readdirSync(d)) {
+			const f = path.join(d, n);
+			if (fs.statSync(f).isDirectory()) walk(f);
+			else out[path.relative(agent, f)] = fs.readFileSync(f, "utf8");
+		}
+	};
+	walk(path.join(agent, "meta-sessions"));
+	return out;
+}
+
 const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean) : []);
 
 describe("O7 surface-in: the real openclaw-send entry, read by the real plugin classifier", () => {
@@ -170,6 +184,22 @@ describe("O7 surface-in: the real openclaw-send entry, read by the real plugin c
 		expect(o).toMatchObject({ outcome: "rejected", reason: "openclaw-scope-not-declared" });
 		expect(calls()).toEqual([]);
 		expect(bodies()).toEqual([]);
+	}, 60_000);
+
+	it("[QK:OPENCLAW-CLOSED-DECL-REFUSES-SEND] exit 3: with the last mailbox removed (empty allow) the declared sender is refused by scope and no record changes", () => {
+		fs.writeFileSync(
+			decl,
+			JSON.stringify({ version: 1, gateways: [{ scope: "lab", url: "ws://127.0.0.1:18811" }], allow: [] }),
+		);
+		const before = storeBytes();
+		const r = runEntry(claim());
+		const o = classifyEntryResult(r);
+		expect(r.code, `${r.stdout}\n${r.stderr}`).toBe(3);
+		expect(o).toMatchObject({ outcome: "rejected", reason: "openclaw-scope-not-declared" });
+		expect(calls()).toEqual([]);
+		expect(bodies()).toEqual([]);
+		expect(storeBytes()).toEqual(before);
+		expect(Object.keys(before).length).toBeGreaterThan(0);
 	}, 60_000);
 
 	it("[QK:OPENCLAW-ROUNDTRIP-WRONG-DECL] exit 2: --decl that is not this host's declaration is invalid before the claim is read", () => {

@@ -1560,8 +1560,8 @@ check_remote_pair_beside() {
 check_openclaw_beside() {
   # #160 S5.4: the execution coordinate for the OpenClaw claims (VERIFY 「Four rules」 rule 3). Not a
   # discovery path — check-tests-beside-behavior already finds these files. Every openclaw QK lives
-  # in one of them, so one mutant re-runs these four files rather than every beside test.
-  run_vitest pi-extensions/lib/openclaw-citizens.test.ts pi-extensions/lib/native-push/openclaw-gateway.test.ts pi-extensions/lib/openclaw-fresh.test.ts plugins/openclaw/core.test.mjs
+  # in one of them, so one mutant re-runs these six files rather than every beside test.
+  run_vitest pi-extensions/lib/openclaw-citizens.test.ts pi-extensions/lib/native-push/openclaw-gateway.test.ts pi-extensions/lib/openclaw-birth.test.ts pi-extensions/lib/openclaw-send.test.ts pi-extensions/lib/openclaw-send-roundtrip.test.ts plugins/openclaw/core.test.mjs
 }
 
 check_native_push_runner() {

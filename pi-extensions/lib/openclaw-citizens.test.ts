@@ -21,7 +21,6 @@ import {
 
 const GW = { scope: "lab-a", url: "ws://127.0.0.1:18811" };
 const KEY = { scope: "lab-a", agentId: "main", sessionKey: "agent:main:s1m1" };
-const PREFIX = { scope: "lab-a", agentId: "main", prefix: "agent:main:entwurf-" };
 
 function decl(over: Record<string, unknown> = {}): string {
 	return JSON.stringify({ version: 1, gateways: [GW], allow: [KEY], ...over });
@@ -30,16 +29,27 @@ function decl(over: Record<string, unknown> = {}): string {
 describe("parseOpenclawCitizensDeclaration", () => {
 	it("accepts the card's shape, with and without the optional parts", () => {
 		expect(parseOpenclawCitizensDeclaration(decl())).toEqual({ gateways: [GW], allow: [KEY] });
-		const full = parseOpenclawCitizensDeclaration(
-			decl({ gateways: [{ ...GW, configPath: "/srv/oc/openclaw.json" }], freshKeyPrefix: PREFIX }),
-		);
+		const full = parseOpenclawCitizensDeclaration(decl({ gateways: [{ ...GW, configPath: "/srv/oc/openclaw.json" }] }));
 		expect(full.gateways[0].configPath).toBe("/srv/oc/openclaw.json");
-		expect(full.freshKeyPrefix).toEqual(PREFIX);
 		// #160 S5 1b: an absolute program path instead of `openclaw` on PATH.
 		const withBin = parseOpenclawCitizensDeclaration(decl({ gateways: [{ ...GW, bin: "/opt/oc/openclaw-shim" }] }));
 		expect(withBin.gateways[0]).toEqual({ ...GW, bin: "/opt/oc/openclaw-shim" });
-		// Prefix only, no fixed key.
-		expect(parseOpenclawCitizensDeclaration(decl({ allow: [], freshKeyPrefix: PREFIX })).allow).toEqual([]);
+	});
+
+	it("[QK:OPENCLAW-EMPTY-ALLOW-IS-CLOSED] an empty allow parses as a closed declaration that admits no key", () => {
+		const closed = parseOpenclawCitizensDeclaration(decl({ allow: [] }));
+		expect(closed).toEqual({ gateways: [GW], allow: [] });
+		expect(selectOpenclawScope(closed, "lab-a", "main", "agent:main:s1m1")).toMatchObject({
+			reason: "openclaw-scope-not-declared",
+		});
+	});
+
+	it("[QK:OPENCLAW-PREFIX-FIELD-REFUSED] the retired freshKeyPrefix field is refused by the strict parser, never ignored", () => {
+		expect(() =>
+			parseOpenclawCitizensDeclaration(
+				decl({ freshKeyPrefix: { scope: "lab-a", agentId: "main", prefix: "agent:main:entwurf-" } }),
+			),
+		).toThrow(/keys must be allow, gateways, version \(got allow, freshKeyPrefix, gateways, version\)/);
 	});
 
 	it("[QK:OPENCLAW-BIN-CONFIGPATH-REFUSED] a gateway declaring both bin and configPath is refused by name", () => {
@@ -63,7 +73,6 @@ describe("parseOpenclawCitizensDeclaration", () => {
 		["not JSON", "{", /not JSON/],
 		["wrong version", decl({ version: 2 }), /"version" must be 1/],
 		["no gateways", decl({ gateways: [] }), /"gateways" must be a non-empty array/],
-		["nothing declared", decl({ allow: [] }), /declares no key/],
 		["scope with colon", decl({ gateways: [{ ...GW, scope: "a:b" }] }), /scope: must match/],
 		["uppercase scope", decl({ gateways: [{ ...GW, scope: "Lab" }] }), /scope: must match/],
 		["http url", decl({ gateways: [{ ...GW, url: "http://127.0.0.1:18811" }] }), /must be ws: or wss:/],
@@ -82,13 +91,6 @@ describe("parseOpenclawCitizensDeclaration", () => {
 		["duplicate key", decl({ allow: [KEY, KEY] }), /duplicate key/],
 		["duplicate scope", decl({ gateways: [GW, { ...GW, url: "ws://127.0.0.1:2" }] }), /duplicate scope/],
 		["one url two scopes", decl({ gateways: [GW, { ...GW, scope: "other" }] }), /declared under another scope/],
-		["agent-wide prefix", decl({ freshKeyPrefix: { ...PREFIX, prefix: "agent:main:" } }), /must start with/],
-		[
-			"allow inside prefix",
-			decl({ allow: [{ ...KEY, sessionKey: "agent:main:entwurf-x" }], freshKeyPrefix: PREFIX }),
-			/must be disjoint/,
-		],
-		["undeclared prefix scope", decl({ freshKeyPrefix: { ...PREFIX, scope: "oracle" } }), /names no declared/],
 		["stray top key", decl({ extra: 1 }), /keys must be/],
 	])("refuses %s by name", (_name, text, pattern) => {
 		expect(() => parseOpenclawCitizensDeclaration(text)).toThrow(pattern);
@@ -112,9 +114,9 @@ describe("readOpenclawCitizens", () => {
 	it("is re-read on every call (no cache)", () => {
 		const f = path.join(dir, "openclaw-citizens.json");
 		fs.writeFileSync(f, decl());
-		expect(readOpenclawCitizens(f)?.freshKeyPrefix).toBeUndefined();
-		fs.writeFileSync(f, decl({ freshKeyPrefix: PREFIX }));
-		expect(readOpenclawCitizens(f)?.freshKeyPrefix).toEqual(PREFIX);
+		expect(readOpenclawCitizens(f)?.allow).toEqual([KEY]);
+		fs.writeFileSync(f, decl({ allow: [] }));
+		expect(readOpenclawCitizens(f)?.allow).toEqual([]);
 	});
 
 	it("refuses a symlink, a directory and an invalid file, naming the path", () => {
@@ -144,21 +146,16 @@ describe("readOpenclawCitizens", () => {
 });
 
 describe("selectOpenclawScope", () => {
-	const d = parseOpenclawCitizensDeclaration(decl({ freshKeyPrefix: PREFIX }));
+	const d = parseOpenclawCitizensDeclaration(decl());
 
-	it("admits a fixed key and a fresh-prefix key, each with its reason", () => {
-		expect(selectOpenclawScope(d, "lab-a", "main", "agent:main:s1m1")).toEqual({ gateway: GW, via: "allow" });
-		expect(selectOpenclawScope(d, "lab-a", "main", "agent:main:entwurf-n1")).toEqual({
-			gateway: GW,
-			via: "fresh-prefix",
-		});
+	it("admits exactly a declared fixed key", () => {
+		expect(selectOpenclawScope(d, "lab-a", "main", "agent:main:s1m1")).toEqual({ gateway: GW });
 	});
 
 	it.each([
 		["undeclared scope", "oracle", "main", "agent:main:s1m1"],
 		["undeclared key", "lab-a", "main", "agent:main:main"],
 		["agent mismatch on fixed key", "lab-a", "ops", "agent:main:s1m1"],
-		["agent mismatch on prefix", "lab-a", "ops", "agent:main:entwurf-n1"],
 	])("refuses %s as openclaw-scope-not-declared", (_n, scope, agentId, key) => {
 		expect(selectOpenclawScope(d, scope, agentId, key)).toMatchObject({ reason: "openclaw-scope-not-declared" });
 	});

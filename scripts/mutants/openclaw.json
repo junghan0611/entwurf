@@ -47,15 +47,48 @@
 			"signatureSource": "plugins/openclaw/core.test.mjs"
 		},
 		{
-			"claim": "OPENCLAW-FRESH-TUI-REFUSES-BIN",
-			"title": "the fresh TUI launch ignores a declared bin and launches the host binary, opening a TUI against some other Gateway than the container one the declaration names",
-			"subject": "pi-extensions/lib/openclaw-fresh.ts",
-			"find": ["\tif (gateway.bin !== undefined) {"],
-			"replace": ["\tif (false) {"],
+			"claim": "OPENCLAW-EMPTY-ALLOW-IS-CLOSED",
+			"title": "the declaration parser refuses an empty allow again, so closing a home's last mailbox reads as a broken file instead of a closed declaration",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["\t// An empty `allow` is accepted: it is the closed declaration (S6 §7), not a broken file."],
+			"replace": ["\tif (decl.allow.length === 0) fail(what, \"declares no key\");"],
 			"gate": ["bash", "run.sh", "check-openclaw-beside"],
 			"timeoutSeconds": 600,
-			"signature": "[QK:OPENCLAW-FRESH-TUI-REFUSES-BIN]",
-			"signatureSource": "pi-extensions/lib/openclaw-fresh.test.ts"
+			"signature": "[QK:OPENCLAW-EMPTY-ALLOW-IS-CLOSED]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PREFIX-FIELD-REFUSED",
+			"title": "the declaration parser tolerates the retired freshKeyPrefix field and silently ignores it, so an old fresh scope looks accepted",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["requireKeys(obj, [\"allow\", \"gateways\", \"version\"], [], what);"],
+			"replace": ["requireKeys(obj, [\"allow\", \"gateways\", \"version\"], [\"freshKeyPrefix\"], what);"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PREFIX-FIELD-REFUSED]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-CLOSED-DECL-REFUSES-SEND",
+			"title": "the send entry stops refusing a sender outside the declaration, so a closed home (empty allow) still dispatches as its old garden",
+			"subject": "pi-extensions/lib/openclaw-send.ts",
+			"find": ["\tif (!(\"gateway\" in scoped)) return { kind: \"rejected\", ...scoped };"],
+			"replace": ["\tif (false) return { kind: \"rejected\", reason: \"openclaw-scope-not-declared\", detail: \"\" };"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-CLOSED-DECL-REFUSES-SEND]",
+			"signatureSource": "pi-extensions/lib/openclaw-send-roundtrip.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-CLOSED-DECL-REFUSES-PROBE",
+			"title": "the receive probe stops refusing a record outside the declaration, so a closed home is still probed and delivered to",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\t\t\tif (!(\"gateway\" in picked)) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-CLOSED-DECL-REFUSES-PROBE]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
 		}
 	]
 }

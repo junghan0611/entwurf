@@ -316,7 +316,6 @@
 		"pi-extensions/lib/openclaw-citizens.ts",
 		"pi-extensions/lib/openclaw-send.ts",
 		"pi-extensions/lib/openclaw-birth.ts",
-		"pi-extensions/lib/native-push/openclaw-gateway.ts",
-		"pi-extensions/lib/openclaw-fresh.ts"
+		"pi-extensions/lib/native-push/openclaw-gateway.ts"
 	]
 }
