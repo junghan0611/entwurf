@@ -58,9 +58,10 @@
 
 - [ ] **S7. #163 ACP steer 대칭 (이 브랜치에서).** GLG 2026-11-15: "이건 대칭이 아닌 문제라 해결해야하니까", "근야 이브랜치에서 구현하자. 지금 dist 구조 바뀌어서 브랜치 바꾸면 연결 끊길수도 있으니까. … 이건 UX 상으로 매우 중요하다." 목표는 busy ACP receiver에도 remote `mode=steer`가 backend의 단계 경계에서 들어가게 해서, steer의 뜻을 모든 control-socket receiver에서 같게 만드는 것이다. ENTWURF.json에 ACP 전용 문구는 넣지 않는다. stop은 별개 동사이고 범위 밖이다(#163 11-14 결정 유지). 기록: #163 issuecomment-6887743866(측정), 6887769373(결정).
   - [x] **S7.0 ACP 측정 (n=1).** STEER-PROBE-21b4c2, receiver ee14c7: steer와 follow_up 모두 6개 도구 경계를 넘지 못했고, prompt가 끝난 뒤 송신 순서대로 각자 한 턴씩 들어왔다(`/tmp/ff08d4-next/steer-probe/RESULT.md`, oracle 로컬; 결정적인 줄은 #163 댓글에 있다).
-  - [ ] **S7.1 native Pi 기준선 (n=1).** 같은 probe를 SOL(a30dda)에게 보냈다. 결과 대기 중.
-  - [ ] **S7.2 정적 판독과 sandbox 측정 계획.** 1eed2c가 맡는다. 대상은 claude-agent-acp 0.107.0의 `steer()`/`_session/steering`이고, 6871961225 §4의 네 gap마다 삽입 지점을 file:line으로 적는다. 산출물: `/tmp/ff08d4-next/issue163-design-read.md`.
-  - [ ] **S7.3 설계 → 리뷰 → 구현 → PARTIAL.** S6.5 amendment가 동결된 뒤 같은 브랜치에서 한다. 새 receipt boundary는 DELIVERY.md가 소유한다.
+  - [x] **S7.1 native Pi 기준선 (n=1).** receiver SOL(a30dda). steer는 첫 도구 경계(tick 1 직후)에 들어왔고, follow_up은 prompt가 끝난 뒤에 들어왔다. 비대칭이 양쪽 측정으로 닫혔다(#163 issuecomment-6887813050).
+  - [x] **S7.2 정적 판독 + adapter 측정.** 1eed2c. 판독: `/tmp/ff08d4-next/issue163-design-read.md`(fba8342b…). 측정은 GLG 승인 LIVE 예외였고, adapter를 직접 구동했으며 ~/.claude/projects에 transcript 3개가 남았다(지우지 않음). 결과: `issue163-adapter-probe.md`(6f8c3217…). claude-agent-acp 0.107.0은 steering supported이다. 도구 사이에 보내면 `injected`이고 모델이 다음 도구 직전에 본다. foreground sleep 중에 보내면 `injected`이지만 도구는 끝까지 돌고, 끝난 뒤에 본다(stop 아님). idle이면 `promptRequired`이고 아무것도 시작하지 않는다. 방향 A의 전제가 성립한다. 우리 쪽 빈칸은 다섯이다: capability 읽기, steer 요청 경로, control→ACP seam, 이중 전달 정책, receipt 값. 가장 큰 함정은 주입한 steer를 Pi transcript에 user 메시지로 남기면 다음 delta가 깨지는 것이다(context.ts:169-184). 그래서 문맥 밖 기록으로 남긴다.
+  - [ ] **S7.3 설계 (1eed2c, /tmp/ff08d4-next/s7-design.md) → SOL 리뷰.** 작업 트리에는 쓰지 않는다. 새 receipt 값의 이름과 ENTWURF.json 열거 갱신은 GLG가 운영 코디와 마무리할 때 함께 정한다(GLG 2026-11-15).
+  - [ ] **S7.4 구현 (ee14c7) → 리뷰 → PARTIAL.** **순서(GLG 2026-11-15): "앞서 하던것 마무리 되고 검증 되면 이걸 진행하자."** S6.5가 재리뷰와 affected PARTIAL까지 통과한 뒤에 시작한다. 작업 트리에 쓰는 형제는 한 번에 하나로 둔다.
 
 # NOW
 
