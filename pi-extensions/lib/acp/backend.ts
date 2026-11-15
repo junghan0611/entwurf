@@ -68,12 +68,19 @@ import {
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
 import {
+	ACP_COMPACTION_ENTRY_TYPE,
+	AcpCompactionCollector,
+	type AcpCompactionRecord,
+	type AcpCompactionStatus,
+	isCompactCommand,
+} from "./compaction-record.js";
+import {
 	enrichMcpServersWithEnvelope,
 	mcpServerNames,
 	type ResolvedAcpConfig,
 	resolveProviderConfig,
 } from "./config.js";
-import { type AcpTextBlock, buildAcpPrompt } from "./context.js";
+import { type AcpTextBlock, buildAcpPrompt, latestUserDelta } from "./context.js";
 import {
 	type AcpPiStreamState,
 	applyAcpSessionUpdate,
@@ -511,6 +518,60 @@ export const ACP_STEER_SEAM: AcpSteerSeamV1 = Object.freeze({
 	steerBusy: (piSessionId: string, text: string) => steerBusyAcpSession(piSessionId, text),
 	hasOpenWindow: () => steerWindows.size > 0,
 });
+
+/**
+ * #163 S8: compaction records waiting for their prompt's `message_end`, by session key. Backend
+ * memory only — nothing rides the assistant message. The provider takes (and so drains) them.
+ */
+interface DroppedCompaction {
+	compactionId: string;
+	status: AcpCompactionStatus;
+}
+const compactionStore = new Map<string, { records: AcpCompactionRecord[]; dropped: DroppedCompaction[] }>();
+
+function compactionEntryOf(key: string) {
+	let entry = compactionStore.get(key);
+	if (!entry) {
+		entry = { records: [], dropped: [] };
+		compactionStore.set(key, entry);
+	}
+	return entry;
+}
+
+/** Keep a finished prompt's records for its `message_end`. */
+export function depositAcpCompactionRecords(key: string, records: AcpCompactionRecord[]): void {
+	if (records.length === 0) return;
+	compactionEntryOf(key).records.push(...records);
+}
+
+/**
+ * Drop records no `message_end` took. Said at once on stderr, never with the summary; the UI hears
+ * of it only through a later take of the SAME key (`droppedBefore`) — a key never reopened leaves
+ * this stderr line as the only trace (S8 v5.2 §1).
+ */
+function discardStrandedCompactionRecords(key: string): void {
+	const entry = compactionStore.get(key);
+	if (!entry || entry.records.length === 0) return;
+	const dropped = entry.records.map((r) => ({ compactionId: r.compactionId, status: r.status }));
+	entry.records = [];
+	entry.dropped.push(...dropped);
+	process.stderr.write(
+		`[acp] dropped ${dropped.length} ${ACP_COMPACTION_ENTRY_TYPE} record(s) for ${key.slice(0, 40)}: ${dropped
+			.map((d) => `${d.compactionId.slice(0, 8)}/${d.status}`)
+			.join(", ")}\n`,
+	);
+}
+
+/** Take (and drain) the records and the drop notices of a Pi session. Empty means no compaction. */
+export function takeAcpCompactionRecords(piSessionId: string): {
+	records: AcpCompactionRecord[];
+	droppedBefore: DroppedCompaction[];
+} {
+	const key = `pi:${piSessionId}`;
+	const entry = compactionStore.get(key);
+	compactionStore.delete(key);
+	return { records: entry?.records ?? [], droppedBefore: entry?.dropped ?? [] };
+}
 const retainedChildren = new Set<AcpChildLike>();
 // sessionKeys with a prompt currently in flight. A NEW turn does not enter
 // bridgeSessions until it succeeds, so without this a second concurrent FIRST
@@ -921,7 +982,7 @@ export const ACP_SUMMARY_CANCELLED_MESSAGE =
 async function awaitAcpPromptTurn(
 	session: BridgeSession,
 	promptArgs: { sessionId: string; prompt: AcpTextBlock[] },
-	opts: { signal?: AbortSignal; graceMs: number },
+	opts: { signal?: AbortSignal; graceMs: number; onWindow?: (open: boolean) => void },
 ): Promise<AcpPromptResponse> {
 	let rejectLifecycle: ((err: Error) => void) | undefined;
 	const lifecycle = new Promise<never>((_, reject) => {
@@ -967,9 +1028,14 @@ async function awaitAcpPromptTurn(
 		acpSessionId: promptArgs.sessionId,
 		steering: session.steeringSupported === true,
 	});
+	// #163 S8: the same window bounds what counts as THIS prompt's compaction. A record of an
+	// earlier prompt still here was never taken by a message_end, so it is dropped (and said so).
+	discardStrandedCompactionRecords(session.key);
+	opts.onWindow?.(true);
 	try {
 		return await Promise.race([session.connection.prompt(promptArgs), lifecycle]);
 	} finally {
+		opts.onWindow?.(false);
 		closeSteerWindow();
 		if (graceTimer) clearTimeout(graceTimer);
 		signal?.removeEventListener("abort", onAbort);
@@ -1300,6 +1366,51 @@ export function streamAcpTurn(
 	/** #163: this turn is Pi's one-shot summary request (set by runSummaryTurn). */
 	let summaryTurnActive = false;
 
+	/** #163 S8: the session key this turn's prompt window ran under (set when it opens). */
+	let compactionKey: string | undefined;
+	/** #163 S8: the prompt window opens and closes this turn's compaction collector. */
+	function compactionWindow(session: BridgeSession): (open: boolean) => void {
+		return (open) => {
+			if (!open) {
+				if (state.compaction) state.compaction.windowOpen = false;
+				return;
+			}
+			compactionKey = session.key;
+			state.compaction = new AcpCompactionCollector({
+				// Scope is decided HERE, at collection (S8 v5.1 §3): Pi's summary turn and a key with no
+				// Pi session (`cwd:`) record nothing, so nothing of theirs waits in backend memory.
+				collect: !summaryTurnActive && session.key.startsWith("pi:"),
+				promptWasCompactCommand: isCompactCommand(
+					latestUserDelta(context)
+						.map((b) => b.text)
+						.join(""),
+				),
+				carried: session.contextOccupancyTokens,
+				now: Date.now,
+				emitLine: (text) => pushAcpLifecycleNotice(state, text),
+			});
+			state.compaction.windowOpen = true;
+		};
+	}
+	/** #163 S8: after finalize — keep this prompt's records for its message_end, report what was not kept. */
+	function depositCompaction(): void {
+		const fenced = state.compactionFencedOut ?? 0;
+		if (fenced > 0) {
+			process.stderr.write(`[acp] ignored ${fenced} compaction update(s) outside the prompt window\n`);
+		}
+		const collector = state.compaction;
+		if (!collector || !compactionKey) return;
+		if (!collector.collect) {
+			if (collector.observedCount > 0) {
+				process.stderr.write(
+					`[acp] ${collector.observedCount} compaction(s) not recorded: outside the record's scope\n`,
+				);
+			}
+			return;
+		}
+		depositAcpCompactionRecords(compactionKey, state.compactionRecords ?? []);
+	}
+
 	stream.push({ type: "start", partial: state.output });
 
 	// Per-turn event router → the CURRENT stream state. The retained connection's
@@ -1568,6 +1679,7 @@ export function streamAcpTurn(
 	function finishSuccess(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {
 		sealTurnUsage(adapter, session, promptResult);
 		finalizeAcpStreamState(state);
+		depositCompaction();
 		let verdict = mapPromptStopReason(promptResult?.stopReason);
 		// #163: Pi keeps an `aborted` summary as a checkpoint — only `error` and `length` are refused
 		// (pi-coding-agent 1.5.2 `compaction.js:454-462`). A summary the backend cancelled while
@@ -1608,6 +1720,7 @@ export function streamAcpTurn(
 		adapter?: AcpBackendAdapter,
 	): void {
 		finalizeAcpStreamState(state);
+		depositCompaction();
 		state.output.stopReason = aborted ? "aborted" : "error";
 		const base = err instanceof Error ? err.message : String(err);
 		// The FIRST failure stays first and verbatim (it is what the backend
@@ -2056,7 +2169,10 @@ export function streamAcpTurn(
 				"initialize",
 				connection.initialize({
 					protocolVersion: PROTOCOL_VERSION,
-					clientCapabilities: {},
+					// #163 S8: declare the compaction contract, so the child's own compactions arrive as
+					// `compaction_update` with their summary (S1/K1, GLG 2026-11-15) — recorded out of
+					// context by the provider, never sent back to a model or a backend session.
+					clientCapabilities: { session: { compaction: {} } },
 					clientInfo: { name: "entwurf", version: "s2d" },
 				}),
 				INITIALIZE_TIMEOUT_MS,
@@ -2158,6 +2274,7 @@ export function streamAcpTurn(
 			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
 				signal,
 				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
+				onWindow: compactionWindow(session),
 			});
 
 			session.activePromptHandler = undefined;
@@ -2302,6 +2419,7 @@ export function streamAcpTurn(
 			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
 				signal,
 				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
+				onWindow: compactionWindow(session),
 			});
 
 			session.activePromptHandler = undefined;

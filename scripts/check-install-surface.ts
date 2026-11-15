@@ -602,9 +602,16 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh check_acp_steer -> run_vitest over the #163 ACP steer beside tests (acp-client.steer and, as they land, backend.steer and steer-record)",
 		},
-		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the acp-steer one.
+		// #163 S8: the ACP compaction-record mutant execution coordinate, right after the acp-steer one.
 		{
 			after: "  entwurf check-acp-steer             # ",
+			line: "  entwurf check-acp-compaction        # #163 mutant execution coordinate (VERIFY rule 3): run_vitest over the ACP compaction beside tests (the per-prompt collector, the turn driver's capability, prompt fence, scope and stranded-record drop, and the provider's record writer) — the gate argv of the acp-compaction claims. Same files check-tests-beside-behavior already runs.",
+			receipt:
+				"run.sh check_acp_compaction -> run_vitest over the #163 S8 ACP compaction beside tests (compaction-record, backend.compaction and, as it lands, the provider record writer)",
+		},
+		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the acp-compaction one.
+		{
+			after: "  entwurf check-acp-compaction        # ",
 			line: "  entwurf check-native-push-runner    # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs.",
 			receipt:
 				"run.sh check_native_push_runner -> run_vitest over pi-extensions/lib/native-push/adapter.test.ts (#160 S5 SOL D1)",

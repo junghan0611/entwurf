@@ -1577,6 +1577,12 @@ check_acp_steer() {
   run_vitest pi-extensions/lib/acp/acp-client.steer.test.ts pi-extensions/lib/acp/backend.steer.test.ts pi-extensions/lib/acp/steer-record.test.ts
 }
 
+check_acp_compaction() {
+  # #163 S8: the execution coordinate for the ACP compaction-record claims (VERIFY 「Four rules」
+  # rule 3). Not a discovery path — check-tests-beside-behavior already finds these files.
+  run_vitest pi-extensions/lib/acp/compaction-record.test.ts pi-extensions/lib/acp/backend.compaction.test.ts
+}
+
 check_native_push_runner() {
   # #160 S5 SOL D1: the execution coordinate for the production native-push runner's deadline
   # (VERIFY 「Four rules」 rule 3). Not a discovery path — check-tests-beside-behavior already finds the

@@ -1,0 +1,118 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-compaction",
+	"mutants": [
+		{
+			"claim": "ACP-COMPACT-RECORD-ONCE",
+			"title": "every compaction update opens a new record, so one compaction with a repeated terminal is recorded several times",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": ["\t\tlet p = this.byId.get(id);"],
+			"replace": ["\t\tlet p: Pending | undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-RECORD-ONCE]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-record.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-RECORD-SAME-SHAPE",
+			"title": "the record drops the observed /compact flag, so a /compact prompt's compaction is indistinguishable from an automatic one",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": ["\t\t\tpromptWasCompactCommand: this.opts.promptWasCompactCommand,"],
+			"replace": ["\t\t\tpromptWasCompactCommand: false,"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-RECORD-SAME-SHAPE]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-record.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-STATUS-HONEST",
+			"title": "a compaction whose terminal was never observed is recorded as cancelled, claiming an abort nobody saw",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": ["\t\tconst status: AcpCompactionStatus = p.status ?? \"unterminated\";"],
+			"replace": ["\t\tconst status: AcpCompactionStatus = p.status ?? \"cancelled\";"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-STATUS-HONEST]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-record.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-PROVENANCE",
+			"title": "the adapter's 0 fallback after a compaction is recorded as a real post-compaction count",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": [
+				"\t\t\tpending.tokensAfter = used > 0 ? { value: used, source: \"usage_update\", observedAt: this.iso(at) } : null;"
+			],
+			"replace": ["\t\t\tpending.tokensAfter = { value: used, source: \"usage_update\", observedAt: this.iso(at) };"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-PROVENANCE]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-record.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SUMMARY-ASSEMBLY",
+			"title": "a summary that arrived only as chunks is dropped, so a completed compaction is recorded with no summary",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": ["\t\t\tconst summary = p.terminalSummary ?? (chunked || undefined);"],
+			"replace": ["\t\t\tconst summary = p.terminalSummary;"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-SUMMARY-ASSEMBLY]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-record.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-LINE-FROM-UPDATE",
+			"title": "the display line goes out at the terminal, before the after it is meant to show was observed",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": ["\t\t\tthis.awaitingAfter = p;"],
+			"replace": ["\t\t\tthis.awaitingAfter = p;\n\t\t\tthis.decideAfter(p);"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-LINE-FROM-UPDATE]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-record.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-CAPABILITY-DECLARED",
+			"title": "initialize stops declaring session.compaction, so the child's compactions arrive without their summary",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\t\tclientCapabilities: { session: { compaction: {} } },"],
+			"replace": ["\t\t\t\t\tclientCapabilities: {},"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-CAPABILITY-DECLARED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-PROMPT-FENCE",
+			"title": "a compaction update outside the prompt window (a load replay, a late frame) is recorded as this prompt's",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\t\tif (state.compaction?.windowOpen) state.compaction.onUpdate(update);"],
+			"replace": ["\t\t\tif (state.compaction) state.compaction.onUpdate(update);"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-PROMPT-FENCE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SCOPE",
+			"title": "Pi's summary turn and a cwd: key collect compaction records that no message_end will ever take",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tcollect: !summaryTurnActive && session.key.startsWith(\"pi:\"),"],
+			"replace": ["\t\t\t\tcollect: true,"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-SCOPE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-DISCARD-STDERR",
+			"title": "a record dropped because no message_end took it leaves no trace at the moment it is dropped",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tentry.dropped.push(...dropped);\n\tprocess.stderr.write("],
+			"replace": ["\tentry.dropped.push(...dropped);\n\t((_line: string) => {})("],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-DISCARD-STDERR]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		}
+	]
+}

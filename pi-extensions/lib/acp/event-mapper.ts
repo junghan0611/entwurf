@@ -25,6 +25,7 @@
 // (`agent_thought_chunk`) IS structured — pi never executes thinking.
 
 import type { AssistantMessage, AssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type { AcpCompactionCollector, AcpCompactionRecord } from "./compaction-record.js";
 
 const NOTICE_TITLE_MAX = 80;
 const NOTICE_SUMMARY_MAX = 160;
@@ -49,6 +50,12 @@ type ObservedToolState = {
 export type AcpPiStreamState = {
 	stream: AssistantMessageEventStream;
 	output: AssistantMessage;
+	/** #163 S8: this prompt's compaction collector, set by the backend when the prompt window opens. */
+	compaction?: AcpCompactionCollector;
+	/** #163 S8: `compaction_update`s that arrived with no prompt window open (bootstrap, replay). */
+	compactionFencedOut?: number;
+	/** #163 S8: the records the collector returned when the stream was finalized. */
+	compactionRecords?: AcpCompactionRecord[];
 	openTextIndex?: number;
 	openThinkingIndex?: number;
 	/** When false, tool/permission notices are suppressed (kept terse for smokes). */
@@ -576,6 +583,7 @@ export function applyAcpSessionUpdate(
 			if (typeof update.used === "number") {
 				state.output.usage.totalTokens = update.used;
 				state.observedContextOccupancyTokens = update.used;
+				if (state.compaction?.windowOpen) state.compaction.onUsage(update.used);
 			}
 			// `cost.amount` is a running SESSION total on the claude backend, so
 			// assigning it to a TURN field is wrong wherever an adapter has measured
@@ -593,6 +601,15 @@ export function applyAcpSessionUpdate(
 			}
 			break;
 		}
+		case "compaction_update":
+		case "compaction_summary_chunk": {
+			// #163 S8: only a compaction of THIS prompt is recorded. On `session/load` the adapter
+			// re-emits past summaries as completed `compaction_update`s under other ids
+			// (context-compaction.js:85-107); outside the prompt window they are counted, not kept.
+			if (state.compaction?.windowOpen) state.compaction.onUpdate(update);
+			else state.compactionFencedOut = (state.compactionFencedOut ?? 0) + 1;
+			break;
+		}
 		default:
 			break;
 	}
@@ -600,6 +617,10 @@ export function applyAcpSessionUpdate(
 
 /** Close any open text/thinking block. Call before pushing the terminal done. */
 export function finalizeAcpStreamState(state: AcpPiStreamState): void {
+	// #163 S8: compaction lines still owed go out before the terminal event, inside the content.
+	if (state.compaction && state.compactionRecords === undefined) {
+		state.compactionRecords = state.compaction.close();
+	}
 	closeThinkingBlock(state);
 	closeTextBlock(state);
 }
