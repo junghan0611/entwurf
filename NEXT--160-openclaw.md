@@ -40,7 +40,15 @@
     - 여러 고정 key가 필요하다는 근거는 없다. 그 가능성을 미리 설계하지 않는다. workspace 경로는 집의 몸이지 두 번째 주소 원장이 아니다.
     - **GLG 결정 2026-11-15: (a).** "간단하게 가보는게 언제나 좋아. 되면서 견고해지면 확장할수 있으니까." (b)는 실사용에서 key 교체가 필요해질 때 별도 계약으로 연다.
   - [ ] **S6.2 OpenClaw 자체 봇 간 메시징 소스 읽기 (외부 artifact 획득, 읽기 전용).** 대상은 운영 버전 2026.11.3 `847611d`(NOW의 운영 전제와 같은 좌표). 10.9 결과를 승계하지 않는다. 그 커밋만 /tmp 별도 디렉터리에 shallow로 받는다. 이건 "완전 offline"이 아니다. 읽을 것은 세 가지다: 봇이 다른 봇을 부르는 도구(sessions_send류)와 설정 게이트, 수신 봇이 보는 발신자 문맥, 접수와 답신의 경계. 영수증에는 file:line@847611d를 단다. 컨테이너·Gateway에는 접촉하지 않는다.
-  - [ ] **S6.3 계약 delta 문서.** 범주명 후보는 "집주인 소유 생명주기의 기존 집 연결"이다. 새 형식 필드나 manager는 만들지 않는다. birth는 집 생성이 아니라 기존 집에 record-backed 주소를 연결하는 일이다. "fresh/resume/retire 미적용"만 적지 않고, 대체 행동을 실증한다: open, address, consume, reply, close, refusal, compact-reset. 필수 증거는 가시성, model/policy, 발신 scope다. 바꿀 문서는 adding-a-harness.md:676-677, `check-harness-admission-parity.ts:93`의 계산 방식, Hard Rule 15 문구다. 이 문서가 아침 카드 결정 ①의 B를 대체하는 형태로 GLG에게 올라간다. 리뷰는 1eed2c, SOL(a30dda)이다.
+  - [x] **S6.3 계약 delta 문서.** → v2.1 `/tmp/ff08d4-next/s6-contract-delta.md`(oracle 로컬, sha 1823a8fd…). 리뷰: 1eed2c B0/D3/O6(cd615e87…), SOL B0/D3/O2(351f0a7d…). 68bd94 운영 의견 반영(10:09). **GLG 채택 2026-11-15**: 아침 카드 ①의 B를 이 범주로 대체, #160 정책 규칙 5·6·7·15 개정, 구현 착수. 설치 모델은 remote-pair처럼 운영자가 먼저 설치한다: nixos-config가 세션 생성·pin·선언·birth를 맡고, agent-config 스킬이 주소록 안내를 맡는다. 주소 권위는 record다. archive 뒤 재birth는 승인된 출구가 아니다. 모호하면 거절하고 멈춘다. 원래 S6.3 메모: 범주명 후보는 "집주인 소유 생명주기의 기존 집 연결"이다. 새 형식 필드나 manager는 만들지 않는다. birth는 집 생성이 아니라 기존 집에 record-backed 주소를 연결하는 일이다. "fresh/resume/retire 미적용"만 적지 않고, 대체 행동을 실증한다: open, address, consume, reply, close, refusal, compact-reset. 필수 증거는 가시성, model/policy, 발신 scope다. 바꿀 문서는 adding-a-harness.md:676-677, `check-harness-admission-parity.ts:93`의 계산 방식, #160 정책 댓글(issuecomment-6876392683)의 규칙 15 merge 정지선이다(AGENTS Hard Rule 15 아님). 이 문서가 아침 카드 결정 ①의 B를 대체하는 형태로 GLG에게 올라간다. 리뷰는 1eed2c, SOL(a30dda)이다.
+  - [ ] **S6.5 구현 (ee14c7, 브랜치).** delta v2.1 §1b·§7 그대로 한다.
+    1. fresh 경로 제거. 완료 조건은 `git grep -n -E 'freshKeyPrefix|openclawTuiLaunch|openclaw-fresh'`가 기록 문서를 빼고 0건이다. strict parser가 prefix 필드를 거절해야 한다.
+    2. pin 안 된 desk의 birth를 거절한다(`sessions.describe`의 `pinnedAt`).
+    3. 한 집 한 garden. birth·send·probe가 공유하는 순수 predicate로 만든다. 선언에 한 집 다중 key가 있거나 활성 record가 다른 key·둘 이상이면 거절하고, pick-first나 lookup은 없다.
+    4. 빈 allow를 닫힘으로 받는다. send/receive 각각 이름 붙은 거절을 내고 record는 바꾸지 않는다.
+    5. parity에 `LANDLORD_HOME` 닫힌 집합을 두고 구조 QK와 mutant를 붙인다. release stop, VERIFY criterion 11, adding-a-harness:38·676-713, DELIVERY:136도 맞춘다.
+    6. 각 계약에 QK와 exact-once mutant를 둔다.
+    - 그 다음 1eed2c·SOL 리뷰 → amendment 한 묶음 → affected PARTIAL. build-bridge는 ff08d4가 clean tree에서만 한다.
   - [ ] **S6.4 lab LIVE (thinkpad, 별도 GLG 승인).** 최소 증거 후보: 고정 key의 실제 run이 편지를 소비하고 집의 garden으로 답한다. 다른 세션이 즉시 아는지, memory 파일에 무엇이 남는지는 OpenClaw 소유의 탐색 측정(n=1)으로 분리하고 계약으로 강제하지 않는다. 자원 반납은 send 요청의 PID·parent·group을 묶어 종료 뒤 잔류를 확인한다. 범위는 새로 만든 exec/ssh/plugin client뿐이고, Gateway·vendor pool 같은 집주인의 상주 자원은 누수가 아니다. runner PARTIAL은 deadline 분류의 증거이지 프로세스 소멸 증거가 아니다.
   - **#151 경계:** #160은 "같은 key가 유지되는 동안 주소가 연속되고, 경계가 깨지면 refuse한다"까지만 맡는다. 여러 기록의 lineage는 #151 몫이다.
   - 이후: GLG 결정 → S6.4 → oracle 판단(S5.6~S5.8 재개).
