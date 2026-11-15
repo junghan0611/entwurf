@@ -494,6 +494,36 @@
 				"argv": ["bash", "scripts/build-bridge.sh"],
 				"output": "mcp/entwurf-bridge/dist"
 			}
+		},
+		{
+			"claim": "SEND-RPC-USES-SENDER-BOUND",
+			"title": "the production send call drops its explicit timeout, so a later smaller bound at the call could undercut the steer answer bound unseen",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": ["\t\t\t\t{ timeout: CONTROL_RPC_DEFAULT_TIMEOUT_MS },"],
+			"replace": ["\t\t\t\t{},"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-RPC-USES-SENDER-BOUND]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "SEND-STEER-DIAGNOSTIC-RUNNER-FORWARDS",
+			"title": "the runner leg drops the hand's diagnostic, so a steer's unknown reason or record failure never reaches the caller even though the hand read it",
+			"subject": "pi-extensions/lib/entwurf-v2-runner.ts",
+			"find": ["\t\t\t\t\t\tdiagnostic: r.diagnostic,"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-STEER-DIAGNOSTIC-RUNNER-FORWARDS]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		}
 	]
 }

@@ -22,8 +22,10 @@ import {
 	parseAcceptanceDiagnostic,
 	sendReceiptBoundary,
 } from "./control-send-receipt.ts";
+import { CONTROL_RPC_DEFAULT_TIMEOUT_MS } from "./entwurf-control-rpc.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "./entwurf-v2-production.ts";
+import { executeDispatch } from "./entwurf-v2-runner.ts";
 import type { ControlSocketPlan } from "./entwurf-v2-send.ts";
 import { renderEntwurfV2Result } from "./entwurf-v2-surface.ts";
 
@@ -153,6 +155,7 @@ describe("steer diagnostics, wire to surface", () => {
 	} as unknown as LockClaim;
 	async function rendered(data: unknown) {
 		let sends = 0;
+		const rpcOptions: unknown[] = [];
 		const deps = makeProductionEntwurfV2Deps({
 			senderProvider: () => undefined,
 			lockDir: "/TEST-ONLY/locks",
@@ -160,19 +163,18 @@ describe("steer diagnostics, wire to surface", () => {
 			mailboxDir: "/TEST-ONLY/mailbox",
 			controlSocketDir: "/TEST-ONLY/control",
 			seams: {
-				sendRpc: async () => {
+				sendRpc: async (_socket: string, _command: unknown, options?: unknown) => {
 					sends++;
+					rpcOptions.push(options);
 					return { response: { type: "response", command: "send", success: true, data } };
 				},
 				releaseLock: () => ({ ok: true }),
 			},
 		} as never);
-		const result = await deps.executor.sendControl(plan, lock);
-		const out = renderEntwurfV2Result({
-			kind: "executed",
-			outcome: { transport: "control-socket", ...result },
-		} as never);
-		return { ...out, sends };
+		// The real runner leg (SOL O2): executeDispatch forwards the hand's result to the surface.
+		const result = await executeDispatch({ kind: "execute", receipt: {} as never, plan, lock }, deps.executor);
+		const out = renderEntwurfV2Result(result);
+		return { ...out, sends, rpcOptions };
 	}
 
 	it("[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE] the unknown reason and detail, a record failure and a skipped record reach the caller's line — still a success, sent once", async () => {
@@ -187,6 +189,18 @@ describe("steer diagnostics, wire to surface", () => {
 		expect(skipped.text).toContain("→ steer-in-turn (record skipped: the receiver's binding changed)");
 		const ok = await rendered({ boundary: "steer-in-turn", record: "ok" });
 		expect(ok.text.endsWith("→ steer-in-turn")).toBe(true);
+	});
+
+	it("[QK:SEND-STEER-DIAGNOSTIC-RUNNER-FORWARDS] the runner leg carries the hand's normalized diagnostic onto the executed outcome the surface reads", async () => {
+		// SOL O2: the fixture goes through executeDispatch, so dropping its forwarding is caught here.
+		const out = await rendered({ boundary: "steer-unknown", reason: "request-rejected", detail: "RPC-ERR" });
+		expect(out.text).toContain("backend acceptance unknown: request-rejected — RPC-ERR");
+	});
+
+	it("[QK:SEND-RPC-USES-SENDER-BOUND] the production send passes the sender bound explicitly, so the steer answer bound below it cannot be undercut by a smaller timeout at the call", async () => {
+		// 1eed2c O1: BOUND-BELOW-SENDER compares constants; this pins that the real send uses one of them.
+		const out = await rendered({ boundary: "sent" });
+		expect(out.rpcOptions).toEqual([{ timeout: CONTROL_RPC_DEFAULT_TIMEOUT_MS }]);
 	});
 
 	it("the diagnostic is normalized: closed reason tokens, a bounded single-line detail, nothing raw", () => {

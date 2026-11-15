@@ -853,12 +853,12 @@ generation, with a permission request pending, with a 12k body, during a tool-ou
 - **During text generation** (2 runs): the steer cut the generation mid-line, and the same prompt
   went on as a steered cycle, rewriting the cut line from its start; there was ONE
   `session/prompt` answer, `end_turn`. The client saw one continuous `agent_message_chunk`
-  stream — the adapter sends no cycle boundary. Replayed through this rail's event mapper: one
+  stream — no cycle-boundary update was observed (n=2). Replayed through this rail's event mapper: one
   text block, one terminal, no false error. The Pi assistant text therefore keeps BOTH the cut
   fragment and the rewritten line (e.g. `12. 12는 1년의 달 수SEEN-…\n\n12. 12는 1년의 달 수입니다.`).
 - **Burst during a tool** (3 back to back, 5 in one turn): all `injected`, answered in send order;
   the model saw all five, in send order, at the next boundary after the tool.
-- **Pending permission:** `injected`; the permission card was not cancelled and the tool ran.
+- **Pending permission (n=1):** `injected`; the permission card was not cancelled and the tool ran.
 - **Unmeasured:** a steer during thinking, during tool-call generation, a burst during generation,
   a saturated host, and bodies far beyond 12k.
 
@@ -898,8 +898,10 @@ generation, with a permission request pending, with a 12k body, during a tool-ou
    been injected — the adapter can throw after its push — so it is never re-queued and must not be
    resent blindly). The sender carries what the receiver said beside these to the caller's line,
    normalized at the wire seam (closed reason tokens, a single-line detail of at most 120
-   characters), still as a success: the unknown reason and detail, and for `steer-in-turn` a record
-   that failed or was skipped (`[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE]`). Both names are
+   characters plus an ellipsis — 121 UTF-16 units), still as a success: the unknown reason and detail, and for `steer-in-turn` a record
+   that failed or was skipped (`[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE]`). That diagnostic rides the
+   clean finalized-send path only: a send whose lock release then fails (`lock-dirty`) keeps its
+   boundary and its do-not-retry verdict but not the diagnostic. Both names are
    provisional; DELIVERY.md carries the rows.
 
 ### What this does and does not mean
@@ -910,8 +912,8 @@ generation, with a permission request pending, with a 12k body, during a tool-ou
   text generation cuts it mid-line and the SAME prompt continues as a steered cycle, rewriting the
   cut line; one prompt still settles once (`end_turn`). That is not a receiver cancel, but it is a
   difference from native Pi, whose steer never cuts a generation, and the Pi assistant text keeps
-  the cut fragment beside the rewritten line (an observation: the adapter sends no cycle
-  boundary, so this rail cannot mark one). A steer during thinking and a burst during generation
+  the cut fragment beside the rewritten line (no cycle-boundary update was observed, n=2, so
+  this rail does not mark one). A steer during thinking and a burst during generation
   are unmeasured.
 - **Volatile, like the queue.** An injected steer is cancelled with its turn on Esc/cancel —
   the same grade as `queued-steer`'s "an abort clears the queue".

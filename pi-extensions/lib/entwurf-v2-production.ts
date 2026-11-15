@@ -31,6 +31,7 @@
 
 import { describeUnknownBoundary, parseAcceptanceBoundary, parseAcceptanceDiagnostic } from "./control-send-receipt.ts";
 import {
+	CONTROL_RPC_DEFAULT_TIMEOUT_MS,
 	type RpcClientOptions,
 	type RpcCommand,
 	type RpcResponse,
@@ -312,13 +313,19 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 	// `sendViaMailbox` instance; the release is the SAME `release` closure. ─────
 	const controlSendDeps: ControlSocketSendDeps = {
 		sendOverSocket: async (plan: ControlSocketPlan): Promise<RpcSendResult> => {
-			const { response } = await io.sendRpc(plan.socketPath, {
-				type: "send",
-				message: plan.message,
-				mode: plan.mode,
-				wants_reply: plan.wantsReply,
-				sender: opts.senderProvider(),
-			});
+			const { response } = await io.sendRpc(
+				plan.socketPath,
+				{
+					type: "send",
+					message: plan.message,
+					mode: plan.mode,
+					wants_reply: plan.wantsReply,
+					sender: opts.senderProvider(),
+				},
+				// #163 S7 (1eed2c O1): named, so the ACP steer answer bound held below it
+				// ([QK:ACP-STEER-BOUND-BELOW-SENDER]) is the bound this call really uses.
+				{ timeout: CONTROL_RPC_DEFAULT_TIMEOUT_MS },
+			);
 			// #120 P2 THE WIRE SEAM. `response.data` is another process's payload, so it is
 			// classified here by one total function and never carried raw any further: a shape we
 			// do not recognise becomes `accepted-unknown-boundary`, an ACCEPTANCE we could not
