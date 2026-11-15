@@ -336,7 +336,7 @@
 				{
 					"synopsis": "check-openclaw-home-receipt",
 					"column": 38,
-					"summary": "#160 S6 landlord-home first-admission release MUST: judges the candidate-attributed receipt of the replacement-behaviour oracles (open, address, consume, reply, close, refusal, compact-reset, visibility, model/policy, send scope, resources) named by ENTWURF_OPENCLAW_HOME_RECEIPT against this HEAD and its commit time, the home named by ENTWURF_OPENCLAW_HOME_TARGET, and each evidence file's sha256 on disk. Strict at every level; only compactReset and resources may be unmeasured, with a reason. No receipt → SKIP (97); no target, another candidate or home, an earlier measurement, a stray key, a digest mismatch or a non-passing row → exit 1. Touches no Gateway or store."
+					"summary": "#160 S6 landlord-home first-admission release MUST: judges the candidate-attributed receipt of the replacement-behaviour oracles (open, address, consume, reply, close, refusal, compact-reset, visibility, model/policy, send scope, resources) named by ENTWURF_OPENCLAW_HOME_RECEIPT against this HEAD and its commit time, the home named by ENTWURF_OPENCLAW_HOME_TARGET, and each evidence file's sha256 on disk. Strict at every level; only compactReset may be unmeasured, with a reason. No receipt → SKIP (97); no target, another candidate or home, a measurement before the commit or in the future, a stray key, a digest mismatch or a non-passing row → exit 1. It checks metadata and bytes, not whether the evidence measured this candidate. Touches no Gateway or store."
 				},
 				{
 					"synopsis": "check-pi-durable-receive",

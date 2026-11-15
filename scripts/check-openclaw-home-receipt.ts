@@ -62,6 +62,7 @@ const digestOf = (p: string): string | null => {
 const verdict = judgeOpenclawHomeReceipt(raw, {
 	candidateHead: head,
 	candidateCommittedAtMs: committedAtMs,
+	nowMs: Date.now(),
 	expectedTarget,
 	digestOf,
 });

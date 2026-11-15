@@ -274,7 +274,7 @@
 		},
 		{
 			"claim": "OPENCLAW-HOME-RECEIPT-UNMEASURED-ALLOWLIST",
-			"title": "the receipt judge lets any row be unmeasured, so a first admission can ship with consume or reply never measured",
+			"title": "the receipt judge lets any row be unmeasured, so a first admission can ship with resources, model/policy or consume never measured",
 			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
 			"find": ["if (!OPENCLAW_HOME_RECEIPT_UNMEASURED_ALLOWED.includes(name)) {"],
 			"replace": ["if (false) {"],
@@ -317,6 +317,17 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-RESET-KEEPS-GARDEN]",
 			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-NOT-FUTURE",
+			"title": "the receipt judge accepts a measurement time in the future, so a mistyped or forged date stands",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["\t} else if (Date.parse(measuredAt) > ctx.nowMs + OPENCLAW_HOME_RECEIPT_FUTURE_SKEW_MS) {"],
+			"replace": ["\t} else if (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-NOT-FUTURE]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
 		}
 	]
 }

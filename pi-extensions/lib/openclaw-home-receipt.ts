@@ -19,10 +19,17 @@
  *                             | { result: "unmeasured", reason: <non-empty> }  (allowed rows only) } }
  *
  * The expected target is NOT taken from the receipt: the caller supplies it (the operator's input),
- * so a receipt naming another home consistently throughout is still refused. Evidence is checked
- * against the bytes at its path through the caller's digest function, so a free sentence or an old
- * file under a new head does not pass. `unmeasured` is accepted only on the closed allowlist and
- * always with a reason; every other row must pass.
+ * so a receipt naming another home consistently throughout is still refused. `unmeasured` is
+ * accepted only on the closed allowlist and always with a reason; every other row must pass.
+ *
+ * WHAT THIS JUDGE GUARANTEES, AND WHAT IT DOES NOT (#160 S6.5 SOL D2). It checks the receipt's
+ * metadata — candidate head, a measurement time after the candidate's commit and not in the future,
+ * the operator's expected home, the configuration's scope, the row set and results — and the
+ * integrity of the referenced bytes: each evidence file must exist and hash to its stated sha256.
+ * It does NOT read the evidence, so it cannot tell a fresh measurement of this candidate from an
+ * older or unrelated file written under new metadata. Whether the evidence really measured this
+ * candidate and configuration is the reviewer's and the operator's judgment; a green here is a
+ * well-formed, intact receipt, not an accepted LIVE measurement.
  */
 
 import { requireGardenId } from "./meta-session.ts";
@@ -46,21 +53,35 @@ export const OPENCLAW_HOME_RECEIPT_ROWS = [
 ] as const;
 
 /**
- * Rows a first admission may report as `unmeasured`, with a reason (#160 S6.5 proposal, ee14c7).
- * `compactReset`: Entwurf's side — a vendor generation change under one key keeps the route, the
- * birth and the send join on the same garden — is closed deterministically by
- * QK OPENCLAW-RESET-KEEPS-GARDEN (openclaw-birth.test.ts); `unmeasured` here covers only the vendor's
- * own LIVE behaviour, whether it keeps consuming on that key after ITS compaction (delta §3). `resources`: lab client residue across an ssh/exec boundary may not be
- * observable on every lab; the runner's own child bound is proven deterministically. Every other row
- * — the behaviours and the three required evidences (visibility, model/policy, send scope) — must pass.
+ * Rows a first admission may report as `unmeasured`, with a reason (#160 S6.5, ff08d4 decision).
+ *
+ * `compactReset` only. Entwurf's side — a vendor generation change under one key keeps the route,
+ * the birth and the send join on the same garden — is closed deterministically by
+ * QK OPENCLAW-RESET-KEEPS-GARDEN (openclaw-birth.test.ts) and is never what this row excuses.
+ * `unmeasured` covers only the vendor's own LIVE behaviour, so its reason should say that consumption
+ * after the vendor's compaction was not observed (not checked here; the reviewer reads it).
+ *
+ * Every other row must pass, and two passes are narrow on purpose:
+ *  - `resources` passes when the clients the send request itself created (exec, ssh, plugin) were
+ *    observed gone afterwards; the Gateway and the vendor's pool are out of scope. A configuration
+ *    with no SSH hop says so in its evidence. "No SSH hop" is an observation; "residue not
+ *    observed" is not a pass.
+ *  - `modelPolicy` passes when the configuration names and the values OpenClaw reported were
+ *    recorded. An effective field that could not be observed is written in the evidence as
+ *    unobserved, never filled in by inference.
  */
-export const OPENCLAW_HOME_RECEIPT_UNMEASURED_ALLOWED: readonly string[] = ["compactReset", "resources"];
+export const OPENCLAW_HOME_RECEIPT_UNMEASURED_ALLOWED: readonly string[] = ["compactReset"];
+
+/** How far in the future a declared measurement time may lie, for clock skew between hosts. */
+export const OPENCLAW_HOME_RECEIPT_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 export interface OpenclawHomeReceiptContext {
 	/** The full 40-hex commit being released. */
 	candidateHead: string;
 	/** That commit's time, epoch ms. */
 	candidateCommittedAtMs: number;
+	/** The judging time, epoch ms (the caller's clock). */
+	nowMs: number;
 	/** The home the operator says was measured: `<scope>/<agentId>/<sessionKey>#<gardenId>`. */
 	expectedTarget: string;
 	/** sha256 of the regular file at an absolute path, or null when it cannot be read. */
@@ -114,6 +135,10 @@ export function judgeOpenclawHomeReceipt(raw: unknown, ctx: OpenclawHomeReceiptC
 	} else if (!(Date.parse(measuredAt) > ctx.candidateCommittedAtMs)) {
 		problems.push(
 			`receipt.measuredAt: ${measuredAt} is not after the candidate's commit (${new Date(ctx.candidateCommittedAtMs).toISOString()}); a measurement cannot predate what it measured`,
+		);
+	} else if (Date.parse(measuredAt) > ctx.nowMs + OPENCLAW_HOME_RECEIPT_FUTURE_SKEW_MS) {
+		problems.push(
+			`receipt.measuredAt: ${measuredAt} is in the future (judged at ${new Date(ctx.nowMs).toISOString()}, skew allowed ${OPENCLAW_HOME_RECEIPT_FUTURE_SKEW_MS / 60000} min)`,
 		);
 	}
 

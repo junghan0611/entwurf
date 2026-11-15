@@ -30,6 +30,7 @@ const FILES: Record<string, string> = Object.fromEntries(ROWS.map((r) => [`/lab/
 const ctx = (over: Partial<OpenclawHomeReceiptContext> = {}): OpenclawHomeReceiptContext => ({
 	candidateHead: HEAD,
 	candidateCommittedAtMs: COMMITTED,
+	nowMs: Date.parse("2026-11-15T04:00:00.000Z"),
 	expectedTarget: TARGET,
 	digestOf: (p) => FILES[p] ?? null,
 	...over,
@@ -146,19 +147,27 @@ describe("judgeOpenclawHomeReceipt", () => {
 		expect(problems(receipt({ measuredAt: "yesterday" }))).toMatch(/must be an ISO-8601 UTC time/);
 	});
 
-	it("[QK:OPENCLAW-HOME-RECEIPT-UNMEASURED-ALLOWLIST] only compactReset and resources may be unmeasured, and only with a reason; every other row must pass", () => {
+	it("[QK:OPENCLAW-HOME-RECEIPT-UNMEASURED-ALLOWLIST] only compactReset may be unmeasured, and only with a reason; resources, modelPolicy and every other row must pass", () => {
 		expect(
 			judgeOpenclawHomeReceipt(
 				receipt(
 					{},
 					{
-						compactReset: { result: "unmeasured", reason: "the lab Gateway did not compact within the window" },
-						resources: { result: "unmeasured", reason: "ssh client residue not observable on this lab" },
+						compactReset: {
+							result: "unmeasured",
+							reason: "consumption after the vendor's compaction was not observed",
+						},
 					},
 				),
 				ctx(),
 			),
 		).toMatchObject({ ok: true });
+		expect(problems(receipt({}, { resources: { result: "unmeasured", reason: "residue not observed" } }))).toMatch(
+			/rows\.resources: may not be unmeasured/,
+		);
+		expect(
+			problems(receipt({}, { modelPolicy: { result: "unmeasured", reason: "effective policy not observed" } })),
+		).toMatch(/rows\.modelPolicy: may not be unmeasured/);
 		expect(problems(receipt({}, { consume: { result: "unmeasured", reason: "r" } }))).toMatch(
 			/rows\.consume: may not be unmeasured/,
 		);
@@ -168,6 +177,14 @@ describe("judgeOpenclawHomeReceipt", () => {
 		expect(problems(receipt({}, { visibility: { result: "fail", evidence: {} } }))).toMatch(
 			/rows\.visibility: result is fail, not pass or unmeasured/,
 		);
+	});
+
+	it("[QK:OPENCLAW-HOME-RECEIPT-NOT-FUTURE] a measurement time beyond the judging clock plus five minutes is refused; within the skew it stands", () => {
+		expect(problems(receipt({ measuredAt: "2099-01-01T00:00:00.000Z" }))).toMatch(/is in the future/);
+		expect(problems(receipt({ measuredAt: "2026-11-15T04:06:00.000Z" }))).toMatch(/is in the future/);
+		expect(judgeOpenclawHomeReceipt(receipt({ measuredAt: "2026-11-15T04:04:00.000Z" }), ctx())).toMatchObject({
+			ok: true,
+		});
 	});
 
 	it("[QK:OPENCLAW-HOME-RECEIPT-EXPECTED-TARGET] a receipt naming another home throughout is refused against the operator's expected target", () => {
