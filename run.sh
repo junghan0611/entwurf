@@ -1348,9 +1348,12 @@ check_acp_set_model_readback() {
   # and (#142) pi's thinking level reaches Claude effort, set and read back before the prompt;
   # and (#142) what a cancel leaves: the operator notice and the aborted-turn status in a rebuild;
   # and (#163) Pi's summary request as a one-shot tool-less turn, and the child closed on compaction;
-  # and (#163) the display-only tool title, output preview and compaction lines in the event mapper.
+  # and (#163) the display-only tool title, output preview and compaction lines in the event mapper;
+  # and (#167) the Antigravity ACP adapter: routing, rows, launch argv, carrier seat, model and
+  # thought-level readback, the overlay link policy, the refused summary turn and operator
+  # narrowing, and what the first-user augment tells an agy child about its own wire.
   section "claude ACP set-model + effort readback (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts pi-extensions/lib/acp/event-mapper.test.ts
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts pi-extensions/lib/acp/event-mapper.test.ts pi-extensions/lib/acp/agy-adapter.test.ts pi-extensions/lib/acp/augment.test.ts
 }
 
 check_acp_vendor_rejection() {
@@ -3382,11 +3385,11 @@ check_acp_provider_surface() {
   # Deterministic gate for the ACP provider registration surface. Loads the REAL
   # provider lib modules AND compiles + drives the REAL entry against a fake pi,
   # asserting: one surface name, the no-auth sentinel shape, full
-  # ProviderModelConfig rows on the curated Claude anchor, the exact Claude-only
-  # set [QK:ACP-PROVIDER-CLAUDE-ONLY], and that streamSimple is the real
+  # ProviderModelConfig rows on the curated Claude anchor, the exact supported
+  # set — Claude four + agy three, no Cortex [QK:ACP-PROVIDER-CLAUDE-ONLY] — and that streamSimple is the real
   # streamShellAcp backend (checked BY NAME, never invoked — invoking spawns an
   # ACP child). Pure, no pi runtime, no API.
-  section "ACP provider surface (registration + Claude-only model set)"
+  section "ACP provider surface (registration + exact curated model set)"
   run_ts scripts/check-acp-provider-surface.ts
 }
 

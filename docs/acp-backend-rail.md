@@ -5,7 +5,8 @@ It is not a second harness and does not create another citizen or socket layer. 
 host pi session already owns the record-backed citizen identity; each backend owns
 its own process, auth, transcript, and native tool surface.
 
-Claude is the supported adapter. Cortex Code ACP is disabled: its retired model ids
+Claude is the reference adapter. Antigravity's own ACP server (`agy acp`) is a second adapter
+behind three `agy-` rows (§Antigravity, #167), with the limits stated there. Cortex Code ACP is disabled: its retired model ids
 are not registered and a direct selection refuses before launch, without a Claude fallback.
 Existing Cortex settings, credentials and native citizen records are not removed.
 Dated Cortex observations below are historical, not a current support claim.
@@ -561,7 +562,8 @@ operator's repair named.
 
 ## Shipped adapters
 
-Claude alone is supported. The former Cortex column below is a historical comparison,
+Claude and Antigravity (`agy acp`) are registered; Antigravity's seams and limits are in
+§Antigravity below rather than in this table. The former Cortex column is a historical comparison,
 not an executable route; Cortex model admission and direct adapter use now refuse.
 
 | Seam | Claude | Former Cortex Code (historical) |
@@ -653,6 +655,106 @@ signature.
 `clientCapabilities` declares only `session.compaction` (#163 S8, §11-8-a). Terminal-output
 widgets and nested subagent transcripts are therefore not requested. Enabling either is a separate
 rendering contract, not a capability bit flip.
+
+### Antigravity (`agy acp`, #167)
+
+This is the ACP-backend lane only ([adding-a-harness §0](./adding-a-harness.md)): a host pi citizen
+drives `agy acp` as a child. It registers no citizen, adds no meta-store backend, and does not lift
+the native-push pause (#152). Wire facts below are `[측정 2026-11-16]` against agy 1.5.9 on a
+Google AI Pro login, read off raw JSON-RPC frames; each is one observation unless a count is given,
+and the receipts are in the measurement comments on #167.
+
+| Seam | Antigravity |
+|---|---|
+| Model ids | `agy-gemini-4-hydrogen`, `agy-gemini-4-argon`, `agy-gemini-3.8-flash`; the `agy-` prefix is stripped before set-model. The prefix is `agy-` rather than the `agy/` the issue body used as an example: `cortex-` is this rail's one precedent, and a second slash inside `provider/id` is a parsing surface nothing needs. agy offers four more models; they are not rows (two carry no `thought_level` option, two are Claude models the Claude rail drives) |
+| Launch | `agy acp --stdio --gemini-dir <overlay> --include-default-customizations=false --dangerously-skip-permissions` from `PATH`. `AGY_ACP_COMMAND` is the operator's explicit override and owns its whole command line: none of those arguments is appended, so the overlay and the permission stance are then the operator's |
+| Model authority | per-turn `session/set_config_option` `model`; the answer carries the full option list and is read back; an id agy does not offer is `-32602 Unknown model ID` before any prompt |
+| Thinking level | pi's level → `thought_level` (`low/medium/high`, plus `xhigh` on Hydrogen), set AFTER the model and read back. agy clamps silently when the model changes under a level it does not offer (Hydrogen `xhigh` → Flash answered `high`), so only the readback says what the session holds. `off`/no level refuses, as on Claude. The lifecycle notice still reads `effort … read back` |
+| Carrier | engraving in `_meta.antigravity.systemPrompt.append` (advertised at initialize; an appended rule shaped the reply). It is APPENDED to agy's own system prompt, where Claude's replaces a preset; the first-user augment tells an agy child so. In the LIVE sibling on the operator HOME the model reported an `# Engraving Here` slot at the end of its system prompt (self-report, weak). agy loads the session cwd's `AGENTS.md` itself, so the augment omits its cwd `AGENTS.md` section for an agy child and keeps the `~/AGENTS.md` one |
+| Overlay | `--gemini-dir` moves the whole state root, so the overlay is a state root of its own with ONE file of the operator's agy state linked in — `antigravity-cli/antigravity-oauth-token` — plus the skill links the operator's global `skillPlugins` names (Skills row). An empty root answered `-32000 Authentication required`; with that one link `session/new` succeeded, also under a HOME holding nothing else. The link is re-established every bootstrap, a regular file found in its place is replaced, any other symlink directly under the overlay is removed, and an overlay path that is itself a symlink or not a directory refuses before anything is touched. One overlay is shared by every agy child of this operator |
+| MCP | explicit wire `mcpServers`; tools appear as `mcp_<server>_<tool>` (`mcp_entwurf-bridge_…`, hyphen kept) |
+| Permissions | the launch flag: no `session/request_permission` is sent. Without it agy asks with `allow_once` / `reject_once` |
+| Session reuse | consecutive prompts on one session keep context. LIVE n=1 through the real turn loop (emitted build, sandbox HOME): turn 2 took `[acp: reusing live session]` and recalled turn 1 |
+| Cancel | n=1: `session/cancel` during a running command answered `stopReason: cancelled` 6 ms later, the tool settled `failed`, and the command was gone |
+| Backend setting | none. An operator `tools`, `disallowedTools` or `permissionAllow` setting REFUSES an agy turn (`acp-agy-narrowing-unsupported`): agy has no seat for them, and ignoring a narrowing on a child whose prompts are bypassed would hand back what the operator took away |
+| Skills | the operator's GLOBAL `entwurfProvider.skillPlugins`: each `<plugin>/skills/<name>` holding a `SKILL.md` is linked at `<overlay>/config/skills/<name>`, the seat agy discovers global skills in (measured n=1: a directory and a symlink there were both listed, under these launch flags; operator-HOME LIVE n=1, 2026-11-16: a fresh agy sibling listed 51 skills — the 46 projected links plus 5 built-in, self-report — and all 46 seat entries were symlinks). A link the setting no longer names is removed at the next bootstrap; a real directory in the seat is never removed; one skill name from two plugins refuses (`acp-agy-skill-name-collision`). Nothing is scanned: the operator's own `~/.gemini` skills are not followed |
+| Fresh call / resume | `entwurf_fresh_call` and `entwurf_resume_call` admit the three ids; the first-turn framing names the bridge tools in agy's spelling (`mcp_entwurf-bridge_entwurf_callback` / `_entwurf_v2` / `_entwurf_peers`), with no tool-load hint. Fresh call: LIVE n=1 (2026-11-16) — a Claude Code caller opened `entwurf/agy-gemini-3.8-flash`, the sibling called back about 10 s later with the matching nonce and sent one `entwurf_v2`, its pane showing both tool calls under the first two names; a reverse `entwurf_v2` was acknowledged `control-socket → queued-follow-up` and answered correctly. `_entwurf_peers` was called by a second LIVE sibling (n=1, sibling's report). Resume: deterministic only |
+
+What stays out of the child is a structural claim, not an observed one: the state root is separate
+and one file is linked. The only direct observation is weak — asked to list what it had, the model
+named no MCP server and five built-in skills.
+
+**What the common loop's Claude-shaped logic does on agy.**
+
+| Common logic | On agy | Evidence |
+|---|---|---|
+| Lifecycle, model lock, thought-level readback notices | works | LIVE turn loop, n=1 |
+| Tool visibility (#162) | works at start/finish granularity: one `tool_call` and one terminal `tool_call_update` with the whole output; nothing arrives while a command runs (a 10 s loop sent two frames) | frames |
+| Context occupancy | works: `usage_update` carries `used`/`size` (`size` 1,048,576 on all three rows) and pi reads `used` | frames, LIVE |
+| Turn accounting seal (#93) | inactive by declaration: `usage_update` has no cost, and the cache-miss bound is a Claude-only recurrence. Cost is reported as 0 | `sealsTurnAccounting` absent |
+| Remote steer inside a turn (#163 S7) | inactive: initialize advertises no `_meta.steering`, and `_session/steering` is `-32601 Method not found`; a steer waits in Pi's queue. (agy does accept a second `session/prompt` during a running turn and answers it inside that turn; nothing here uses that) | frames |
+| Child compaction records (#163 S8) | inactive: no compaction capability is advertised and `/compact` (advertised as a command) sent no `compaction_update`; nothing is recorded | frames |
+| Pi's summary turn (#163) | **refused by name** (`acp-summary-turn-unsupported`) before any child starts: agy takes no tool list, `plan` mode with the permission flag still ran a shell command, and a denied permission stops only tools that ask, so there is no tool-less child to summarize with. Pi's `/compact`, its threshold compaction, overflow recovery and `/tree` summaries therefore end in that error on an agy row; the message says to switch to a Claude row | `toollessSummaryTurn` absent; `[QK:ACP-AGY-SUMMARY-REFUSED]` |
+| Typed prompt rejection (#127) | not declared; a failure keeps the verbatim-first message | — |
+| Exclude-tools preflight | works as for any non-Claude backend: agy is assumed to expose its full native set | `tool-surface.ts` |
+| `settingSources` | ignored: a Claude-only seat that narrows nothing | — |
+| `skillPlugins` | the global list is projected into the overlay's skill seat; a project-only list is not | Skills row above |
+
+**Known limits.**
+
+- **Background commands outlive the child.** agy's `run_command` hands a command to a background
+  task after a model-chosen wait (`WaitMsBeforeAsync`, 500–10000 ms observed). Such a command is a
+  direct child of `agy` in its own session and process group; when `agy` exits it is re-parented to
+  init and keeps running. No vendor switch closes it — `session/close`, cancel, stdin EOF and
+  `--process-per-session` all left the orphan alive — and group teardown does not reach it. GLG
+  accepted this as a known limit on 2026-11-16; it is the same family as #125. A measured candidate,
+  NOT adopted: at teardown, stop agy's group, collect its descendants from `/proc`, kill each
+  descendant's group, then agy's. It closed the three orphan shapes measured, in 20–34 ms.
+- **A replayed prompt can repeat a side effect.** The error agy answers `session/prompt` with on an
+  exhausted quota or an expired login is not measured. If its text reads as transient to pi, pi
+  replays the whole prompt, and on a child with bypassed permissions any tool that already ran runs
+  again.
+- **A level a row does not offer refuses the first turn.** A sibling opened on Argon or Flash with
+  pi's level at `off`, `minimal`, `xhigh` or `max` fails its first turn (`acp-agy-thinking-level-unsupported`)
+  rather than running at a level nobody chose; Hydrogen takes `xhigh`.
+- **agy reads more rule files than a Claude child is given.** Marker files, n=4 cwd shapes: agy
+  loaded `<cwd>/AGENTS.md` every time, the repository root's `AGENTS.md` and `GEMINI.md` when the
+  cwd was inside a repository, and `<overlay>/config/AGENTS.md`/`GEMINI.md` as global rules; it did
+  not load an `AGENTS.md` above the repository root, `~/AGENTS.md` (unless the cwd was home) or
+  anything under the real `~/.gemini`. The augment drops only the one file both would carry. With
+  the cwd at home, `~/AGENTS.md` arrives twice.
+- **The native tool surface is wide and cannot be narrowed.** The LIVE sibling listed sub-agent,
+  schedule, workflow and web-search tools beside file and shell tools (self-report); with
+  permissions bypassed none of them asks, and a narrowing setting refuses rather than applies.
+  GLG deferred reducing it (2026-11-16).
+- **The shared overlay persists what a child writes.** `<overlay>/config/AGENTS.md` and
+  `GEMINI.md` are agy's global-rule seat and regular files are not swept: one an agy child wrote
+  there is loaded by every later agy child.
+- **Only the global skill list reaches an agy child.** Every agy child shares one overlay, so the
+  projection reads `skillPlugins` from the global settings file alone; a `skillPlugins` written
+  only in a project's `.pi/settings.json` reaches a Claude child there and no agy child, with no
+  notice. The skills were written for Claude sessions; whether their instructions fit agy's tools
+  is not measured, and every linked skill's name and description is listed in agy's own prompt.
+- **`--sandbox` and mode `auto` are not usable on the measured host.** With either, every
+  `run_command` failed (`connecting to sandbox server: … connection reset by peer`, n=1, cause not
+  identified). The adapter sets neither and keeps mode `default`; only an `AGY_ACP_COMMAND`
+  override could reach them.
+- **Not measured:** whether a token refresh writes through the credential link or renames over it
+  (the link policy above is what repairs a rename at the next bootstrap); agy's own automatic compaction near a full
+  window; `agent_thought_chunk` above `low`; which skill agy lists when
+  a projected skill carries a built-in skill's name.
+- The row's `maxTokens` is an entwurf-declared number pi requires; nothing sends it to agy.
+- The Claude overlay has the same exposure the agy overlay now refuses — a `CLAUDE_CONFIG_DIR`
+  overlay path that is itself a symlink — and it is not changed here.
+
+Gates: `agy-adapter.test.ts` (routing, rows, launch admission, launch argv, carrier, set-model and
+thought-level readback, the clamp, operator narrowing, the overlay link, sweep and real-directory
+rules, the skill projection, retraction, collision and global-only rules), `augment.test.ts` (what
+an agy child is told, and the cwd `AGENTS.md` it is not handed twice), `backend.summary-turn.test.ts`
+(`[QK:ACP-AGY-SUMMARY-REFUSED]`, and an untagged agy turn through the real driver),
+`test/fresh-call-composition.contract.test.ts` (`[QK:FRESHCOMP-ACP-AGY-TOOL-DIALECT]`),
+`check-resume-launch-identity` (`[QK:RESUME-ID-ACP-AGY-ADMITTED]`), `check-acp-provider-surface`
+(the exact registered set).
 
 ### Cortex Code audit (D1–D10)
 

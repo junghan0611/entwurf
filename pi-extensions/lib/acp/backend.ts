@@ -63,6 +63,7 @@ import {
 import { prependNewPromptAugment } from "./augment.js";
 import {
 	ACP_PROMPT_REJECTION_DIAGNOSTIC,
+	ACP_SUMMARY_TURN_UNSUPPORTED,
 	type AcpBackendAdapter,
 	assertSupportedDeclaredBackend,
 	resolveAcpBackendAdapter,
@@ -1853,6 +1854,19 @@ export function streamAcpTurn(
 			return;
 		}
 		if (summaryTurn) {
+			// #167: honouring the empty surface is only honest where the child really has none. A
+			// backend that declares no tool-less summary child is refused here, before any spawn.
+			if (!adapter.toollessSummaryTurn) {
+				finishError(
+					new Error(
+						`entwurf: ${ACP_SUMMARY_TURN_UNSUPPORTED} — Pi asked ${model.id} for a summary, which declares no tools, ` +
+							`but the ${adapter.backend} ACP backend has no way to open a child without its native tools. ` +
+							`Nothing was started. Switch this session to a Claude row to summarize; repeating this request cannot change that.`,
+					),
+					false,
+				);
+				return;
+			}
 			await runSummaryTurn(config, adapter, nativeModelId);
 			return;
 		}

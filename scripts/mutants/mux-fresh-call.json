@@ -803,6 +803,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-LAUNCH-REJECT-HINTS-FROM-ROOT]",
 			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-ACP-AGY-TOOL-DIALECT",
+			"title": "an agy ACP model no longer switches the tool-name table — a pi sibling whose turns run inside `agy acp` is told Pi's `mcp__entwurf_bridge__*` names it does not have, and its first turn cannot call back",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tif (isAgyAcpModelId(id)) return FRESH_CALL_AGY_ACP_DIALECT;"],
+			"replace": ["\tvoid isAgyAcpModelId;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-ACP-AGY-TOOL-DIALECT]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
 		}
 	]
 }

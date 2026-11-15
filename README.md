@@ -202,10 +202,11 @@ identity, routes, roles, permissions or lifecycle. `entwurf help team`.
 **Entwurf** (기투, projection-of-self) connects independent visible siblings; a **garden id** names
 a record-backed citizen, not its pane or native transcript. The package holds the v2 core, the
 native-harness bridges, a pi adapter and an ACP plugin. ACP is one ingress, not the boundary; pi is
-one adapter, not the center. Claude is the supported ACP backend; Cortex Code ACP is disabled in
+one adapter, not the center. Claude is the reference ACP backend; Cortex Code ACP is disabled in
 this source. Already-running processes keep their loaded bytes until an operator restarts them.
-Codex and Antigravity stay
-native so they keep their own tools and work context. The pi adapter registers the compiled bridge
+Codex and Antigravity stay native citizens so they keep their own tools and work context; separately,
+a pi citizen can drive Antigravity's own ACP server (`agy acp`) as a backend, with the limits the
+[ACP rail](./docs/acp-backend-rail.md) states. The pi adapter registers the compiled bridge
 with Pi's built-in MCP after record birth, while pi's own receive stays its record-addressed control
 address. [FAQ](./FAQ.md) explains ACP, MCP and context carriers.
 

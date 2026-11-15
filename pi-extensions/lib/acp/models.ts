@@ -1,12 +1,13 @@
-// ACP plugin — curated Claude model surface. Cortex ACP is disabled.
+// ACP plugin — curated model surface: Claude rows, and the Antigravity ACP rows (#167) at the
+// end of this file. Cortex ACP is disabled.
 //
 // entwurf is an ACP *plugin* on the v2 core, NOT a general-purpose
 // Anthropic provider. It deliberately does not expose the full pi-ai model
 // registry — the surface is curated to the ids the plugin commits to driving
 // through a real ACP backend.
 //
-// Only the unprefixed Claude IDs are registered. Historical Cortex IDs are
-// reserved refusal inputs; native citizens are independent of this provider.
+// The unprefixed Claude IDs and the `agy-` prefixed Antigravity IDs are registered. Historical
+// Cortex IDs are reserved refusal inputs; native citizens are independent of this provider.
 
 // pi 0.80 migration: the standalone root `getModels()` moved to the deprecated
 // `@earendil-works/pi-ai/compat` entrypoint (the global-API churn). We import it
@@ -27,16 +28,23 @@
 // re-export of `getBuiltinModels`. When pi removes compat we migrate to whatever
 // the loader then exposes.
 import { getModels } from "@earendil-works/pi-ai/compat";
-import { CURATED_ANCHOR_MODEL_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./model-ids.js";
+import {
+	AGY_MODEL_PREFIX,
+	CURATED_ANCHOR_MODEL_ID,
+	SUPPORTED_AGY_NATIVE_MODEL_IDS,
+	SUPPORTED_ANTHROPIC_MODEL_IDS,
+} from "./model-ids.js";
 
 // The provider id and the curated ID lists live in the dependency-free
 // `model-ids.js` leaf, shared with the launch seams (#128); this file is the only
 // one that loads the upstream catalog to turn them into registry rows.
 export {
+	AGY_MODEL_PREFIX,
 	CORTEX_MODEL_PREFIX,
 	CURATED_ANCHOR_MODEL_ID,
 	LEGACY_CORTEX_MODEL_IDS,
 	PROVIDER_ID,
+	SUPPORTED_AGY_NATIVE_MODEL_IDS,
 	SUPPORTED_ANTHROPIC_MODEL_IDS,
 } from "./model-ids.js";
 
@@ -140,5 +148,70 @@ export function curatedClaudeModels() {
 		cost: m.cost,
 		contextWindow: claudeContextWindow(m),
 		maxTokens: m.maxTokens,
+	}));
+}
+
+// ---------------------------------------------------------------------------
+// Antigravity ACP rows (#167)
+// ---------------------------------------------------------------------------
+
+/**
+ * The `thought_level` values `agy acp` offers, per native model. `[측정 2026-11-16]` agy 1.5.9,
+ * authenticated, no prompt: setting each model and reading the answer's `thought_level` option gave
+ * `low, medium, high` for Argon and Flash and `low, medium, high, xhigh` for Hydrogen. The vendor
+ * default is `medium`; no pi level maps to "whatever the vendor picked".
+ */
+export const AGY_THOUGHT_LEVELS: Readonly<Record<(typeof SUPPORTED_AGY_NATIVE_MODEL_IDS)[number], readonly string[]>> =
+	Object.freeze({
+		"gemini-4-hydrogen": Object.freeze(["low", "medium", "high", "xhigh"]),
+		"gemini-4-argon": Object.freeze(["low", "medium", "high"]),
+		"gemini-3.8-flash": Object.freeze(["low", "medium", "high"]),
+	});
+
+/** The names agy's own `model` option gives these rows (same measurement). */
+const AGY_MODEL_NAMES: Readonly<Record<(typeof SUPPORTED_AGY_NATIVE_MODEL_IDS)[number], string>> = Object.freeze({
+	"gemini-4-hydrogen": "Gemini 4 Hydrogen",
+	"gemini-4-argon": "Gemini 4 Argon",
+	"gemini-3.8-flash": "Gemini 3.8 Flash",
+});
+
+/**
+ * The window agy reports as `usage_update.size`. `[측정 2026-11-16]` one prompt on each of the three
+ * models answered `size: 1048576`. It is a measured wire value, not a catalog row.
+ */
+export const AGY_CONTEXT_WINDOW = 1_048_576;
+
+/**
+ * pi requires an output cap on a row; this rail sends none to agy and reads none back, so the value
+ * limits nothing on the wire. It is an entwurf-declared number, NOT a measured vendor limit.
+ */
+export const AGY_ROW_MAX_TOKENS = 32_768;
+
+/** The pi `thinkingLevelMap` of one agy row: each offered `thought_level` under the pi level of the
+ *  same name, everything else `null` (never offered). */
+export function agyThinkingLevelMap(nativeModelId: (typeof SUPPORTED_AGY_NATIVE_MODEL_IDS)[number]): ThinkingLevelMap {
+	const offered = new Set(AGY_THOUGHT_LEVELS[nativeModelId]);
+	const map: ThinkingLevelMap = { off: null, minimal: null };
+	for (const level of ["low", "medium", "high", "xhigh", "max"] as const) {
+		map[level] = offered.has(level) ? level : null;
+	}
+	return map;
+}
+
+/**
+ * The curated Antigravity ACP rows. Built from the measured wire values above, never from pi's
+ * catalog: the subscription's models are whatever `agy acp` offers, and the price is zero because
+ * the wire carries no cost and nothing here prices a subscription turn.
+ */
+export function curatedAgyModels() {
+	return SUPPORTED_AGY_NATIVE_MODEL_IDS.map((nativeModelId) => ({
+		id: `${AGY_MODEL_PREFIX}${nativeModelId}`,
+		name: `${AGY_MODEL_NAMES[nativeModelId]} (agy ACP)`,
+		reasoning: true,
+		thinkingLevelMap: agyThinkingLevelMap(nativeModelId),
+		input: [...ACP_ROW_INPUT],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: AGY_CONTEXT_WINDOW,
+		maxTokens: AGY_ROW_MAX_TOKENS,
 	}));
 }

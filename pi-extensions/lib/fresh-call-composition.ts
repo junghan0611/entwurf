@@ -23,7 +23,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { PROVIDER_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./acp/model-ids.js";
+import { isAgyAcpModelId, PROVIDER_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./acp/model-ids.js";
 
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
  * not a config entry. `copilot` was added by #82 RAIL 9, `omp` by #87 Bundle C, `codex`
@@ -33,6 +33,15 @@ import { PROVIDER_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./acp/model-ids.js";
  * missing HERE is not an unwired convenience, it is a release blocker. */
 export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp", "codex", "pi-durable"] as const;
 export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
+
+/**
+ * A tool-name dialect is usually a backend's, with one that is not (#167): a pi sibling whose turns
+ * run inside `agy acp` reaches the bridge under the names AGY mints, and agy is not a fresh-call
+ * backend — the sibling is still a pi citizen. So the dialect tables are keyed by this wider set,
+ * while launch, load hints and admission stay keyed by `FreshCallBackend`.
+ */
+export const FRESH_CALL_AGY_ACP_DIALECT = "agy-acp";
+export type FreshCallToolDialect = FreshCallBackend | typeof FRESH_CALL_AGY_ACP_DIALECT;
 
 /**
  * The callback tool NAME differs per backend and that is not cosmetic: every session reaches the
@@ -62,7 +71,7 @@ export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
  * (`scripts/raw-omp-measure/README.md` "Tool-name dialect"). Unlike Copilot there is no second
  * permission dialect: omp's approval layer consults the same minted string (`source-audit.md`).
  */
-export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
+export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallToolDialect, string> = {
 	pi: "mcp__entwurf_bridge__entwurf_callback",
 	"claude-code": "mcp__entwurf-bridge__entwurf_callback",
 	copilot: "entwurf-bridge-entwurf_callback",
@@ -75,16 +84,25 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	// @cd32f77). Measured for `entwurf_v2` on the S+native-H wire (receipt 4012c066); the callback
 	// spelling follows the same rule and is owed its first LIVE observation.
 	"pi-durable": "entwurf_callback",
+	// `[측정 2026-11-16]` agy 1.5.9 mints `mcp_<server>_<tool>` — ONE underscore each side and the
+	// server's hyphen kept: a lab MCP server registered as `entwurf-bridge` surfaced its tool as
+	// `mcp_entwurf-bridge_lab_echo` in `tool_call.name` and in the model's own listing (#167).
+	// `[LIVE n=1, 2026-11-16]` a real `entwurf/agy-gemini-3.8-flash` sibling (garden
+	// `20261116T060223-a1f47f`) called `mcp_entwurf-bridge_entwurf_callback` and
+	// `mcp_entwurf-bridge_entwurf_v2` by these names — the digit survives. The peers spelling
+	// follows the same rule and is owed its first LIVE observation.
+	"agy-acp": "mcp_entwurf-bridge_entwurf_callback",
 };
 
 /** Where a sibling SENDS the task result. Always the delivery verb, never the birth callback. */
-export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallBackend, string> = {
+export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallToolDialect, string> = {
 	pi: "mcp__entwurf_bridge__entwurf_v2",
 	"claude-code": "mcp__entwurf-bridge__entwurf_v2",
 	copilot: "entwurf-bridge-entwurf_v2",
 	omp: "mcp__entwurf_bridge_entwurf_v",
 	codex: "mcp__entwurf_bridge__entwurf_v2",
 	"pi-durable": "entwurf_v2",
+	"agy-acp": "mcp_entwurf-bridge_entwurf_v2",
 };
 
 /**
@@ -101,13 +119,14 @@ export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallBackend, string> = {
  * charset is `[a-z_]`, which ate the digit in `entwurf_v2` — `entwurf_peers` has no digit, so the
  * SAME rule produces the whole word here.
  */
-export const FRESH_CALL_PEERS_TOOL: Record<FreshCallBackend, string> = {
+export const FRESH_CALL_PEERS_TOOL: Record<FreshCallToolDialect, string> = {
 	pi: "mcp__entwurf_bridge__entwurf_peers",
 	"claude-code": "mcp__entwurf-bridge__entwurf_peers",
 	copilot: "entwurf-bridge-entwurf_peers",
 	omp: "mcp__entwurf_bridge_entwurf_peers",
 	codex: "mcp__entwurf_bridge__entwurf_peers",
 	"pi-durable": "entwurf_peers",
+	"agy-acp": "mcp_entwurf-bridge_entwurf_peers",
 };
 
 /**
@@ -169,13 +188,19 @@ export const FRESH_CALL_TOOL_LOAD_HINT: Record<FreshCallBackend, readonly string
  * exactly curated (`isUncuratedEntwurfPiModel`, #128), and the test pins that alignment. Retired
  * Cortex ids are refused at the dispatch root before framing. The ACP id list arrives from
  * `acp/model-ids.js`, an import-free module.
+ *
+ * `[측정 2026-11-16, #167]` the same holds one vendor over: a pi sibling opened on an ACP
+ * Antigravity model (`entwurf/agy-*`) runs its turns inside `agy acp`, which mints
+ * `mcp_entwurf-bridge_*`. Only an exact curated agy id switches, and the load hint stays the pi
+ * row (none): agy listed an explicit MCP server's tools on the first prompt of a new session.
  */
-export function freshCallToolDialect(backend: FreshCallBackend, model: string): FreshCallBackend {
+export function freshCallToolDialect(backend: FreshCallBackend, model: string): FreshCallToolDialect {
 	if (backend !== "pi") return backend;
 	const trimmed = model.trim();
 	const slash = trimmed.indexOf("/");
 	if (slash < 0 || trimmed.slice(0, slash) !== PROVIDER_ID) return backend;
 	const id = trimmed.slice(slash + 1);
+	if (isAgyAcpModelId(id)) return FRESH_CALL_AGY_ACP_DIALECT;
 	return (SUPPORTED_ANTHROPIC_MODEL_IDS as readonly string[]).includes(id) ? "claude-code" : backend;
 }
 

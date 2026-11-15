@@ -27,14 +27,24 @@ import type { AcpConnectionLike } from "./acp-client.js";
 import { enrichMcpServersWithEnvelope, type ResolvedAcpConfig } from "./config.js";
 import { loadEngraving } from "./engraving.js";
 import {
+	AGY_MODEL_PREFIX,
+	AGY_THOUGHT_LEVELS,
 	CLAUDE_ACP_EFFORT_VALUES,
 	CORTEX_MODEL_PREFIX,
+	curatedAgyModels,
 	curatedClaudeModels,
 	curatedCortexModels,
 	LEGACY_CORTEX_MODEL_IDS,
+	SUPPORTED_AGY_NATIVE_MODEL_IDS,
 	SUPPORTED_ANTHROPIC_MODEL_IDS,
 } from "./models.js";
-import { claudeLaunchEnvDefaults, ensureClaudeConfigOverlay, ensureCortexDualHomeOverlay } from "./overlay.js";
+import {
+	AGY_GEMINI_OVERLAY_DIR,
+	claudeLaunchEnvDefaults,
+	ensureAgyGeminiOverlay,
+	ensureClaudeConfigOverlay,
+	ensureCortexDualHomeOverlay,
+} from "./overlay.js";
 import { buildClaudeSessionMeta } from "./tool-surface.js";
 
 // POSIX-safe single-quote wrapper for shell arg interpolation. Byte-for-byte
@@ -267,6 +277,16 @@ export interface AcpBackendAdapter {
 	 *  shape it never inspects. */
 	sealsTurnAccounting?: true;
 
+	/** Declares that THIS backend's summary child is tool-less in fact (#163, #167). Pi's summary
+	 *  request declares no tools, and the common loop honours it only because the child it opens
+	 *  can call none: a summarizer that could still run a command would act where Pi cannot see it.
+	 *  Claude's child is narrowed by the session meta the common loop hands it (`tools: []`, no MCP,
+	 *  nothing pre-approved).
+	 *
+	 *  ABSENT means no such surface was measured for this backend, so backend.ts refuses the
+	 *  summary turn by name before any child starts rather than run it with tools. */
+	toollessSummaryTurn?: true;
+
 	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
 	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
 	 *  from `errorMessage` alone, and a vendor's "Internal error" reads as transient
@@ -280,6 +300,10 @@ export interface AcpBackendAdapter {
 	 *  The vocabulary is the vendor's, so only the adapter that speaks it may declare it. */
 	readPromptRejection?(err: unknown): AcpPromptRejection | undefined;
 }
+
+/** The named refusal for a summary turn on a backend with no tool-less child. Fixed text,
+ *  non-transient to pi: replaying the request cannot give the backend a surface it lacks. */
+export const ACP_SUMMARY_TURN_UNSUPPORTED = "acp-summary-turn-unsupported";
 
 /** A vendor rejection an adapter recognised (`readPromptRejection`). */
 export interface AcpPromptRejection {
@@ -574,9 +598,252 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// per-turn round-trip aggregate, which is not what pi's four fields mean.
 	sealsTurnAccounting: true,
 
+	// #163: the summary child gets `tools: []`, no MCP, no plugin and nothing pre-approved through
+	// buildSessionMeta ([QK:ACP-SUMMARY-TURN-TOOLLESS]).
+	toollessSummaryTurn: true,
+
 	// #127: claude-agent-acp 0.85.0+ rejects an `end_turn` with unanswered foreground tools as
 	// -32603 `incomplete_tool_call` (upstream #1212). Its raw text reads as transient to pi.
 	readPromptRejection: readClaudePromptRejection,
+};
+
+// ---------------------------------------------------------------------------
+// agy adapter — Antigravity's own ACP server, `agy acp` (#167)
+// ---------------------------------------------------------------------------
+//
+// Every wire fact below was measured against agy 1.5.9 on 2026-11-16 (receipts on #167). This is
+// the ACP-backend lane only: a host pi citizen drives `agy acp` as a child. It registers no
+// citizen, touches no meta-store backend, and does not lift the native-push pause (#152).
+
+const SUPPORTED_AGY_NATIVE_IDS: ReadonlySet<string> = new Set(SUPPORTED_AGY_NATIVE_MODEL_IDS);
+
+/** The named refusal for operator tool narrowing agy cannot apply. Fixed text, non-transient to pi. */
+export const ACP_AGY_NARROWING_UNSUPPORTED = "acp-agy-narrowing-unsupported";
+
+/** The `entwurfProvider` keys that narrow a Claude child's tools and have no agy seat. */
+/** The agy adapter's own settings: the operator's GLOBAL `skillPlugins`, the one list the shared
+ *  overlay can project. */
+export interface AgyAdapterSettings {
+	skillPlugins: string[];
+}
+
+export const AGY_UNSUPPORTED_NARROWING_KEYS = ["tools", "disallowedTools", "permissionAllow"] as const;
+
+/** The named refusal for a thinking level agy ACP cannot carry. Fixed text, non-transient to pi. */
+export const ACP_AGY_THINKING_LEVEL_UNSUPPORTED = "acp-agy-thinking-level-unsupported";
+
+/**
+ * The launch argv after `agy`. The state root, the customization switch and the permission switch
+ * are ARGUMENTS on this vendor, so the overlay path rides argv rather than spawn env.
+ *
+ *  - `--gemini-dir <overlay>` — the whole state root (see `ensureAgyGeminiOverlay`).
+ *  - `--include-default-customizations=false` — the vendor's own default customizations stay out.
+ *  - `--dangerously-skip-permissions` — unattended operation, the same stance as the Claude
+ *    overlay's `bypassPermissions`: a tool call must not suspend a turn on a prompt. Measured: with
+ *    it a shell command ran with no `session/request_permission`; without it the server asked.
+ */
+export function agyLaunchArgs(overlayDir: string = AGY_GEMINI_OVERLAY_DIR): string[] {
+	return [
+		"acp",
+		"--stdio",
+		"--gemini-dir",
+		overlayDir,
+		"--include-default-customizations=false",
+		"--dangerously-skip-permissions",
+	];
+}
+
+function agyConfigOption(response: unknown, id: string): Record<string, unknown> | undefined {
+	const configOptions = (response as { configOptions?: unknown } | null | undefined)?.configOptions;
+	if (!Array.isArray(configOptions)) return undefined;
+	const hit = (configOptions as Array<Record<string, unknown> | null>).find((option) => option?.id === id);
+	return hit ?? undefined;
+}
+
+/**
+ * Refuse unless the set-model answer reads back the requested native id. agy answers
+ * `session/set_config_option` with the full option list and `model.currentValue` equal to the value
+ * it was given (measured: no alias rows, unlike Claude), and rejects an id it does not offer with
+ * `-32602 Unknown model ID` before any prompt.
+ */
+export function confirmAgySetModelAnswer(response: unknown, nativeModelId: string): void {
+	const model = agyConfigOption(response, "model");
+	if (model?.currentValue === nativeModelId) return;
+	const answered = model === undefined ? "no model option" : `model ${jsonText(model.currentValue)}`;
+	throw new Error(
+		`entwurf: agy acp answered set-model ${JSON.stringify(nativeModelId)} with ${answered}, which does not name ` +
+			`the requested model. Refusing before the prompt so a different model cannot answer under this id; ` +
+			`repeating the turn cannot change that.`,
+	);
+}
+
+/**
+ * Map pi's requested level to agy's `thought_level`, or refuse by name. The value is the registered
+ * row's `thinkingLevelMap` entry and must be one this native model was measured to offer.
+ * `undefined` (pi off, or no level) is refused rather than left at the vendor's `medium`, for the
+ * reason Claude's is: the turn would run at a depth nobody chose.
+ */
+export function resolveAgyThoughtLevel(
+	modelId: string,
+	reasoning: string | undefined,
+	thinkingLevelMap: Readonly<Record<string, string | null | undefined>> | undefined,
+): string {
+	const native = modelId.startsWith(AGY_MODEL_PREFIX) ? modelId.slice(AGY_MODEL_PREFIX.length) : modelId;
+	const offered: readonly string[] = (AGY_THOUGHT_LEVELS as Readonly<Record<string, readonly string[]>>)[native] ?? [];
+	const value = reasoning === undefined ? undefined : thinkingLevelMap?.[reasoning];
+	if (typeof value === "string" && offered.includes(value)) return value;
+	const asked =
+		reasoning === undefined
+			? "no thinking level (pi sends none for `off`, and none when no level is set; the two are indistinguishable here)"
+			: `thinking level ${JSON.stringify(reasoning)}`;
+	throw new Error(
+		`entwurf: ${ACP_AGY_THINKING_LEVEL_UNSUPPORTED} — ${modelId} over agy ACP carries thought level ` +
+			`${offered.join("/") || "(none)"} only, and was asked for ${asked}. Choose one of those levels; ` +
+			`the turn was not sent, and repeating it at the same level cannot change that.`,
+	);
+}
+
+function agyThoughtLevelRefusal(modelId: string, value: string, what: string, cause?: unknown): Error {
+	const error = new Error(
+		`entwurf: agy acp ${what} for thought level ${JSON.stringify(value)} on ${modelId}. Refusing before the prompt ` +
+			`so the turn cannot run at a level nobody chose; repeating the turn cannot change the server's answer.`,
+	);
+	if (cause !== undefined) (error as Error & { cause?: unknown }).cause = cause;
+	return error;
+}
+
+/**
+ * Refuse unless the set-thought-level answer reads back the requested value. The readback is not a
+ * formality on this vendor: agy CLAMPS silently when the model changes under a level it does not
+ * offer (measured: Hydrogen at `xhigh`, then set-model Flash, answered `thought_level: high`), so
+ * the level is set after the model and only the answer says what the session holds.
+ */
+export function confirmAgyThoughtLevelAnswer(response: unknown, modelId: string, value: string): void {
+	const level = agyConfigOption(response, "thought_level");
+	if (level?.currentValue === value) return;
+	throw agyThoughtLevelRefusal(
+		modelId,
+		value,
+		level === undefined
+			? "answered with no thought_level option"
+			: `answered thought level ${jsonText(level.currentValue)}`,
+	);
+}
+
+export const agyAdapter: AcpBackendAdapter = {
+	backend: "agy",
+
+	// agy owns the reserved `agy-` prefix; the native id is what its `model` option offers.
+	routeModel(modelId) {
+		if (!modelId.startsWith(AGY_MODEL_PREFIX)) return undefined;
+		const nativeModelId = modelId.slice(AGY_MODEL_PREFIX.length);
+		return SUPPORTED_AGY_NATIVE_IDS.has(nativeModelId) ? { nativeModelId } : undefined;
+	},
+
+	curatedModels() {
+		return curatedAgyModels();
+	},
+
+	// No backend-specific settings: the account, tier and model set are whatever the operator's
+	// `agy acp --login` holds. What this does read is the operator's Claude-shaped NARROWING: agy
+	// has no seat for `tools`, `disallowedTools` or `permissionAllow`, and the child runs with its
+	// permission prompts bypassed, so honouring a config that says "only these tools" by ignoring
+	// it would hand the model a shell the operator had taken away. Any of the three, set in either
+	// settings file, refuses the turn here — before the overlay, the spawn or the session.
+	//
+	// What it returns is the one setting agy can honour: `skillPlugins`, read from the GLOBAL block
+	// only. Every agy child shares one overlay, so a per-project list would have two siblings
+	// sweeping each other's skill links; a project-only `skillPlugins` therefore reaches no agy child.
+	resolveAdapterSettings({ globalBlock, mergedBlock, projectBlock, globalPath, projectPath }): AgyAdapterSettings {
+		for (const key of AGY_UNSUPPORTED_NARROWING_KEYS) {
+			if (mergedBlock[key] === undefined) continue;
+			const where = projectBlock[key] !== undefined ? projectPath : globalPath;
+			throw new Error(
+				`entwurf: ${ACP_AGY_NARROWING_UNSUPPORTED} — ${where} sets entwurfProvider.${key}, and the agy ACP backend ` +
+					`cannot apply it: agy takes no tool list or allow list and runs with its permission prompts bypassed. ` +
+					`Nothing was started. Use a Claude row for a narrowed session, or remove the setting; repeating this request cannot change that.`,
+			);
+		}
+		const declared = globalBlock.skillPlugins;
+		return { skillPlugins: Array.isArray(declared) ? declared.filter((p): p is string => typeof p === "string") : [] };
+	},
+
+	// `agy` from PATH — the CLI is the ACP server. `AGY_ACP_COMMAND` is the explicit operator
+	// override and, like Claude's, owns its whole command line: the overlay and permission
+	// arguments are not appended to it.
+	resolveLaunch() {
+		const override = process.env.AGY_ACP_COMMAND?.trim();
+		if (override) return { command: "bash", args: ["-lc", override] };
+		return { command: "agy", args: agyLaunchArgs() };
+	},
+
+	// Nothing rides the environment: the overlay is an argument (agyLaunchArgs).
+	launchEnvDefaults() {
+		return {};
+	},
+
+	ensureOverlay({ config }) {
+		ensureAgyGeminiOverlay(undefined, undefined, (config.adapterSettings as AgyAdapterSettings).skillPlugins);
+		return { envOverrides: {} };
+	},
+
+	loadCarrier({ mcpServerNames }) {
+		return loadEngraving({ backend: "agy", mcpServerNames });
+	},
+
+	// agy advertises `_meta.antigravity.systemPrompt.append` at initialize and honours a string
+	// there on session/new (measured: an appended rule shaped the reply). No carrier → no `_meta`.
+	buildSessionMeta(_params, carrier) {
+		if (carrier === null) return undefined;
+		return { antigravity: { systemPrompt: { append: carrier } } };
+	},
+
+	async enforceModel({ connection, acpSessionId, nativeModelId, modelId }) {
+		const setConfig = connection.setSessionConfigOption;
+		if (typeof setConfig !== "function") {
+			throw new Error(`setSessionConfigOption unsupported — cannot enforce model ${modelId}`);
+		}
+		const answer = await setConfig.call(connection, {
+			sessionId: acpSessionId,
+			configId: "model",
+			value: nativeModelId,
+		});
+		confirmAgySetModelAnswer(answer, nativeModelId);
+	},
+
+	resolveThinking({ modelId, reasoning, thinkingLevelMap }) {
+		return resolveAgyThoughtLevel(modelId, reasoning, thinkingLevelMap);
+	},
+
+	async enforceThinking({ connection, acpSessionId, modelId, value }) {
+		const setConfig = connection.setSessionConfigOption;
+		if (typeof setConfig !== "function") {
+			throw new Error(`setSessionConfigOption unsupported — cannot set thought level for ${modelId}`);
+		}
+		let answer: unknown;
+		try {
+			answer = await setConfig.call(connection, { sessionId: acpSessionId, configId: "thought_level", value });
+		} catch (err) {
+			throw agyThoughtLevelRefusal(modelId, value, "refused the set", err);
+		}
+		confirmAgyThoughtLevelAnswer(answer, modelId, value);
+	},
+
+	configSignatureFields(_adapterSettings) {
+		return {};
+	},
+
+	// NO sealsTurnAccounting — a deliberate absence. agy's `usage_update` carries `used` and `size`
+	// and NO cost (measured), so there is no session total to diff; and the seal's cache-miss bound
+	// rests on a recurrence observed for Claude Code alone. The common mapper still relays `used`
+	// as the context occupancy pi reads.
+
+	// NO readPromptRejection — nobody has read which typed rejections agy answers a prompt with.
+
+	// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on
+	// session/new; `plan` mode still ran a shell command; and a denied permission stops only the
+	// tools that ask. With no way to open a child that can call nothing, Pi's summary request is
+	// refused by name instead of being run by a summarizer that holds a shell.
 };
 
 // ---------------------------------------------------------------------------
@@ -765,7 +1032,7 @@ export const cortexAdapter: AcpBackendAdapter = {
 	configSignatureFields: cortexDisabled,
 };
 
-const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter];
+const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, agyAdapter];
 
 /** A declared backend is only a guard, never a replacement routing authority. */
 export function assertSupportedDeclaredBackend(backend: string | undefined): void {

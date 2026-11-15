@@ -146,10 +146,14 @@ try {
 		expectedIds,
 		"[QK:CLAUDE-CURATED-FOUR-ROWS] the four Claude IDs are an independent literal oracle",
 	);
+	// #167: the Antigravity ACP adapter adds three reserved-prefix rows. Literal here for the same
+	// reason as the Claude four. The QK keeps its name — it is the stable key the mutant manifest
+	// cites — and still certifies what it always did: the exact supported set, no retired Cortex row.
+	const expectedAgyIds = ["agy-gemini-3.8-flash", "agy-gemini-4-argon", "agy-gemini-4-hydrogen"];
 	assert.deepEqual(
 		capIds.slice().sort(),
-		expectedIds,
-		`[QK:ACP-PROVIDER-CLAUDE-ONLY] compiled provider must expose exactly the four Claude rows — got: ${capIds.join(", ") || "none"}`,
+		[...expectedAgyIds, ...expectedIds],
+		`[QK:ACP-PROVIDER-CLAUDE-ONLY] compiled provider must expose exactly the four Claude rows and the three agy rows, and no retired Cortex row — got: ${capIds.join(", ") || "none"}`,
 	);
 	assert.equal(typeof cap.cfg.streamSimple, "function", "entry streamSimple must be a function");
 	// Regression guard: the entry must wire the REAL backend (streamShellAcp),
@@ -196,7 +200,7 @@ assert.ok(!/backend-stub/.test(entrySrc), "entry must not import the removed S0 
 
 console.log(
 	`[check-acp-provider-surface] ok — compiled entry registers ${PROVIDER_ID} once (idempotent) with the no-auth ` +
-		`sentinel + the EXACT Claude-only curated set (${SUPPORTED_ANTHROPIC_MODEL_IDS.length} incl. ` +
-		`${CURATED_ANCHOR_MODEL_ID}) + real streamShellAcp backend (S2c); ` +
+		`sentinel + the EXACT curated set (${SUPPORTED_ANTHROPIC_MODEL_IDS.length} Claude incl. ` +
+		`${CURATED_ANCHOR_MODEL_ID}, 3 agy, no Cortex) + real streamShellAcp backend (S2c); ` +
 		`claude lib surface verified live (${models.length} model(s))`,
 );

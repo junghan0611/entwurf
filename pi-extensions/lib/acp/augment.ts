@@ -48,6 +48,24 @@ const MAX_AUGMENT_BYTES = 50 * 1024;
 // carrier feeds bridgeConfigSignature.
 const CARRIER_LESS_BACKENDS: ReadonlySet<string> = new Set(["cortex"]);
 
+// #167: agy's carrier seat is `_meta.antigravity.systemPrompt.append` — the engraving is ADDED to
+// agy's own system prompt, not put in place of one. Telling an agy child the Claude sentence
+// (`_meta.systemPrompt`, "system prompt = the short engraving") would state a wire that was never
+// sent and deny a system prompt it does have.
+const APPEND_CARRIER_BACKENDS: ReadonlySet<string> = new Set(["agy"]);
+
+// #167: backends that load the session cwd's AGENTS.md on their own. `[측정 2026-11-16]` agy 1.5.9
+// put `<cwd>/AGENTS.md` into its own rules in 4 of 4 cwd shapes (repo subdirectory, repo root, a
+// directory outside any repository, HOME) and `~/AGENTS.md` only when the cwd WAS home. So the cwd
+// section here would be a second copy; the home section is still the only one such a child gets.
+const CWD_AGENTS_SELF_LOADING_BACKENDS: ReadonlySet<string> = new Set(["agy"]);
+
+/** #167: what an agy child's tool surface looks like, stated only to an agy child. The MCP spelling
+ *  is the measured one (`mcp_<server>_<tool>`, hyphen kept); `run_command` is the shell tool its own
+ *  frames named. The callable schema stays the source of truth, as the lines above this one say. */
+const AGY_TOOL_SURFACE_LINE =
+	"- Antigravity ACP exposes its own native tools (run_command among them) and names an MCP server's tools mcp_<server>_<tool>, for example mcp_entwurf-bridge_entwurf_v2.";
+
 // The one sentence both rails owe the model: WHAT this block is and what it is
 // NOT. Shared so neither rail's frame can quietly lose it (and so the gate has a
 // single anchor to mutate). Everything after it is rail-specific, because the
@@ -146,13 +164,21 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 					`The ${params.backend} rail carries no system-prompt carrier at all — entwurf sends no \`_meta.systemPrompt\`, so everything entwurf tells you, including any operator engraving above, arrives here as user-message text.`,
 					"If you are asked what your system prompt says, do not quote this block as one.",
 				].join("\n")
-			: [
-					"# entwurf: where this text comes from",
-					"",
-					PROVENANCE_LEAD,
-					`The ${params.backend} rail does have a system-prompt carrier (\`_meta.systemPrompt\`), and entwurf keeps it deliberately tiny: it carries the operator engraving only — never this narrative, never AGENTS.md.`,
-					"So: system prompt = the short engraving; everything below = first-user-message text. If you are asked what your system prompt says, do not quote this block as one.",
-				].join("\n"),
+			: APPEND_CARRIER_BACKENDS.has(params.backend)
+				? [
+						"# entwurf: where this text comes from",
+						"",
+						PROVENANCE_LEAD,
+						`The ${params.backend} rail does have a system-prompt carrier (\`_meta.antigravity.systemPrompt.append\`), and entwurf keeps it deliberately tiny: the operator engraving is appended to the backend's own system prompt — never this narrative, never AGENTS.md.`,
+						"So: system prompt = the backend's own, plus the short engraving; everything below = first-user-message text. If you are asked what your system prompt says, do not quote this block as one.",
+					].join("\n")
+				: [
+						"# entwurf: where this text comes from",
+						"",
+						PROVENANCE_LEAD,
+						`The ${params.backend} rail does have a system-prompt carrier (\`_meta.systemPrompt\`), and entwurf keeps it deliberately tiny: it carries the operator engraving only — never this narrative, never AGENTS.md.`,
+						"So: system prompt = the short engraving; everything below = first-user-message text. If you are asked what your system prompt says, do not quote this block as one.",
+					].join("\n"),
 	);
 
 	// Bridge identity + caller-side sibling stance. The closing line is a
@@ -183,6 +209,7 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 			"- Do not assume a tool exists only because this context or AGENTS.md mentions it.",
 			"- Pi-level work generally includes reading files, running shell commands, editing files, and writing files; concrete tool names differ by backend.",
 			"- Native pi may expose read/bash/edit/write; Claude ACP may expose Read/Bash/Edit/Write/Skill; Codex ACP may expose exec_command/apply_patch/write_stdin/update_plan.",
+			...(params.backend === "agy" ? [AGY_TOOL_SURFACE_LINE] : []),
 			"- MCP/custom tools are usable only when they appear in the actual tool schema for this session.",
 		].join("\n"),
 	);
@@ -207,7 +234,8 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 		const content = readAgents(homeAgents);
 		if (content) projectContextParts.push(`## ${homeAgents}\n\n${content}`);
 	}
-	if (existsSync(cwdAgents) && cwdAgents !== homeAgents) {
+	const backendLoadsCwdAgents = CWD_AGENTS_SELF_LOADING_BACKENDS.has(params.backend);
+	if (existsSync(cwdAgents) && cwdAgents !== homeAgents && !backendLoadsCwdAgents) {
 		const content = readAgents(cwdAgents);
 		if (content) projectContextParts.push(`## ${cwdAgents}\n\n${content}`);
 	}

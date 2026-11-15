@@ -33,6 +33,7 @@ import {
 	type TranscriptContext,
 	type Usage,
 } from "@earendil-works/pi-ai";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { generateBranchSummary, generateSummary } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -476,6 +477,78 @@ describe("Pi's summary request through the ACP turn driver (#163)", () => {
 		const [created] = world.calls("newSession");
 		expect(created._meta.claudeCode.options.tools).toEqual([]);
 		expect(world.killed.has(world.children[0])).toBe(true);
+	});
+});
+
+describe("the Antigravity ACP backend through the turn driver (#167)", () => {
+	function agyFlash(): Model<Api> {
+		const row = models.curatedAgyModels().find((r) => r.id === "agy-gemini-3.8-flash");
+		if (!row) throw new Error("agy-gemini-3.8-flash is not curated");
+		return { ...row, api: "entwurf", provider: "entwurf", baseUrl: "" } as Model<Api>;
+	}
+	async function agyTurn(
+		world: ReturnType<typeof makeWorld>,
+		context: TranscriptContext,
+		options: Record<string, unknown>,
+	) {
+		const events: AssistantMessageEvent[] = [];
+		const opts = options as Parameters<typeof backend.streamAcpTurn>[2];
+		for await (const event of backend.streamAcpTurn(agyFlash(), context, opts, world.deps)) events.push(event);
+		const sealed = events.filter((e) => e.type === "done" || e.type === "error");
+		expect(sealed).toHaveLength(1);
+		return sealed[0];
+	}
+
+	it("an agy turn through the real driver: the carrier goes on session/new, then the native model, then the thought level, then the prompt", async () => {
+		const world = makeWorld((say) =>
+			say({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" } }),
+		);
+		const sealed = await agyTurn(world, transcript("hello"), { sessionId: "S-agy", reasoning: "low" });
+		expect(sealed.type).toBe("done");
+		expect(world.wire.map((c) => c.method)).toEqual(["newSession", "set:model", "set:thought_level", "prompt"]);
+		expect(world.calls("newSession")[0]._meta).toBeDefined();
+		expect(world.calls("set:model")[0].value).toBe("gemini-3.8-flash");
+		expect(world.calls("set:thought_level")[0].value).toBe("low");
+	});
+
+	it("[QK:ACP-AGY-SUMMARY-REFUSED] Pi's summary request to an agy model is refused by name before any child starts — agy has no tool-less child", async () => {
+		// The provider's own answer to a summary-shaped request.
+		const world = makeWorld(summarizerSays);
+		const context = normalizeContext({
+			tools: [],
+			messages: [...conversation("first"), { role: "user", content: "summarize", timestamp: 9 }],
+		});
+		const sealed = await agyTurn(world, context, { sessionId: "S-agy-sum", reasoning: "low", cacheRetention: "none" });
+		expect(sealed.type).toBe("error");
+		const message = sealed.type === "error" ? (sealed.error.errorMessage ?? "") : "";
+		expect(message).toContain("acp-summary-turn-unsupported");
+		expect(message).toContain("a Claude row");
+		// Not transient to pi: a replay cannot give the backend a surface it lacks.
+		expect(isRetryableAssistantError({ stopReason: "error", errorMessage: message } as never)).toBe(false);
+		expect(world.children).toHaveLength(0);
+		expect(world.wire).toHaveLength(0);
+
+		// Pi's own summarizer — the path /compact, the threshold and overflow recovery all take. It
+		// must end in that named error, never in a stored summary.
+		const piWorld = makeWorld(summarizerSays);
+		const seen: { context?: TranscriptContext; options?: any } = {};
+		await expect(
+			generateSummary(
+				conversation("plan the release", "run the gates"),
+				agyFlash(),
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				"low",
+				piStreamFn(piWorld, seen),
+			),
+		).rejects.toThrow(/acp-summary-turn-unsupported/);
+		expect(seen.options?.cacheRetention).toBe("none");
+		expect(piWorld.children).toHaveLength(0);
+		expect(piWorld.wire).toHaveLength(0);
 	});
 });
 

@@ -211,9 +211,15 @@
 			"claim": "ACP-CORTEX-LEGACY-NOT-CURATED",
 			"title": "retired Cortex ids become accepted by the exact launch admission again",
 			"subject": "pi-extensions/lib/acp/model-ids.js",
-			"find": ["const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);"],
+			"find": [
+				"const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_AGY_MODEL_IDS]);"
+			],
 			"replace": [
-				"const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...LEGACY_CORTEX_MODEL_IDS]);"
+				"const CURATED_ACP_MODEL_IDS = new Set([",
+				"\t...SUPPORTED_ANTHROPIC_MODEL_IDS,",
+				"\t...SUPPORTED_AGY_MODEL_IDS,",
+				"\t...LEGACY_CORTEX_MODEL_IDS,",
+				"]);"
 			],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
@@ -511,6 +517,291 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-PREVIEW-MATCHES-PI]",
 			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-ROUTE-EXACT",
+			"title": "the agy adapter routes any `agy-` id — a model agy offers but this rail does not register reaches set-model under a row nobody curated",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\treturn SUPPORTED_AGY_NATIVE_IDS.has(nativeModelId) ? { nativeModelId } : undefined;"],
+			"replace": ["\t\treturn { nativeModelId };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-ROUTE-EXACT]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-ROWS",
+			"title": "the agy rows declare a window agy never reported — pi's occupancy and compaction threshold read against the wrong size",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": ["export const AGY_CONTEXT_WINDOW = 1_048_576;"],
+			"replace": ["export const AGY_CONTEXT_WINDOW = 1_000_000;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-ROWS]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-LAUNCH-ADMITTED",
+			"title": "the launch seams drop the agy ids — a fresh call or a resume on an agy row is refused as uncurated while the provider registers it",
+			"subject": "pi-extensions/lib/acp/model-ids.js",
+			"find": [
+				"const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_AGY_MODEL_IDS]);"
+			],
+			"replace": ["const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-LAUNCH-ADMITTED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-LAUNCH-ARGV",
+			"title": "agy is launched without its permission switch — an unattended turn suspends on a request the operator never sees as a choice",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\t\"--include-default-customizations=false\",", "\t\t\"--dangerously-skip-permissions\",", "\t];"],
+			"replace": ["\t\t\"--include-default-customizations=false\",", "\t];"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-LAUNCH-ARGV]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-CARRIER-APPEND",
+			"title": "the carrier is sent under a key agy does not read — the engraving silently never reaches the session",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\treturn { antigravity: { systemPrompt: { append: carrier } } };"],
+			"replace": ["\t\treturn { systemPrompt: carrier };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-CARRIER-APPEND]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SET-MODEL-READBACK",
+			"title": "the agy set-model answer is no longer read back — an answer naming another model reaches the prompt",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconfirmAgySetModelAnswer(answer, nativeModelId);"],
+			"replace": ["\t\tvoid answer;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SET-MODEL-READBACK]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-THOUGHT-RESOLVE",
+			"title": "a thought level the model was not measured to offer resolves anyway — the refusal moves from before any spawn to a vendor error mid-bootstrap",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tif (typeof value === \"string\" && offered.includes(value)) return value;"],
+			"replace": ["\tif (typeof value === \"string\") return value;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-THOUGHT-RESOLVE]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-THOUGHT-READBACK",
+			"title": "the agy thought-level answer is no longer read back — an answer with no thought_level option passes as the level asked for",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconfirmAgyThoughtLevelAnswer(answer, modelId, value);"],
+			"replace": ["\t\tvoid answer;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-THOUGHT-READBACK]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-THOUGHT-CLAMP",
+			"title": "any thought level in the answer is accepted — agy's silent clamp to a lower level passes as the level asked for",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tconst level = agyConfigOption(response, \"thought_level\");",
+				"\tif (level?.currentValue === value) return;"
+			],
+			"replace": [
+				"\tconst level = agyConfigOption(response, \"thought_level\");",
+				"\tif (level !== undefined) return;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-THOUGHT-CLAMP]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-NO-SEAL-NO-REJECTION",
+			"title": "agy declares measured turn accounting it does not have — a cost baseline and a Claude-only cache-miss bound run on a wire with no cost",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t// NO sealsTurnAccounting — a deliberate absence. agy's `usage_update` carries `used` and `size`"],
+			"replace": [
+				"\tsealsTurnAccounting: true,",
+				"\t// NO sealsTurnAccounting — a deliberate absence. agy's `usage_update` carries `used` and `size`"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-NO-SEAL-NO-REJECTION]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OVERLAY-ONE-LINK",
+			"title": "the agy overlay links the operator's settings beside the token — operator configuration reaches the ACP child",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["export const AGY_OVERLAY_PASSTHROUGH: ReadonlySet<string> = new Set([\"antigravity-oauth-token\"]);"],
+			"replace": [
+				"export const AGY_OVERLAY_PASSTHROUGH: ReadonlySet<string> = new Set([\"antigravity-oauth-token\", \"settings.json\"]);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-OVERLAY-ONE-LINK]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OVERLAY-RELINK",
+			"title": "whatever sits at the token path is kept — a renamed copy or a wrong link outlives the bootstrap and the child authenticates off a file the operator does not own",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": [
+				"\t\tif (existing?.isSymbolicLink() && readlinkSync(overlayPath) === realPath) continue;",
+				"\t\tif (existing) rmSync(overlayPath, { recursive: true, force: true });"
+			],
+			"replace": ["\t\tif (existing) continue;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-OVERLAY-RELINK]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-REFUSED",
+			"title": "agy declares a tool-less summary child it cannot open — Pi's summary runs on a child holding a shell with permissions bypassed",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on"],
+			"replace": [
+				"\ttoollessSummaryTurn: true,",
+				"\t// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-NARROWING-REFUSED",
+			"title": "an operator allow list no longer refuses the agy turn — a session the operator narrowed runs on a child that ignores the narrowing with its permission prompts bypassed",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"export const AGY_UNSUPPORTED_NARROWING_KEYS = [\"tools\", \"disallowedTools\", \"permissionAllow\"] as const;"
+			],
+			"replace": ["export const AGY_UNSUPPORTED_NARROWING_KEYS = [\"tools\", \"disallowedTools\"] as const;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-NARROWING-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OVERLAY-SWEEP",
+			"title": "a foreign symlink in the agy overlay is kept — a link to operator state made outside the allowlist stays readable by the ACP child",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\t\t\tif (isForeignLink) rmSync(path, { force: true });"],
+			"replace": ["\t\t\tvoid isForeignLink;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-OVERLAY-SWEEP]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OVERLAY-REAL-DIRECTORY",
+			"title": "a symlinked overlay path is accepted — the passthrough step deletes the operator's own token and links it to itself",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tfor (const dir of [overlayDir, overlayAppData, ...guarded]) assertAgyOverlayDirectory(dir);"],
+			"replace": ["\tfor (const dir of guarded) assertAgyOverlayDirectory(dir);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-OVERLAY-REAL-DIRECTORY]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OVERLAY-SKILL-SEAT-REAL",
+			"title": "a skill seat linked into the operator's own directory is swept as if it were the overlay's",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tconst guarded = isSymlink(overlayConfig) ? [] : [overlayConfig, overlaySkills];"],
+			"replace": ["\tconst guarded = isSymlink(overlayConfig) ? [] : [overlayConfig];"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-OVERLAY-SKILL-SEAT-REAL]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SKILLS-GLOBAL-ONLY",
+			"title": "a project settings file decides which skills the overlay every agy child shares is given",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconst declared = globalBlock.skillPlugins;"],
+			"replace": ["\t\tconst declared = mergedBlock.skillPlugins;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SKILLS-GLOBAL-ONLY]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SKILLS-PROJECTED",
+			"title": "a plugin directory with no SKILL.md is linked into the agy skill seat",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\t\t\tif (!existsSync(join(source, \"SKILL.md\"))) continue;"],
+			"replace": ["\t\t\tif (!existsSync(source)) continue;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SKILLS-PROJECTED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SKILLS-RETRACTED",
+			"title": "a skill link the operator's setting no longer names stays in the agy overlay",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\t\tif (skillLinks.get(entry) !== readlinkSync(path)) rmSync(path, { force: true });"],
+			"replace": ["\t\tvoid entry;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SKILLS-RETRACTED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SKILLS-COLLISION",
+			"title": "two plugins offering one skill name are linked last-one-wins instead of refused",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\t\t\tif (taken !== undefined) {"],
+			"replace": ["\t\t\tif (taken === null) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SKILLS-COLLISION]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-AUGMENT-PROVENANCE",
+			"title": "an agy child is told the Claude carrier sentence — a `_meta.systemPrompt` that was never sent, and a system prompt that is only the engraving",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": ["const APPEND_CARRIER_BACKENDS: ReadonlySet<string> = new Set([\"agy\"]);"],
+			"replace": ["const APPEND_CARRIER_BACKENDS: ReadonlySet<string> = new Set([]);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-AUGMENT-PROVENANCE]",
+			"signatureSource": "pi-extensions/lib/acp/augment.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-AUGMENT-CWD-AGENTS-DROPPED",
+			"title": "an agy child is handed the cwd AGENTS.md a second time, beside the copy agy loads itself",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": ["const CWD_AGENTS_SELF_LOADING_BACKENDS: ReadonlySet<string> = new Set([\"agy\"]);"],
+			"replace": ["const CWD_AGENTS_SELF_LOADING_BACKENDS: ReadonlySet<string> = new Set([]);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-AUGMENT-CWD-AGENTS-DROPPED]",
+			"signatureSource": "pi-extensions/lib/acp/augment.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-AUGMENT-TOOL-SPELLING",
+			"title": "agy's MCP tool spelling is stated to a Claude child instead of an agy one",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": ["\t\t\t...(params.backend === \"agy\" ? [AGY_TOOL_SURFACE_LINE] : []),"],
+			"replace": ["\t\t\t...(params.backend === \"claude\" ? [AGY_TOOL_SURFACE_LINE] : []),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-AUGMENT-TOOL-SPELLING]",
+			"signatureSource": "pi-extensions/lib/acp/augment.test.ts"
 		}
 	]
 }

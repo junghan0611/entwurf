@@ -41,8 +41,34 @@ export const LEGACY_CORTEX_MODEL_IDS = /** @type {const} */ ([
 	"cortex-openai-gpt-5.4",
 ]);
 
+// Antigravity ACP (`agy acp`, #167). The reserved prefix marks a row the agy adapter owns; the
+// native id behind it is the value agy's own `model` config option offers. `[측정 2026-11-16]`
+// agy 1.5.9, Google AI Pro: the option lists these three among seven; the other four are not
+// rows here (two carry no `thought_level` option, two are Claude models the Claude rail already
+// drives). The prefix is `agy-`, not the `agy/` an early note on #167 used as an example: the one
+// reserved prefix this file already had is `cortex-`, and a second slash inside `provider/id` is a
+// parsing surface nothing here needs.
+export const AGY_MODEL_PREFIX = "agy-";
+export const SUPPORTED_AGY_NATIVE_MODEL_IDS = /** @type {const} */ ([
+	"gemini-4-hydrogen",
+	"gemini-4-argon",
+	"gemini-3.8-flash",
+]);
+
+/** The curated agy ids as registered: prefix + native id. @type {readonly string[]} */
+export const SUPPORTED_AGY_MODEL_IDS = SUPPORTED_AGY_NATIVE_MODEL_IDS.map((id) => `${AGY_MODEL_PREFIX}${id}`);
+
+/**
+ * Exact membership in the agy rows — what switches a launch to agy's tool-name dialect.
+ * @param {string} model
+ * @returns {boolean}
+ */
+export function isAgyAcpModelId(model) {
+	return SUPPORTED_AGY_MODEL_IDS.includes(model);
+}
+
 /** @type {ReadonlySet<string>} */
-const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
+const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_AGY_MODEL_IDS]);
 
 /**
  * Exact membership only — no trim, no case folding, no prefix.

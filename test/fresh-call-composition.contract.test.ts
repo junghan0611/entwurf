@@ -120,6 +120,36 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		expect(FRESH_CALL_PEERS_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_peers");
 	});
 
+	it("[QK:FRESHCOMP-ACP-AGY-TOOL-DIALECT] a pi sibling opened on a curated ACP Antigravity model resolves to the names agy mints — one underscore, the server's hyphen kept; anything else under that prefix does not", () => {
+		// [측정 2026-11-16, #167] agy 1.5.9 surfaced a tool of an MCP server registered as
+		// `entwurf-bridge` as `mcp_entwurf-bridge_<tool>`. Literals, not the tables' own entries. This
+		// reads the resolver and the tables; that the framing spells whatever the resolver picked is
+		// the Claude cell's claim below, and it is the same code path.
+		for (const model of [
+			"entwurf/agy-gemini-4-hydrogen",
+			"entwurf/agy-gemini-4-argon",
+			" entwurf/agy-gemini-3.8-flash ",
+		]) {
+			const dialect = freshCallToolDialect("pi", model);
+			expect(dialect).toBe("agy-acp");
+			expect(FRESH_CALL_CALLBACK_TOOL[dialect]).toBe("mcp_entwurf-bridge_entwurf_callback");
+			expect(FRESH_CALL_DELIVERY_TOOL[dialect]).toBe("mcp_entwurf-bridge_entwurf_v2");
+			expect(FRESH_CALL_PEERS_TOOL[dialect]).toBe("mcp_entwurf-bridge_entwurf_peers");
+			expect(isUncuratedEntwurfPiModel("pi", model)).toBe(false);
+		}
+		// A model agy offers but this rail does not register, a native id and a suffixed id keep the
+		// pi table here and are refused at the dispatch root, so none can launch misnamed.
+		for (const model of ["entwurf/agy-claude-opus-5-5", "entwurf/gemini-4-argon", "entwurf/agy-gemini-4-argon:high"]) {
+			expect(freshCallToolDialect("pi", model)).toBe("pi");
+			expect(isUncuratedEntwurfPiModel("pi", model)).toBe(true);
+		}
+		// The model never moves another backend's dialect.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			if (backend === "pi") continue;
+			expect(freshCallToolDialect(backend, "entwurf/agy-gemini-4-argon")).toBe(backend);
+		}
+	});
+
 	it("[QK:FRESHCOMP-ACP-CLAUDE-TOOL-DIALECT] a pi sibling opened on a curated ACP Claude model is told the Claude MCP spelling its tool surface exposes, with no ToolSearch hint; every other model keeps its backend's dialect", () => {
 		// [측정 2026-11-13, D1] the ACP Sonnet interview: the child's schema carried
 		// `mcp__entwurf-bridge__*` while its framing named Pi's `mcp__entwurf_bridge__*`.

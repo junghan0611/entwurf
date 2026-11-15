@@ -455,3 +455,199 @@ export function ensureCortexDualHomeOverlay(params: CortexOverlayParams): Cortex
 
 	return { home, snowflakeHome, scopeDir };
 }
+
+// ============================================================================
+// Antigravity gemini-dir overlay — the as-measured containment for `agy acp` (#167)
+// ============================================================================
+//
+// `agy acp` takes its whole state root as an ARGUMENT, not an env knob: `--gemini-dir <absolute>`
+// moves config/, brain/, conversations/, logs, skills, MCP config and hooks together.
+// `[측정 2026-11-16]` agy 1.5.9: pointed at an empty absolute directory it created that tree itself
+// and answered `session/new` with `-32000 Authentication required`; with ONE operator file linked
+// in — `antigravity-cli/antigravity-oauth-token` — the same call succeeded on the operator's
+// subscription tier. Nothing else crosses from the operator's agy state: its skills link, MCP
+// config, hooks, brain and conversation history stay unread and unwritten. The one other thing
+// linked in is what the operator NAMED in entwurf's own settings — the skills of the global
+// `entwurfProvider.skillPlugins` (see `resolveAgySkillLinks`).
+//
+// The link policy is the Claude overlay's: re-established on every bootstrap; a correct symlink is
+// kept, anything else at that path — a wrong link, or a regular file a vendor rename left behind —
+// is replaced by the link. Whether agy's token refresh writes through the link or renames over it is
+// NOT measured; the replacement is what keeps a renamed copy from outliving the next bootstrap.
+
+/** Operator's real agy state root — the symlink-passthrough SOURCE. */
+export const AGY_REAL_GEMINI_DIR = join(homedir(), ".gemini");
+
+/** pi-owned overlay dir — the `--gemini-dir` target for agy ACP child spawns. */
+export const AGY_GEMINI_OVERLAY_DIR = join(homedir(), ".pi", "agent", "agy-gemini-overlay");
+
+/** agy's own subdirectory under the gemini dir (its `--app-data-dir` default). */
+export const AGY_APP_DATA_DIRNAME = "antigravity-cli";
+
+/** The one entry of the operator's agy state exposed to the agy ACP child, relative to the
+ *  app-data dir. Skill links are a separate seat with a separate source (the operator's setting). */
+export const AGY_OVERLAY_PASSTHROUGH: ReadonlySet<string> = new Set(["antigravity-oauth-token"]);
+
+/** The named refusal for an overlay path that is not a real directory of its own. */
+export const ACP_AGY_OVERLAY_NOT_A_DIRECTORY = "acp-agy-overlay-not-a-directory";
+
+/** Where agy discovers global skills under the gemini dir: `config/skills/<name>/SKILL.md`. */
+export const AGY_CONFIG_DIRNAME = "config";
+export const AGY_SKILLS_DIRNAME = "skills";
+
+/** The named refusal for a skill name the overlay cannot give exactly one source. */
+export const ACP_AGY_SKILL_NAME_COLLISION = "acp-agy-skill-name-collision";
+
+/**
+ * The skill links one bootstrap owes the overlay: name → source directory, for every
+ * `<plugin>/skills/<name>` that holds a `SKILL.md`, over the operator-named plugin directories and
+ * nothing else. `[측정 2026-11-16]` agy 1.5.9 lists a skill whose directory — or a symlink to it —
+ * sits at `<gemini-dir>/config/skills/<name>`, under the flags this adapter launches with. Two
+ * plugins offering one name refuse: agy would list one of them and nothing says which.
+ */
+export function resolveAgySkillLinks(skillPlugins: readonly string[]): Map<string, string> {
+	const links = new Map<string, string>();
+	for (const plugin of skillPlugins) {
+		const skillsDir = join(plugin, AGY_SKILLS_DIRNAME);
+		if (!existsSync(skillsDir)) continue;
+		for (const name of readdirSync(skillsDir).sort()) {
+			const source = join(skillsDir, name);
+			if (!existsSync(join(source, "SKILL.md"))) continue;
+			const taken = links.get(name);
+			if (taken !== undefined) {
+				throw new Error(
+					`entwurf: ${ACP_AGY_SKILL_NAME_COLLISION} — the skill ${JSON.stringify(name)} is offered by both ${taken} and ${source}. ` +
+						`The agy ACP overlay links one directory per skill name; nothing was linked or removed. Rename or remove one of them.`,
+				);
+			}
+			links.set(name, source);
+		}
+	}
+	return links;
+}
+
+function isSymlink(path: string): boolean {
+	try {
+		return lstatSync(path).isSymbolicLink();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Refuse an overlay path that exists as anything but a real directory. A symlink there would make
+ * every write below land in whatever it points at: with the overlay (or its app-data dir) linked to
+ * the operator's own state, the passthrough step would delete the operator's token and link it to
+ * itself, and the sweep would delete the operator's own symlinks. Absent is fine — it is created.
+ */
+function assertAgyOverlayDirectory(path: string): void {
+	let stat: ReturnType<typeof lstatSync>;
+	try {
+		stat = lstatSync(path);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+		throw err;
+	}
+	if (stat.isSymbolicLink() || !stat.isDirectory()) {
+		throw new Error(
+			`entwurf: ${ACP_AGY_OVERLAY_NOT_A_DIRECTORY} — ${path} is ${stat.isSymbolicLink() ? "a symlink" : "not a directory"}. ` +
+				`The agy ACP overlay must be a directory of its own; nothing was linked or removed. Remove that entry and start the turn again.`,
+		);
+	}
+}
+
+/**
+ * Materialize / refresh the agy gemini-dir overlay. Idempotent; safe on every ACP bootstrap, and
+ * safe for two agy children that share it (both bootstraps converge on the same link).
+ *
+ * Order: the two overlay directories are proven real directories BEFORE anything is created, linked
+ * or removed; then any symlink directly under them that is not the passthrough is removed, so a link
+ * nobody on the allowlist made cannot point the child at operator data; then the passthrough link is
+ * (re-)established. Everything else in the overlay is agy's own and is left alone.
+ *
+ * Skills (`skillPlugins`, the operator's GLOBAL setting): each resolved skill is linked at
+ * `config/skills/<name>`, and a symlink there that this call did not ask for is removed — so an
+ * emptied setting retracts every link. A real directory in that seat is not ours and is never
+ * removed; one standing where a link is owed refuses. The seat's two directories are proven real
+ * with the rest, unless `config` is itself a foreign link the sweep below is about to remove.
+ */
+export function ensureAgyGeminiOverlay(
+	realDir: string = AGY_REAL_GEMINI_DIR,
+	overlayDir: string = AGY_GEMINI_OVERLAY_DIR,
+	skillPlugins: readonly string[] = [],
+): void {
+	const realAppData = join(realDir, AGY_APP_DATA_DIRNAME);
+	const overlayAppData = join(overlayDir, AGY_APP_DATA_DIRNAME);
+	const overlayConfig = join(overlayDir, AGY_CONFIG_DIRNAME);
+	const overlaySkills = join(overlayConfig, AGY_SKILLS_DIRNAME);
+	const guarded = isSymlink(overlayConfig) ? [] : [overlayConfig, overlaySkills];
+	for (const dir of [overlayDir, overlayAppData, ...guarded]) assertAgyOverlayDirectory(dir);
+	const skillLinks = resolveAgySkillLinks(skillPlugins);
+	mkdirSync(overlayAppData, { recursive: true });
+
+	for (const dir of [overlayDir, overlayAppData]) {
+		for (const entry of readdirSync(dir)) {
+			if (dir === overlayAppData && AGY_OVERLAY_PASSTHROUGH.has(entry)) continue;
+			const path = join(dir, entry);
+			let isForeignLink: boolean;
+			try {
+				isForeignLink = lstatSync(path).isSymbolicLink();
+			} catch (err) {
+				// agy creates and removes its own files here while it runs (sqlite journals among
+				// them); an entry gone between the listing and the stat is not ours to judge.
+				if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+				throw err;
+			}
+			if (isForeignLink) rmSync(path, { force: true });
+		}
+	}
+
+	for (const entry of AGY_OVERLAY_PASSTHROUGH) {
+		const realPath = join(realAppData, entry);
+		const overlayPath = join(overlayAppData, entry);
+		let existing: ReturnType<typeof lstatSync> | undefined;
+		try {
+			existing = lstatSync(overlayPath);
+		} catch {
+			existing = undefined;
+		}
+		if (!existsSync(realPath)) {
+			// Not present operator-side — no credential to pass; drop any stale overlay copy.
+			if (existing) rmSync(overlayPath, { recursive: true, force: true });
+			continue;
+		}
+		if (existing?.isSymbolicLink() && readlinkSync(overlayPath) === realPath) continue;
+		if (existing) rmSync(overlayPath, { recursive: true, force: true });
+		try {
+			symlinkSync(realPath, overlayPath);
+		} catch (err) {
+			// Another agy bootstrap linked it between the removal and here. The same link is the
+			// outcome this call wanted; anything else at the path is not.
+			if ((err as NodeJS.ErrnoException).code !== "EEXIST" || readlinkSync(overlayPath) !== realPath) throw err;
+		}
+	}
+
+	if (skillLinks.size > 0) mkdirSync(overlaySkills, { recursive: true });
+	if (!existsSync(overlaySkills)) return;
+	for (const entry of readdirSync(overlaySkills)) {
+		const path = join(overlaySkills, entry);
+		if (!isSymlink(path)) continue;
+		if (skillLinks.get(entry) !== readlinkSync(path)) rmSync(path, { force: true });
+	}
+	for (const [name, source] of skillLinks) {
+		const path = join(overlaySkills, name);
+		if (isSymlink(path)) continue;
+		try {
+			symlinkSync(source, path);
+		} catch (err) {
+			const sameLink =
+				(err as NodeJS.ErrnoException).code === "EEXIST" && isSymlink(path) && readlinkSync(path) === source;
+			if (sameLink) continue;
+			if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+			throw new Error(
+				`entwurf: ${ACP_AGY_SKILL_NAME_COLLISION} — ${path} already exists and is not a link this overlay made, so the skill at ${source} cannot be linked there. ` +
+					`Remove that entry and start the turn again.`,
+			);
+		}
+	}
+}

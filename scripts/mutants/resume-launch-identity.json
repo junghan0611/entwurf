@@ -133,6 +133,19 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUME-ID-CC-TRANSCRIPT-PRESENT]",
 			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-ACP-AGY-ADMITTED",
+			"title": "the launch admission drops the agy rows — a pi citizen whose transcript opened on an agy row can never be reopened, refused as uncurated while the provider registers the id",
+			"subject": "pi-extensions/lib/acp/model-ids.js",
+			"find": [
+				"const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_AGY_MODEL_IDS]);"
+			],
+			"replace": ["const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-ACP-AGY-ADMITTED]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
 		}
 	]
 }

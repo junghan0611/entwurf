@@ -240,6 +240,35 @@ function main(): void {
 			);
 		}
 
+		// 4d-agy. #167 — an Antigravity ACP row is curated too: a pi citizen whose transcript opened on
+		// one resumes on that exact id, while a model agy offers but this rail does not register is the
+		// same typed refusal as any other uncurated id.
+		{
+			const acpModelLine = (provider: string, modelId: string): string =>
+				`${JSON.stringify({ type: "model_change", provider, modelId })}\n`;
+			const settle = (gid: string): { identity?: ReturnType<typeof resolveResumeLaunchIdentity>; err?: unknown } => {
+				try {
+					return { identity: resolveResumeLaunchIdentity(gid) };
+				} catch (err) {
+					return { err };
+				}
+			};
+			const minted = (native: string, name: string, modelId: string): string =>
+				mintRecord(native, writeTranscript(name, sessionLine(native) + acpModelLine("entwurf", modelId)));
+			const agy = settle(minted("0199e5e5-1111-4222-8333-444455556666", "acp-agy.jsonl", "agy-gemini-3.8-flash"));
+			const unregistered = settle(
+				minted("0199f5f5-1111-4222-8333-444455556666", "acp-agy-unregistered.jsonl", "agy-claude-opus-5-5"),
+			);
+			ok(
+				"4d: an entwurf-provider resume of a curated agy row resolves on that exact id, and an agy model this rail does not register is the typed refusal [QK:RESUME-ID-ACP-AGY-ADMITTED]",
+				agy.identity?.backend === "pi" &&
+					agy.identity.provider === "entwurf" &&
+					agy.identity.model === "agy-gemini-3.8-flash" &&
+					unregistered.err instanceof AcpModelNotCuratedError &&
+					unregistered.err.model === "agy-claude-opus-5-5",
+			);
+		}
+
 		const gidNoFile = mintRecord("0199dddd-1111-4222-8333-444455556666", null);
 		rejects(gidNoFile, "no recorded transcriptPath", "4: transcriptPath null → nothing to resume");
 
