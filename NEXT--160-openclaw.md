@@ -52,6 +52,12 @@
   - **#151 경계:** #160은 "같은 key가 유지되는 동안 주소가 연속되고, 경계가 깨지면 refuse한다"까지만 맡는다. 여러 기록의 lineage는 #151 몫이다.
   - 이후: GLG 결정 → S6.4 → oracle 판단(S5.6~S5.8 재개).
 
+- [ ] **S7. #163 ACP steer 대칭 (이 브랜치에서).** GLG 2026-11-15: "이건 대칭이 아닌 문제라 해결해야하니까", "근야 이브랜치에서 구현하자. 지금 dist 구조 바뀌어서 브랜치 바꾸면 연결 끊길수도 있으니까. … 이건 UX 상으로 매우 중요하다." 목표는 busy ACP receiver에도 remote `mode=steer`가 backend의 단계 경계에서 들어가게 해서, steer의 뜻을 모든 control-socket receiver에서 같게 만드는 것이다. ENTWURF.json에 ACP 전용 문구는 넣지 않는다. stop은 별개 동사이고 범위 밖이다(#163 11-14 결정 유지). 기록: #163 issuecomment-6887743866(측정), 6887769373(결정).
+  - [x] **S7.0 ACP 측정 (n=1).** STEER-PROBE-21b4c2, receiver ee14c7: steer와 follow_up 모두 6개 도구 경계를 넘지 못했고, prompt가 끝난 뒤 송신 순서대로 각자 한 턴씩 들어왔다(`/tmp/ff08d4-next/steer-probe/RESULT.md`, oracle 로컬; 결정적인 줄은 #163 댓글에 있다).
+  - [ ] **S7.1 native Pi 기준선 (n=1).** 같은 probe를 SOL(a30dda)에게 보냈다. 결과 대기 중.
+  - [ ] **S7.2 정적 판독과 sandbox 측정 계획.** 1eed2c가 맡는다. 대상은 claude-agent-acp 0.107.0의 `steer()`/`_session/steering`이고, 6871961225 §4의 네 gap마다 삽입 지점을 file:line으로 적는다. 산출물: `/tmp/ff08d4-next/issue163-design-read.md`.
+  - [ ] **S7.3 설계 → 리뷰 → 구현 → PARTIAL.** S6.5 amendment가 동결된 뒤 같은 브랜치에서 한다. 새 receipt boundary는 DELIVERY.md가 소유한다.
+
 # NOW
 
 - **현재 HEAD:** S5.5b 기록 커밋(NEXT만). 코드 후보는 `f13c3e99`(PARTIAL-b 통과, 운영 dist도 이 코드로 build됨 [상속: ff08d4]). push 안 함. 이 checkout은 oracle 운영 설치이기도 하고, 운영 dist는 ff08d4가 clean tree에서만 build한다.
