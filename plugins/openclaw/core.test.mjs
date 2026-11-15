@@ -115,32 +115,42 @@ describe("executeSend — commit point", () => {
 		expect(res.content[0].text).toBe("OK-RECEIPT");
 	});
 
-	it("a stale ctx refuses at the commit point and starts nothing", async () => {
-		const c = ctx({
+	it("[QK:OPENCLAW-PLUGIN-COMMIT-POINT] an invocation that is no longer current starts nothing: a stale ctx refuses at the commit point, a ctx without the commit-point callback refuses, and a current ctx is asserted exactly once before the one run", async () => {
+		const stale = ctx({
 			assertInvocationCurrent() {
+				stale.calls.push("assert");
 				throw new Error("refused: agent tool caller authority is no longer active");
 			},
 		});
-		let ran = false;
+		let staleRuns = 0;
 		await expect(
-			executeSend(CONFIG, c, { target: TARGET, message: "hi" }, async () => {
-				ran = true;
+			executeSend(CONFIG, stale, { target: TARGET, message: "hi" }, async () => {
+				staleRuns++;
 			}),
 		).rejects.toThrow(/no longer active/);
-		expect(ran).toBe(false);
+		expect(staleRuns).toBe(0);
+		expect(stale.calls).toEqual(["assert"]);
+
+		let missingRuns = 0;
+		await expect(
+			executeSend(CONFIG, ctx({ assertInvocationCurrent: undefined }), { target: TARGET, message: "hi" }, async () => {
+				missingRuns++;
+			}),
+		).rejects.toThrow(/assertInvocationCurrent/);
+		expect(missingRuns).toBe(0);
+
+		const current = ctx();
+		await executeSend(CONFIG, current, { target: TARGET, message: "hi" }, async () => {
+			current.calls.push("run");
+			return { code: 0, stdout: `${JSON.stringify({ kind: "dispatched", isError: false, text: "OK" })}\n`, stderr: "" };
+		});
+		expect(current.calls).toEqual(["assert", "run"]);
 	});
 
 	it("bad arguments refuse before the commit point", async () => {
 		const c = ctx();
 		await expect(executeSend(CONFIG, c, { target: "x", message: "hi" }, async () => {})).rejects.toThrow();
 		expect(c.calls).toEqual([]);
-	});
-
-	it("a ctx with no assertInvocationCurrent refuses", async () => {
-		const c = ctx({ assertInvocationCurrent: undefined });
-		await expect(executeSend(CONFIG, c, { target: TARGET, message: "hi" }, async () => {})).rejects.toThrow(
-			/assertInvocationCurrent/,
-		);
 	});
 });
 

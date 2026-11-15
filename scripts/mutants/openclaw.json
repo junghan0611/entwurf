@@ -396,6 +396,28 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-PLUGIN-OUTWAITS-ENTRY]",
 			"signatureSource": "plugins/openclaw/core.test.mjs"
+		},
+		{
+			"claim": "OPENCLAW-PLUGIN-COMMIT-POINT",
+			"title": "the plugin no longer asserts the invocation is current before it runs the entry, so a stale tool call from a replaced or reset run still starts a send",
+			"subject": "plugins/openclaw/dist/core.js",
+			"find": ["\tctx.assertInvocationCurrent(); // the commit point: throws → nothing is started"],
+			"replace": ["\t// commit point removed"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PLUGIN-COMMIT-POINT]",
+			"signatureSource": "plugins/openclaw/core.test.mjs"
+		},
+		{
+			"claim": "OPENCLAW-BIRTH-PROBE-REFUSES",
+			"title": "birth stops honoring a dead or indeterminate probe, so it goes on toward the write for a session the Gateway does not confirm",
+			"subject": "pi-extensions/lib/openclaw-birth.ts",
+			"find": ["\tif (probe.status !== \"alive\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-BIRTH-PROBE-REFUSES]",
+			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
 		}
 	]
 }

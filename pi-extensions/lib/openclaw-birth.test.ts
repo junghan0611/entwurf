@@ -162,7 +162,10 @@ describe("birthOpenclawCitizen", () => {
 		);
 	});
 
-	it.each(["dead", "indeterminate"] as const)("a %s probe refuses before the write", async (status) => {
+	it.each([
+		"dead",
+		"indeterminate",
+	] as const)("[QK:OPENCLAW-BIRTH-PROBE-REFUSES] a %s probe refuses before the write — birth keeps the classifier's refusal, so no garden id points at a session the Gateway does not confirm", async (status) => {
 		const h = deps(status);
 		await expect(birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/w" }, h.d)).rejects.toThrow(
 			/does not confirm/,

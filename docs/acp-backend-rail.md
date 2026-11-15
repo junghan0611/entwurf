@@ -894,7 +894,7 @@ one.
 
 ## 11-9. A busy ACP receiver takes a remote steer inside its turn (#163 S7; was #120 P5)
 
-**Adopted (#163 S7, provisional receipt names).** A control-socket `send` with `mode:"steer"` to a
+**Adopted (#163 S7; receipt names final at R2).** A control-socket `send` with `mode:"steer"` to a
 BUSY receiver whose running turn is an ACP prompt is put into that backend turn through the
 adapter's private `_session/steering` request, instead of waiting in Pi's steering queue for the
 whole prompt to end. The decision lives in one place, `pi-extensions/lib/control-steer.ts`
@@ -975,7 +975,7 @@ generation, with a permission request pending, with a 12k body, during a tool-ou
    that failed or was skipped (`[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE]`). That diagnostic rides the
    clean finalized-send path only: a send whose lock release then fails (`lock-dirty`) keeps its
    boundary and its do-not-retry verdict but not the diagnostic. Both names are
-   provisional; DELIVERY.md carries the rows.
+   final; DELIVERY.md carries the rows.
 
 ### What this does and does not mean
 

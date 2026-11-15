@@ -92,7 +92,7 @@ describe("control-send-receipt", () => {
 			sendReceiptBoundary({ idle: false, mode: "follow_up" }),
 		];
 		expect(new Set(produced).size, "the three observable boundaries are distinct").toBe(3);
-		expect(ACCEPTANCE_BOUNDARIES.length, "the set is closed at six: #120's four and #163's two provisional").toBe(6);
+		expect(ACCEPTANCE_BOUNDARIES.length, "the set is closed at six: #120's four and #163's two").toBe(6);
 	});
 
 	it("[QK:SEND-RECEIPT-STEER-IN-TURN] the two #163 receiver values are observable and read back as themselves; the queue classifier never produces them and idle still wins", () => {

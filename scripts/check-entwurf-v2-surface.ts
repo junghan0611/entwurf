@@ -950,11 +950,12 @@ async function main(): Promise<void> {
 	// ── #120 P2 (D8): the OUTCOME list in the tool description names every rail ──
 	// A caller reads this blurb and nothing else before dispatching. (#125: the pi-native copy is
 	// retired with the native verbs; a pi session reads the bridge's own blurb.) The control
-	// rail's four boundaries are the ONLY receiver-acceptance values; a mailbox answers with an
+	// rail's boundaries (#120's four plus #163's `steer-in-turn`, and the two unknowns
+	// `accepted-unknown-boundary` / `steer-unknown`) are the ONLY receiver-acceptance values; a mailbox answers with an
 	// ENQUEUE receipt and native-push with an INJECTION, and folding those into the boundary union
 	// would tell a caller that `mailbox-enqueued` is something a receiver observed about its own
 	// queues. The socket dispatch may re-resolve to a mailbox leg and report mailbox-enqueued;
-	// that exception must name the leg, not silently invent a fifth receiver queue boundary.
+	// that exception must name the leg, not silently invent another receiver boundary.
 	// Missing either rail is red — the earlier draft listed `mailbox-enqueued` beside the
 	// four and left native-push out entirely, and nothing noticed.
 	{
@@ -997,9 +998,12 @@ async function main(): Promise<void> {
 	}
 
 	// ── #163 R2: an unknown boundary carries its own instruction ──
-	// `accepted-unknown-boundary` and `steer-unknown` mean the sender cannot know whether the receiver
-	// took the message. Delivery is at most once only if the caller does not send it again, so every
-	// caller-facing site that names an unknown must say so beside it — not merely somewhere in the text.
+	// `accepted-unknown-boundary` means the receiver accepted the RPC but its place is unknown;
+	// `steer-unknown` means a steer left and the backend's acceptance was not read
+	// (`control-send-receipt.ts`). Delivery is at most once only if the caller does not send it
+	// again, so each site checked here says so beside the name — not merely somewhere in the text.
+	// The two root texts are what callers read; the pi schema copy is checked too, though nothing
+	// outside tests reads it today.
 	{
 		const sites = [
 			{
@@ -1022,7 +1026,7 @@ async function main(): Promise<void> {
 			if (!/never resend/i.test(text.slice(at, at + 120))) gaps.push(`${rel}: no never-resend beside steer-unknown`);
 		}
 		ok(
-			`[QK:SEND-OUTCOME-UNKNOWN-NO-RESEND] every caller-facing site that names \`steer-unknown\` says, within 120 characters of it, never to resend — an unknown acceptance is the one outcome where a second send can deliver twice (gaps: ${JSON.stringify(gaps)})`,
+			`[QK:SEND-OUTCOME-UNKNOWN-NO-RESEND] every site that names \`steer-unknown\` says, within 120 characters of it, never to resend — an unknown acceptance is the one outcome where a second send can deliver twice (gaps: ${JSON.stringify(gaps)})`,
 			gaps.length === 0,
 		);
 	}
@@ -1030,10 +1034,12 @@ async function main(): Promise<void> {
 	// ── #120 P2: the caller-facing prose sites, checked for what they SAY ──
 	// (#125: three sites now — the pi-native copy left with the native verbs; a pi session reads
 	// the bridge's own `mode` text, which stays the first site below.)
-	// `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` neither mode interrupts anything: `agent-loop.js:186`
+	// `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` on a native pi receiver neither mode cancels or stops anything: `agent-loop.js:186`
 	// drains steering after a turn ENDS and `:191-197` drains follow-ups only once the inner loop
 	// has ended. A caller who reads "interrupt the current turn" picks `steer` for urgency and gets
-	// a queue with no order against the other one — the decision #120 was opened about.
+	// a queue with no order against the other one — the decision #120 was opened about. Since #163 a
+	// receiver whose runtime takes a steer in-turn may cut generated text short at a step boundary;
+	// that is still not a cancel, so the axis below says "neither cancels or stops".
 	//
 	// POSITIVE, not merely a banned-word sweep. The first cut of this claim only looked for the old
 	// wording, which meant a site could pass by deleting its description entirely — the assertion
@@ -1079,8 +1085,9 @@ async function main(): Promise<void> {
 	}
 
 	// ── #163 R2: the root mode text names what an in-turn steer does to the reply it lands in ──
-	// Only the root text (the one every caller reads) states it; the contract comment speaks of the
-	// native queues alone and the pi schema copy is checked by the axes above.
+	// Only the root text (the one every caller reads) is checked for it. The contract comment speaks
+	// of the native queues alone; the pi schema copy carries the same sentence but nothing checks it
+	// there, and nothing outside tests reads that copy today.
 	{
 		const mode = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode;
 		const gaps: string[] = [];

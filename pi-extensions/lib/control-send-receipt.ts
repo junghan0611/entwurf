@@ -46,7 +46,7 @@ export const ACCEPTANCE_BOUNDARIES = [
 	"sent",
 	"queued-steer",
 	"queued-follow-up",
-	// #163 S7, provisional names (final names at the wrap-up, never kept as aliases):
+	// #163 S7, final names since the R2 wrap-up (no alias for any earlier spelling):
 	// a busy ACP turn took the steer as input (not proof the model saw it; no tool is stopped) …
 	"steer-in-turn",
 	// … or the steer request left and whether the backend took it is unknown (never retried).
@@ -125,7 +125,7 @@ export function describeUnknownBoundary(data: unknown): string | undefined {
 
 /**
  * #163 S7 — the reasons a receiver may give for `steer-unknown`, closed. A token outside this set is
- * read as `unrecognized`, never repeated (provisional, like the two boundary names).
+ * read as `unrecognized`, never repeated.
  */
 export const STEER_UNKNOWN_REASONS = [
 	"timeout",

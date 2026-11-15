@@ -39,7 +39,7 @@ import type { AcpSteerEffect, AcpSteerSeamLookup } from "./acp-steer-seam.js";
 import { type CompactionGuard, compactionSendReject } from "./compaction-send-guard.js";
 import { type ObservedBoundary, sendReceiptBoundary } from "./control-send-receipt.js";
 
-/** Provisional receipt names (#163 S7 design §5); final names are decided at the wrap-up. */
+/** Receipt names (#163 S7 design §5), final since the R2 wrap-up. */
 export const STEER_IN_TURN = "steer-in-turn" as const;
 export const STEER_UNKNOWN = "steer-unknown" as const;
 
