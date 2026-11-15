@@ -160,17 +160,19 @@ describe("probe", () => {
 	});
 
 	it("[QK:OPENCLAW-PROBE-READS-PINNED] the desk pin is read from the describe's boolean pinned only — the measured unpinned shape (pinned:false, no pinnedAt key) is unpinned, a non-boolean is unknown", async () => {
-		// The measured unpinned describe [상속: 9fc008, lab receipt m5-rpc-1.txt]: pinned:false, pinnedAt absent.
+		// The two measured describe shapes [상속: 9fc008 lab M3, n=1]: before the pin pinned:false with no
+		// pinnedAt key; after it pinned:true with pinnedAt a JSON number.
 		const unpinned = JSON.stringify({ session: { key: "agent:main:s1m1", sessionId: "2de2", pinned: false } });
 		expect(await adapter(runner({ code: 0, stdout: unpinned, stderr: "" })).probe(ID)).toEqual({
 			status: "alive",
 			route: { ...ROUTE, deskPin: "unpinned" },
 		});
-		const pinned = JSON.stringify({ session: { key: "agent:main:s1m1", pinned: true } });
+		const pinned = JSON.stringify({ session: { key: "agent:main:s1m1", pinned: true, pinnedAt: 1794707048719 } });
 		expect(await adapter(runner({ code: 0, stdout: pinned, stderr: "" })).probe(ID)).toMatchObject({
 			route: { deskPin: "pinned" },
 		});
-		// pinnedAt is an observation, not the condition.
+		// pinnedAt is an observation, not the condition: the patch answer's entry shape (pinnedAt, no
+		// pinned boolean) does not read as pinned.
 		for (const session of [
 			{ key: "agent:main:s1m1", pinnedAt: 1763100000000 },
 			{ key: "agent:main:s1m1", pinned: null },

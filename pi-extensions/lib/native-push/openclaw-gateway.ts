@@ -158,12 +158,13 @@ function parseJsonObject(stdout: string): Record<string, unknown> | null {
  * The ONE pin judgment for a birth desk (#160 S6 §1b), read from the session object of the
  * `sessions.describe` answer this adapter already consumes. Pure.
  *
- * Measured shape [상속: 9fc008 10:38, lab receipt m5-rpc-1.txt]: an unpinned session describes with
- * `pinned:false` and NO `pinnedAt` key (absent, not null). The pinned shape is not yet measured (lab
- * M3), so only the boolean decides: `pinned === true` → "pinned", `pinned === false` → "unpinned",
- * anything else (absent, null, a string) → "unknown", never guessed. `pinnedAt` is an observation, not
- * a condition. Do not read the session-event payload here: it defaults `pinnedAt` to null and is
- * another surface. When M3 lands, this function is the one place to change.
+ * Measured on one lab describe, n=1 [상속: 9fc008 lab M3 via 68bd94, 2026-11-15]: before the pin
+ * `pinned:false` with NO `pinnedAt` key (absent, not null); after it `pinned:true` with `pinnedAt` a
+ * JSON number (epoch ms). Only the boolean decides: `pinned === true` → "pinned", `pinned === false`
+ * → "unpinned", anything else (absent, null, a string) → "unknown", never guessed. `pinnedAt` is an
+ * observation, not a condition. Other surfaces are not read here: the `sessions.patch` answer carries
+ * `entry.pinnedAt` with no `pinned` boolean, and the session-event payload defaults `pinnedAt` to null.
+ * A later shape change is this one function's to absorb.
  */
 export function judgeOpenclawDeskPin(stdout: string): OpenclawDeskPin {
 	const s = parseJsonObject(stdout)?.session;
