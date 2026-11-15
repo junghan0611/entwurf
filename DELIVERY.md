@@ -49,8 +49,8 @@ steering (`docs/acp-backend-rail.md` §11-9).
 | `sent` | n/a — the receiver was idle and the turn was TRIGGERED directly | none needed; the turn started | the turn is running, but the model has NOT necessarily read the text yet, and nothing here says the turn completed | an in-band refusal is `rejected`, never this |
 | `queued-steer` | drained after each turn; overtakes every `queued-follow-up` already waiting | **none** — volatile receiver process memory | nothing shows it: it is not in the TUI's pending-message count | an abort clears the queue and the message is gone, silently |
 | `queued-follow-up` | drained only when the receiver's inner loop ends; a steer arriving later still goes first | **none** — volatile receiver process memory | same: invisible in the receiver's own queue display | same: an abort drops it |
-| `steer-in-turn` *(provisional)* | the backend's RUNNING turn took it as input, at the backend's next step boundary; it is not queued in Pi | **none** — the turn's own memory; Esc/cancel of that turn drops it, like the queue | NOT the status word `injected` above: the backend accepted it, the model has not necessarily read it yet, and a running tool is not stopped. Recorded once as a plain session entry outside the model context; a later rebuild from the transcript does not replay its text | a record failure is a receipt diagnostic (`record: failed:…`), never a rejection |
-| `steer-unknown` *(provisional)* | unknown — a steer request left and the backend's answer was not read (`timeout`, `connection-closed`, `answer-unrecognized`) | unknown | unknown: it MAY have been injected | the receiver ACCEPTED and did not queue or retry; do not resend blindly. Distinct from `accepted-unknown-boundary`, which the receiver never produces |
+| `steer-in-turn` *(provisional)* | the backend's RUNNING turn took it as input, at the backend's next step boundary; it is not queued in Pi. `[측정, adapter direct only: n=1 tool boundaries, n=2 mid-generation (cuts the line, same prompt continues); thinking and Pi end-to-end unmeasured — §11-9]` | **none** — the turn's own memory; Esc/cancel of that turn drops it, like the queue | NOT the status word `injected` above: the backend accepted it, the model has not necessarily read it yet, and a running tool is not stopped. Recorded once as a plain session entry outside the model context; a later rebuild from the transcript does not replay its text | a record that failed or was skipped is shown on the caller's line beside the boundary, never a rejection |
+| `steer-unknown` *(provisional)* | unknown — a steer request left and the backend's answer was not read: `timeout` (1 s; measured answers ≤ 4.3 ms, n=24), `connection-closed` (the connection really closed), `request-rejected` (failed on an open connection), `seam-threw`, `answer-unrecognized`. `[판독 + unit proofs; no backend has been observed to time out]` | unknown | unknown: it MAY have been injected; the reason and a bounded detail are shown on the caller's line | the receiver ACCEPTED and did not queue or retry; do not resend blindly. Distinct from `accepted-unknown-boundary`, which the receiver never produces |
 | `accepted-unknown-boundary` | unknown | unknown | unknown | the receiver ACCEPTED; this names our inability to classify its answer (version skew), and it must never be retried or rendered as `sent` |
 
 `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` `dist/agent.js:60-71,96-97,137-138`
@@ -61,9 +61,10 @@ and `dist/agent-loop.js:85,186,191-197`
 `[측정 n=1, 2026-11-15, claude-agent-acp 0.107.0 driven directly]` for the two `steer-*` rows: the
 adapter answered `injected` in 2–3 ms while the model read the steer 1.35 s later (between tools)
 and only after a foreground `sleep 30` finished (during a tool) — acceptance is not reading, and a
-running tool is not stopped. Idle answered `promptRequired` and started nothing. Steer during
-thinking or text generation is unmeasured; the adapter may preempt that generation inside the
-same prompt (`docs/acp-backend-rail.md` §11-9).
+running tool is not stopped. Idle answered `promptRequired` and started nothing.
+`[측정 n=24, probe 2]` answers took 1.2–4.3 ms in every situation measured; during text generation
+the steer cut the line and the same prompt continued (one `end_turn`). Steer during thinking is
+unmeasured (`docs/acp-backend-rail.md` §11-9).
 
 The **meta-mailbox** rail is the contrast, not a fifth boundary: it writes a durable `*.msg` before
 ringing any doorbell, its filenames are ISO stamps so a drain is a global FIFO, an undrained inbox

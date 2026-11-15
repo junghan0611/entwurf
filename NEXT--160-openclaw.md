@@ -76,12 +76,21 @@
       2. `2951083b` backend: capability 읽기, prompt마다 owner-checked steer window, `ACP_STEER_SEAM`(`Symbol.for("entwurf.acp.steer.v1")`, 다른 객체는 `acp-steer-seam-duplicate`).
       3. `14db2928` `lib/control-steer.ts` `deliverControlSend`로 send 판정 추출(코디 승인). 결정표는 v2.1 그대로이고, 임시 receipt 두 값 `steer-in-turn`·`steer-unknown`을 쓴다. 기록은 plain entry `entwurf-steer-in-turn`이다.
       4. `115cc426` 문서: rail §11-9 채택으로 다시 씀, DELIVERY acceptance 표 임시 두 행 + probe 측정 단락, 이 기록. 뒤이어 seam reload 좁은 예외 커밋.
-    - 새 실행 좌표 `check-acp-steer`(lane `acp-steer` 14). `control-send-receipt` lane은 +10(build-bridge 선언 동일)으로 33. QK와 mutant는 1:1이고, 새 mutant는 전부 손으로 kill해 각자 QK에 귀속을 확인했다.
+    - 새 실행 좌표 `check-acp-steer`(lane `acp-steer` 14 → 리뷰 수선 뒤 16). `control-send-receipt` lane은 +10(build-bridge 선언 동일)으로 33. QK와 mutant는 1:1이고, 새 mutant는 전부 손으로 kill해 각자 QK에 귀속을 확인했다.
     - 추출 때문에 기존 원문 모양 검사 둘(`SEND-RECEIVER-EMITS-BOUNDARY` @check-entwurf-v2-surface, `COMPACT-SEND-WIRE` @check-compaction-send-guard)과 그 mutant의 subject를 control-steer.ts로 옮겼다. 그래서 affected PARTIAL에 이 두 그룹이 더해진다.
     - `entwurf-control.test.ts`는 기존 compiled bridge로 돌아 green이지만, 새 send 판정을 거치지 않는다. build 금지라 다시 build하지 않았다.
-    - **마무리 묶음으로 넘김:** 최종 receipt 이름, ENTWURF.json 열거("those four")와 `mode` 문구(SEND-PROSE-NO-INTERRUPT 축), sender 쪽 `steer-unknown` 렌더링.
+    - **마무리 묶음으로 넘김:** 최종 receipt 이름, ENTWURF.json 열거("those four")와 `mode` 문구(SEND-PROSE-NO-INTERRUPT 축), check-entwurf-v2-surface의 그 문구 검사. sender 쪽 진단 표시는 리뷰 수선(아래)에서 들어왔다.
+    - **출하 정지선 (1eed2c O2, ff08d4 2026-11-15):** 이 마무리 묶음이 들어오기 전에는 merge도 release도 하지 않는다. 지금 receiver는 임시 값 둘을 만들고 ACP 경로는 생성을 끊을 수 있는데, caller가 읽는 ENTWURF.json은 아직 "those four"와 "NEITHER is an interrupt"를 말한다.
     - **이연:** entry renderer, 로컬 TUI steer(§6), 생성 중 선점 LIVE cell.
     - **seam reload (ff08d4 결정 2026-11-15, 좁은 예외):** 옛 seam이 `hasOpenWindow()`로 열린 window가 없다고 답할 때만 다른 객체로 교체한다. 바쁘거나 모양이 깨졌거나 답하다 throw하면 예전처럼 `acp-steer-seam-duplicate`로 throw한다. QK는 `ACP-STEER-SEAM-RELOAD-IDLE-REPLACES`와 `-BUSY-REFUSED` 둘이고, `-DUPLICATE-REFUSED`는 깨진 옛 값 쪽으로 좁혔다. lane `acp-steer`는 14가 됐다. 실제 pi `/reload` 경로는 측정하지 않았다.
+    - **리뷰 수선 묶음 (SOL `review-s7-impl-sol.md` 25fb9943…, 1eed2c `review-s7-impl-1eed2c.md` beee5c14…, probe 2 `issue163-adapter-probe-2.md` 5ab8cdaa…):**
+      - A. steer 응답 상한 5 s → 1 s(측정 n=24, 최대 4.3 ms). sender RPC 기본값은 `CONTROL_RPC_DEFAULT_TIMEOUT_MS`(5 s)로 이름을 붙였고 값은 그대로다. `상한 + 2 s ≤ sender`를 `[QK:ACP-STEER-BOUND-BELOW-SENDER]`가 sender 상수와 직접 비교한다.
+      - B. receiver가 `steer-*` 옆에 말한 것(unknown 이유와 detail, record 실패와 생략)이 caller 줄까지 간다. wire seam에서 닫힌 token과 120자 한 줄로 정규화하고, 성공은 그대로 성공이다. `[QK:SEND-STEER-DIAGNOSTIC-REACHES-SURFACE]`는 생산 factory → control hand → surface 경로를 SOL probe의 세 wire 답으로 확인한다.
+      - C. 이유 이름: JSON-RPC 오류 등 열린 연결에서의 실패는 `request-rejected`, seam throw는 `seam-threw`, `connection-closed`는 연결이 실제로 닫혔을 때만 쓴다(`isClosed` = SDK `signal.aborted`). QK `ACP-STEER-FAILURE-NAMED-BY-CONNECTION`, `CONTROL-STEER-SEAM-THREW-NAMED`.
+      - D. `ACP-STEER-SEAM-DUPLICATE-REFUSED` mutant를 실제 덮어쓰기(깨진 옛 값 위에 새 seam을 쓰고 return)로 바꿨다. `CONTROL-STEER-AFTER-AWAIT-IDLE`는 제목을 실제 위험(틀린 옵션과 queued-steer receipt)으로 좁혔다. SOL O2로 BOUND에 context-only와 native-id-only 변화 사례를 더했다.
+      - 기존 mutant 넷(SEND-BOUNDARY-CARRIED, SEND-FALLBACK-KEEPS-BOUNDARY, SEND-SURFACE-RENDERS-BOUNDARY, V2PROD-INBAND-ERROR-WIRED)은 같은 줄이 바뀌어 find만 새 줄로 옮겼다. 결함은 같다.
+      - lane: `acp-steer` 16, `control-send-receipt` 35. 새 mutant와 옮긴 mutant는 모두 손으로 kill했고, 자기 QK에서 실패했다.
+      - 문서: rail §11-9에 probe 2를 넣었다(생성 중 측정, burst, 권한 대기; thinking 중과 생성 중 burst는 미측정). DELIVERY 두 행에 증거 수준을 붙였다.
 
 # NOW
 
@@ -90,7 +99,7 @@
 - **운영 전제 정정:** 옛 "운영 10.9 / 8b18b55" 전제는 낡았다. 운영 버전 SSOT는 nixos-config `ORACLE.md`의 LIVE 줄 하나다 [read ORACLE.md:140, 2026-11-14]: OpenClaw **2026.11.3** · `847611d` · image `openclaw-custom:11.3-candidate-20261113`. 컨테이너 node v24.22.1 / sqlite 3.53.4 [상속: 8216f4 s5-ops-facts]. 따라서 "운영을 11.3으로 맞추는 일"은 이미 끝났다.
 - **경로 축 정정:** 옛 S5 줄의 "컨테이너 경로와 host 경로가 다르다"는 부분만 맞다. `~/repos/gh`, `~/.pi/agent`, `~/org`는 host와 같은 절대경로로도 마운트되어 있다 [측정 `docker inspect openclaw-gateway` Mounts, 2026-11-14]. 다른 것은 봇 workspace의 컨테이너 경로뿐이고, birth `--cwd`는 운영자 명시값(host 절대경로)으로 둔다. record cwd는 send envelope 표시에만 쓰인다.
 - **Tier 1/2 측정 (8216f4, 운영 컨테이너, 읽기 전용):** 컨테이너 CLI에 `--expect-url` 있음. 선언 url `ws://127.0.0.1:18789`로 `sessions.describe` 없는 key → `{"session":null}` rc0 1.56s, 틀린 url → rc1 "Gateway destination changed", state 쓰기 0 [상속: `/tmp/ff08d4-next/s5-f0-tier2.md` sha a6f5853c…, oracle 로컬]. A1(수신 = docker exec shim) 성립.
-- **다음 한 행동 (2026-11-15):** S7.4 checkpoint 4까지 ee14c7이 커밋했다. 코디가 tree를 동결하고 리뷰를 보낸 뒤 affected PARTIAL을 돌린다: check-acp-steer, check-control-send-receipt, check-entwurf-v2-surface, check-compaction-send-guard. 운영 dist rebuild 여부는 GLG가 정한다. FULL·push·birth 금지는 유지한다.
+- **다음 한 행동 (2026-11-15):** S7.4 리뷰 수선 묶음을 ee14c7이 커밋했다. 코디가 동결 → 짧은 재리뷰 → affected PARTIAL을 돌린다: check-acp-steer, check-control-send-receipt, check-entwurf-v2-surface, check-compaction-send-guard, check-entwurf-v2-send, check-entwurf-v2-production. 출하는 마무리 묶음 뒤다(정지선 위). 운영 dist rebuild 여부는 GLG가 정한다. FULL·push·birth 금지는 유지한다.
 - **역할 (2026-11-14):** 코디 = `20261113T043350-ff08d4`(Claude Code, oracle). 구현 = `20261114T193422-ee14c7`(이 문서의 writer). 운영 실행 = nixos-config 운영 담당(garden id는 코디가 앎). 운영 코디 68bd94, thinkpad 코디 b22677, thinkpad 검수 9fc008. 보고는 모두 ff08d4로. 커밋은 commit 스킬, push는 GLG.
 
 # S5 결정 (GLG 2026-11-14, ff08d4 중계) — 공개 정책: #160 issuecomment-6876392683
