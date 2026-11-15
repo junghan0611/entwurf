@@ -8,7 +8,7 @@
 - [x] **S3. 구현.** 0c9e3a(flip 포함), 4184c5 리뷰 Blocker 0, Defect 3 반영.
 - [~] **S4. LIVE (lab).** 왕복, busy steer, reset 뒤 같은 garden id, fresh (c)(d) 측정. 남은 것: fresh (a) 표시면, (b) agent-policy 폭, TUI 바인딩 증명. release stop 유지.
   - fresh 조합을 만들 때 `bin` 거절을 preflight에도 넣는다(S5.4 재확인 A1): 지금은 `openclawTuiLaunch`(tui 단계)에만 있어서, 조합이 생기면 `sessions.create`와 birth 뒤에 거절된다. tui 단계 throw는 마지막 방어선으로 남긴다.
-- [~] **S5. oracle 운영 Docker 봇 연결.** ← CURRENT. 설계 카드와 GLG 결정은 끝났다(아래 "S5 결정"). 구현 단계:
+- [~] **S5. oracle 운영 Docker 봇 연결.** S5.6에서 멈춤(admission이 S6에 달림). 설계 카드와 GLG 결정은 끝났다(아래 "S5 결정"). 구현 단계:
   - [x] **S5.0 merge·RED.** main `0c058cea` 37커밋 merge → `51ed755a`(충돌 0, ff08d4 승인 2026-11-14). 이름 붙은 RED 두 개: ① `check-harness-admission-parity` openclaw(GLG: 그냥 둠, flip 묶음에서만 닫힘) ② ~~`check-capability-bundle-reach` B3~~ — CLOSED: ff08d4가 GLG 승인으로 20:24:26 build-bridge, bundle-reach PASS(39) [상속: ff08d4 메시지]. build-bridge는 ff08d4 담당, 구현자는 돌리지 않는다. 영수증 `/tmp/ff08d4-next/impl-status.md`(oracle 로컬).
   - [x] **S5.1 1b: 선언별 `bin` 절대경로.** gateway 항목에 optional `bin`(absolute + normalized). 수신 어댑터 probe가 그 경로를 argv0로 쓰고 route에 찍어, send는 선언을 다시 읽지 않고 같은 program을 쓴다. `bin`+`configPath`는 파서가 이름 붙은 오류로 거절. DELIVERY.md OpenClaw 행 갱신. V3 불변. 옆 테스트 +8(파서 4, 어댑터 3, 수용 1), 손 mutant 2개 kill(거절 제거 → 1 fail, route.bin 무시 → 2 fail). focused gate green: lint, typecheck, tests-beside-behavior 1204, native-push-adapter, v2-contract, v2-production, meta-session, install-surface.
     - 경계: fresh의 `openclawTuiLaunch`는 `bin`을 읽지 않는다(production 호출자 0, fresh preflight가 거절 중). 컨테이너 TUI는 docker exec `-it`가 필요해 별도 설계 — fresh 단계에서 다룬다.
@@ -32,6 +32,18 @@
   - [x] **S5.5b PARTIAL (candidate f13c3e99).** 2026-11-14 22:17–22:55, HEAD 동결, 그룹마다 1회, 실패·재시도 0, 끝날 때 status 0줄. 5그룹 모두 group-green, 107/107 killed, control ok, 모든 receipt의 candidate.head = f13c3e99, workSurfaceSha256 8a7d65bb602a…: `check-native-push-runner` 1/1, `check-openclaw-beside` 5/5, `check-install-surface` 44/44, `check-gate-manifests` 52/52, `check-entwurf-v2-production` 5/5. receipt `/tmp/ff08d4-next/partial-b/<group>.json`(oracle 로컬). `check-native-push-adapter`는 committed mutant가 0이라 그룹이 아니다(빈 argv는 qualification이 receipt 없이 거절, `scripts/check-gate-qualification.ts:1363-1371`). `check-entwurf-v2-contract`는 f005e603 후보 PARTIAL에서 1/1, 이후 그 gate·subject 변경 없음. PARTIAL은 FULL 통과가 아니다.
   - [ ] **S5.6 frozen FULL** ← NEXT, 오늘 밤 하지 않음: 이름 붙은 RED(admission-parity)가 admission 결정 전까지 FULL을 확정적으로 실패시키고, FULL 안의 pack 단계가 운영 dist를 지웠다 다시 쓴다(ff08d4 2026-11-14). → **S5.7 exact-SHA CI.** build-bridge/check-pack/check:full/prepack은 GLG가 정한 재시작 창 안에서만.
   - [ ] **S5.8 oracle 적용** (GLG 승인 단계별): host shim(PATH 밖) + 선언 → SSH 키·forced command(8216f4 계획) → 플러그인 `--link` → 책상 열기(birth). oracle birth는 main 병합·flip·reader 재시작 뒤에만.
+
+- [~] **S6. 집 연결 재정의.** ← CURRENT. GLG 글 2026-11-15 09:15(journal week45 "entwurf 외연 확장 방식"): 1번 herdr 방식은 하네스에 가든 아이디를 주고 퇴근·출근(retire/resume)을 지원한다. 2번 OpenClaw 방식은 집주인이 봇의 집을 관리하고, 우리는 집 앞 편지함에 주소를 준다(retire/resume 무의미, workspace-abc에서 깨어나는 몸은 모두 abc 봇). 첫 질문을 "fresh 예외로 입장시킬까"에서 "주소를 받는 존재는 누구이며 그 생명주기는 누가 소유하는가"로 바꾼다. 실무 질문지는 ff08d4가 보냈고(68bd94 mailbox 2026-11-15 09:42), 68bd94가 보완 4개를 붙여 순서에 동의했다(09:43). 실행·구현 승인은 아니다.
+  - [~] **S6.1 정체성 범위 (오프라인, 문서; (a) 결정, 계약 문구는 S6.3에 합류).** 지금 주소 단위는 편지함이다. record nativeId가 `openclaw:<scope>:<sessionKey>`이고(`openclaw-citizens.ts:51-54`), 선언이 한 agent 아래에 여러 key를 허용한다(:11-12, :25-29). 그래서 한 집에 garden이 여럿 생길 수 있다. birth와 send가 모두 key를 포함한 nativeId로 정확히 join하므로(`openclaw-birth.ts:41-42`, `openclaw-send.ts` → `receiveOpenclawClaim`) [68bd94 직접 읽음, ff08d4 재확인], 중복 birth 거절만으로는 "key를 바꿔도 같은 garden"이 성립하지 않는다. 비교할 두 안:
+    - (a) 최소안: 한 집에 한 garden. 첫 key를 고정하고, key 교체는 미지원이며 교체 시 정직하게 거절한다.
+    - (b) 집 정체성과 route를 분리하는 별도 계약. 문법 변경은 V3 스키마 변경과 구분하고, 기존 thinkpad lab record의 이동·재발급·dual reader를 미리 가정하지 않는다.
+    - 여러 고정 key가 필요하다는 근거는 없다. 그 가능성을 미리 설계하지 않는다. workspace 경로는 집의 몸이지 두 번째 주소 원장이 아니다.
+    - **GLG 결정 2026-11-15: (a).** "간단하게 가보는게 언제나 좋아. 되면서 견고해지면 확장할수 있으니까." (b)는 실사용에서 key 교체가 필요해질 때 별도 계약으로 연다.
+  - [ ] **S6.2 OpenClaw 자체 봇 간 메시징 소스 읽기 (외부 artifact 획득, 읽기 전용).** 대상은 운영 버전 2026.11.3 `847611d`(NOW의 운영 전제와 같은 좌표). 10.9 결과를 승계하지 않는다. 그 커밋만 /tmp 별도 디렉터리에 shallow로 받는다. 이건 "완전 offline"이 아니다. 읽을 것은 세 가지다: 봇이 다른 봇을 부르는 도구(sessions_send류)와 설정 게이트, 수신 봇이 보는 발신자 문맥, 접수와 답신의 경계. 영수증에는 file:line@847611d를 단다. 컨테이너·Gateway에는 접촉하지 않는다.
+  - [ ] **S6.3 계약 delta 문서.** 범주명 후보는 "집주인 소유 생명주기의 기존 집 연결"이다. 새 형식 필드나 manager는 만들지 않는다. birth는 집 생성이 아니라 기존 집에 record-backed 주소를 연결하는 일이다. "fresh/resume/retire 미적용"만 적지 않고, 대체 행동을 실증한다: open, address, consume, reply, close, refusal, compact-reset. 필수 증거는 가시성, model/policy, 발신 scope다. 바꿀 문서는 adding-a-harness.md:676-677, `check-harness-admission-parity.ts:93`의 계산 방식, Hard Rule 15 문구다. 이 문서가 아침 카드 결정 ①의 B를 대체하는 형태로 GLG에게 올라간다. 리뷰는 1eed2c, SOL(a30dda)이다.
+  - [ ] **S6.4 lab LIVE (thinkpad, 별도 GLG 승인).** 최소 증거 후보: 고정 key의 실제 run이 편지를 소비하고 집의 garden으로 답한다. 다른 세션이 즉시 아는지, memory 파일에 무엇이 남는지는 OpenClaw 소유의 탐색 측정(n=1)으로 분리하고 계약으로 강제하지 않는다. 자원 반납은 send 요청의 PID·parent·group을 묶어 종료 뒤 잔류를 확인한다. 범위는 새로 만든 exec/ssh/plugin client뿐이고, Gateway·vendor pool 같은 집주인의 상주 자원은 누수가 아니다. runner PARTIAL은 deadline 분류의 증거이지 프로세스 소멸 증거가 아니다.
+  - **#151 경계:** #160은 "같은 key가 유지되는 동안 주소가 연속되고, 경계가 깨지면 refuse한다"까지만 맡는다. 여러 기록의 lineage는 #151 몫이다.
+  - 이후: GLG 결정 → S6.4 → oracle 판단(S5.6~S5.8 재개).
 
 # NOW
 
