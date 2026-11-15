@@ -84,14 +84,13 @@ export interface OpenclawRoute {
 	readonly bin?: string;
 	readonly sessionKey: string;
 	/**
-	 * The described session's `pinnedAt` (epoch ms) when the Gateway reports one. OpenClaw 2026.11.3
-	 * puts it on the session row only for a pinnable session that is pinned (openclaw@847611d
-	 * src/gateway/session-utils-row.ts:417-418, :484-486; `sessions.describe` answers that row,
-	 * src/gateway/server-methods/sessions-read-by-key.ts:22-80). Read by birth (#160 S6 §1b); send
-	 * ignores it. An absent or non-numeric value is "not pinned", never guessed.
+	 * The desk's pin as {@link judgeOpenclawDeskPin} read it from the alive describe that produced this
+	 * route (absent on a route nobody probed). Birth reads it; send ignores it.
 	 */
-	readonly pinnedAt?: number;
+	readonly deskPin?: OpenclawDeskPin;
 }
+
+export type OpenclawDeskPin = "pinned" | "unpinned" | "unknown";
 
 export interface OpenclawGatewayAdapterDeps {
 	runner: NativePushRunner;
@@ -155,12 +154,22 @@ function parseJsonObject(stdout: string): Record<string, unknown> | null {
 	}
 }
 
-/** The `pinnedAt` of an alive `sessions.describe` answer, when it is a finite number. Pure. */
-export function describedPinnedAt(stdout: string): number | undefined {
+/**
+ * The ONE pin judgment for a birth desk (#160 S6 §1b), read from the session object of the
+ * `sessions.describe` answer this adapter already consumes. Pure.
+ *
+ * Measured shape [상속: 9fc008 10:38, lab receipt m5-rpc-1.txt]: an unpinned session describes with
+ * `pinned:false` and NO `pinnedAt` key (absent, not null). The pinned shape is not yet measured (lab
+ * M3), so only the boolean decides: `pinned === true` → "pinned", `pinned === false` → "unpinned",
+ * anything else (absent, null, a string) → "unknown", never guessed. `pinnedAt` is an observation, not
+ * a condition. Do not read the session-event payload here: it defaults `pinnedAt` to null and is
+ * another surface. When M3 lands, this function is the one place to change.
+ */
+export function judgeOpenclawDeskPin(stdout: string): OpenclawDeskPin {
 	const s = parseJsonObject(stdout)?.session;
-	if (s === null || typeof s !== "object" || Array.isArray(s)) return undefined;
-	const v = (s as Record<string, unknown>).pinnedAt;
-	return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+	if (s === null || typeof s !== "object" || Array.isArray(s)) return "unknown";
+	const pinned = (s as Record<string, unknown>).pinned;
+	return pinned === true ? "pinned" : pinned === false ? "unpinned" : "unknown";
 }
 
 /** Classify a `sessions.describe` result for `sessionKey`. Pure. */
@@ -257,8 +266,7 @@ export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): 
 			});
 			const verdict = classifyOpenclawDescribe(r.code, r.stdout, r.stderr, route.sessionKey);
 			if (verdict !== "alive") return verdict;
-			const pinnedAt = describedPinnedAt(r.stdout);
-			return { status: "alive", route: pinnedAt === undefined ? route : { ...route, pinnedAt } };
+			return { status: "alive", route: { ...route, deskPin: judgeOpenclawDeskPin(r.stdout) } };
 		},
 
 		async send(route, nativeSessionId, content) {

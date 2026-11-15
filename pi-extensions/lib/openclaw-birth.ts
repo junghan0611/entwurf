@@ -26,6 +26,7 @@
  */
 
 import * as path from "node:path";
+import type { OpenclawDeskPin } from "./native-push/openclaw-gateway.ts";
 import {
 	checkOpenclawHome,
 	composeOpenclawNativeSessionId,
@@ -45,10 +46,10 @@ export interface OpenclawBirthDeps {
 	readDeclaration: () => OpenclawCitizensDeclaration | null;
 	/** The active records — including ones whose key has left the declaration (#160 S6 §7 (2)). */
 	listIdentities: () => readonly OpenclawHomeRecord[];
-	/** The receive adapter's probe; an alive answer carries the session's `pinnedAt` when pinned. */
+	/** The receive adapter's probe; an alive answer carries the desk's pin verdict (`judgeOpenclawDeskPin`). */
 	probe: (
 		nativeSessionId: string,
-	) => Promise<{ status: "alive"; pinnedAt?: number } | { status: "dead" | "indeterminate"; reason: string }>;
+	) => Promise<{ status: "alive"; deskPin: OpenclawDeskPin } | { status: "dead" | "indeterminate"; reason: string }>;
 	upsert: (nativeSessionId: string, cwd: string) => { action: "create" | "attach"; gardenId: string };
 }
 
@@ -105,10 +106,16 @@ export async function birthOpenclawCitizen(
 
 	// The desk must be pinned (#160 S6 §1b, GLG): OpenClaw keeps a pinned session out of its
 	// maintenance archive. This closes that one automatic archive path; it does not guarantee the
-	// session against deletion, an unpin or another Gateway.
-	if (probe.pinnedAt === undefined) {
+	// session against deletion, an unpin or another Gateway. The verdict is the adapter's one pin
+	// judgment; an answer it cannot read as a pin is refused, never guessed.
+	if (probe.deskPin === "unpinned") {
 		throw new OpenclawBirthError(
 			`openclaw-birth: openclaw-desk-not-pinned: ${id.sessionKey} is alive but not pinned on ${picked.gateway.url}; pin it first (sessions.patch {"key":…,"pinned":true}); no record written`,
+		);
+	}
+	if (probe.deskPin !== "pinned") {
+		throw new OpenclawBirthError(
+			`openclaw-birth: openclaw-desk-pin-indeterminate: the describe of ${id.sessionKey} on ${picked.gateway.url} carries no boolean pinned; no record written`,
 		);
 	}
 

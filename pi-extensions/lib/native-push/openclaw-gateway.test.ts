@@ -62,7 +62,7 @@ const ALIVE = JSON.stringify({ session: { key: "agent:main:s1m1", sessionId: "2d
 describe("probe", () => {
 	it("runs sessions.describe with --expect-url, the declared config for that call only, no token", async () => {
 		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
-		expect(await adapter(r).probe(ID)).toEqual({ status: "alive", route: ROUTE });
+		expect(await adapter(r).probe(ID)).toEqual({ status: "alive", route: { ...ROUTE, deskPin: "unknown" } });
 		expect(r.calls).toEqual([
 			{
 				argv: [
@@ -159,16 +159,27 @@ describe("probe", () => {
 		expect(r.calls).toEqual([]);
 	});
 
-	it("[QK:OPENCLAW-PROBE-READS-PINNED-AT] an alive describe carries the session's numeric pinnedAt onto the route, and only a finite number counts", async () => {
-		const pinned = JSON.stringify({
-			session: { key: "agent:main:s1m1", sessionId: "2de2", pinned: true, pinnedAt: 1763100000000 },
+	it("[QK:OPENCLAW-PROBE-READS-PINNED] the desk pin is read from the describe's boolean pinned only — the measured unpinned shape (pinned:false, no pinnedAt key) is unpinned, a non-boolean is unknown", async () => {
+		// The measured unpinned describe [상속: 9fc008, lab receipt m5-rpc-1.txt]: pinned:false, pinnedAt absent.
+		const unpinned = JSON.stringify({ session: { key: "agent:main:s1m1", sessionId: "2de2", pinned: false } });
+		expect(await adapter(runner({ code: 0, stdout: unpinned, stderr: "" })).probe(ID)).toEqual({
+			status: "alive",
+			route: { ...ROUTE, deskPin: "unpinned" },
 		});
-		const a = await adapter(runner({ code: 0, stdout: pinned, stderr: "" })).probe(ID);
-		expect(a).toEqual({ status: "alive", route: { ...ROUTE, pinnedAt: 1763100000000 } });
-		for (const pinnedAt of [undefined, null, "1763100000000", Number.NaN]) {
-			const out = JSON.stringify({ session: { key: "agent:main:s1m1", pinned: true, pinnedAt } });
-			const b = await adapter(runner({ code: 0, stdout: out, stderr: "" })).probe(ID);
-			expect(b).toEqual({ status: "alive", route: ROUTE });
+		const pinned = JSON.stringify({ session: { key: "agent:main:s1m1", pinned: true } });
+		expect(await adapter(runner({ code: 0, stdout: pinned, stderr: "" })).probe(ID)).toMatchObject({
+			route: { deskPin: "pinned" },
+		});
+		// pinnedAt is an observation, not the condition.
+		for (const session of [
+			{ key: "agent:main:s1m1", pinnedAt: 1763100000000 },
+			{ key: "agent:main:s1m1", pinned: null },
+			{ key: "agent:main:s1m1", pinned: "true" },
+		]) {
+			const out = JSON.stringify({ session });
+			expect(await adapter(runner({ code: 0, stdout: out, stderr: "" })).probe(ID)).toMatchObject({
+				route: { deskPin: "unknown" },
+			});
 		}
 	});
 
@@ -217,7 +228,13 @@ describe("declared bin (#160 S5 1b)", () => {
 		const probe = await adapter(r, () => withBin).probe(ID);
 		expect(probe).toEqual({
 			status: "alive",
-			route: { backend: "openclaw", url: "ws://127.0.0.1:18811", bin: SHIM, sessionKey: "agent:main:s1m1" },
+			route: {
+				backend: "openclaw",
+				url: "ws://127.0.0.1:18811",
+				bin: SHIM,
+				sessionKey: "agent:main:s1m1",
+				deskPin: "unknown",
+			},
 		});
 		expect(r.calls).toHaveLength(1);
 		expect(r.calls[0].argv[0]).toBe(SHIM);

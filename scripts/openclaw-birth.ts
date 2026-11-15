@@ -52,7 +52,7 @@ const result = await birthOpenclawCitizen(
 		probe: async (nativeSessionId) => {
 			const p = await resolveNativePushAdapter(OPENCLAW_BACKEND).probe(nativeSessionId);
 			if (p.status !== "alive") return p;
-			return { status: "alive", pinnedAt: p.route.backend === "openclaw" ? p.route.pinnedAt : undefined };
+			return { status: "alive", deskPin: p.route.backend === "openclaw" ? (p.route.deskPin ?? "unknown") : "unknown" };
 		},
 		upsert: (nativeSessionId, cwd) => {
 			const r = upsertMetaSession({ input: { backend: OPENCLAW_BACKEND, nativeSessionId, cwd } });

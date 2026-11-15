@@ -158,9 +158,9 @@
 		},
 		{
 			"claim": "OPENCLAW-BIRTH-REQUIRES-PIN",
-			"title": "birth writes a record for a desk the Gateway reports unpinned, so OpenClaw's maintenance may archive the garden's only mailbox",
+			"title": "birth writes a record for a desk the describe reports unpinned, so OpenClaw's maintenance may archive the garden's only mailbox",
 			"subject": "pi-extensions/lib/openclaw-birth.ts",
-			"find": ["\tif (probe.pinnedAt === undefined) {"],
+			"find": ["\tif (probe.deskPin === \"unpinned\") {"],
 			"replace": ["\tif (false) {"],
 			"gate": ["bash", "run.sh", "check-openclaw-beside"],
 			"timeoutSeconds": 600,
@@ -168,14 +168,14 @@
 			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
 		},
 		{
-			"claim": "OPENCLAW-PROBE-READS-PINNED-AT",
-			"title": "the receive probe drops the described pinnedAt, so birth refuses every desk as unpinned, or reads any non-number as pinned",
+			"claim": "OPENCLAW-PROBE-READS-PINNED",
+			"title": "the desk pin judgment reads any truthy pinned as pinned, so a non-boolean answer births an unpinned desk instead of refusing",
 			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
-			"find": ["\treturn typeof v === \"number\" && Number.isFinite(v) ? v : undefined;"],
-			"replace": ["\treturn v === undefined || v === null ? undefined : Number(v);"],
+			"find": ["\treturn pinned === true ? \"pinned\" : pinned === false ? \"unpinned\" : \"unknown\";"],
+			"replace": ["\treturn pinned ? \"pinned\" : pinned === false ? \"unpinned\" : \"unknown\";"],
 			"gate": ["bash", "run.sh", "check-openclaw-beside"],
 			"timeoutSeconds": 600,
-			"signature": "[QK:OPENCLAW-PROBE-READS-PINNED-AT]",
+			"signature": "[QK:OPENCLAW-PROBE-READS-PINNED]",
 			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
 		},
 		{
