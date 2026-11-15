@@ -4,6 +4,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+Release-note candidates for 0.55.0 (prepare rewrites this section):
+
+- ACP in-turn steer: a `steer` to a busy ACP Claude citizen is taken into its running turn at the next step boundary; new receipts `steer-in-turn` and `steer-unknown` (never resend on unknown).
+- ACP compaction record (S8): Claude's own compaction is preserved as an out-of-context `entwurf-acp-compaction` entry in the host Pi session (Rule 9: observability only, never hydrated).
+- Sibling-requested ACP compaction: a message body `/compact` sent to an idle ACP Claude sibling compacts it in the same child (measured n=1). Warning: a body `/clear` takes the same path and empties that sibling's model conversation while Pi is not told (measured n=1).
+- OpenClaw home connection (#160): a pinned OpenClaw Gateway session is a record-backed native-push citizen (`openclaw-birth`, `openclaw-send`, the `entwurf` plugin's `entwurf_v2` tool); first admission owes the landlord-home receipt.
+- One host, one build (#165): a developer-install host runs the checkout only; release consumer proofs stay sandboxed.
+
 ## v2026.11.14-herdr.0.53.1 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.53.1` runtime and its measured npm sha512; it is not a new core release. Core 0.53.0 was tagged but never published to npm, so the previous pin is 0.52.0 (`v2026.11.12-herdr.0.52.0`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically. The install guidance, the support-contract rows and the durable supply note now name the published 0.53.1.

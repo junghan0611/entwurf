@@ -9,6 +9,17 @@
 
 ---
 
+## 0.55.0 후보 (2026-11-15) — #160 OpenClaw 집 연결 + ACP steer/compaction; 출하 뒤 몫
+
+브랜치 `160-openclaw`의 handoff(NEXT--160-openclaw.md, 이 커밋에서 삭제)에서 옮긴 지속 사실. 진행 기록은 git history와 [#160](https://github.com/junghan0611/entwurf/issues/160) 스레드에 있다.
+
+- **출하 순서 (GLG 2026-11-15):** R1 S8 PARTIAL → R2 마무리 묶음 → R2.5 ACP LIVE 4셀 → R3 frozen FULL(6847cb65 green) → R4 oracle 실사용(책상 `agent:main:entwurf`, garden `20261115T215046-12438c`, 양방향 왕복 PASS) → R5 이 커밋 → 이 커밋 위에서 landlord-home receipt 11행 측정 → `entwurf-release prepare 0.55.0`(P5 `release-gate --cut`이 `check-openclaw-home-receipt`로 이 HEAD를 판정) → make → publish. receipt는 candidate.head == 판정 HEAD, measuredAt > 그 커밋 시각이어야 서므로 R4의 a449c2c5 측정은 그대로 쓰지 않는다. close 행(선언에서 key를 잠시 뺌)은 측정 때 GLG 별도 승인.
+- **prepare에서 고칠 문구:** DELIVERY.md OpenClaw 행의 "branch candidate, not shipped; offline proof only, no LIVE acceptance", 그리고 `docs/adding-a-harness.md`·`pi-extensions/lib/meta-session.ts`의 같은 "branch candidate" 표현 — receipt가 선 뒤.
+- **릴리스 노트 경고 (실측 n=1, 2026-11-15):** 메시지 본문 `/compact`를 idle ACP Claude 형제에게 보내면 같은 child에서 compaction이 일어나고 `entwurf-acp-compaction` 기록이 남는다(기능). 본문 `/clear`는 같은 길로 실행되어 그 형제의 모델 대화(첫 메시지에만 실리는 entwurf 안내 포함)를 비운다; Pi transcript·record·socket은 그대로라 Pi는 모른다(adapter 0.107.0, `/tmp/ff08d4-next/acp-clear-probe.md` 09a42a19 oracle 로컬). busy 수신자, pi native·Claude Code 대상은 미측정.
+- **출하 뒤 (이연):** S6.4 thinkpad lab(fresh (a) garden-id 표시면, (b) `--width agent-policy`, TUI Gateway 바인딩 증명 — 그 전까지 fresh preflight는 openclaw를 거절); #160 정책 댓글 규칙 5·6·7·15 개정 반영; agent-config peek enum; #165 B(개발/소비 판 단일화) 논의; Fable O-b1(ACP compaction window 닫힘 줄의 error/abort 종료 셀); 다음 집 mini(sonnet, claude-cli 런타임 대조군)는 선언 allow 한 줄 + 새 garden, A창 6·10–13단계만 반복.
+- **OpenClaw Observation (기록만):** QK 0 이연 4개 — BIRTH-SAME-ID(`OPENCLAW-RESET-KEEPS-GARDEN`이 덮음), BIRTH-STORE-CERTIFIED(공통 `upsertMetaSession` 쪽 Rule 7 proof), DECL-NO-GARDENID, SEND-RECORD-ENVELOPE. S5.4: O3 shim timeout kill은 argv0에만 감(컨테이너 안 `chat.send` 지속 여부 미측정, 거짓 실패 방향·재시도 없음), O4 spawn ENOENT/EACCES가 "exited 127: (empty)"로만 보임(공용 runner), O5 끝 슬래시 `bin` 수용, O6 birth가 선언을 두 번 읽음(판정은 probe 쪽).
+- **운영 사실 (oracle, 2026-11-15):** 플러그인은 checkout `plugins/openclaw/dist/index.js`에 link(`--force` 로컬 출처) — 창 동안 oracle checkout 브랜치를 바꾸지 않는다. link 뒤 hot reload는 memory-core drain timeout으로 실패해 Gateway 재시작이 필요했다. 한 호스트 한 판(#165): oracle은 checkout만, npm entwurf 없음.
+
 ## 보류 방향 — pi-durable × ACP Claude (GLG 결정 2026-11-13)
 
 일반 Pi ACP Claude는 #142로 main에 착지했고 #163(드라이버 0.107.0, 정확한 manual `/compact`, 가시성)과 함께 npm 0.53.1로 출하됐다(effort 실설정·readback, ESC 경계). GLG 결정: pi-durable을 ACP Claude로 잇는 것은 **일반 Pi ACP Claude가 실사용으로 안정화된 뒤**에 별도로 판단하며, 그 전에 [#160](https://github.com/junghan0611/entwurf/issues/160)이 먼저다. 안정화 검증 주제는 [#161](https://github.com/junghan0611/entwurf/issues/161)이 소유한다. 이 방향은 구현 issue가 아니다.
