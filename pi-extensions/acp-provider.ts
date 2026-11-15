@@ -21,8 +21,14 @@
 // strip-types fence is introduced.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { ACP_STEER_SEAM, closeRetainedAcpSession, streamShellAcp } from "./lib/acp/backend.js";
+import {
+	ACP_STEER_SEAM,
+	closeRetainedAcpSession,
+	streamShellAcp,
+	takeAcpCompactionRecords,
+} from "./lib/acp/backend.js";
 import { allCuratedModels } from "./lib/acp/backend-adapter.js";
+import { writeAcpCompactionRecords } from "./lib/acp/compaction-writer.js";
 import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
 import { registerAcpSteerSeam } from "./lib/acp-steer-seam.js";
 
@@ -70,6 +76,21 @@ export default function (pi: ExtensionAPI) {
 	// `closeRetainedAcpSession`). A session that never used an ACP model has nothing to close.
 	pi.on("session_compact", (_event, ctx) => {
 		closeRetainedAcpSession(ctx.sessionManager.getSessionId());
+	});
+
+	// #163 S8: the ACP child's own compactions of the prompt that just ended become out-of-context
+	// records in this session. Taken here, before Pi persists the assistant message (Pi emits the
+	// extension message_end first — pi-coding-agent agent-session.js:810-826), so each entry sits
+	// just before that message. The message itself carries nothing of them.
+	pi.on("message_end", (event, ctx) => {
+		const message = event.message as { role?: string; provider?: string };
+		if (message.role !== "assistant" || message.provider !== PROVIDER_ID) return;
+		writeAcpCompactionRecords(takeAcpCompactionRecords(ctx.sessionManager.getSessionId()), {
+			appendEntry: (customType, data) => pi.appendEntry(customType, data),
+			notify: ctx.hasUI ? (text) => ctx.ui.notify(text, "warning") : undefined,
+			stderr: (line) => process.stderr.write(line),
+			now: () => new Date().toISOString(),
+		});
 	});
 
 	// #163 S7: offer the control socket a way to steer this process's busy ACP turns. Registered

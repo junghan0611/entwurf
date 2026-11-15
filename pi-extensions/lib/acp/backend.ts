@@ -68,7 +68,6 @@ import {
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
 import {
-	ACP_COMPACTION_ENTRY_TYPE,
 	AcpCompactionCollector,
 	type AcpCompactionRecord,
 	type AcpCompactionStatus,
@@ -556,7 +555,7 @@ function discardStrandedCompactionRecords(key: string): void {
 	entry.records = [];
 	entry.dropped.push(...dropped);
 	process.stderr.write(
-		`[acp] dropped ${dropped.length} ${ACP_COMPACTION_ENTRY_TYPE} record(s) for ${key.slice(0, 40)}: ${dropped
+		`[acp] dropped ${dropped.length} compaction record(s) for ${key.slice(0, 40)}: ${dropped
 			.map((d) => `${d.compactionId.slice(0, 8)}/${d.status}`)
 			.join(", ")}\n`,
 	);

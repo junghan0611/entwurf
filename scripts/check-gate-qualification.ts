@@ -3437,7 +3437,7 @@ let manifestCount: number;
 		"acp-backend-preflight": 1,
 		"acp-augment": 8,
 		"acp-cortex": 3,
-		"acp-compaction": 10,
+		"acp-compaction": 15,
 		"acp-foreground-only": 2,
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,

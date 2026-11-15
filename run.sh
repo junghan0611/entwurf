@@ -1580,7 +1580,7 @@ check_acp_steer() {
 check_acp_compaction() {
   # #163 S8: the execution coordinate for the ACP compaction-record claims (VERIFY 「Four rules」
   # rule 3). Not a discovery path — check-tests-beside-behavior already finds these files.
-  run_vitest pi-extensions/lib/acp/compaction-record.test.ts pi-extensions/lib/acp/backend.compaction.test.ts
+  run_vitest pi-extensions/lib/acp/compaction-record.test.ts pi-extensions/lib/acp/backend.compaction.test.ts pi-extensions/lib/acp/compaction-roundtrip.test.ts
 }
 
 check_native_push_runner() {

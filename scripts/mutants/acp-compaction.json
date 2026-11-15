@@ -113,6 +113,65 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-COMPACT-DISCARD-STDERR]",
 			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-PERSIST-ROUNDTRIP",
+			"title": "a take leaves the records in backend memory, so a second message_end writes the same compaction again",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tcompactionStore.delete(key);"],
+			"replace": ["\tvoid key;"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-PERSIST-ROUNDTRIP]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-roundtrip.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SUMMARY-NOT-IN-CHILD",
+			"title": "the summary rides the assistant text, so a child rebuilt from the transcript receives it",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tdepositAcpCompactionRecords(compactionKey, state.compactionRecords ?? []);"],
+			"replace": [
+				"\t\tdepositAcpCompactionRecords(compactionKey, state.compactionRecords ?? []);\n\t\tfor (const r of state.compactionRecords ?? []) if (r.summary) state.output.content.push({ type: \"text\", text: r.summary });"
+			],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-SUMMARY-NOT-IN-CHILD]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-roundtrip.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SUMMARY-NOT-IN-PI-CONTEXT",
+			"title": "the record is written as a custom message, which Pi projects into the model context",
+			"subject": "pi-extensions/acp-provider.ts",
+			"find": ["\t\t\tappendEntry: (customType, data) => pi.appendEntry(customType, data),"],
+			"replace": [
+				"\t\t\tappendEntry: (customType, data) => pi.sendMessage({ customType, content: JSON.stringify(data), display: false }),"
+			],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-SUMMARY-NOT-IN-PI-CONTEXT]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-roundtrip.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SUMMARY-NOT-IN-TEXT",
+			"title": "the display line carries the summary, so it lands in the assistant message's text",
+			"subject": "pi-extensions/lib/acp/compaction-record.ts",
+			"find": ["\t\tthis.opts.emitLine(line);"],
+			"replace": ["\t\tthis.opts.emitLine(`${p.terminalSummary ?? \"\"} ${line}`);"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-SUMMARY-NOT-IN-TEXT]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-roundtrip.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-LOSS-VISIBLE",
+			"title": "a record that could not be saved is reported only on stderr, so a UI user never learns of the gap",
+			"subject": "pi-extensions/lib/acp/compaction-writer.ts",
+			"find": ["\t\tdeps.notify?.(message);"],
+			"replace": ["\t\tvoid message;"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-COMPACT-LOSS-VISIBLE]",
+			"signatureSource": "pi-extensions/lib/acp/compaction-roundtrip.test.ts"
 		}
 	]
 }

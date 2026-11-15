@@ -607,7 +607,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			after: "  entwurf check-acp-steer             # ",
 			line: "  entwurf check-acp-compaction        # #163 mutant execution coordinate (VERIFY rule 3): run_vitest over the ACP compaction beside tests (the per-prompt collector, the turn driver's capability, prompt fence, scope and stranded-record drop, and the provider's record writer) — the gate argv of the acp-compaction claims. Same files check-tests-beside-behavior already runs.",
 			receipt:
-				"run.sh check_acp_compaction -> run_vitest over the #163 S8 ACP compaction beside tests (compaction-record, backend.compaction and, as it lands, the provider record writer)",
+				"run.sh check_acp_compaction -> run_vitest over the #163 S8 ACP compaction beside tests (compaction-record, backend.compaction and compaction-roundtrip)",
 		},
 		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the acp-compaction one.
 		{
