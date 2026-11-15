@@ -186,6 +186,17 @@ Findings: **D1** (next lane, source checkouts only) AGENTS.md Rule 11 "run_ts is
 
 Boundary: one host with shared bridge, MCP and overlay, n=1, below L4. Effort, ESC, cancel, gates and footer % were not measured; the summary child's provided tool set is unobserved; this is success at a short context (Pi about 40k, Claude about 250k), not long-run durability. Siblings 262958 and b3e007 are alive.
 
+## 0.55.0 ACP LIVE cells and message-body slash commands, 2026-11-15 (n=1)
+
+oracle, run by the coordinator (ff08d4) with GLG's approval. Receiver R = fresh Pi `entwurf/claude-sonnet-5-5` (garden 20261115T191711-c8a5d3), sender S = fresh Claude Code (20261115T191712-e3f32e). Candidate `65be161c`, tree frozen; code identical to the released 0.55.0 apart from documentation. Full records stay host-local (`~/.local/share/entwurf-lab/160/acp-0.55.0/`, `acp-live-r2.md` sha256 a25f7b5c…, `acp-clear-probe.md` 09a42a19…); the decisive lines are here.
+
+- **A1 busy steer — PASS.** R busy on a 60 s sleep; S → R `entwurf_v2` mode=steer "CODE: amber-heron" → S's receipt `entwurf_v2 control-socket → steer-in-turn`. R's session file: one custom `entwurf-steer-in-turn` entry (sender e3f32e), the same text not repeated as a user or custom message. In the child it arrived once as a user input right after a tool result (10:18:52Z) and the same turn answered "CODE: amber-heron"; one Pi assistant message; the next prompt's delta carried no repeat.
+- **A2 idle — PASS.** S → R mode=steer to an idle R → receipt `sent`; a new turn ran; still one steer entry.
+- **B1 sibling-requested `/compact` — PASS.** S → R body `/compact`, no mode → `sent`. Child: `<command-name>/compact` then "Conversation compacted" and Claude's own compact summary; R's file: one custom `entwurf-acp-compaction` entry before the next assistant message (status completed, promptWasCompactCommand true, 32140 → 6696 tokens, summarySource terminal); display line `[acp: compaction completed 32k→7k, 9.3s observed, after /compact]`. The entwurf reply-etiquette suffix and `<sender_info>` rode along as `<command-args>`, which Claude Code documents as custom summary instructions (effect not measured); the compaction still completed.
+- **B2 record stays out of model context — PASS.** In the next question's delta, 0 of 8 summary probes from the entwurf record appeared; the only hits were Claude's own compact summary. The code word survived through Claude's summary.
+- **`/clear` by message body (P = 20261115T215853-705a89, Pi `entwurf/claude-sonnet-5-5`, at `45961dec`).** Body `/clear` to an idle P → `sent`; Claude Code opened a new conversation file, the old one untouched; the next question "what CODE … else NONE" was answered `NONE` (cacheRead 10947 vs 31195 before). Pi's own transcript, record and socket were unchanged, so Pi is not told; the entwurf first-message augment is gone with the conversation.
+- **Not measured:** Claude's automatic compaction (~970k), an older sender's demotion (A3), Pi's own manual `/compact` on this rail (B4), `steer-unknown`, a busy receiver for `/compact` or `/clear`, slash commands other than these two, and Pi-native or Claude Code targets.
+
 ## Superseded / retired material (not instructions, not a gate)
 
 Moved verbatim out of [BASELINE.md](../BASELINE.md) by the 0.53.1 documentation diet. It is history for a reader of old receipts: nothing here is a question to ask a session, a release gate or a current support verdict. The question IDs below are stable names for old results.

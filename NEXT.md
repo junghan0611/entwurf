@@ -1,70 +1,35 @@
-# NEXT — 0.53.1 출하 뒤: Herdr 0.53.1 snapshot → 다음 레일
+# NEXT — 0.55.0 cut: #160 OpenClaw home + ACP in-turn steer and compaction record
 
-0.53.1은 #163(ACP Claude 품질 레일)을 npm으로 처음 출하했다. 0.53.0은 태그와 GitHub release만 있다. 다음 core 레일은 GLG가 정한다. 0.55.0은 #160이 준비될 때 간다(GLG 2026-11-14, ff08d4 전달).
+0.55.0은 #160(OpenClaw 집 연결)과 ACP in-turn steer(S7)·compaction 기록(S8)을 묶는다. 브랜치 `160-openclaw`는 main `1255adbb`로 land했다(exact-SHA CI run 43717547419, 4개 job success). 브랜치 handoff의 지속 사실은 ROADMAP 맨 위 "0.55.0 후보" 절에 있다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. 0.53.0 cut.** tag `v0.53.0`(`72975b0`)과 GitHub release(2026-11-13)까지 했고, npm에는 게시하지 않았다(GLG 결정).
-- [x] **2. #163 land.** claude-agent-acp 0.107.0, 정확한 manual `/compact`, Pi 같은 가시성. main `7a100e89`, exact-SHA CI run 43570025312의 4개 job 모두 success.
-- [x] **3. BASELINE·VERIFY R2R (2026-11-14, ACP Opus 5.5).** 기록은 `docs/baseline-receipts.md`의 "0.53.1 BASELINE and VERIFY run" 항목에 있다.
-- [x] **4. 0.53.1 prepare → make → publish.**
-  - prepare `563b9334`, M0 FULL green.
-  - exact-SHA CI run 43579212082의 4개 job 모두 success.
-  - Windows preview run 43580235467.
-  - candidate sha256 `45ea17e4…57e5`.
-  - [release](https://github.com/junghan0611/entwurf/releases/tag/v0.53.1).
-  - GLG가 npm에 publish했다. `latest`=0.53.1, `repair` 유지.
-  - U2(registry bytes = candidate)와 U3(registry install smoke)는 green이다.
-- [ ] **5. Herdr npm snapshot 0.53.1.** ← CURRENT: re-pin 커밋을 main에 push하고 exact-SHA CI를 확인한다. 이어서 tag-release로 `v2026.11.14-herdr.0.53.1`와 GitHub release를 만든다.
-
-현재 좌표: 1–4 완료 → 5 Herdr snapshot(push·CI·tag) → 다음 레일은 GLG 결정
+- [x] **1. land.** main `1255adbb`, CI 4 job green(2026-11-15 22:09 KST push, GLG 요청).
+- [x] **2. landlord-home receipt.** `1255adbb` 위에서 11행 측정(10 pass, compactReset unmeasured), `check-openclaw-home-receipt` green. 정본 `~/.local/share/entwurf-lab/160/receipt-0.55.0-1255adbb/receipt.json`. visibility는 chat.history + GLG의 OpenClaw 노드 앱 관측.
+- [x] **3. prepare 0.55.0.** FULL green(seal cd1bbd97, 1025s), `release-gate --cut` MUST 25/0/0 cut OK(3회차; 1·2회차 red는 stale installed writer와 OMP gave-up 로그 — CHANGELOG Release evidence). 원래 계획: CHANGELOG·버전·문서 → 리뷰(bc72e5) → build-bridge → frozen `check:full` → `release-gate --cut`(Codex triple + `ENTWURF_OPENCLAW_HOME_RECEIPT`/`_TARGET`) → release-prep 커밋.
+- [ ] **4. make → publish.** ← CURRENT: make(prepared HEAD push, exact-SHA CI, candidate, tag, GitHub release)는 GLG 2026-11-15 "npm publish 전까지 쭉 진행" 범위. publish는 GLG가 직접.
+- [ ] **5. Herdr re-pin.** publish 뒤 `plugins/herdr/runtime-lock.json`을 npm 0.55.0 측정 바이트로 다시 pin하고 snapshot tag(prepare 동안은 herdr-checkout carrier).
 
 # NOW
 
-- **다음 한 걸음:**
-  - re-pin 커밋의 exact-SHA CI 4개 job이 green이면 snapshot tag와 GitHub release를 만들고 release stamp를 찍는다.
-  - 그 뒤 ff08d4가 #163 결과 댓글과 종결을 맡는다.
-  - 운영 host를 0.53.1로 옮기는 설치·재시작은 별도 승인이다.
-- **0.53.1 증거:**
-  - `CHANGELOG.md`의 0.53.1 Release evidence와 Herdr snapshot 항목.
-  - candidate와 U0 receipt는 `~/.local/state/entwurf-releases/0.53.1-563b9334f786/candidate.XBHRFx/`에 있다(host-local).
-- **사용감 기록 (자문 a30dda 제안, 결재 조건 아님):** 평소 일 한 건을 ACP로 끝낸 뒤 GLG에게 묻는다.
-  1. 기다리는 동안 Claude가 무엇을 하는지 알았나.
-  2. ESC 뒤 상태를 알고 이어서 말할 수 있었나.
-  3. compact 뒤 최신 결정, 남은 일, 끝난 일이 구분됐나.
-  - 불편은 "하려던 일 / 화면 / 관측 / 수습" 네 칸으로 적는다.
-  - 관찰 항목: 턴이 끝난 뒤에도 사는 서브에이전트나 백그라운드 작업이 보이지 않는 사각.
-- **#163 Observation (기록만):** 계약 문서는 `docs/acp-backend-rail.md` §11-10·§11-11이다.
-  - O3: 요약 오라클은 pi `sdk`/`modelRuntime` 구간을 덮지 않는다.
-  - O5: `/new`나 fork 뒤 `session_compact` 키가 어긋날 때 no-op인지 확인하지 않았다.
-  - M2b: done/failed summary의 fence 꼴은 그대로 뒀다.
-  - O-2: 미리보기를 Markdown으로 해석할 수 있다.
-  - O-3: fence를 벗긴 뒤에도 `'`가 남을 수 있다.
-  - O-4: 바이트 자르기는 code point 경계에서 한다.
-  - O-5: title이 여러 번 바뀌면 running 줄도 여러 번 나온다.
-  - 제어문자 정리는 pi 범위에 DEL·C1 제거를 더한 것이다.
-- **범위 제외 (GLG 2026-11-14):** 실행 중인 턴에 `_session/steering` 주입, 정지 동사 노출. 정지 수단은 로컬 ESC다.
+- **receipt와 HEAD:** receipt의 candidate는 `1255adbb`(prepare 커밋의 부모)다. prepare 커밋 전에 다른 커밋을 넣으면 receipt가 무효가 되어 11행을 다시 재야 한다.
+- **역할 (2026-11-15):** ff08d4 코디·prepare, bc72e5(ACP Opus) 리뷰, 8216f4 운영(OpenClaw Gateway). OpenClaw 책상 `agent:main:entwurf` = garden `20261115T215046-12438c`.
 - **운영 관찰:**
-  - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. 0.53.0과 0.53.1 cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정했다. daemon 복원은 GLG가 결정한다.
+  - 새 backend를 store에 처음 쓰기 전에는 installed writer 전부(`doctor-codex-birth`는 helper bytes staleness를 보지 않으므로 `install-state.json`의 unit 버전도), omp·copilot doctor를 확인한다. 0.55.0 cut에서 Codex birth helper(0.41.1)·OMP·Copilot receive가 `openclaw` record를 보고 store 쓰기를 거절했다.
+  - `doctor-omp-receive`는 receive 로그에 남은 `arm-gave-up` 줄을 평생 센다. 한 번의 실패가 영구 RED가 된다(0.55.0 cut에서 로그를 보존용 이름으로 바꿔 넘김).
+  - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정한다. daemon 복원은 GLG가 결정한다.
   - `check-acp-backend-preflight`가 thinking level 없이 backend를 부른다(b3 O1).
-  - `*resume-call.test.ts`가 `/tmp`에 디렉터리를 남긴다(P9). 0.53.1 U3 뒤에는 `mux-resume-call-pd`와 `herdr-resume-*` 세 종류가 각 105개였다.
-  - U3 registry 설치에서 pi가 경고를 냈다: host-provided 패키지(`pi-agent-core`, `pi-ai`, `pi-coding-agent`, `pi-tui`)는 dependencies가 아니라 `"*"` 범위의 peerDependencies여야 한다. 기록만 했다.
-- **PAUSED:** #160(Oracle 실행, 0.55.0), durable ACP 통합.
-- **역할 (2026-11-14):**
-  - ff08d4: 실무 코디.
-  - b3fc7c: make와 post-publish 작성자.
-  - Sonnet f17cd8: prepare 문서.
-  - 02055a: 리뷰.
-  - a30dda: 자문.
-  - 68bd94: 운영 코디. GLG에게 DM하는 것은 68bd94뿐이다.
-- **Do not touch:**
-  - 출하된 tag/release/npm bytes
-  - push(GLG 승인 시만), `--no-verify`, worktree
-  - 운영 profile·overlay·hook, credential
-  - 자동 compaction 기준 논의, #160, andenken 리포
+  - `*resume-call.test.ts`가 `/tmp`에 디렉터리를 남긴다(P9).
+  - U3 registry 설치 경고: host-provided pi 패키지는 `"*"` peerDependencies여야 한다는 pi 경고. 기록만 했다.
+  - OpenClaw 플러그인은 oracle checkout `plugins/openclaw/dist/index.js`에 link되어 있다. checkout 브랜치를 바꾸지 않는다.
+- **범위 제외 (GLG 2026-11-14, 유지):** 정지 동사 노출. 정지 수단은 로컬 ESC다. (같은 결정의 steer 절반은 0.55.0 S7로 출하됐다.)
+- **PAUSED:** durable ACP 통합.
+- **Do not touch:** 출하된 tag/release/npm bytes, push(GLG 승인 시만), `--no-verify`, worktree, 운영 profile·overlay·hook, credential, 자동 compaction 기준 논의(S8은 기록만 하고 기준은 바꾸지 않는다), andenken 리포.
 
 # 이월 (다음 레일과 결정 대기)
 
+- **#163 Observation (0.53.1, 기록만):** 계약 문서 `docs/acp-backend-rail.md` §11-10·§11-11. O3 요약 오라클이 pi `sdk`/`modelRuntime` 구간을 덮지 않음, O5 `/new`·fork 뒤 `session_compact` 키 어긋남 no-op 미확인, M2b fence 꼴 유지, O-2 미리보기 Markdown 해석, O-3 fence 뒤 `'`, O-4 code point 경계 자르기, O-5 title 변경마다 running 줄; 제어문자 정리는 pi 범위에 DEL·C1 제거를 더한 것.
+- **사용감 기록 (a30dda 제안, 결재 조건 아님):** 평소 일 한 건을 ACP로 끝낸 뒤 GLG에게 묻는다 — 기다리는 동안 무엇을 하는지 알았나, ESC 뒤 이어서 말할 수 있었나, compact 뒤 최신 결정·남은 일·끝난 일이 구분됐나. 불편은 "하려던 일 / 화면 / 관측 / 수습" 네 칸.
 - **0.53.1 CHANGELOG kill-power 줄:** `none (all committed claims not re-proved, #144)`에 claim 개수 N이 빠졌다. 0.53.0은 1532였다. 2026-11-14 PARTIAL receipt(`563b9334` 위)에는 committed mutant가 1547개(5개 실행 + 1542개 미실행)로 나온다. 이미 태그된 섹션이라 고치지 않았다(ff08d4 2026-11-14).
 - **D1(다음 레일):** AGENTS.md Rule 11의 "run_ts is the sole TS crossing"과 `mcp/entwurf-bridge/start.sh:47-68`이 어긋난다. start.sh는 소스 체크아웃에서 src를 strip-types로 실행한다. 문안은 GLG가 정한다. 같은 owner 체크아웃에서 ACP 쪽 bridge는 src를 쓰고 Pi 내장은 dist를 써서, dist가 낡으면 둘이 갈라질 수 있다(미측정).
 - **O3(다음 레일):** R2R에서 summary에는 옛 사실만 있었고, 갱신된 사실은 kept tail이 운반했다. 다음 VERIFY 다이어트 후보는 §1A Layers 1–4다.

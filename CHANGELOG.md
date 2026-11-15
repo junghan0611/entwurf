@@ -4,13 +4,82 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
-Release-note candidates for 0.55.0 (prepare rewrites this section):
+## 0.55.0 — 2026-11-15
 
-- ACP in-turn steer: a `steer` to a busy ACP Claude citizen is taken into its running turn at the next step boundary; new receipts `steer-in-turn` and `steer-unknown` (never resend on unknown).
-- ACP compaction record (S8): Claude's own compaction is preserved as an out-of-context `entwurf-acp-compaction` entry in the host Pi session (Rule 9: observability only, never hydrated).
-- Sibling-requested ACP compaction: a message body `/compact` sent to an idle ACP Claude sibling compacts it in the same child (measured n=1). Warning: a body `/clear` takes the same path and empties that sibling's model conversation while Pi is not told (measured n=1).
-- OpenClaw home connection (#160): a pinned OpenClaw Gateway session is a record-backed native-push citizen (`openclaw-birth`, `openclaw-send`, the `entwurf` plugin's `entwurf_v2` tool); first admission owes the landlord-home receipt.
-- One host, one build (#165): a developer-install host runs the checkout only; release consumer proofs stay sandboxed.
+### What an npm user gets
+
+Two lines of work ship together: an OpenClaw Gateway session can be a record-backed Entwurf citizen (#160), and a sibling's `steer` can now enter a busy Claude ACP turn instead of waiting for it to end, with Claude's own compactions kept as out-of-context records (#163 S7/S8). The Pi set, the Claude ACP driver (0.107.0) and the npm surface are otherwise unchanged from 0.53.1. The OpenClaw plugin (`plugins/openclaw`) is not in the npm package: the CLI half (`openclaw-birth`, `openclaw-send`) ships, and the operator installs the plugin from an Entwurf checkout (`openclaw plugins install` of that directory, a local source outside ClawHub review).
+
+### OpenClaw home connection (#160)
+
+- **Landlord home.** An OpenClaw Gateway session the operator created and pinned becomes one record-backed native-push citizen. Entwurf opens nothing there: no fresh, no same-id resume, no retire; the Gateway owns the bot's lifecycle. `entwurf openclaw-birth --scope <s> --session-key agent:<id>:<key> --cwd <abs>` attaches a garden id to a key the operator's `openclaw-citizens.json` declares, only after that Gateway's `sessions.describe` answers alive and `pinned:true`; it is idempotent (`create`, then `attach` on the same garden). One home, one garden: a second key for the same bot, two records for one home, or a malformed OpenClaw record refuses by name.
+- **Receive.** `entwurf_v2` to the desk probes with `sessions.describe` and sends one `chat.send queueMode:"steer"` through the vendor CLI against the declared url under `--expect-url`, not retriable, no mailbox. A gateway entry may declare an absolute `bin` (e.g. a shim into a container Gateway).
+- **Send.** The `entwurf` OpenClaw plugin's `entwurf_v2` tool runs `entwurf openclaw-send --decl <abs>` with one claim on stdin; the entry checks scope, joins exactly one record and hands the record-backed sender to the existing v2 dispatch. The declaration limits who may send (scope, agent, key), not where to; there is no destination ACL. An operator wrapper (for example SSH with a forced command) answers `{"kind":"invalid"}` with exit 2 when it refuses.
+- **Closed declaration.** An empty `allow` closes every desk: send and probe refuse by scope and no record changes; fresh-cut counts a closed desk as quiesced.
+- **First admission.** OpenClaw is the one member of the closed landlord-home list in `check-harness-admission-parity`; instead of a visible fresh it owes `check-openclaw-home-receipt` in the release MUST tier (VERIFY criterion 11). Measured on OpenClaw 2026.11.3 only.
+
+### ACP in-turn steer (#163 S7)
+
+- A `mode=steer` sent to a busy Claude ACP citizen is offered to the running backend turn once (claude-agent-acp 0.107.0 steering). When the adapter takes it, it enters at the next step boundary and the receipt is `steer-in-turn`; when the adapter answers that it was not sent, it falls back to Pi's steering queue as before (`queued-steer`, or `sent` if the receiver went idle meanwhile); `follow_up` does not take this path. When the adapter's answer cannot be read (timeout, closed connection, rejected request, a seam error, an unrecognized answer) the receipt is `steer-unknown`: it may have been injected, so never resend. Neither mode cancels or stops a turn or a running tool. The taken text is recorded once as a plain session entry outside the model context.
+- The `entwurf_v2` description and its `mode` text were rewritten as one piece to name these outcomes (ENTWURF.json revision 21).
+
+### ACP compaction record and sibling-requested compaction (#163 S8)
+
+- **Record.** When Claude compacts its own context inside an ACP prompt, the host Pi session keeps one out-of-context `entwurf-acp-compaction` entry (status, whether the prompt was a `/compact` command, tokens before/after, summary and its source) before the next assistant message. Rule 9 boundary: observability only; Entwurf never hydrates a transcript from it or injects it into a model. Measured after a manual `/compact`; Claude's automatic compaction takes the same path and was not measured LIVE at this candidate.
+- **Capability.** The ACP client now declares `clientCapabilities.session.compaction` to every adapter at `initialize` (§11-8-a).
+- **A sibling can ask an idle ACP Claude sibling to compact.** A message body `/compact` sent with `entwurf_v2` to an idle ACP Claude citizen compacts it in the same child and writes the record (n=1). The entwurf reply note and `<sender_info>` ride along as `/compact`'s arguments, which Claude Code documents as custom summary instructions (their effect on the summary was not measured); the compaction still completes.
+- **Warning — `/clear`.** A message body `/clear` takes the same path and empties that sibling's model conversation, including Entwurf's first-message guidance, while Pi's transcript, record and socket stay as they were, so Pi is not told (n=1). Do not send it unless that is what you want. Other slash commands, a busy receiver, and Pi-native or Claude Code targets are not measured.
+
+### Native-push runner
+
+- The shared native-push runner's deadline now holds even when a child ignores SIGTERM: a stalled probe or send is killed and classified at its bound instead of being read late as success (`f13c3e99`). This affects every native-push backend.
+
+### One host, one build (#165)
+
+- On a developer-install host the operator runs the checkout only; no release mode installs its candidate or the registry package into the operator environment, and every consumer proof stays in a sandboxed HOME/XDG/PNPM_HOME (release skill host rule).
+
+### Herdr
+
+- While 0.55.0 is unpublished, `plugins/herdr/runtime-lock.json` moves to the closed `herdr-checkout` verification carrier, as in the 0.53.0 and 0.53.1 prepares (an npm lock must name the checkout's own version, `certifyLockCoherence`); no 0.55.0 bytes or integrity are invented. The last published npm pin is 0.53.1 (snapshot `v2026.11.14-herdr.0.53.1`); re-pin after publication is a separate Herdr step.
+
+### Release evidence
+
+The candidate tree is `1255adbb` (main after the #160 land, exact-SHA CI run 43717547419, four required jobs success) plus this section's release-prep edits: CHANGELOG, `package.json` version, `plugins/herdr/runtime-lock.json` and its README, NEXT, ROADMAP, DELIVERY, `docs/adding-a-harness.md` and `docs/baseline-receipts.md`. Code is identical to `6847cb65`, whose frozen FULL was green on the branch. Floors ran on that tree with the seal below; the make step's M0 floor covers the committed prepared HEAD.
+
+- P4 (deterministic floor), seal `cd1bbd97bc2bd076` (before = after; sha256 of HEAD + `git diff --binary` + `git diff --cached --binary` + untracked sha256sums, first 16 hex): `pnpm run build-bridge` rc=0 and byte-identical to the preserved dist manifest, then `pnpm run check:full` exit 0 in 1025s (2026-11-15 22:40–22:57 KST). Log SHA-256 `feb1b545ef5304c461a145860e5e17f8e594fd00c9e5e53fdf138e3fd58b465e`. An earlier FULL on this prepare was red at `check-herdr-plugin-build` [QK:HPB-DEFAULT-LOCK-READ] (npm lock 0.53.1 vs checkout 0.55.0, `certifyLockCoherence`); the lock moved to the `herdr-checkout` carrier as in the 0.53.x prepares and the floor was rerun from scratch.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-15 23:52 – 2026-11-16 00:14 KST: MUST 25 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0, 1319s. Log SHA-256 `e38b3dfcb782fbaa47ca9d93b4f8c117274a232a3409ce61421a744a97ac164c`; scratch `/tmp/entwurf-release-gate-0.55.0.wQYMfl`.
+  - `smoke-codex-fresh-live` ran against an app-server started for this cut (`entwurf codex-app-server`, pid 535672, tmux session `codex-as-0550`, separate from the gate's session `rg-0550`), stopped after the run. Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`.
+  - `check-openclaw-home-receipt` (MUST, VERIFY criterion 11) read `~/.local/share/entwurf-lab/160/receipt-0.55.0-1255adbb/receipt.json` (sha256 `79a7908a026e…`) for home `oracle/main/agent:main:entwurf#20261115T215046-12438c`. Its candidate is `1255adbb`, the parent of the prepare commit; the prepare diff touches documentation, the version and the Herdr lock only. Rows: open, address, consume, reply, close, refusal, visibility, modelPolicy, sendScope and resources pass; compactReset unmeasured (vendor consumption after its compaction not observed; Entwurf's side is QK OPENCLAW-RESET-KEEPS-GARDEN). Visibility is the Gateway's `chat.history` for that key plus GLG's own look in the OpenClaw node app, relayed in session, not a captured screen. The close row emptied the operator's declaration for 31 s with GLG's approval and restored it byte-identical (sha256 `6fe3c9ea…`). Measured on OpenClaw 2026.11.3 (`847611d`) on oracle. The cross-harness leg is this receipt's address/reply pair: a Claude Code citizen's live turn into the desk, and the desk's live turn back into it.
+  - Two earlier runs on the same seal were red and are kept: run 1 (MUST 22/3/0) failed `smoke-omp-receive-live`, `smoke-omp-fresh-live` and `smoke-codex-fresh-live`. Cause: the operator's installed Codex birth helper (unit 0.41.1), OMP extensions and Copilot receive unit predated the `openclaw` backend, so once the desk's record existed they refused to certify the store and no new Codex or OMP session could be born (Rule 7 stale reader; the hook log shows only the two smoke fixtures failing). `install-codex-birth`, `install-omp-bridge`, `install-omp-receive` and `install-copilot-receive` rolled them forward from this checkout (`~/.codex/hooks.json` byte-identical, so the trusted declaration did not change). Run 2 (MUST 24/1/0) failed only `smoke-omp-receive-live`, whose doctor counts every `arm-gave-up` line ever written; the one line came from run 1's refused birth. That log was kept by renaming it (`meta-bridge-receive-omp.log.archived-20261115T2358-gaveup`, sha256 `b5c79335…`) and run 3 is the cut.
+- P9 after P5: reclaimable roots 0. One reparented `/tmp` process, the Emacs daemon. About 38 roots each of `mux-resume-call-pd`, `herdr-resume-pd-pkg`, `herdr-resume-pd-nolauncher` and `herdr-resume-call` remain, from the beside-behaviour `*resume-call.test.ts` files outside the owned-prefix scan. Recorded, not deleted.
+- Kill-power re-measured at this shipped SHA: none (all 1640 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-acp-steer"] 16/16 receipt b1cf1f801064
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 9f4b2e496590
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-control-send-receipt"] 21/21 receipt b304b22f149b
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-entwurf-v2-surface"] 22/22 receipt b504bf7b77eb
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-gate-manifests"] 52/52 receipt 72ffc9c448d9
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-install-surface"] 44/44 receipt 4c1bb299dda3
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 65be161c8f96 surface 696f00286006 -- ["bash","run.sh","check-openclaw-beside"] 37/37 receipt 144c1f0bacbe
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-backend-preflight"] 1/1 receipt 13fc7776d2fe
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-compaction"] 17/17 receipt f46c797e80f4
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-prompt-lifecycle"] 15/15 receipt ea8a6eb3b030
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-provider-surface"] 2/2 receipt 14fd5730fd4f
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-session-reuse"] 1/1 receipt 80429925b39b
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-set-model-readback"] 44/44 receipt c2cd37d94082
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-steer"] 16/16 receipt ff158f0011be
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-stop-reason"] 7/7 receipt 264c48856fba
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-stream-hooks"] 10/10 receipt c507fa9b7807
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-usage-accounting"] 12/12 receipt c358b8e31f94
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-acp-vendor-rejection"] 4/4 receipt b35ea95959f7
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-control-send-receipt"] 21/21 receipt 6ee5c84b8f96
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-entwurf-v2-production"] 5/5 receipt 6a8bb8bcf8a8
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-gate-manifests"] 52/52 receipt 3d8373e8dcf5
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-herdr-placement"] 13/13 receipt cdce57b2b20a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-install-surface"] 44/44 receipt 140eba33c82a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-meta-hook-session-switch"] 25/25 receipt 84d56c33144a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-mux-launch"] 7/7 receipt 08ef24919623
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 9ed5f71eee1b surface 17972ce14a58 -- ["bash","run.sh","check-probe-ordering"] 1/1 receipt 482dafb876e2
+- Exact prepared-SHA CI and the artifact acceptance belong to make and produce their own receipts.
 
 ## v2026.11.14-herdr.0.53.1 — Herdr npm runtime snapshot
 
