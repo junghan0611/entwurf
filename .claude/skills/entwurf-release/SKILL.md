@@ -52,6 +52,12 @@ execution, feature-branch push/CI may proceed when authorized, but prepare/make 
 until the named cut can run its required floors. Do not reinterpret that restriction as a
 floor waiver, nor a delegated tag/release decision as proof those floors already passed.
 
+Host rule (#165, GLG 2026-11-15): one host, one build. On a developer-install host (oracle) the
+operator runs the checkout only; no release mode installs its candidate or the registry package
+into the operator environment (`pnpm add -g`, `npm i -g`, or a store path pinned in an operator
+config). Every consumer proof runs in a sandboxed HOME/XDG/PNPM_HOME and stays in its evidence
+directory.
+
 ## Shared version contract
 
 Accept a normal SemVer release or prerelease. Reject a leading `v`.
