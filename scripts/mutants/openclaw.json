@@ -177,6 +177,17 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-PROBE-READS-PINNED-AT]",
 			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-RECEIPT-REFUSES",
+			"title": "the landlord-home release step accepts a receipt measured on another candidate, so an old lab run stands in for the head being cut",
+			"subject": "pi-extensions/lib/openclaw-home-receipt.ts",
+			"find": ["\t} else if (head !== candidateHead) {"],
+			"replace": ["\t} else if (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-RECEIPT-REFUSES]",
+			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
 		}
 	]
 }

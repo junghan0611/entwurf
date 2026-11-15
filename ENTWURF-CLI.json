@@ -326,12 +326,17 @@
 				{
 					"synopsis": "check-openclaw-beside",
 					"column": 38,
-					"summary": "#160 mutant execution coordinate (VERIFY rule 3): run_vitest over the six OpenClaw beside tests (scope declaration, receive adapter, birth, send claim, send entry round trip, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs."
+					"summary": "#160 mutant execution coordinate (VERIFY rule 3): run_vitest over the seven OpenClaw beside tests (scope declaration, receive adapter, birth, send claim, send entry round trip, home receipt judge, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs."
 				},
 				{
 					"synopsis": "check-native-push-runner",
 					"column": 38,
 					"summary": "#160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs."
+				},
+				{
+					"synopsis": "check-openclaw-home-receipt",
+					"column": 38,
+					"summary": "#160 S6 landlord-home first-admission release MUST: judges the candidate-attributed receipt of the replacement-behaviour oracles (open, address, consume, reply, close, refusal, compact-reset, visibility, model/policy, send scope, resources) named by ENTWURF_OPENCLAW_HOME_RECEIPT for this HEAD. No receipt → SKIP (97); another candidate, another home, a missing or non-passing row → exit 1. Touches no Gateway or store."
 				},
 				{
 					"synopsis": "check-pi-durable-receive",

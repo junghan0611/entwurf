@@ -35,7 +35,7 @@ them there.
 | `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_callback` | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
 | `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2` — the one exception: the no-arg callback refuses in the app-server's tool process, so its callback stays the delivery verb with arguments; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
 | `pi-durable` | upstream's experimental app/TUI, which upstream omits from its npm distribution; Entwurf supplies it as a carrier emitted from its owned source (`pi/pi-durable/src` → `pi/pi-durable/carrier/`, #130/#141; SDK set pinned by `pi/pi-durable/overlay/upstream-pin.json`). The 0.31 operator-XDG source route is retired, with no fallback | self-fetch mailbox: the receiver runs IN the durable host; an announce-only doorbell submits a root notice through the native submission API, and the model drains with `entwurf_inbox_read` | `entwurf_callback` (since 0.41.0 the contact registers eight tools by their plain names, including operator-requested `entwurf_retire_call`; this is not a new LIVE receipt) | managed verb `entwurf pi-durable --provider … --model … --width task-wide --entwurf-bootstrap <{v,task}>`; LIVE MUST `smoke-pi-durable-fresh-live` (first green 2026-10-06 on the **0.31 operator source-runtime route**, see DELIVERY — not the 0.32 carrier receipt; frozen b220's carrier aggregate LIVE was accepted 2026-10-08 in #130, separate from prepared-SHA and versioned-artifact proof) |
-| `openclaw` | independent vendor (#160, branch candidate) | native-push: `sessions.describe` probe + one `chat.send queueMode:"steer"` through the vendor CLI against the operator-declared Gateway url (`--expect-url`); birth only for a declared key; send through the `entwurf` OpenClaw plugin tool → `entwurf openclaw-send` | the plugin's `entwurf_v2` with target + nonce (Codex shape: the plugin runs in the Gateway, not the TUI window) — not wired | not admitted: preflight refuses until the TUI Gateway binding and (a)–(d) are measured; `FRESH_CALL_BACKENDS` unchanged |
+| `openclaw` | independent vendor (#160, branch candidate) | native-push: `sessions.describe` probe + one `chat.send queueMode:"steer"` through the vendor CLI against the operator-declared Gateway url (`--expect-url`); birth only for a declared key; send through the `entwurf` OpenClaw plugin tool → `entwurf openclaw-send` | none: Entwurf opens no OpenClaw session | landlord home (#160 S6): not a fresh-call backend; one pinned home on one fixed key, birth only for an existing session; first admission owes `check-openclaw-home-receipt` in the release MUST tier |
 
 
 The verb a sibling SENDS its result with is a separate source column, `FRESH_CALL_DELIVERY_TOOL`
@@ -680,6 +680,19 @@ capability: add it only when a record can authoritatively recover the vendor's t
 without guessing. Internal subagents stay inside the top-level citizen throughout lifecycle work;
 do not connect a vendor's internal hub/team protocol to entwurf merely to expose its private hops.
 
+**One reviewed exception: the landlord home (#160 S6, GLG 2026-11-15).** Some vendors keep a bot's
+home — its workspace, memory, generations and waking — under their own long-running service, and
+the operator, not Entwurf, chooses and pins the session that is the home's mailbox. There Entwurf
+opens nothing: fresh, same-id resume and retire would each re-own a lifecycle that belongs to the
+vendor. Such a harness is admitted without visible fresh, as an existing home connected to one
+record-backed address, and proves the replacement behaviours instead — open, address, consume,
+reply, close, refusal and compact-reset, with visibility, model/policy, send scope and resources —
+as one candidate-attributed receipt. This is not a general exemption. The list is closed
+(`LANDLORD_HOME` in `check-harness-admission-parity`, OpenClaw only today); a backend joins only by
+its own contract review and its own candidate's acceptance; a fresh that failed never falls back
+here; and the qualifying line is the operator-chosen, already existing home, not "the vendor owns a
+runtime" (every vendor owns its runtime).
+
 ### The release stop — partial evidence is a BRANCH state, never a shipped one
 
 Steps 1–8 can be walked incrementally, and a branch carrying a harness that has reached step 7 and
@@ -688,13 +701,19 @@ new native harness may not be cut until that harness has closed step 9, and the 
 rule are both executable rather than remembered:
 
 - **Deterministic:** `check-harness-admission-parity` (in `pnpm run check:full`) requires every
-  backend in `META_CITIZEN_BACKENDS` to be in `FRESH_CALL_BACKENDS` or to be a declared pre-#82
-  legacy admission whose exception a reader can find in `DELIVERY.md`. A post-contract harness that
-  mints records but cannot be opened turns the floor red.
+  backend in `META_CITIZEN_BACKENDS` to be exactly one of: in `FRESH_CALL_BACKENDS`, a declared
+  pre-#82 legacy admission whose exception a reader can find in `DELIVERY.md`, or a member of the
+  closed landlord-home list (documented the same way, direct-inject, outside same-id resume, and
+  with its receipt step in the release MUST tier). A post-contract harness that mints records but is
+  none of these turns the floor red. Parity green is not admission.
 - **LIVE:** the first release of a harness admitted under this contract owes the clause 7 receipt as
   a release-gate MUST step, because a schema is not a product. `smoke-omp-fresh-live` is the worked
   instance. This applies from OMP onward; it does not retroactively redesign the operator-metered
-  exclusion Copilot's visible fresh was accepted under.
+  exclusion Copilot's visible fresh was accepted under. A landlord home replaces only this bullet:
+  its first release owes `check-openclaw-home-receipt` green in the MUST tier — the
+  candidate-attributed receipt of the replacement behaviours above, which refuses an empty receipt,
+  another candidate's and one naming another home. The cross-harness leg below and the offline,
+  package and exact-SHA floors are unchanged.
 - **LIVE, the cross-harness leg (GLG directive, 2026-08-31):** clause 7 proves the new harness
   against the bridge caller; it does not prove one live model turn CROSSING harnesses in either
   direction. And the fixed delivery chain does not grow at admission — `[측정]`

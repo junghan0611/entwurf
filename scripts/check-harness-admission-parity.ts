@@ -23,12 +23,15 @@
  *
  * ── The rule ──
  *
- * Every backend a meta-record may name is either
- *   (a) openable by `entwurf_fresh_call` — it walked step 9; or
- *   (b) a PRE-#82 admission, named here AND described as such in the delivery matrix.
+ * Every backend a meta-record may name is exactly one of
+ *   (a) openable by `entwurf_fresh_call` — it walked step 9;
+ *   (b) a PRE-#82 admission, named here AND described as such in the delivery matrix; or
+ *   (c) a landlord home (#160 S6): the vendor owns the lifecycle and Entwurf only addresses an
+ *       existing pinned home — a CLOSED list, documented, with its own receipt step in the
+ *       release MUST tier (section 5).
  *
- * There is no third state. A post-#82 harness that is a citizen but not fresh-openable makes
- * this gate red, which is what stops the release package rather than only the docs.
+ * There is no fourth state. A post-#82 harness that is a citizen but none of these makes this
+ * gate red, which is what stops the release package rather than only the docs.
  *
  * ── Why the exception is a literal here plus a sentence there ──
  *
@@ -51,6 +54,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { META_CITIZEN_BACKENDS, type MetaCitizenBackend } from "../pi-extensions/lib/meta-session.ts";
 import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
+import { RESUME_BACKENDS } from "../pi-extensions/lib/resume-launch-identity.ts";
 
 const REPO_DIR = fileURLToPath(new URL("..", import.meta.url));
 
@@ -83,14 +87,35 @@ const PRE_82_LEGACY: Partial<Record<MetaCitizenBackend, [file: string, sentence:
 	],
 };
 
+/**
+ * Landlord homes (#160 S6 §7, GLG 2026-11-15): the second lifecycle domain. The vendor's Gateway
+ * owns the bot's lifecycle — waking, generations, memory — and Entwurf opens nothing: it addresses
+ * an EXISTING, operator-chosen, pinned home on one fixed key. So fresh, resume and retire do not
+ * apply, and the first release owes the landlord-home receipt step in the MUST tier instead of a
+ * visible-fresh step. This is not a general exemption: it is a CLOSED list, a backend joins only by
+ * its own contract review and its own candidate's acceptance, and a failed fresh never falls back
+ * here. Same [file, sentence] shape as the legacy list, for the same reason.
+ */
+const LANDLORD_HOME: Partial<Record<MetaCitizenBackend, [file: string, sentence: string]>> = {
+	openclaw: [
+		"DELIVERY.md",
+		"Admitted as a landlord home (#160 S6): its Gateway owns the bot's lifecycle and Entwurf only addresses an existing, pinned home on one fixed key, so it is not a fresh-call backend and its first release owes the landlord-home receipt in the MUST tier instead of visible fresh",
+	],
+};
+/** The reviewed closed list. Growing it is a contract change, made here and in the docs together. */
+const LANDLORD_HOME_REVIEWED = ["openclaw"];
+
 const fresh = new Set<string>(FRESH_CALL_BACKENDS);
 const legacy = Object.keys(PRE_82_LEGACY);
+const home = Object.keys(LANDLORD_HOME);
 
 // ---------------------------------------------------------------------------
 // 1. The join itself. This assertion is the entire point of the file: it is the
 //    first line in the repo that reads both constants at once.
 // ---------------------------------------------------------------------------
-const unaccounted = META_CITIZEN_BACKENDS.filter((b) => !fresh.has(b) && !(b in PRE_82_LEGACY));
+const unaccounted = META_CITIZEN_BACKENDS.filter(
+	(b) => !fresh.has(b) && !(b in PRE_82_LEGACY) && !(b in LANDLORD_HOME),
+);
 ok(
 	"[QK:ADMISSION-FRESH-PARITY] every citizen backend is either openable by entwurf_fresh_call or a declared pre-#82 legacy admission — a post-contract harness that mints records but cannot be opened is not admissible, and an `unsupported` note is not a partial-release permit (docs/adding-a-harness.md step 9). Unaccounted: " +
 		(unaccounted.length === 0 ? "none" : unaccounted.join(", ")),
@@ -138,5 +163,46 @@ ok(
 		(openableNonCitizens.length === 0 ? "none" : openableNonCitizens.join(", ")),
 	openableNonCitizens.length === 0,
 );
+
+// ---------------------------------------------------------------------------
+// 5. Landlord homes: a closed, documented, exclusive list of citizen backends
+//    that are direct-inject and outside every Entwurf lifecycle verb, each with
+//    its first-admission receipt step in the release MUST tier.
+// ---------------------------------------------------------------------------
+ok(
+	`[QK:ADMISSION-HOME-CLOSED] the landlord-home list is exactly the reviewed ${JSON.stringify(LANDLORD_HOME_REVIEWED)} — a backend joins only through its own contract review, never by being typed into the list. Got ${JSON.stringify(home)}`,
+	JSON.stringify([...home].sort()) === JSON.stringify(LANDLORD_HOME_REVIEWED),
+);
+const capabilities = JSON.parse(fs.readFileSync(path.join(REPO_DIR, "pi", "entwurf-capabilities.json"), "utf8")) as {
+	backends: Record<string, { wakeMode?: string }>;
+};
+const releaseGate = (() => {
+	const runSh = fs.readFileSync(path.join(REPO_DIR, "run.sh"), "utf8");
+	const at = runSh.indexOf("release_gate() {");
+	return at < 0 ? "" : runSh.slice(at, runSh.indexOf("\n}\n", at));
+})();
+for (const backend of home) {
+	const [file, sentence] = LANDLORD_HOME[backend as MetaCitizenBackend] as [string, string];
+	ok(
+		`[QK:ADMISSION-HOME-DOCUMENTED] ${backend}'s landlord-home admission is carried by a sentence an operator can read in ${file}, not only by this gate's literal`,
+		fs.readFileSync(path.join(REPO_DIR, file), "utf8").includes(sentence),
+	);
+	ok(
+		`[QK:ADMISSION-HOME-EXCLUSIVE] ${backend} is a landlord home OR fresh-openable OR legacy, never two — the three admissions are disjoint and each is a citizen backend`,
+		!fresh.has(backend) &&
+			!(backend in PRE_82_LEGACY) &&
+			(META_CITIZEN_BACKENDS as readonly string[]).includes(backend),
+	);
+	ok(
+		`[QK:ADMISSION-HOME-SHAPE] ${backend} is direct-inject in the capability registry and outside same-id resume — Entwurf neither opens, reopens nor holds a landlord home's process`,
+		capabilities.backends[backend]?.wakeMode === "direct-inject" &&
+			!(RESUME_BACKENDS as readonly string[]).includes(backend),
+	);
+	const steps = releaseGate.split("\n").filter((l) => l.includes(`"$self" check-${backend}-home-receipt`));
+	ok(
+		`[QK:ADMISSION-HOME-RELEASE-MUST] ${backend}'s first-admission receipt step runs exactly once in release_gate through run_live_step, so a missing receipt is a SKIP the cut refuses — parity green alone is not admission (${steps.length} step(s))`,
+		steps.length === 1 && (steps[0]?.trimStart().startsWith("run_live_step ") ?? false),
+	);
+}
 
 console.log(`[check-harness-admission-parity] ${passed} assertions ok`);

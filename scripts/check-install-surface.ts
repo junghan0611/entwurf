@@ -591,9 +591,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// #160 S5.4 D1: the mutant execution coordinate of the openclaw lane, right after the remote-pair one.
 		{
 			after: "  entwurf check-remote-pair-beside    # ",
-			line: "  entwurf check-openclaw-beside       # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the six OpenClaw beside tests (scope declaration, receive adapter, birth, send claim, send entry round trip, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs.",
+			line: "  entwurf check-openclaw-beside       # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the seven OpenClaw beside tests (scope declaration, receive adapter, birth, send claim, send entry round trip, home receipt judge, plugin send core) — the gate argv of the openclaw claims. Same files check-tests-beside-behavior already runs.",
 			receipt:
-				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-birth, openclaw-send, openclaw-send-roundtrip and plugins/openclaw/core tests (#160 S5.4, S6.5)",
+				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-birth, openclaw-send, openclaw-send-roundtrip, openclaw-home-receipt and plugins/openclaw/core tests (#160 S5.4, S6.5)",
 		},
 		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the openclaw one.
 		{
@@ -601,6 +601,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			line: "  entwurf check-native-push-runner    # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs.",
 			receipt:
 				"run.sh check_native_push_runner -> run_vitest over pi-extensions/lib/native-push/adapter.test.ts (#160 S5 SOL D1)",
+		},
+		// #160 S6 §7: the landlord-home first-admission release MUST, right after the runner coordinate.
+		{
+			after: "  entwurf check-native-push-runner    # ",
+			line: "  entwurf check-openclaw-home-receipt # #160 S6 landlord-home first-admission release MUST: judges the candidate-attributed receipt of the replacement-behaviour oracles (open, address, consume, reply, close, refusal, compact-reset, visibility, model/policy, send scope, resources) named by ENTWURF_OPENCLAW_HOME_RECEIPT for this HEAD. No receipt → SKIP (97); another candidate, another home, a missing or non-passing row → exit 1. Touches no Gateway or store.",
+			receipt:
+				"run.sh check_openclaw_home_receipt -> scripts/check-openclaw-home-receipt.ts: judgeOpenclawHomeReceipt over ENTWURF_OPENCLAW_HOME_RECEIPT for git HEAD, skipLive (97) when unnamed, exit 1 on any problem (#160 S6)",
 		},
 		{
 			after: "  entwurf openclaw-send               # ",

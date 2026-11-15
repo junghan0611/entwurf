@@ -1560,8 +1560,14 @@ check_remote_pair_beside() {
 check_openclaw_beside() {
   # #160 S5.4: the execution coordinate for the OpenClaw claims (VERIFY 「Four rules」 rule 3). Not a
   # discovery path — check-tests-beside-behavior already finds these files. Every openclaw QK lives
-  # in one of them, so one mutant re-runs these six files rather than every beside test.
-  run_vitest pi-extensions/lib/openclaw-citizens.test.ts pi-extensions/lib/native-push/openclaw-gateway.test.ts pi-extensions/lib/openclaw-birth.test.ts pi-extensions/lib/openclaw-send.test.ts pi-extensions/lib/openclaw-send-roundtrip.test.ts plugins/openclaw/core.test.mjs
+  # in one of them, so one mutant re-runs these seven files rather than every beside test.
+  run_vitest pi-extensions/lib/openclaw-citizens.test.ts pi-extensions/lib/native-push/openclaw-gateway.test.ts pi-extensions/lib/openclaw-birth.test.ts pi-extensions/lib/openclaw-send.test.ts pi-extensions/lib/openclaw-send-roundtrip.test.ts pi-extensions/lib/openclaw-home-receipt.test.ts plugins/openclaw/core.test.mjs
+}
+
+check_openclaw_home_receipt() {
+  # #160 S6 §7: the landlord-home first-admission release MUST. Judges the receipt named by
+  # ENTWURF_OPENCLAW_HOME_RECEIPT for this HEAD; no receipt → SKIP (97). Touches no Gateway or store.
+  run_ts scripts/check-openclaw-home-receipt.ts "$@"
 }
 
 check_native_push_runner() {
@@ -7637,6 +7643,9 @@ release_gate() {
   run_live_step "smoke-codex-fresh-live (#95: visible Pi -> visible Codex/callback/addressed v2 -> visible Pi/callback)" gate bash "$self" smoke-codex-fresh-live
   # #129 first-admission: step 9 clause 7 + the two cross-harness receipts for pi-durable.
   run_live_step "smoke-pi-durable-fresh-live (#129: visible Pi -> visible pi-durable/callback/addressed v2 -> Pi relay)" gate bash "$self" smoke-pi-durable-fresh-live
+  # #160 S6 landlord-home first admission: no visible fresh; one candidate-attributed receipt of the
+  # replacement-behaviour oracles, judged for THIS head (absent → SKIP the cut refuses).
+  run_live_step "check-openclaw-home-receipt (#160 S6: landlord-home first admission, candidate-attributed oracle receipt)" gate bash "$self" check-openclaw-home-receipt
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never

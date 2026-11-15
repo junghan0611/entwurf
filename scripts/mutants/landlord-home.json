@@ -1,0 +1,69 @@
+{
+	"schemaVersion": 1,
+	"lane": "landlord-home",
+	"mutants": [
+		{
+			"claim": "ADMISSION-HOME-CLOSED",
+			"title": "a second backend is typed into the landlord-home list, so a harness that cannot be opened is admitted without its own contract review",
+			"subject": "scripts/check-harness-admission-parity.ts",
+			"find": ["\topenclaw: [\n\t\t\"DELIVERY.md\","],
+			"replace": ["\tomp: [\"DELIVERY.md\", \"x\"],\n\topenclaw: [\n\t\t\"DELIVERY.md\","],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ADMISSION-HOME-CLOSED]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		},
+		{
+			"claim": "ADMISSION-HOME-DOCUMENTED",
+			"title": "the delivery matrix loses the sentence that says why OpenClaw is a landlord home, so the exception lives only in the gate's literal",
+			"subject": "DELIVERY.md",
+			"find": [
+				"Admitted as a landlord home (#160 S6): its Gateway owns the bot's lifecycle and Entwurf only addresses an existing, pinned home on one fixed key, so it is not a fresh-call backend and its first release owes the landlord-home receipt in the MUST tier instead of visible fresh"
+			],
+			"replace": ["Admitted (#160 S6)"],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ADMISSION-HOME-DOCUMENTED]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		},
+		{
+			"claim": "ADMISSION-HOME-EXCLUSIVE",
+			"title": "OpenClaw is also made fresh-call openable while it stays a landlord home, so one backend carries two admissions",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": [
+				"export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\", \"pi-durable\"] as const;"
+			],
+			"replace": [
+				"export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\", \"pi-durable\", \"openclaw\"] as const;"
+			],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ADMISSION-HOME-EXCLUSIVE]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		},
+		{
+			"claim": "ADMISSION-HOME-SHAPE",
+			"title": "OpenClaw joins same-id resume, so Entwurf would reopen a process whose lifecycle the Gateway owns",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["export const RESUME_BACKENDS = [\"pi\", \"claude-code\", \"pi-durable\"] as const;"],
+			"replace": ["export const RESUME_BACKENDS = [\"pi\", \"claude-code\", \"pi-durable\", \"openclaw\"] as const;"],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ADMISSION-HOME-SHAPE]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		},
+		{
+			"claim": "ADMISSION-HOME-RELEASE-MUST",
+			"title": "the landlord-home receipt step leaves the release MUST tier, so parity green would read as admission with no LIVE acceptance at all",
+			"subject": "run.sh",
+			"find": [
+				"  run_live_step \"check-openclaw-home-receipt (#160 S6: landlord-home first admission, candidate-attributed oracle receipt)\" gate bash \"$self\" check-openclaw-home-receipt"
+			],
+			"replace": ["  : no landlord-home step"],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ADMISSION-HOME-RELEASE-MUST]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		}
+	]
+}

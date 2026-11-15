@@ -316,6 +316,10 @@
 		"pi-extensions/lib/openclaw-citizens.ts",
 		"pi-extensions/lib/openclaw-send.ts",
 		"pi-extensions/lib/openclaw-birth.ts",
-		"pi-extensions/lib/native-push/openclaw-gateway.ts"
+		"pi-extensions/lib/native-push/openclaw-gateway.ts",
+		// #160 S6: the landlord-home release receipt judge, a lib→lib VALUE importer with explicit `.ts`
+		// extensions, same fence. Received by scripts/tsconfig.json through its existing
+		// ../pi-extensions/lib/**/*.ts include; its beside test takes the existing test fence.
+		"pi-extensions/lib/openclaw-home-receipt.ts"
 	]
 }
