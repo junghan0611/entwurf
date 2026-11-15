@@ -595,9 +595,16 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-birth, openclaw-send, openclaw-send-roundtrip, openclaw-home-receipt and plugins/openclaw/core tests (#160 S5.4, S6.5)",
 		},
-		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the openclaw one.
+		// #163 S7: the ACP steer mutant execution coordinate; it sits right before the runner one.
 		{
 			after: "  entwurf check-openclaw-beside       # ",
+			line: "  entwurf check-acp-steer             # #163 mutant execution coordinate (VERIFY rule 3): run_vitest over the ACP steer beside tests (the steer request and its answer bound, the backend busy window and capability, the in-turn record) — the gate argv of the acp-steer claims. Same files check-tests-beside-behavior already runs.",
+			receipt:
+				"run.sh check_acp_steer -> run_vitest over the #163 ACP steer beside tests (acp-client.steer and, as they land, backend.steer and steer-record)",
+		},
+		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the acp-steer one.
+		{
+			after: "  entwurf check-acp-steer             # ",
 			line: "  entwurf check-native-push-runner    # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs.",
 			receipt:
 				"run.sh check_native_push_runner -> run_vitest over pi-extensions/lib/native-push/adapter.test.ts (#160 S5 SOL D1)",

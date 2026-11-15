@@ -100,6 +100,95 @@ export interface AcpConnectionLike {
 	 * mask the turn's real outcome nor skip the child teardown that follows it.
 	 */
 	close?(error?: unknown): void;
+	/**
+	 * The adapter's `_session/steering` extension request, raw (#163 S7). Optional: a backend that
+	 * does not advertise steering has none, and a fake without it reads as unsupported. Callers go
+	 * through {@link requestAcpSteer}, which owns the params, the answer reading and the bound.
+	 */
+	steer?(params: AcpSteerParams): Promise<unknown>;
+}
+
+/** The `_session/steering` request entwurf sends (claude-agent-acp 0.107.0 `v1/steering.js:18-40`). */
+export type AcpSteerParams = {
+	sessionId: string;
+	prompt: AcpTextBlock[];
+	_meta: { steering: { idleBehavior: "promptRequired" } };
+};
+
+/**
+ * What one steer request came to (#163 S7 design §2.2). Three readings of an answer, plus the two
+ * ways no answer arrives in time. Only `injected` and `promptRequired` are definite; the rest mean
+ * the request left and whether the backend took it is unknown.
+ */
+export type AcpSteerResult =
+	| { kind: "injected" }
+	| { kind: "promptRequired" }
+	| { kind: "unrecognized"; detail: string }
+	| { kind: "timeout"; detail: string }
+	| { kind: "rejected"; detail: string };
+
+/** How long to wait for the steer ANSWER. Measured round trips were 2–3 ms (adapter probe cells A–C). */
+export const ACP_STEER_ANSWER_TIMEOUT_MS = 5_000;
+
+/**
+ * Send ONE steer and read its answer (#163 S7).
+ *
+ * - `_meta.steering.idleBehavior: "promptRequired"` is ALWAYS sent: without it an idle backend starts
+ *   a detached turn (`startedNewTurn`) whose notifications arrive with no prompt handler and are lost.
+ * - The answer is read three ways: `{outcome:"injected"}`, `{outcome:"promptRequired"}`, and
+ *   anything else (`startedNewTurn`, an unknown outcome, a non-object) as `unrecognized` — a value,
+ *   not a throw, because the request has already left.
+ * - The bound is on waiting for the answer only. It never cancels or tears down the running prompt.
+ *   An answer or rejection that arrives after the bound is ignored: it is swallowed, settles nothing
+ *   twice and causes no effect.
+ */
+export function requestAcpSteer(
+	conn: Pick<AcpConnectionLike, "steer">,
+	sessionId: string,
+	text: string,
+	timeoutMs: number = ACP_STEER_ANSWER_TIMEOUT_MS,
+): Promise<AcpSteerResult> {
+	if (!conn.steer) return Promise.reject(new Error("requestAcpSteer: this connection has no steer method"));
+	const params: AcpSteerParams = {
+		sessionId,
+		prompt: [{ type: "text", text }],
+		_meta: { steering: { idleBehavior: "promptRequired" } },
+	};
+	return new Promise<AcpSteerResult>((resolve) => {
+		let settled = false;
+		const settle = (r: AcpSteerResult) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			resolve(r);
+		};
+		const timer = setTimeout(
+			() => settle({ kind: "timeout", detail: `no steer answer within ${timeoutMs} ms` }),
+			timeoutMs,
+		);
+		let pending: Promise<unknown>;
+		try {
+			pending = Promise.resolve(conn.steer?.(params));
+		} catch (err) {
+			settle({ kind: "rejected", detail: err instanceof Error ? err.message : String(err) });
+			return;
+		}
+		pending.then(
+			(answer) => settle(readSteerAnswer(answer)),
+			(err) => settle({ kind: "rejected", detail: err instanceof Error ? err.message : String(err) }),
+		);
+	});
+}
+
+/** Read one steer answer. Pure. Only the two measured outcomes are definite. */
+export function readSteerAnswer(answer: unknown): AcpSteerResult {
+	const outcome =
+		answer !== null && typeof answer === "object" && !Array.isArray(answer)
+			? (answer as Record<string, unknown>).outcome
+			: undefined;
+	if (outcome === "injected") return { kind: "injected" };
+	if (outcome === "promptRequired") return { kind: "promptRequired" };
+	return { kind: "unrecognized", detail: `steer answer not understood: ${JSON.stringify(answer)}` };
 }
 
 /** The ACP client-side callbacks. They delegate to the session's mutable handler. */
@@ -150,6 +239,8 @@ export function connectAcpClient(stream: Stream, handlers: AcpClientHandlers): A
 				// connection already closed — the abort path escalates on its own.
 			}
 		},
+		// #163 S7: the adapter's steering extension; params (incl. `_meta`) come from requestAcpSteer.
+		steer: (params) => agent.request("_session/steering", params as never),
 		close: (error) => {
 			// Best-effort by contract (see AcpConnectionLike.close): a teardown-path
 			// close that threw would mask the turn's real error and skip the child

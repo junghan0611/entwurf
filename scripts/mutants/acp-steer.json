@@ -1,0 +1,65 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-steer",
+	"mutants": [
+		{
+			"claim": "ACP-STEER-PROMPT-REQUIRED-ALWAYS",
+			"title": "the steer request drops idleBehavior promptRequired, so an idle backend starts a detached turn whose output is lost",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": ["\t\t_meta: { steering: { idleBehavior: \"promptRequired\" } },\n"],
+			"replace": ["\t\t_meta: { steering: {} },\n"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-PROMPT-REQUIRED-ALWAYS]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-INJECTED-SHAPE",
+			"title": "the steer answer reader takes promptRequired for injected, so a steer the backend did not take is dropped instead of queued",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": ["\tif (outcome === \"promptRequired\") return { kind: \"promptRequired\" };"],
+			"replace": ["\tif (outcome === \"promptRequired\") return { kind: \"injected\" };"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-INJECTED-SHAPE]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-ANSWER-FENCED",
+			"title": "the steer answer reader reads any unknown answer as injected, so startedNewTurn or a changed vendor shape is reported as taken",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": [
+				"\treturn { kind: \"unrecognized\", detail: `steer answer not understood: ${JSON.stringify(answer)}` };"
+			],
+			"replace": ["\treturn { kind: \"injected\" };"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-ANSWER-FENCED]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-TIMEOUT-LATE-QUIET",
+			"title": "the steer request loses its answer bound, so a silent backend holds the control socket's reply forever",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": ["\t\t\t() => settle({ kind: \"timeout\", detail: `no steer answer within ${timeoutMs} ms` }),"],
+			"replace": ["\t\t\t() => {},"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-TIMEOUT-LATE-QUIET]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		},
+		{
+			"claim": "ACP-STEER-LATE-REJECT-QUIET",
+			"title": "the steer request stops handling a rejected answer, so a rejection after the bound escapes as an unhandled rejection",
+			"subject": "pi-extensions/lib/acp/acp-client.ts",
+			"find": [
+				"\t\t\t(err) => settle({ kind: \"rejected\", detail: err instanceof Error ? err.message : String(err) }),"
+			],
+			"replace": ["\t\t\tundefined,"],
+			"gate": ["bash", "run.sh", "check-acp-steer"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:ACP-STEER-LATE-REJECT-QUIET]",
+			"signatureSource": "pi-extensions/lib/acp/acp-client.steer.test.ts"
+		}
+	]
+}
