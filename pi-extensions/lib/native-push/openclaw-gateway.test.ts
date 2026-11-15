@@ -185,6 +185,21 @@ describe("probe", () => {
 		}
 	});
 
+	it("[QK:OPENCLAW-PROBE-STORE-UNREADABLE] a record store that cannot be listed is a named indeterminate (openclaw-store-unreadable), not a throw, with no vendor call", async () => {
+		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
+		const a = createOpenclawGatewayAdapter({
+			runner: r,
+			readDeclaration: () => DECL,
+			listIdentities: () => {
+				throw new Error("duplicate nativeSessionId in store");
+			},
+		});
+		const res = await a.probe(ID);
+		expect(res).toMatchObject({ status: "indeterminate" });
+		expect("reason" in res && res.reason).toMatch(/^openclaw-store-unreadable: .*duplicate nativeSessionId/);
+		expect(r.calls).toEqual([]);
+	});
+
 	it("a broken declaration throws by name (Rule 15), with no vendor call", async () => {
 		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
 		await expect(

@@ -108,13 +108,29 @@ describe("birthOpenclawCitizen", () => {
 		expect(twice.store.size).toBe(0);
 	});
 
-	it("[QK:OPENCLAW-BIRTH-REQUIRES-PIN] an alive desk judged unpinned is refused as openclaw-desk-not-pinned, an unreadable pin as openclaw-desk-pin-indeterminate, and nothing is written", async () => {
+	it("a malformed openclaw record in the store refuses birth before the probe and the write", async () => {
+		const h = deps("alive", {
+			existing: [
+				{ gardenId: "20261115T000000-aabbcc", backend: "openclaw", nativeSessionId: "openclaw:lab:agent:main:" },
+			],
+		});
+		await expect(
+			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, h.d),
+		).rejects.toThrow(/openclaw-home-record-malformed: .*20261115T000000-aabbcc.*no record written/);
+		expect(h.order).toEqual(["decl", "list"]);
+		expect(h.store.size).toBe(0);
+	});
+
+	it("[QK:OPENCLAW-BIRTH-REQUIRES-PIN] an alive desk judged unpinned is refused as openclaw-desk-not-pinned and nothing is written", async () => {
 		const h = deps("alive", { deskPin: "unpinned" });
 		await expect(
 			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, h.d),
 		).rejects.toThrow(/openclaw-desk-not-pinned: agent:main:s1m1 .*no record written/);
 		expect(h.order).toEqual(["decl", "list", "probe openclaw:lab:agent:main:s1m1"]);
 		expect(h.store.size).toBe(0);
+	});
+
+	it("[QK:OPENCLAW-BIRTH-REFUSES-UNKNOWN-PIN] an alive desk whose pin cannot be read is refused as openclaw-desk-pin-indeterminate, never guessed, and nothing is written", async () => {
 		const u = deps("alive", { deskPin: "unknown" });
 		await expect(
 			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, u.d),

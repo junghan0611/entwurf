@@ -250,7 +250,19 @@ export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): 
 			}
 			// One home, one garden: an ambiguous home is not delivered to, whichever record is asked
 			// about. Indeterminate, never dead — the session itself was not asked.
-			const home = checkOpenclawHome(deps.listIdentities(), id.scope, id.agentId, id.sessionKey);
+			// A store that cannot be listed is not a departed session: a named indeterminate, so the
+			// decider leaves a native-push-probe-indeterminate receipt instead of an unreceipted
+			// throw (#160 S6.5 review O1). Birth and the send entry still refuse on it as before.
+			let records: readonly OpenclawHomeRecord[];
+			try {
+				records = deps.listIdentities();
+			} catch (err) {
+				return {
+					status: "indeterminate",
+					reason: `openclaw-store-unreadable: the record store could not be listed for the home check (${err instanceof Error ? err.message : String(err)})`,
+				};
+			}
+			const home = checkOpenclawHome(records, id.scope, id.agentId, id.sessionKey);
 			if (!("ok" in home)) {
 				return { status: "indeterminate", reason: `${home.reason}: ${home.detail}` };
 			}

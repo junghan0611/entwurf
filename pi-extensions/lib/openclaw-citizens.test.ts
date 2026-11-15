@@ -213,9 +213,22 @@ describe("checkOpenclawHome — one home, one garden", () => {
 			rec("20261113T170000-0c0c0c", "openclaw:lab-a:agent:ops:s1"),
 			rec("20261113T170000-0d0d0d", "openclaw:oracle:agent:main:s2"),
 			rec("20261113T170000-0e0e0e", "openclaw:lab-a:agent:main:s2", "codex"),
-			rec("20261113T170000-0f0f0f", "not-an-openclaw-id"),
 		];
 		expect(checkOpenclawHome([A, ...others], "lab-a", "main", "agent:main:s1m1")).toEqual({ ok: true });
+	});
+
+	it("[QK:OPENCLAW-HOME-MALFORMED-REFUSED] one openclaw record with an unparseable native id refuses every home by name — it is not skipped; another backend's odd id is passed over", () => {
+		const bad = rec("20261113T170000-0f0f0f", "openclaw:lab-a:agent:main:");
+		for (const key of ["agent:main:s1m1", "agent:ops:s1"]) {
+			const v = checkOpenclawHome([A, bad], "lab-a", key.split(":")[1], key);
+			expect(v).toMatchObject({ reason: "openclaw-home-record-malformed" });
+			expect("detail" in v && v.detail).toMatch(/20261113T170000-0f0f0f/);
+		}
+		expect(
+			checkOpenclawHome([A, rec("20261113T170000-1a1a1a", "x", "codex")], "lab-a", "main", "agent:main:s1m1"),
+		).toEqual({
+			ok: true,
+		});
 	});
 
 	it("[QK:OPENCLAW-HOME-OTHER-KEY] a home addressed on one key refuses another key as openclaw-home-already-addressed", () => {

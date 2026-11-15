@@ -356,7 +356,10 @@ export interface OpenclawHomeRecord {
 	nativeSessionId: string;
 }
 
-export type OpenclawHomeRejectReason = "openclaw-home-already-addressed" | "openclaw-home-ambiguous";
+export type OpenclawHomeRejectReason =
+	| "openclaw-home-already-addressed"
+	| "openclaw-home-ambiguous"
+	| "openclaw-home-record-malformed";
 
 export type OpenclawHomeVerdict = { ok: true } | { reason: OpenclawHomeRejectReason; detail: string };
 
@@ -375,8 +378,11 @@ export type OpenclawHomeVerdict = { ok: true } | { reason: OpenclawHomeRejectRea
  * and it is a check, not a lookup: nothing here finds a record by home to stand in for another key.
  * There is no lock: two births on different keys at once may both write; the ambiguity rule then
  * refuses both homes' send and probe until the operator resolves it (fail-closed, not unique write).
- * An `openclaw` record whose native id does not parse names no home; its own probe and the strict
- * listing refuse it, so it is not counted here.
+ * An `openclaw` record whose native id does not parse is NOT skipped (#160 S6.5 SOL D2): the V3
+ * store only requires a non-empty string, so the strict listing does not refuse it, and its home
+ * cannot be known — it could be this one. So one such record refuses every OpenClaw home as
+ * `openclaw-home-record-malformed`, fail-closed like ambiguity, naming the garden and the error.
+ * Records of other backends are not OpenClaw's to judge and are passed over.
  */
 export function checkOpenclawHome(
 	records: readonly OpenclawHomeRecord[],
@@ -390,8 +396,11 @@ export function checkOpenclawHome(
 		let id: OpenclawNativeId;
 		try {
 			id = parseOpenclawNativeSessionId(r.nativeSessionId);
-		} catch {
-			continue;
+		} catch (err) {
+			return {
+				reason: "openclaw-home-record-malformed",
+				detail: `openclaw record ${r.gardenId} carries a native id no home can be read from (${err instanceof Error ? err.message : String(err)}); every OpenClaw home is refused until it is resolved by hand`,
+			};
 		}
 		if (id.scope === scope && id.agentId === agentId) home.push({ gardenId: r.gardenId, sessionKey: id.sessionKey });
 	}

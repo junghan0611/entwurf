@@ -188,6 +188,45 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-HOME-RECEIPT-REFUSES]",
 			"signatureSource": "pi-extensions/lib/openclaw-home-receipt.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-MALFORMED-REFUSED",
+			"title": "the home check skips an openclaw record whose native id does not parse, so a home it may belong to is treated as empty and births a second garden",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["\t\t} catch (err) {\n\t\t\treturn {\n\t\t\t\treason: \"openclaw-home-record-malformed\","],
+			"replace": [
+				"\t\t} catch (err) {\n\t\t\tif (err) continue;\n\t\t\treturn {\n\t\t\t\treason: \"openclaw-home-record-malformed\","
+			],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-MALFORMED-REFUSED]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PROBE-STORE-UNREADABLE",
+			"title": "the receive probe lets a store listing failure escape as an unreceipted throw instead of a named indeterminate",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": [
+				"\t\t\t} catch (err) {\n\t\t\t\treturn {\n\t\t\t\t\tstatus: \"indeterminate\",\n\t\t\t\t\treason: `openclaw-store-unreadable:"
+			],
+			"replace": [
+				"\t\t\t} catch (err) {\n\t\t\t\tthrow err;\n\t\t\t\treturn {\n\t\t\t\t\tstatus: \"indeterminate\",\n\t\t\t\t\treason: `openclaw-store-unreadable:"
+			],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-STORE-UNREADABLE]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-BIRTH-REFUSES-UNKNOWN-PIN",
+			"title": "birth writes a record for a desk whose pin it could not read, so a changed describe shape births an unpinned desk",
+			"subject": "pi-extensions/lib/openclaw-birth.ts",
+			"find": ["\tif (probe.deskPin !== \"pinned\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-BIRTH-REFUSES-UNKNOWN-PIN]",
+			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
 		}
 	]
 }
