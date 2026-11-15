@@ -28,7 +28,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { defaultMetaSessionsDir } from "./meta-session.ts";
+import { defaultMetaSessionsDir, type MetaCitizenBackend } from "./meta-session.ts";
+
+/** The record backend of an OpenClaw home. */
+export const OPENCLAW_BACKEND = "openclaw" satisfies MetaCitizenBackend;
 
 export const OPENCLAW_CITIZENS_FILE = "openclaw-citizens.json";
 export const OPENCLAW_DECLARATION_VERSION = 1;
@@ -191,7 +194,8 @@ function parseAllow(raw: unknown, what: string): OpenclawAllowedKey {
  * Set rules over the whole file, independent of order: scopes and urls are unique among gateways
  * (two labels for one Gateway would mint two citizens for one session — compared as parsed URL
  * text, so `localhost` vs `127.0.0.1`, or two routes to one Gateway, are NOT caught: a named
- * boundary, review O4); every allow scope names a declared gateway; and no exact triple twice.
+ * boundary, review O4); every allow scope names a declared gateway; no exact triple twice; and one
+ * home, one mailbox — a home (scope, agentId) declares at most one key (#160 S6 §7 (1)).
  */
 function checkSets(decl: OpenclawCitizensDeclaration, what: string): void {
 	const scopes = new Set<string>();
@@ -204,12 +208,22 @@ function checkSets(decl: OpenclawCitizensDeclaration, what: string): void {
 		urls.add(href);
 	});
 	const triples = new Set<string>();
+	const homes = new Map<string, string>();
 	decl.allow.forEach((a, i) => {
 		const at = `${what}.allow[${i}]`;
 		if (!scopes.has(a.scope)) fail(at, `scope ${a.scope} names no declared gateway`);
 		const t = `${a.scope}\u0000${a.sessionKey}`;
 		if (triples.has(t)) fail(at, `duplicate key ${a.sessionKey} in scope ${a.scope}`);
 		triples.add(t);
+		const home = `${a.scope}\u0000${a.agentId}`;
+		const held = homes.get(home);
+		if (held !== undefined) {
+			fail(
+				at,
+				`home ${a.scope}/${a.agentId} already declares key ${held}; one home, one mailbox (${a.sessionKey} refused)`,
+			);
+		}
+		homes.set(home, a.sessionKey);
 	});
 }
 
@@ -331,4 +345,68 @@ export function parseOpenclawNativeSessionId(nativeSessionId: string): OpenclawN
 	const agentId = requireOpenclawAgentId(m[1], `${what} agentId`);
 	requireOpenclawSessionKey(sessionKey, agentId, `${what} sessionKey`);
 	return { scope, agentId, sessionKey };
+}
+
+// ── one home, one garden ─────────────────────────────────────────────────────
+
+/** A record as the home check reads it: only what the store already says. */
+export interface OpenclawHomeRecord {
+	gardenId: string;
+	backend: string;
+	nativeSessionId: string;
+}
+
+export type OpenclawHomeRejectReason = "openclaw-home-already-addressed" | "openclaw-home-ambiguous";
+
+export type OpenclawHomeVerdict = { ok: true } | { reason: OpenclawHomeRejectReason; detail: string };
+
+/**
+ * One home, one garden (#160 S6 §7, GLG decision (a)): the ONE predicate birth, send and probe share.
+ *
+ * A home is (scope, agentId); its garden is the one active `openclaw` record whose native id names
+ * that home. Over the active records given — a record whose key has left the declaration still
+ * counts, so removing a key never frees its home for another key:
+ *  - two or more records for the home → `openclaw-home-ambiguous`, for every key, the matching one
+ *    included: there is no pick-first, and nothing is merged, deleted or archived here;
+ *  - one record for the home on a different key → `openclaw-home-already-addressed`;
+ *  - otherwise (no record, or the one record carries this key) → ok.
+ *
+ * It is an OpenClaw admission constraint, not a store invariant (Hard Rule 7 stays one contract),
+ * and it is a check, not a lookup: nothing here finds a record by home to stand in for another key.
+ * There is no lock: two births on different keys at once may both write; the ambiguity rule then
+ * refuses both homes' send and probe until the operator resolves it (fail-closed, not unique write).
+ * An `openclaw` record whose native id does not parse names no home; its own probe and the strict
+ * listing refuse it, so it is not counted here.
+ */
+export function checkOpenclawHome(
+	records: readonly OpenclawHomeRecord[],
+	scope: string,
+	agentId: string,
+	sessionKey: string,
+): OpenclawHomeVerdict {
+	const home: { gardenId: string; sessionKey: string }[] = [];
+	for (const r of records) {
+		if (r.backend !== OPENCLAW_BACKEND) continue;
+		let id: OpenclawNativeId;
+		try {
+			id = parseOpenclawNativeSessionId(r.nativeSessionId);
+		} catch {
+			continue;
+		}
+		if (id.scope === scope && id.agentId === agentId) home.push({ gardenId: r.gardenId, sessionKey: id.sessionKey });
+	}
+	const listed = home.map((h) => `${h.gardenId} on ${h.sessionKey}`).join(", ");
+	if (home.length >= 2) {
+		return {
+			reason: "openclaw-home-ambiguous",
+			detail: `home ${scope}/${agentId} has ${home.length} records (${listed}); one home, one garden — resolve by hand, nothing is picked`,
+		};
+	}
+	if (home.length === 1 && home[0].sessionKey !== sessionKey) {
+		return {
+			reason: "openclaw-home-already-addressed",
+			detail: `home ${scope}/${agentId} is already addressed by ${listed}; key ${sessionKey} is refused (key change is not supported)`,
+		};
+	}
+	return { ok: true };
 }

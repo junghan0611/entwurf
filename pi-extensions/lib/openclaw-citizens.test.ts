@@ -10,6 +10,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	checkOpenclawHome,
 	composeOpenclawNativeSessionId,
 	OpenclawDeclarationError,
 	openclawCitizensPath,
@@ -58,6 +59,18 @@ describe("parseOpenclawCitizensDeclaration", () => {
 				decl({ gateways: [{ ...GW, bin: "/opt/oc/openclaw-shim", configPath: "/srv/oc/openclaw.json" }] }),
 			),
 		).toThrow(/declares both bin and configPath/);
+	});
+
+	it("[QK:OPENCLAW-DECL-ONE-KEY-PER-HOME] a home (scope, agentId) declaring a second key is refused by name", () => {
+		expect(() =>
+			parseOpenclawCitizensDeclaration(decl({ allow: [KEY, { ...KEY, sessionKey: "agent:main:s2" }] })),
+		).toThrow(/home lab-a\/main already declares key agent:main:s1m1; one home, one mailbox/);
+		// Another agent in the same Gateway is another home.
+		expect(
+			parseOpenclawCitizensDeclaration(
+				decl({ allow: [KEY, { scope: "lab-a", agentId: "ops", sessionKey: "agent:ops:s1" }] }),
+			).allow,
+		).toHaveLength(2);
 	});
 
 	it("carries no garden id: a gardenId key anywhere is refused", () => {
@@ -182,5 +195,39 @@ describe("native id", () => {
 	it("refuses to compose what it would not parse", () => {
 		expect(() => composeOpenclawNativeSessionId("a:b", "main", "agent:main:s1")).toThrow();
 		expect(() => composeOpenclawNativeSessionId("lab", "main", "agent:ops:s1")).toThrow();
+	});
+});
+
+describe("checkOpenclawHome — one home, one garden", () => {
+	const rec = (gardenId: string, nativeSessionId: string, backend = "openclaw") => ({
+		gardenId,
+		backend,
+		nativeSessionId,
+	});
+	const A = rec("20261113T164129-222657", "openclaw:lab-a:agent:main:s1m1");
+
+	it("ok for an empty home and for the home's own key; other homes and other backends do not count", () => {
+		expect(checkOpenclawHome([], "lab-a", "main", "agent:main:s1m1")).toEqual({ ok: true });
+		expect(checkOpenclawHome([A], "lab-a", "main", "agent:main:s1m1")).toEqual({ ok: true });
+		const others = [
+			rec("20261113T170000-0c0c0c", "openclaw:lab-a:agent:ops:s1"),
+			rec("20261113T170000-0d0d0d", "openclaw:oracle:agent:main:s2"),
+			rec("20261113T170000-0e0e0e", "openclaw:lab-a:agent:main:s2", "codex"),
+			rec("20261113T170000-0f0f0f", "not-an-openclaw-id"),
+		];
+		expect(checkOpenclawHome([A, ...others], "lab-a", "main", "agent:main:s1m1")).toEqual({ ok: true });
+	});
+
+	it("[QK:OPENCLAW-HOME-OTHER-KEY] a home addressed on one key refuses another key as openclaw-home-already-addressed", () => {
+		expect(checkOpenclawHome([A], "lab-a", "main", "agent:main:s2")).toMatchObject({
+			reason: "openclaw-home-already-addressed",
+		});
+	});
+
+	it("[QK:OPENCLAW-HOME-AMBIGUOUS] two records for one home refuse every key, the matching one included (no pick-first)", () => {
+		const B = rec("20261113T170000-0b0b0b", "openclaw:lab-a:agent:main:s2");
+		for (const key of ["agent:main:s1m1", "agent:main:s2", "agent:main:s3"]) {
+			expect(checkOpenclawHome([A, B], "lab-a", "main", key)).toMatchObject({ reason: "openclaw-home-ambiguous" });
+		}
 	});
 });

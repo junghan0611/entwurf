@@ -145,10 +145,10 @@ describe("receiveOpenclawClaim", () => {
 		["undeclared key", claim({ sessionKey: "agent:main:main" }), [RECORD], "openclaw-scope-not-declared"],
 		["no record", claim(), [], "openclaw-sender-not-citizen"],
 		[
-			"two records",
+			"two records on one native id (an ambiguous home)",
 			claim(),
 			[RECORD, { ...RECORD, gardenId: "20261113T150000-0b0b0b" }],
-			"openclaw-sender-not-citizen",
+			"openclaw-home-ambiguous",
 		],
 		["foreign backend record", claim(), [{ ...RECORD, backend: "codex" }], "openclaw-sender-not-citizen"],
 		[
@@ -161,6 +161,16 @@ describe("receiveOpenclawClaim", () => {
 		const h = harness(ids as OpenclawRecordView[]);
 		const r = await receiveOpenclawClaim(parseOpenclawClaim(text), DECL, h.deps);
 		expect(r).toMatchObject({ kind: "rejected", reason });
+		expect(openclawSendExitCode(r)).toBe(3);
+		expect(h.calls).toEqual([]);
+		expect(h.probed).toEqual([]);
+	});
+
+	it("[QK:OPENCLAW-SEND-HOME-GATE] a home with a second record on another key refuses its declared sender as openclaw-home-ambiguous — no pick-first, no probe, no dispatch", async () => {
+		const other = { ...RECORD, gardenId: "20261113T170000-0b0b0b", nativeSessionId: "openclaw:lab:agent:main:s9" };
+		const h = harness([RECORD, other]);
+		const r = await receiveOpenclawClaim(parseOpenclawClaim(claim()), DECL, h.deps);
+		expect(r).toMatchObject({ kind: "rejected", reason: "openclaw-home-ambiguous" });
 		expect(openclawSendExitCode(r)).toBe(3);
 		expect(h.calls).toEqual([]);
 		expect(h.probed).toEqual([]);

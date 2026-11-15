@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { birthOpenclawCitizen, type OpenclawBirthDeps } from "./openclaw-birth.ts";
-import { parseOpenclawCitizensDeclaration } from "./openclaw-citizens.ts";
+import { type OpenclawHomeRecord, parseOpenclawCitizensDeclaration } from "./openclaw-citizens.ts";
 
 const DECL = parseOpenclawCitizensDeclaration(
 	JSON.stringify({
@@ -15,13 +15,32 @@ const DECL = parseOpenclawCitizensDeclaration(
 	}),
 );
 
-function deps(status: "alive" | "dead" | "indeterminate" = "alive") {
+/** The declaration after the operator moved the home's mailbox from s1m1 to s2: s1m1 left it. */
+const MOVED = parseOpenclawCitizensDeclaration(
+	JSON.stringify({
+		version: 1,
+		gateways: [{ scope: "lab", url: "ws://127.0.0.1:18811" }],
+		allow: [{ scope: "lab", agentId: "main", sessionKey: "agent:main:s2" }],
+	}),
+);
+
+function deps(
+	status: "alive" | "dead" | "indeterminate" = "alive",
+	opts: { decl?: typeof DECL; existing?: OpenclawHomeRecord[] } = {},
+) {
 	const store = new Map<string, string>();
 	const order: string[] = [];
 	const d: OpenclawBirthDeps = {
 		readDeclaration: () => {
 			order.push("decl");
-			return DECL;
+			return opts.decl ?? DECL;
+		},
+		listIdentities: () => {
+			order.push("list");
+			return [
+				...(opts.existing ?? []),
+				...[...store].map(([nativeSessionId, gardenId]) => ({ gardenId, backend: "openclaw", nativeSessionId })),
+			];
 		},
 		probe: async (id) => {
 			order.push(`probe ${id}`);
@@ -51,6 +70,7 @@ describe("birthOpenclawCitizen", () => {
 		});
 		expect(h.order).toEqual([
 			"decl",
+			"list",
 			"probe openclaw:lab:agent:main:s1m1",
 			"upsert openclaw:lab:agent:main:s1m1 /lab/ws",
 		]);
@@ -62,6 +82,28 @@ describe("birthOpenclawCitizen", () => {
 		const b = await birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, h.d);
 		expect(b).toMatchObject({ action: "attach", gardenId: a.gardenId });
 		expect(h.store.size).toBe(1);
+	});
+
+	it("[QK:OPENCLAW-BIRTH-HOME-GATE] a home already addressed on another key — even one that left the declaration — is refused before the probe and the write", async () => {
+		const old: OpenclawHomeRecord = {
+			gardenId: "20261113T164129-222657",
+			backend: "openclaw",
+			nativeSessionId: "openclaw:lab:agent:main:s1m1",
+		};
+		const h = deps("alive", { decl: MOVED, existing: [old] });
+		await expect(
+			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s2", cwd: "/lab/ws" }, h.d),
+		).rejects.toThrow(/openclaw-home-already-addressed: .*20261113T164129-222657.*no record written/);
+		expect(h.order).toEqual(["decl", "list"]);
+		expect(h.store.size).toBe(0);
+		// An ambiguous home refuses even the key one of its records carries.
+		const twice = deps("alive", {
+			existing: [old, { ...old, gardenId: "20261113T170000-0b0b0b", nativeSessionId: "openclaw:lab:agent:main:s9" }],
+		});
+		await expect(
+			birthOpenclawCitizen({ scope: "lab", sessionKey: "agent:main:s1m1", cwd: "/lab/ws" }, twice.d),
+		).rejects.toThrow(/openclaw-home-ambiguous/);
+		expect(twice.store.size).toBe(0);
 	});
 
 	it.each([

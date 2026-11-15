@@ -45,7 +45,9 @@
 import * as crypto from "node:crypto";
 
 import {
+	checkOpenclawHome,
 	type OpenclawCitizensDeclaration,
+	type OpenclawHomeRecord,
 	parseOpenclawNativeSessionId,
 	selectOpenclawScope,
 } from "../openclaw-citizens.ts";
@@ -87,6 +89,8 @@ export interface OpenclawGatewayAdapterDeps {
 	runner: NativePushRunner;
 	/** The scope declaration, read at the moment of use. `null` = absent. May throw (broken). */
 	readDeclaration: () => OpenclawCitizensDeclaration | null;
+	/** The active records, for the one-home-one-garden check (#160 S6 §7), read at the moment of use. */
+	listIdentities: () => readonly OpenclawHomeRecord[];
 	binary?: string;
 	/** Test seam for the idempotency key. */
 	newIdempotencyKey?: () => string;
@@ -217,6 +221,12 @@ export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): 
 			const picked = selectOpenclawScope(decl, id.scope, id.agentId, id.sessionKey);
 			if (!("gateway" in picked)) {
 				return { status: "indeterminate", reason: `${picked.reason}: ${picked.detail}` };
+			}
+			// One home, one garden: an ambiguous home is not delivered to, whichever record is asked
+			// about. Indeterminate, never dead — the session itself was not asked.
+			const home = checkOpenclawHome(deps.listIdentities(), id.scope, id.agentId, id.sessionKey);
+			if (!("ok" in home)) {
+				return { status: "indeterminate", reason: `${home.reason}: ${home.detail}` };
 			}
 			const route: OpenclawRoute = {
 				backend: "openclaw",

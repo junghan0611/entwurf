@@ -89,6 +89,72 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:OPENCLAW-CLOSED-DECL-REFUSES-PROBE]",
 			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-DECL-ONE-KEY-PER-HOME",
+			"title": "the declaration parser accepts a second key for one home, so one bot home can be born as two gardens",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["\t\tif (held !== undefined) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-DECL-ONE-KEY-PER-HOME]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-OTHER-KEY",
+			"title": "the home check lets another key through a home already addressed, so a key change silently births a second garden",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["\tif (home.length === 1 && home[0].sessionKey !== sessionKey) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-OTHER-KEY]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-HOME-AMBIGUOUS",
+			"title": "the home check stops refusing a home with two records, so send and probe pick whichever record matches the key",
+			"subject": "pi-extensions/lib/openclaw-citizens.ts",
+			"find": ["\tif (home.length >= 2) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-HOME-AMBIGUOUS]",
+			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-BIRTH-HOME-GATE",
+			"title": "birth no longer consults the home check, so a home already addressed on another key gets a second garden",
+			"subject": "pi-extensions/lib/openclaw-birth.ts",
+			"find": ["\tif (!(\"ok\" in home)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-BIRTH-HOME-GATE]",
+			"signatureSource": "pi-extensions/lib/openclaw-birth.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-SEND-HOME-GATE",
+			"title": "the send entry no longer consults the home check, so an ambiguous home still sends as one of its gardens",
+			"subject": "pi-extensions/lib/openclaw-send.ts",
+			"find": ["\tif (!(\"ok\" in home)) return { kind: \"rejected\", ...home };"],
+			"replace": ["\tif (false) return { kind: \"rejected\", ...home };"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-SEND-HOME-GATE]",
+			"signatureSource": "pi-extensions/lib/openclaw-send.test.ts"
+		},
+		{
+			"claim": "OPENCLAW-PROBE-HOME-GATE",
+			"title": "the receive probe no longer consults the home check, so an ambiguous home is still delivered to",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["\t\t\tif (!(\"ok\" in home)) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-HOME-GATE]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
 		}
 	]
 }

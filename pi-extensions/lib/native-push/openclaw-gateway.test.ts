@@ -41,11 +41,20 @@ function runner(answer: NativePushExecResult): NativePushRunner & { calls: Call[
 	};
 }
 
+/** The probed record alone: its home holds exactly this garden. */
+const OWN = [{ gardenId: "20261113T164129-222657", backend: "openclaw", nativeSessionId: ID }];
+
 function adapter(
 	r: NativePushRunner,
 	decl: () => ReturnType<typeof parseOpenclawCitizensDeclaration> | null = () => DECL,
+	identities: { gardenId: string; backend: string; nativeSessionId: string }[] = OWN,
 ) {
-	return createOpenclawGatewayAdapter({ runner: r, readDeclaration: decl, newIdempotencyKey: () => "entwurf-k1" });
+	return createOpenclawGatewayAdapter({
+		runner: r,
+		readDeclaration: decl,
+		listIdentities: () => identities,
+		newIdempotencyKey: () => "entwurf-k1",
+	});
 }
 
 const ALIVE = JSON.stringify({ session: { key: "agent:main:s1m1", sessionId: "2de2", hasActiveRun: false } });
@@ -135,6 +144,18 @@ describe("probe", () => {
 		const res = await adapter(r, () => closed).probe(ID);
 		expect(res).toMatchObject({ status: "indeterminate" });
 		expect("reason" in res && res.reason).toMatch(/^openclaw-scope-not-declared: /);
+		expect(r.calls).toEqual([]);
+	});
+
+	it("[QK:OPENCLAW-PROBE-HOME-GATE] an ambiguous home (two records for one bot home) is indeterminate naming openclaw-home-ambiguous, with no vendor call and no pick-first", async () => {
+		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
+		const twice = [
+			...OWN,
+			{ ...OWN[0], gardenId: "20261113T170000-0b0b0b", nativeSessionId: "openclaw:lab:agent:main:s9" },
+		];
+		const res = await adapter(r, () => DECL, twice).probe(ID);
+		expect(res).toMatchObject({ status: "indeterminate" });
+		expect("reason" in res && res.reason).toMatch(/^openclaw-home-ambiguous: /);
 		expect(r.calls).toEqual([]);
 	});
 

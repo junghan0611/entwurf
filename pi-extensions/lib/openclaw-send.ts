@@ -25,17 +25,20 @@
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { EntwurfV2SurfaceRendered, SurfaceEntwurfV2Params } from "./entwurf-v2-surface.ts";
 import type { MailboxSenderEnvelope } from "./meta-mailbox-body.ts";
-import { type MetaCitizenBackend, requireGardenId } from "./meta-session.ts";
+import { requireGardenId } from "./meta-session.ts";
 import {
+	checkOpenclawHome,
 	composeOpenclawNativeSessionId,
+	OPENCLAW_BACKEND,
 	type OpenclawCitizensDeclaration,
+	type OpenclawHomeRejectReason,
 	requireOpenclawAgentId,
 	requireOpenclawScope,
 	requireOpenclawSessionKey,
 	selectOpenclawScope,
 } from "./openclaw-citizens.ts";
 
-export const OPENCLAW_BACKEND = "openclaw" satisfies MetaCitizenBackend;
+export { OPENCLAW_BACKEND };
 
 export const OPENCLAW_CLAIM_VERSION = 1;
 const MESSAGE_CAP = 16000;
@@ -58,7 +61,10 @@ export interface OpenclawRecordView {
 	cwd: string;
 }
 
-export type OpenclawSendRejectReason = "openclaw-scope-not-declared" | "openclaw-sender-not-citizen";
+export type OpenclawSendRejectReason =
+	| "openclaw-scope-not-declared"
+	| "openclaw-sender-not-citizen"
+	| OpenclawHomeRejectReason;
 
 export type OpenclawSendReceipt =
 	| { kind: "rejected"; reason: OpenclawSendRejectReason; detail: string }
@@ -172,7 +178,10 @@ export async function receiveOpenclawClaim(
 ): Promise<OpenclawSendReceipt> {
 	const scoped = selectOpenclawScope(decl, claim.scope, claim.agentId, claim.sessionKey);
 	if (!("gateway" in scoped)) return { kind: "rejected", ...scoped };
-	const joined = joinOpenclawSender(claim, deps.listIdentities());
+	const identities = deps.listIdentities();
+	const home = checkOpenclawHome(identities, claim.scope, claim.agentId, claim.sessionKey);
+	if (!("ok" in home)) return { kind: "rejected", ...home };
+	const joined = joinOpenclawSender(claim, identities);
 	if (!("record" in joined)) return { kind: "rejected", ...joined };
 	const replyable = await deps.replyable(joined.record);
 	const sender = buildOpenclawSenderEnvelope(joined.record, replyable, (deps.now ?? (() => new Date()))());

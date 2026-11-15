@@ -12,7 +12,13 @@
  * defect throws (exit 1, stderr). Wrong argv is exit 2 with usage.
  */
 
-import { upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
+import {
+	defaultMetaSessionsDir,
+	listAllMetaIdentities,
+	makeStoreRecordReader,
+	readActiveStoreEntries,
+	upsertMetaSession,
+} from "../pi-extensions/lib/meta-session.ts";
 import { resolveNativePushAdapter } from "../pi-extensions/lib/native-push/adapter.ts";
 import { birthOpenclawCitizen } from "../pi-extensions/lib/openclaw-birth.ts";
 import { openclawCitizensPath, readOpenclawCitizens } from "../pi-extensions/lib/openclaw-citizens.ts";
@@ -37,6 +43,12 @@ const result = await birthOpenclawCitizen(
 	},
 	{
 		readDeclaration: () => readOpenclawCitizens(openclawCitizensPath()),
+		// The strict store-wide listing: a duplicate or unreadable neighbour throws (exit 1).
+		listIdentities: () => {
+			const dir = defaultMetaSessionsDir();
+			return listAllMetaIdentities(readActiveStoreEntries(dir), makeStoreRecordReader(dir), { mode: "strict" })
+				.identities;
+		},
 		probe: (nativeSessionId) => resolveNativePushAdapter(OPENCLAW_BACKEND).probe(nativeSessionId),
 		upsert: (nativeSessionId, cwd) => {
 			const r = upsertMetaSession({ input: { backend: OPENCLAW_BACKEND, nativeSessionId, cwd } });

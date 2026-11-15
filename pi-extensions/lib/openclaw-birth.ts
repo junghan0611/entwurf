@@ -27,8 +27,10 @@
 
 import * as path from "node:path";
 import {
+	checkOpenclawHome,
 	composeOpenclawNativeSessionId,
 	type OpenclawCitizensDeclaration,
+	type OpenclawHomeRecord,
 	parseOpenclawNativeSessionId,
 	selectOpenclawScope,
 } from "./openclaw-citizens.ts";
@@ -41,6 +43,8 @@ export interface OpenclawBirthInput {
 
 export interface OpenclawBirthDeps {
 	readDeclaration: () => OpenclawCitizensDeclaration | null;
+	/** The active records — including ones whose key has left the declaration (#160 S6 §7 (2)). */
+	listIdentities: () => readonly OpenclawHomeRecord[];
 	probe: (
 		nativeSessionId: string,
 	) => Promise<{ status: "alive" } | { status: "dead" | "indeterminate"; reason: string }>;
@@ -82,6 +86,13 @@ export async function birthOpenclawCitizen(
 	const picked = selectOpenclawScope(decl, id.scope, id.agentId, id.sessionKey);
 	if (!("gateway" in picked)) {
 		throw new OpenclawBirthError(`openclaw-birth: ${picked.reason}: ${picked.detail}`);
+	}
+
+	// One home, one garden: the same key re-attaches; another key, or an ambiguous home, is refused
+	// before the Gateway is asked and before anything is written.
+	const home = checkOpenclawHome(deps.listIdentities(), id.scope, id.agentId, id.sessionKey);
+	if (!("ok" in home)) {
+		throw new OpenclawBirthError(`openclaw-birth: ${home.reason}: ${home.detail}; no record written`);
 	}
 
 	const probe = await deps.probe(nativeSessionId);

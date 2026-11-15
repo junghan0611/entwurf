@@ -29,6 +29,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { NativePushBackend } from "../entwurf-v2-contract.ts";
+import {
+	defaultMetaSessionsDir,
+	listAllMetaIdentities,
+	makeStoreRecordReader,
+	readActiveStoreEntries,
+} from "../meta-session.ts";
 import { openclawCitizensPath, readOpenclawCitizens } from "../openclaw-citizens.ts";
 import { codexNativePushAdapter } from "./codex-ws-client.ts";
 import { createOpenclawGatewayAdapter, type OpenclawRoute } from "./openclaw-gateway.ts";
@@ -341,6 +347,13 @@ export const antigravityAdapter: NativePushAdapter = createAntigravityAdapter({ 
 export const openclawNativePushAdapter: NativePushAdapter = createOpenclawGatewayAdapter({
 	runner: realNativePushRunner,
 	readDeclaration: () => readOpenclawCitizens(openclawCitizensPath()),
+	// The strict store-wide listing the send entry uses: an unreadable or duplicate neighbour throws
+	// rather than disappearing from the home check.
+	listIdentities: () => {
+		const dir = defaultMetaSessionsDir();
+		return listAllMetaIdentities(readActiveStoreEntries(dir), makeStoreRecordReader(dir), { mode: "strict" })
+			.identities;
+	},
 });
 
 const ADAPTERS: readonly NativePushAdapter[] = [antigravityAdapter, codexNativePushAdapter, openclawNativePushAdapter];
