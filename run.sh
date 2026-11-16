@@ -1589,9 +1589,10 @@ check_acp_compaction() {
 
 check_renew_beside() {
   # #151 R-1: the execution coordinate for the /renew reader-boundary claims (VERIFY 「Four rules」
-  # rule 3). Not a discovery path — check-tests-beside-behavior already finds the file; one renew
-  # mutant re-runs only this beside test.
-  run_vitest pi-extensions/lib/meta-session.renew.test.ts
+  # rule 3), and (R-2) for the named refusals of delivery and same-id resume on a record mid-/renew.
+  # Not a discovery path — check-tests-beside-behavior already finds both files; one renew mutant
+  # re-runs only these two beside tests.
+  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts
 }
 
 check_native_push_runner() {

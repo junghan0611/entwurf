@@ -6,8 +6,14 @@
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. A slotted hint holds only the text around its slot: the slot value (for record-less-socket, the fresh-cut command in both invocation forms) is supplied by its code owner and never copied here. Metadata is not delivered to models."
 	},
 	"schemaVersion": 6,
-	"revision": 21,
+	"revision": 22,
 	"history": [
+		{
+			"revision": 22,
+			"source": "563d71abd10e00d823ff9b3020fe9db6916f2d0c",
+			"issue": "https://github.com/junghan0611/entwurf/issues/151",
+			"change": "Add two static reject hints for a record mid-/renew (#151 R-2): rejectHints renew-in-progress (entwurf_v2, refused before any probe) and resumeRejectHints target-renew-in-progress (entwurf_resume_call). They say the record marks the transition, claim no liveness, promise no automatic release and name the human operator for recovery. The first layer that adds keys to existing hint families; no existing leaf changes."
+		},
 		{
 			"revision": 21,
 			"source": "def2a790c1a0638ee739c736776758e9242694f4",
@@ -227,7 +233,8 @@
 		"indeterminate-no-spawn": "the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen '-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at that garden id by a session that died without cleaning up.",
 		"native-push-target-dead": "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it, so nothing was injected. Ask the human operator to check or reopen that conversation/thread in its own harness; this delivery call does not reopen it.",
 		"native-push-probe-indeterminate": "the adapter could not establish a live route to this conversation/thread, so its liveness is UNKNOWN — not a measured death. Inspect the probe reason and verify the target in its own native harness; the host itself may or may not be running.",
-		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed nothing and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
+		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed nothing and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead.",
+		"renew-in-progress": "this citizen's record marks an in-progress /renew to a new native chapter under the same garden id, so this dispatch probed nothing and sent nothing. Delivery cannot address either chapter until the transition commits or is recovered by the human operator; send again after that. This is not a dormant or dead verdict."
 	},
 	"resumeRejectHints": {
 		"target-invalid": "the target is not a valid garden id; use entwurf_peers to discover valid targets",
@@ -240,7 +247,8 @@
 		"target-receiver-mismatch": "the receiver marker under this garden id names another backend or native session than the record — look at the store before anything reopens",
 		"target-receiver-unbound": "the dead receiver owner is not bound to the record's last arm (none observed, a later attach, or the record moved), so a Claude Code process may still hold the session and this verb opens nothing. Ask the human operator whether its window is still open; reopening it is the operator's act, not this verb's",
 		"target-address-conflict": "that citizen's control-socket path is corrupt",
-		"launch-refused": "the launcher refused before creating anything — no tmux window and no herdr tab was opened"
+		"launch-refused": "the launcher refused before creating anything — no tmux window and no herdr tab was opened",
+		"target-renew-in-progress": "this citizen's record marks an in-progress /renew to a new native chapter under the same garden id; resuming now would reopen the outgoing chapter while the transition is still uncommitted. Only the human operator can finish or recover that transition; resume or send again once the record shows no transition in progress"
 	},
 	"freshLaunchRejectHints": {
 		"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",

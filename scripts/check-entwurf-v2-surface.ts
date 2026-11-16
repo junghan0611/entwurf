@@ -648,7 +648,7 @@ async function main(): Promise<void> {
 			"[QK:V2SURF-RECORD-LESS-SOCKET-HINT-FROM-ROOT] the record-less-socket hint is exactly the root text before the fix command, the command from its meta-session owner, and the root text after it",
 			rls === `${rlsRoot.beforeFreshCutPrescription}${FRESH_CUT_PRESCRIPTION}${rlsRoot.afterFreshCutPrescription}`,
 		);
-		// #154 C1-B: the five static hints are authored in root ENTWURF.json. This is the WIRING
+		// #154 C1-B: the static hints — five, and #151 R-2's renew-in-progress — are authored in root ENTWURF.json. This is the WIRING
 		// claim — what the surface returns is the Root value for every declared reason — compared
 		// against the loaded Root, never a fixture, so a Root prose mutant still dies at its own
 		// semantic QK above. The C0 byte oracle lives beside the reader (GUIDANCE-REJECT-HINTS-ORIGINAL).
@@ -657,7 +657,7 @@ async function main(): Promise<void> {
 			.map(([reason]) => reason);
 		ok(
 			`2D: every static reject hint the surface renders is the root ENTWURF.json value [QK:V2SURF-REJECT-HINTS-FROM-ROOT] (unwired: ${JSON.stringify(unwired)})`,
-			Object.keys(ENTWURF_REJECT_HINTS).length === 5 && unwired.length === 0,
+			Object.keys(ENTWURF_REJECT_HINTS).length === 6 && unwired.length === 0,
 		);
 	}
 

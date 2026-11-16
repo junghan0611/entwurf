@@ -106,6 +106,9 @@ export function actionableRejectHint(reason: string): string | undefined {
 		case "native-push-paused":
 			// #152: a policy refusal, not a liveness verdict — this dispatch probed and sent nothing.
 			return ENTWURF_REJECT_HINTS["native-push-paused"];
+		case "renew-in-progress":
+			// #151 R-2: the record marks a /renew transition — a record fact, not a liveness verdict.
+			return ENTWURF_REJECT_HINTS["renew-in-progress"];
 		case "record-less-socket": {
 			// #50 C4: name the true cause AND the fix — a bare socket is a diagnostic
 			// state, not an addressable citizen (the record is the address). The text on either

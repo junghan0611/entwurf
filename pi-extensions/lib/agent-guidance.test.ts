@@ -248,6 +248,32 @@ const reviewedR20 = JSON.parse(
 const reviewedR21 = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-21.json", import.meta.url), "utf8"),
 ) as ReviewedAmendmentLayer & { previousRevision: number };
+// #151 R-2: the first layer that ADDS keys to existing hint families — two reject hints for a record
+// mid-/renew. It changes no existing leaf; each addition carries only its new literal, and the family
+// expectation checks the key was absent before. The README paragraph owns that provenance.
+const reviewedR22 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-22.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: unknown[];
+	additions: { key: ["rejectHints" | "resumeRejectHints", string]; new: string }[];
+};
+
+function applyR22(family: string, expected: Record<string, string>): void {
+	expect(reviewedR22.amendments).toHaveLength(0);
+	expect(reviewedR22.additions.map((a) => a.key.join(".")).sort()).toEqual([
+		"rejectHints.renew-in-progress",
+		"resumeRejectHints.target-renew-in-progress",
+	]);
+	for (const addition of reviewedR22.additions) {
+		if (addition.key[0] !== family) continue;
+		const key = addition.key[1];
+		expect(Object.keys(expected)).not.toContain(key);
+		expect(addition.new.length).toBeGreaterThan(0);
+		expected[key] = addition.new;
+	}
+}
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -508,10 +534,12 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR20.revision).toBe(20);
 		expect(reviewedR21.previousRevision).toBe(reviewedR20.revision);
 		expect(reviewedR21.revision).toBe(21);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR21.revision);
+		expect(reviewedR22.previousRevision).toBe(reviewedR21.revision);
+		expect(reviewedR22.revision).toBe(22);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR22.revision);
 	});
 
-	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {
+	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments and the reviewed revision-22 addition", () => {
 		expect(originalRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
 		const expected = structuredClone(originalRejectHints.hints);
 		expect(reviewedR6.amendments).toHaveLength(1);
@@ -525,18 +553,22 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		}
 		applyR10("rejectHints", expected);
 		applyR11("rejectHints", expected);
+		applyR22("rejectHints", expected);
 		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
 			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
 		}
-		const changed = Object.keys(expected).filter((reason) => expected[reason] !== originalRejectHints.hints[reason]);
+		const original = Object.keys(originalRejectHints.hints);
+		const added = Object.keys(expected).filter((reason) => !original.includes(reason));
+		expect(added).toEqual(["renew-in-progress"]);
+		const changed = original.filter((reason) => expected[reason] !== originalRejectHints.hints[reason]);
 		expect(changed).toEqual(["native-push-target-dead", "native-push-probe-indeterminate", "native-push-paused"]);
-		expect(Object.keys(expected).filter((reason) => !changed.includes(reason))).toHaveLength(2);
+		expect(original.filter((reason) => !changed.includes(reason))).toHaveLength(2);
 		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
 	});
 
-	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared revision-10, reviewed revision-11 and declared revision-12, revision-17 and revision-18 amendments", () => {
+	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared revision-10, reviewed revision-11 and declared revision-12, revision-17 and revision-18 amendments and the reviewed revision-22 addition", () => {
 		expect(originalResumeRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
 		const expected = structuredClone(originalResumeRejectHints.hints);
 		applyR10("resumeRejectHints", expected);
@@ -544,6 +576,7 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR12("resumeRejectHints", expected);
 		applyR17("resumeRejectHints", expected);
 		applyR18("resumeRejectHints", expected);
+		applyR22("resumeRejectHints", expected);
 		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];

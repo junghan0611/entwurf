@@ -266,6 +266,100 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-R1C-STORE-REFUSAL-CHECK-BEFORE-ARCHIVE]",
 			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "V2-RENEW-IN-PROGRESS-PRE-PROBE",
+			"title": "the decider no longer reads the renew mark — a record mid-/renew is locked, its socket inspected and a dispatch planned into a chapter the transition is closing",
+			"subject": "pi-extensions/lib/entwurf-v2-decider.ts",
+			"find": [
+				"\tif (identity.renewing !== undefined) {\n\t\treturn reject(makeRejectReceipt(\"renew-in-progress\", null));"
+			],
+			"replace": ["\tif (false) {\n\t\treturn reject(makeRejectReceipt(\"renew-in-progress\", null));"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:V2-RENEW-IN-PROGRESS-PRE-PROBE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "V2-RENEW-IN-PROGRESS-WELL-FORMED",
+			"title": "renew-in-progress leaves the pre-probe set — its null observedLiveness is no longer well-formed, so a receipt either lies about liveness or fails its own contract",
+			"subject": "pi-extensions/lib/entwurf-v2-contract.ts",
+			"find": [
+				"\t\"native-push-paused\",\n\t\"renew-in-progress\",\n] as const satisfies readonly EntwurfV2RejectReason[];"
+			],
+			"replace": ["\t\"native-push-paused\",\n] as const satisfies readonly EntwurfV2RejectReason[];"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:V2-RENEW-IN-PROGRESS-WELL-FORMED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "RESUME-RENEW-IN-PROGRESS-NAMED",
+			"title": "the resume identity read ignores the renew mark — a record mid-/renew resolves to its outgoing chapter, or fails as an integrity error, instead of a named refusal",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["\tif (record.renewing !== undefined) {\n\t\tthrow new ResumeRenewInProgressError(gardenId);"],
+			"replace": ["\tif (false) {\n\t\tthrow new ResumeRenewInProgressError(gardenId);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RESUME-RENEW-IN-PROGRESS-NAMED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "RESUME-RENEW-IN-PROGRESS-NO-WINDOW",
+			"title": "visibleResume no longer maps the renew refusal — it escapes as an unnamed error instead of target-renew-in-progress with its hint",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tif (err instanceof ResumeRenewInProgressError) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RESUME-RENEW-IN-PROGRESS-NO-WINDOW]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "V2-RENEW-MARK-REREAD-UNDER-LOCK",
+			"title": "the decider trusts its pre-lock read — a transition that marked the record after that read and let go of the lock is missed, and the send inspects and plans into the closing chapter",
+			"subject": "pi-extensions/lib/entwurf-v2-decider.ts",
+			"find": ["\t\tif (fresh.identity.renewing !== undefined) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:V2-RENEW-MARK-REREAD-UNDER-LOCK]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "V2-RENEW-FALLBACK-REFUSED",
+			"title": "the dead-control fallback ignores the renew mark — its own re-resolve re-inspects and can plan a retry into a record mid-/renew",
+			"subject": "pi-extensions/lib/entwurf-v2-send-fallback.ts",
+			"find": [
+				"\tif (identity.renewing !== undefined) {\n\t\treturn { kind: \"reject\", reason: \"renew-in-progress\" };"
+			],
+			"replace": ["\tif (false) {\n\t\treturn { kind: \"reject\", reason: \"renew-in-progress\" };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:V2-RENEW-FALLBACK-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "V2-RENEW-REREAD-KEEPS-RECORD-GONE",
+			"title": "the under-lock re-read drops a vanished record — a record gone since the first read falls through to a socket the record no longer authorizes",
+			"subject": "pi-extensions/lib/entwurf-v2-decider.ts",
+			"find": ["\t\tif (fresh.identity === null) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:V2-RENEW-REREAD-KEEPS-RECORD-GONE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "V2-RENEW-REREAD-KEEPS-CONFLICT",
+			"title": "the under-lock re-read drops an address conflict — a gid quarantined since the first read is inspected and dispatched into",
+			"subject": "pi-extensions/lib/entwurf-v2-decider.ts",
+			"find": ["\t\tif (fresh.preProbeAddressConflict) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:V2-RENEW-REREAD-KEEPS-CONFLICT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
 		}
 	]
 }

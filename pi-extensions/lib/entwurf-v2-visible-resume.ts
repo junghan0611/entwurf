@@ -130,6 +130,7 @@ import {
 	type ClaudeCodeLaunchIdentity,
 	type LaunchIdentity,
 	ResumeBackendUnsupportedError,
+	ResumeRenewInProgressError,
 	resolveResumeLaunchIdentity,
 } from "./resume-launch-identity.ts";
 import { isValidSessionId } from "./session-id.js";
@@ -174,7 +175,8 @@ export type VisibleResumeRejectReason =
 	| "target-receiver-unbound"
 	| "target-indeterminate"
 	| "target-address-conflict"
-	| "launch-refused";
+	| "launch-refused"
+	| "target-renew-in-progress";
 
 /** What the injected launcher gives back. Structural on purpose: naming mux's or herdr's types here
  * would be the import this split exists to avoid. `rail` says which one ran. */
@@ -535,6 +537,15 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 					ok: false,
 					reason: err.reason,
 					detail: `${targetGardenId} would launch model ${JSON.stringify(err.model)} under the entwurf provider (the resolved launch pair, which may differ from the recorded provider)`,
+				};
+			}
+			// #151 R-2: the record marks a /renew transition and still names its outgoing chapter.
+			// Same shape again: a named refusal matched on its FIELD, claiming no liveness.
+			if (err instanceof ResumeRenewInProgressError) {
+				return {
+					ok: false,
+					reason: err.reason,
+					detail: `${targetGardenId}'s record carries a renewing block; it still names the outgoing chapter`,
 				};
 			}
 			if (err instanceof ResumeBackendUnsupportedError) {
@@ -1110,6 +1121,7 @@ const REJECT_HINT: Record<VisibleResumeRejectReason, string> = {
 	"target-receiver-mismatch": ENTWURF_RESUME_REJECT_HINTS["target-receiver-mismatch"],
 	"target-receiver-unbound": ENTWURF_RESUME_REJECT_HINTS["target-receiver-unbound"],
 	"target-address-conflict": ENTWURF_RESUME_REJECT_HINTS["target-address-conflict"],
+	"target-renew-in-progress": ENTWURF_RESUME_REJECT_HINTS["target-renew-in-progress"],
 	"launch-refused": ENTWURF_RESUME_REJECT_HINTS["launch-refused"],
 };
 

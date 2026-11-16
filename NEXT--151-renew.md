@@ -44,9 +44,9 @@
     - 가벼운 진입. 이때의 진행 의사는 **인터뷰를 시작할 뜻**이지 final이 아니다.
     - 입력면, 유효·철회 후보면, 해시로 특정한 판에 대한 사람 확인, 거절 사유 피드백.
     - 옛 ACP child 닫기. 호출처가 `acp-provider.ts:78` 하나뿐이다.
-    - agy 크기 상한을 보수적으로 잡는다.
+    - 크기 상한은 하나다. 모델·백엔드마다 다른 값을 두지 않는다.
     - Claude에서 `<project-context>` 태그가 오매칭되는 함정.
-    - agy에서 renew의 위치는 "현재 조사한 동일 생일·얼개 연속성을 위한 후보"로 둔다. 유일성은 주장하지 않는다(SOL).
+    - renew는 모델·백엔드로 대상을 가르지 않는다. 어느 장에서 renew할지는 사용자가 고른다(GLG 2026-11-17: "모델 차별은 코드와 문구에 들어갈게 아니야. 그냥 사용자가 선택할일이야"). ACP 연결 고리의 알려진 빈틈은 #167·#168에 기술 사실로만 둔다. 계약 문장 교체: `/tmp/entwurf-151/renew-contract-c1.3c.md`.
 - **2026-11-17 아침 (6a8b34, oracle):** R-1b는 `018c6122`로 push됐다. GLG가 agy ACP 지원 미비 문제를 #167·#168로 나눴다.
   - **계약 C1.3 → C1.3a:** `/tmp/entwurf-151/renew-contract-c1.3a.md`(033aeb84…, C1.3 1488c783…를 한 amendment로 대체). 앞 관문을 처음 정했다: `/renew`(가벼운 진입, customType 진입 표지) → 에이전트가 마지막 완료 응답에 `renew-outline` 블록 제출 → `/renew confirm`(fullSha·진입·후보 위치 결속) → `/renew confirm <sha8>`(결속 대조, lock 뒤 K1 직전 재대조). 마지막 응답에 제출이 없으면 후보 없음(옛 후보로 회귀하지 않음). SOL·Gemini 리뷰 반영, SOL의 C1.3a 확인 대기.
   - **GLG 결정 대기:** ① chapters 시각 = "record 현재 포인터 점유 구간"(원본 파일 시각 아님)이 맞는지 ② 크기 상한 16 KiB ③ 오토비 지적 처리(아래).
@@ -56,6 +56,10 @@
   - **① reader 보강(R-1c):** chapters 시각 nullable(각각 독립, null = 값을 확정하지 못함이지 원본에 없음의 증명이 아님). 낯선 V3 키 거절은 유지하되 처방을 고쳤다(`UNEXPECTED_KEY_PRESCRIPTION`): reader skew·옛 schema·손상/외부 데이터일 수 있고 키만으로는 모른다 → 쓴 버전·schema와 matching reader를 먼저 확인 → 유효한 새 키면 reader를 올리고 identity 보존, archive 금지 → 이전·사용 불가 generation으로 확인된 record만 fresh-cut. store 거절 문구도 "원인 확인 먼저, archive는 확인된 것만" 순서로 바꿨다. SOL 리뷰 D1(추론 과잉)·D2(archive가 먼저) 수선. Hard Rule 7과 맞춘다.
   - **값 문법의 skew(SOL):** R-1c가 쓰는 `startedAt: null`은 R-1b reader가 거절한다. 첫 nullable writer 전에 reader 하한을 R-1c로 잡는다. generation 변경이 아니다. R-1 모양(chapters만, outline·model 없음)을 R-1b가 거절한다는 주의도 그대로다.
   - **다음 writer 계약에 옮길 것(SOL):** C1.3a §2의 포인터 구간과 C1-s의 "n.startedAt = 직전 endedAt" 조건은 퇴거한다. 원본 시각을 관측하고 못 정하면 null이므로 연속성 assertion을 상속하지 않는다.
+  - **R-1c 로컬 커밋 `563d71ab`**(PARTIAL renew 23/23, SOL 두 차례 리뷰). push 전.
+  - **② R-2(진행 중):** 전환 중인 record에 대해 `entwurf_v2`는 모든 intent를 `renew-in-progress`(pre-probe, observedLiveness null)로, `entwurf_resume_call`은 lock 아래 `target-renew-in-progress`로 거절한다. 첫 read의 빠른 거절에 더해 control-socket 경로는 lock을 얻은 뒤 record를 다시 읽고, dead-control fallback도 자기 재해석에서 mark를 본다(SOL D1·D2). 안내 문구는 ENTWURF.json revision 22로 들였다 — 기존 hint family에 키를 **더하는** 첫 layer(`amendments-revision-22.json` additions). literal은 초안 → Gemini 리뷰 → 확정(`r2-hint-literals-final.md` e1f1fb9b…) 순으로 고정한 뒤 제품을 고쳤다.
+  - **R-2 검증 경계:** `pnpm check`는 `check-capability-bundle-reach` F1에서 RED다. 운영 dist의 `mcp/entwurf-bridge/dist/ENTWURF.json`이 새 Root와 바이트가 달라서이고(F2–F6도 dist 비교라 미실행), 운영 dist는 build하지 않았다. 나머지 단계는 따로 green. stale-dist RED와 같은 부류로, reader 롤아웃 창의 build에서 닫힌다.
+  - **다음 writer 계약 메모(SOL R-2 리뷰):** withSession 확인은 자기에게 `entwurf_v2` send하는 시험이 아니다. 무턴 control health·identity 관측과 record 결속으로 한다. 지금 `get_info`(`entwurf-control.ts:549` 이하)는 garden/cwd/model/idle만 돌려주므로 native/owner 귀속 확인은 writer의 health 계약에서 닫는다. self라는 이유로 send 예외를 열지 않는다.
 - **reader 롤아웃 전제 (오토비 지적, 운영코디 목록, 2026-11-17):**
   - **옛 reader의 fresh-cut 처방을 따르지 않는다.** 이미 설치된 옛 reader(0.55.1 이하, R-1c 이전 바이트)는 renew 키(`renewing`·`chapters`·`outline`)를 낯선 키로 보고 "이전 세대, fresh-cut으로 archive"라고 말한다. 새 소스의 문구를 고쳐도 설치된 옛 사본의 문구는 바뀌지 않는다.
   - **첫 운영 renew는 그 호스트 reader의 되돌릴 수 없는 바닥이다.** `chapters`·`outline`은 계속 남으므로 그 뒤로는 옛 바이트로 단순 rollback할 수 없다. 데이터를 지워 옛 reader를 만족시키지 않는다. 앞으로의 보존형 이행을 막는다는 뜻은 아니다.

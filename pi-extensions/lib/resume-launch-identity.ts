@@ -64,6 +64,26 @@ export class ResumeBackendUnsupportedError extends Error {
 	}
 }
 
+/**
+ * #151 R-2: a `pi` record that carries a `renewing` block is mid-/renew. Until that transition
+ * commits, the record still names the OUTGOING chapter (`nativeSessionId`/`transcriptPath` = its
+ * `from`), so a resume would reopen exactly the chapter the transition is closing — and after a
+ * failed transition that process may already be gone, so dormancy proves nothing here. A named
+ * refusal, matched on its `reason` FIELD like {@link ResumeBackendUnsupportedError}; it claims no
+ * liveness. Thrown before any transcript check, so a transition record whose path is missing or
+ * broken still reads as this refusal and not as an integrity error.
+ */
+export class ResumeRenewInProgressError extends Error {
+	readonly reason = "target-renew-in-progress" as const;
+	constructor(gardenId: string) {
+		super(
+			`resume-launch-identity: ${gardenId} is mid-/renew (its record carries a renewing block) — the record still ` +
+				`names the outgoing chapter until the transition commits, so a resume would reopen it.`,
+		);
+		this.name = "ResumeRenewInProgressError";
+	}
+}
+
 /** The launch-time facts `buildResumePiArgs` needs, resolved from the meta-record + the
  * recorded transcript (record authority, #50 C2/C3). */
 export interface PiLaunchIdentity {
@@ -201,6 +221,9 @@ export function resolveResumeLaunchIdentity(gardenId: string): LaunchIdentity {
 	}
 	if (record.backend !== "pi") {
 		throw new ResumeBackendUnsupportedError(gardenId, record.backend);
+	}
+	if (record.renewing !== undefined) {
+		throw new ResumeRenewInProgressError(gardenId);
 	}
 	const sessionFile = record.transcriptPath;
 	if (!sessionFile) {

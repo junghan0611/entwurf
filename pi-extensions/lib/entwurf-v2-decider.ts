@@ -300,6 +300,16 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 	}
 	const identity = resolution.identity;
 
+	// 2c-bis. #151 R-2: a record mid-/renew (`renewing` present) names neither its outgoing nor its
+	// reserved chapter as a delivery address until the transition commits or its operator recovers
+	// it. Refused by name for EVERY intent, before any lock, socket inspection, mailbox or adapter
+	// probe — the record answered, so no liveness is claimed (pre-probe, observedLiveness null).
+	// Only a `pi` record can carry the block (the reader refuses it elsewhere), but the check reads
+	// the record, not the backend, so it stays true if that domain ever widens.
+	if (identity.renewing !== undefined) {
+		return reject(makeRejectReceipt("renew-in-progress", null));
+	}
+
 	// 2d. native-push rail (봉인 4): a native-push backend (antigravity) is measured by its
 	// adapter probe, NOT the pi socket and NOT the mailbox. Intercept it HERE — after identity
 	// resolution + the address-conflict guard, but BEFORE the unsupported mailbox branch — so
@@ -407,6 +417,26 @@ async function decideInDomain(
 
 	let retainLock = false;
 	try {
+		// 4b. #151 R-2 (SOL D1): the renew mark was read on the PRE-lock resolution. A transition that
+		// wrote its mark after that read and then let go of the lock would be missed by that snapshot,
+		// so the record is read again under THIS lock. Every refusal that read can name is kept, in the
+		// pre-lock order, before the mark — a record gone since the first read (record-less-socket or
+		// bad-target) or an address conflict must not fall through to a socket the record no longer
+		// authorizes. Each is released before any socket inspection or probe (observedLiveness null).
+		// Nothing else is taken from this read; the routing below is unchanged.
+		const fresh = await deps.resolveTarget(gardenId);
+		if (fresh.identity === null) {
+			return rejectAfterRelease(
+				makeRejectReceipt(fresh.recordLessSocket === true ? "record-less-socket" : "bad-target", null),
+			);
+		}
+		if (fresh.preProbeAddressConflict) {
+			return rejectAfterRelease(makeRejectReceipt("target-address-conflict", null));
+		}
+		if (fresh.identity.renewing !== undefined) {
+			return rejectAfterRelease(makeRejectReceipt("renew-in-progress", null));
+		}
+
 		// 5. under the lock: inspect the socket (lstat-then-connect), then route.
 		const inspection = await inspectSocket(gardenId);
 		const mapped = await mapInspectionToLiveness(inspection, probeSocket);

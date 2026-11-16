@@ -430,9 +430,16 @@ ok(
 // cannot enforce it — these semantic fixtures (the SSOT predicate the 5b decider
 // mints against) do.
 eq(
-	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict/record-less-socket/native-push-paused",
+	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict/record-less-socket/native-push-paused/renew-in-progress",
 	[...PRE_PROBE_REJECT_REASONS],
-	["bad-target", "target-locked", "target-address-conflict", "record-less-socket", "native-push-paused"],
+	[
+		"bad-target",
+		"target-locked",
+		"target-address-conflict",
+		"record-less-socket",
+		"native-push-paused",
+		"renew-in-progress",
+	],
 );
 // the partition is exhaustive + disjoint: every reject reason is pre-probe XOR not.
 for (const r of ENTWURF_V2_REJECT_REASONS) {

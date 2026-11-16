@@ -1,0 +1,21 @@
+{
+	"previousRevision": 21,
+	"revision": 22,
+	"amendments": [],
+	"additions": [
+		{
+			"key": [
+				"rejectHints",
+				"renew-in-progress"
+			],
+			"new": "this citizen's record marks an in-progress /renew to a new native chapter under the same garden id, so this dispatch probed nothing and sent nothing. Delivery cannot address either chapter until the transition commits or is recovered by the human operator; send again after that. This is not a dormant or dead verdict."
+		},
+		{
+			"key": [
+				"resumeRejectHints",
+				"target-renew-in-progress"
+			],
+			"new": "this citizen's record marks an in-progress /renew to a new native chapter under the same garden id; resuming now would reopen the outgoing chapter while the transition is still uncommitted. Only the human operator can finish or recover that transition; resume or send again once the record shows no transition in progress"
+		}
+	]
+}

@@ -104,6 +104,14 @@ export async function resolveDeadControlSendFallback(
 	// path below is record-backed — a record-less socket never re-enters dispatch).
 	const identity = resolution.identity;
 
+	// #151 R-2 (SOL D2): this leaf re-resolves on its own, so decideDispatch's renew guard does not
+	// reach it. A record that has started a /renew since the first attempt names neither chapter as a
+	// delivery address: refuse by name under the held lock, before any re-inspect or re-probe. This
+	// says nothing about what the FIRST attempt observed — that probe already happened.
+	if (identity.renewing !== undefined) {
+		return { kind: "reject", reason: "renew-in-progress" };
+	}
+
 	// Unsupported backend (claude-code self-fetch, …) → the mailbox mini-table, keyed on
 	// intent alone. This is NOT an in-domain dormant (the N2 asymmetry) — a deliverable
 	// citizen's honest channel is its mailbox. No inspect/probe on this axis.

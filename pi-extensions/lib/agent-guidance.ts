@@ -28,6 +28,7 @@ const REJECT_HINT_REASONS = [
 	"native-push-target-dead",
 	"native-push-probe-indeterminate",
 	"native-push-paused",
+	"renew-in-progress",
 ] as const;
 
 export type RejectHintReason = (typeof REJECT_HINT_REASONS)[number];
@@ -45,6 +46,7 @@ const RESUME_REJECT_HINT_REASONS = [
 	"target-receiver-unbound",
 	"target-address-conflict",
 	"launch-refused",
+	"target-renew-in-progress",
 ] as const;
 
 export type ResumeRejectHintReason = (typeof RESUME_REJECT_HINT_REASONS)[number];

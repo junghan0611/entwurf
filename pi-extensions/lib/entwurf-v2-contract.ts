@@ -194,6 +194,7 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"native-push-target-dead", // 봉인 1: fire-and-forget to a native-push (agy) target whose adapter probe found NO live conversation. Post-probe; observedLiveness = dead.
 	"native-push-probe-indeterminate", // 봉인 1: fire-and-forget to a native-push target whose adapter probe was inconclusive (agy alive but no port served the conv, or a probe error). Post-probe; observedLiveness = indeterminate. Never coerced to dead.
 	"native-push-paused", // #152: fire-and-forget to a native-push backend whose send is paused by product policy (NATIVE_PUSH_PAUSED_BACKENDS — antigravity). Pre-probe, observedLiveness = null: nothing was probed, so no liveness is claimed — never coerced to dead or indeterminate.
+	"renew-in-progress", // #151 R-2: the target's record carries a `renewing` block — a /renew is moving it to a new native chapter, and until that transition commits (or its operator recovers it) neither chapter is a delivery address. Pre-probe, observedLiveness = null: the record answered, no socket or mailbox was looked at, so no liveness is claimed — never coerced to dormant or dead. NOT `target-locked`: the transition's lock is held only around its own writes, while the record mark outlives it (a failed transition can leave it for good).
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); fresh creation out of v2 scope
 	"record-less-socket", // #50 C4: a gid-shaped non-symlink control socket exists but NO meta-record claims it. The record is the sole address authority (목표 ②), so a bare socket is not an addressable citizen — it is a diagnostic state, refused for EVERY intent before any lock/probe (pre-probe, observedLiveness=null). NOT `bad-target`: something real answers to this gid, and mislabeling it absent would hide the very state the reject exists to surface.
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
@@ -202,13 +203,14 @@ export const ENTWURF_V2_REJECT_REASONS = [
 export type EntwurfV2RejectReason = (typeof ENTWURF_V2_REJECT_REASONS)[number];
 
 // ── Pre-probe reject reasons (？6 — observedLiveness = null) ────────────────
-// These five rejects are decided BEFORE any liveness probe runs, so there is no
+// These six rejects are decided BEFORE any liveness probe runs, so there is no
 // honest 4-value FactLiveness to stamp: `bad-target` (no citizen/backend),
 // `target-locked` (5a lock conflict, before lstat/connect), `target-address-conflict`
 // (address-subject conflict → probing is forbidden), `record-less-socket` (#50 C4:
 // no record ⇒ not a citizen ⇒ no in-domain probe ever runs — the presence hint is
 // a single lstat, not a liveness measurement), `native-push-paused` (#152: the backend's
-// native-push send is paused by policy, so its adapter is never probed). `indeterminate` means an
+// native-push send is paused by policy, so its adapter is never probed), `renew-in-progress` (#151:
+// the record itself marks a /renew transition, so neither chapter is probed). `indeterminate` means an
 // in-domain probe was inconclusive (≠ "not looked yet"); `unsupported` means the
 // backend has no predicate (≠ "pre-probe"). So a pre-probe reject's
 // observedLiveness is `null`, NOT one of the four values. Every OTHER reject —
@@ -226,6 +228,7 @@ export const PRE_PROBE_REJECT_REASONS = [
 	"target-address-conflict",
 	"record-less-socket",
 	"native-push-paused",
+	"renew-in-progress",
 ] as const satisfies readonly EntwurfV2RejectReason[];
 export type PreProbeRejectReason = (typeof PRE_PROBE_REJECT_REASONS)[number];
 

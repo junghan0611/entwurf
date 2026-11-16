@@ -87,6 +87,24 @@ real native lifecycle remain separate evidence axes; the one dated native lifecy
 is [BASELINE's 2026-10-22 n=1 round trip](./docs/baseline-receipts.md#147-native-round-trip-2026-10-22-n1). Historical delivery receipts below do
 not certify these candidate components.
 
+### A record mid-/renew is not a delivery target (#151 R-2)
+
+A `pi` record that carries a `renewing` block marks a /renew transition to a new native
+chapter under the same garden id. Until that transition commits — or the human operator
+recovers it — `entwurf_v2` refuses every intent as `renew-in-progress` before any lock,
+socket inspection, mailbox or adapter probe (`observedLiveness: null`). A mark written after
+that first read is still caught: the control-socket path re-reads the record under its lock,
+and so does the dead-control fallback, each refusing before any socket inspection or probe of
+its own. `entwurf_resume_call` refuses as `target-renew-in-progress` under its lock before any
+window, because the record still names the outgoing chapter. While the transition itself holds
+the target lock the answers differ by verb: a delivery whose first read already sees the mark
+answers `renew-in-progress` without touching the lock; a delivery whose first read did not yet
+see it answers `target-locked`; a resume takes the lock before it reads the record, so it
+answers `target-locked`. Both read the record only:
+neither claims the chapter is dormant, dead or alive, and a transition left by a failed
+renew keeps refusing until it is recovered. No writer opens this state on an operational
+host yet; the renew writer and its rollout floor are tracked in the #151 branch NEXT.
+
 ## Levels (D0–D8)
 
 These are independent of VERIFY's `L0–L5` evidence levels and BASELINE's question

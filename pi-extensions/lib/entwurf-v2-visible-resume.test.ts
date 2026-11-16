@@ -2333,7 +2333,7 @@ describe("the visible-resume rejection hints", () => {
 		const acp = renderVisibleResume({ ok: false, reason: "acp-model-not-curated", detail: "DETAIL" }).text;
 		ok(
 			`all ${reasons.length} static reasons render their root hint (unwired: ${unwired.join(", ") || "none"}); acp-model-not-curated keeps the shared constant`,
-			reasons.length === 11 &&
+			reasons.length === 12 && // #151 R-2 added target-renew-in-progress
 				unwired.length === 0 &&
 				!reasons.includes("acp-model-not-curated" as never) &&
 				acp.includes(`— ${ACP_MODEL_NOT_CURATED_HINT}. DETAIL.`),
