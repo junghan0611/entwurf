@@ -11,6 +11,13 @@
 
 # NOW
 
+- **oracle 수용 대기 (GLG 2026-11-16: release는 oracle, 이 lane은 할 수 있는 것만 커밋·push). oracle은 Orca를 설치하지 않는다 — Orca 검증 정보는 이 노트북 실측(#164 댓글 6906503079 측정 요약, 6907955407 소비자 설치 영수증, 이 NEXT)을 그대로 받아 release 때 정리한다.**
+  1. 이 branch의 커밋을 수용한다: Orca 안내(`plugins/orca/README.md`, 루트 README Orca 절), setup/durable 문서 0.55.0 갱신(+pi-floor mutant), pi 기본 모델 opus-5-5(`6d7adf84`).
+  2. 다음 release(예: 0.55.1)를 cut·publish한다. 0.55.0 소비자는 pi 기본 모델로 retired `claude-fable-5-1`을 받는다(소비자 실측, 턴 실패 여부 미측정).
+  3. publish 뒤 herdr runtime pin을 그 버전 registry bytes로 다시 잡는다(`plugins/herdr/runtime-lock.json`는 아직 `herdr-checkout` 후보 상태, `faa535a3` 선례). `plugins/herdr/README.md:526`의 "unpublished 0.55.0" 서술도 그때 맞춘다. 이 lane에서는 pin을 잡지 않는다(GLG).
+  4. Orca README와 setup 문서의 버전 예시를 새 버전으로 맞춘다.
+- **pi 기본 모델 → `claude-opus-5-5` (`6d7adf84`):** pi `findInitialModel`은 --model/--models·settings enabledModels/defaultModel이 없고 auth 있는 다른 provider가 앞서지 않으면 첫 등록 행을 고른다. entwurf 행이 pi-ai 카탈로그 순서를 따라 0.55.0에서 fable-5-1이 첫 행이었다. anchor를 첫 행으로 등록(settings 쓰기 없음). QK ACP-ROWS-ANCHOR-FIRST + mutant(레인 68→69), PARTIAL 69/69, check:full green(c87132a2 고정 트리). 리뷰 1c8604 Blocker/Defect 0. 이미 `entwurf/claude-fable-5-1`을 default로 저장한 사용자는 3·4단계로 내려와 opus가 될 것[추론, 미측정].
+
 - 팀(2026-11-16): 코디 Opus `20261116T105225-f17648` · 구현 Sonnet `20261116T121913-d5672e`(편집 범위 `plugins/orca/**`만, 구성안 승인 전 코드 금지) · 리뷰 Opus `20261116T122714-1c8604`(README 독립 리뷰, 편집 금지) · 소비자 Sonnet `20261116T140211-64a36b`(README만 받고 sandbox에서 npm 0.55.0 소비자 설치 수용 측정). GLG 결정: 코어는 npm pin 설치, 플러그인은 npm 패키징하지 않음, plugins/orca는 안내 문서만(점검 스크립트 없음).
 
 - GLG 직접 요청(이 세션): entwurf Opus를 실무코디로 열고, 코디가 필요한 형제들을 불러 진행한다. 이 노트북은 Orca 설치와 실험 가능. oracle은 코어 이슈 작업 전용이며 이 lane에서 Orca 설치·원격 변경을 하지 않는다.
