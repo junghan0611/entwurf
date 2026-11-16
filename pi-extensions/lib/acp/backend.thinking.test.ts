@@ -141,9 +141,7 @@ describe("curated Claude rows — pi's own thinking menu (#142)", () => {
 			refreshOnCreate: false,
 		});
 		const rows = models.curatedClaudeModels();
-		expect(rows.map((r) => r.id).sort()).toEqual(
-			["claude-fable-5-1", "claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"].sort(),
-		);
+		expect(rows.map((r) => r.id).sort()).toEqual(["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"].sort());
 		runtime.registerProvider("acp-thinking-oracle", {
 			baseUrl: "x",
 			apiKey: "x",

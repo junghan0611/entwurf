@@ -12,7 +12,7 @@
 // The model set comes from `allCuratedModels()` — the union across the adapter
 // registry (backend-adapter.ts), NOT a per-backend list spelled here. Adding a
 // backend therefore never edits this file. check-acp-provider-surface pins that
-// the compiled entry registers the exact supported set — the four Claude rows and the
+// the compiled entry registers the exact supported set — the three Claude rows and the
 // three `agy-` rows (#167), no retired Cortex row ([QK:ACP-PROVIDER-CLAUDE-ONLY]).
 //
 // Fence: this entry rides the emit-capable root tsconfig (it is not in the root

@@ -3386,7 +3386,7 @@ check_acp_provider_surface() {
   # provider lib modules AND compiles + drives the REAL entry against a fake pi,
   # asserting: one surface name, the no-auth sentinel shape, full
   # ProviderModelConfig rows on the curated Claude anchor, the exact supported
-  # set — Claude four + agy three, no Cortex [QK:ACP-PROVIDER-CLAUDE-ONLY] — and that streamSimple is the real
+  # set — Claude three + agy three, no Cortex [QK:ACP-PROVIDER-CLAUDE-ONLY] — and that streamSimple is the real
   # streamShellAcp backend (checked BY NAME, never invoked — invoking spawns an
   # ACP child). Pure, no pi runtime, no API.
   section "ACP provider surface (registration + exact curated model set)"
@@ -5288,7 +5288,7 @@ _check_pack_install_impl() {
     echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
     return 1
   fi
-  # Verify the EXACT supported surface the installed package registers: four
+  # Verify the EXACT supported surface the installed package registers: three
   # Claude rows and three agy rows (#167), no retired Cortex row. A substring probe cannot prove absence.
   # This gate joins the source admission to pack → install → real Pi loader.
   #
@@ -5298,7 +5298,6 @@ _check_pack_install_impl() {
   local loader_ids loader_expected
   loader_ids=$(awk '$1 == "entwurf" { print $2 }' <<<"$loader_out" | LC_ALL=C sort)
   loader_expected=$(printf '%s\n' \
-    claude-fable-5-1 \
     claude-fable-5-2 \
     claude-opus-5-5 \
     claude-sonnet-5-5 \
@@ -5306,7 +5305,7 @@ _check_pack_install_impl() {
     agy-gemini-4-argon \
     agy-gemini-3.8-flash | LC_ALL=C sort)
   if [ "$loader_ids" != "$loader_expected" ]; then
-    fail "[check-pack-install] installed provider model set drifted — expected exactly 4 Claude ids, 3 agy ids and no Cortex ids:"
+    fail "[check-pack-install] installed provider model set drifted — expected exactly 3 Claude ids, 3 agy ids and no Cortex ids:"
     echo "  expected:" >&2
     echo "$loader_expected" | sed 's/^/    /' >&2
     echo "  actual (entwurf rows):" >&2
@@ -5318,7 +5317,7 @@ _check_pack_install_impl() {
   # Name the set on SUCCESS too, not only in the failure branch — same principle as
   # the pinned-pi version assert above: a gate that cannot name what it proved has
   # proved nothing, and a row COUNT without the ids cannot be audited from a CI log.
-  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: 4 Claude ids, 3 agy ids, no Cortex):"
+  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: 3 Claude ids, 3 agy ids, no Cortex):"
   echo "$loader_ids" | sed 's/^/    /'
 
   # npm-managed neutral install regression — the README's PRIMARY install path is

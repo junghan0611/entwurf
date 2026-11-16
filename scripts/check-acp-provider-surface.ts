@@ -138,22 +138,22 @@ try {
 		assert.ok(capIds.includes(want), `entry model surface missing ${want} (got: ${capIds.join(", ") || "none"})`);
 	}
 
-	// Independent literal oracle: the compiled provider exposes the four Claude
+	// Independent literal oracle: the compiled provider exposes the three Claude
 	// rows and no retired Cortex row, even if a source list drifts with the SUT.
-	const expectedIds = ["claude-fable-5-1", "claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"];
+	const expectedIds = ["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"];
 	assert.deepEqual(
 		[...SUPPORTED_ANTHROPIC_MODEL_IDS].sort(),
 		expectedIds,
-		"[QK:CLAUDE-CURATED-FOUR-ROWS] the four Claude IDs are an independent literal oracle",
+		"[QK:CLAUDE-CURATED-ROWS] the three Claude IDs are an independent literal oracle",
 	);
 	// #167: the Antigravity ACP adapter adds three reserved-prefix rows. Literal here for the same
-	// reason as the Claude four. The QK keeps its name — it is the stable key the mutant manifest
+	// reason as the Claude rows. The QK keeps its name — it is the stable key the mutant manifest
 	// cites — and still certifies what it always did: the exact supported set, no retired Cortex row.
 	const expectedAgyIds = ["agy-gemini-3.8-flash", "agy-gemini-4-argon", "agy-gemini-4-hydrogen"];
 	assert.deepEqual(
 		capIds.slice().sort(),
 		[...expectedAgyIds, ...expectedIds],
-		`[QK:ACP-PROVIDER-CLAUDE-ONLY] compiled provider must expose exactly the four Claude rows and the three agy rows, and no retired Cortex row — got: ${capIds.join(", ") || "none"}`,
+		`[QK:ACP-PROVIDER-CLAUDE-ONLY] compiled provider must expose exactly the three Claude rows and the three agy rows, and no retired Cortex row — got: ${capIds.join(", ") || "none"}`,
 	);
 	assert.equal(typeof cap.cfg.streamSimple, "function", "entry streamSimple must be a function");
 	// Regression guard: the entry must wire the REAL backend (streamShellAcp),

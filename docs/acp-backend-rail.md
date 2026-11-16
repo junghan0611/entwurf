@@ -568,7 +568,7 @@ not an executable route; Cortex model admission and direct adapter use now refus
 
 | Seam | Claude | Former Cortex Code (historical) |
 |---|---|---|
-| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, `claude-fable-5-2` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
+| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-2` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
 | Model authority | per-turn ACP set-model, its answer read back before the prompt | per-turn ACP set-model; an unavailable curated id fails before prompt; the answer is not read back |
 | Thinking level | pi's level → `effort`, set and read back before the prompt (§Claude effort) | not declared: no `thinkingLevelMap`, `reasoning` is not carried |

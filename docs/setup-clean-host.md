@@ -1098,8 +1098,8 @@ operator-installed Claude runtime. Resolution order:
 2. `require.resolve(...)` against the bundled `@agentclientprotocol/claude-agent-acp`.
 3. `PATH:claude-agent-acp` fallback if package resolution fails.
 
-The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`,
-`claude-fable-5-1`, and `claude-fable-5-2`. Cortex ACP is disabled; a legacy
+The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`, and
+`claude-fable-5-2`. Cortex ACP is disabled; a legacy
 `entwurfProvider.cortexConnection` does not select a backend or block Claude.
 Codex and Antigravity are native-push citizens (§4c/§5), not ACP backends.
 
