@@ -7,7 +7,8 @@
 - [x] **3. 로컬 Orca 설치·실측.** M1~M3f 완료, #164 댓글 6906503079.
 - [x] **4. plugins/orca/README.md(영어, 64줄) + 루트 README Orca 절.** `7f7b5359`, Sonnet 작성 · Opus 리뷰 3회(Blocker 0). GLG 요청으로 commit+push.
 - [x] **5. 소비자 수용 측정.** README만 받은 새 Sonnet `20261116T140211-64a36b`가 sandbox HOME에 npm 0.55.0 설치→setup green→Orca 터미널 시민 출생(로그인 없음). 막힌 곳을 README에 반영(`4bf643b5`), setup/durable 문서 0.55.0 갱신(`348c78aa`), 영수증 #164 댓글 6907955407.
-- [ ] **6. 후속.** ← CURRENT: (a) 시험 자원 정리(대상별 GLG 확인): lab serve/GUI(tmux orca164m3, orca164gui), consumer serve(tmux orca164consumer), Orca 데몬·PTY, worktree cabezon/sturgeon/tarpon + lab repo, 측정 시민(c69848, 6f4745, 6ed129, 92f112, 94355d, 소비자 sandbox 845ceb), Orca가 운영자 HOME에 쓴 설정(settings.json 훅 16+.bak, agent-config keybindings.json+.bak, Pi 확장 3, orca-agent-view.json, ~/.orca, 재생성된 ~/.config/opencode) (b) 형제 Sonnet d5672e·리뷰어 1c8604·소비자 64a36b는 GLG 지시로 유지 중 (c) merge 전 이 NEXT 삭제·지속 사실 승격.
+- [x] **6. 시험 자원 회수 (GLG 요청, 2026-11-16 15:10 KST).** 형제·시험 시민 retire(d5672e·1c8604·64a36b·92f112·94355d shutdown-requested, c69848·6f4745 exited, 6ed129 receiver-dead로 이미 종료), Orca serve 2·GUI·데몬/PTY scope 0, worktree·~/orca 제거, Orca가 쓴 설정 복원(settings.json은 pre-Orca .bak 바이트로, agent-config keybindings checkout, Pi 확장 3·orca-agent-view·~/.orca·~/.config/orca·~/.config/opencode 제거). 운영자 HOME은 pre-Orca 스냅샷과 Claude 자체 churn 외 동일(`m3-operator-home/receipts/M3-after-cleanup.sha256`). lab 바이너리·sandbox 삭제, 영수증 디렉터리만 보존(~/.local/share/entwurf-lab/164/*/receipts). Sonnet의 PARTIAL/check:full 로컬 영수증(/tmp)은 정리 중 지워짐 — 결과는 `6d7adf84` 커밋 메시지에 남음.
+- [ ] **7. oracle 수용.** ← CURRENT: 위 NOW의 oracle 항목. merge 전 이 NEXT 삭제·지속 사실 승격.
 
 # NOW
 
