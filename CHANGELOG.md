@@ -4,6 +4,59 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.55.1 — 2026-11-16
+
+### What an npm user gets
+
+Antigravity joins Claude as an ACP backend (#167): three `entwurf/agy-gemini-*` rows a pi session can run, open with `entwurf_fresh_call` or reopen with `entwurf_resume_call`. The entwurf Claude rows now register `claude-opus-5-5` first (the row pi falls back to when nothing else selects a model), and the retired `claude-fable-5-1` row is gone. The package also carries an Orca guide (#164). The Pi 1.5.2 SDK set, the Claude ACP adapter 0.107.0 and the host Pi floor `>=1.5.2 <1.6` are unchanged from 0.55.0.
+
+### Antigravity ACP backend (#167)
+
+- **Rows.** `entwurf/agy-gemini-4-hydrogen`, `entwurf/agy-gemini-4-argon` and `entwurf/agy-gemini-3.8-flash` drive `agy acp` (agy on `PATH`, the operator's own Google login) as a child of the host pi session. It registers no citizen and adds no meta-store backend; agy's native push stays paused (#152). Measured against agy 1.5.9.
+- **Isolation.** The child runs on its own state root with one file of the operator's agy state linked in (the OAuth token), the operator's global `skillPlugins` linked into agy's skill seat, and explicit `mcpServers` only. agy loads the session cwd's `AGENTS.md` itself, so the first-message augment omits that section for an agy child.
+- **Permissions are bypassed.** agy runs with `--dangerously-skip-permissions`; an operator `tools`, `disallowedTools` or `permissionAllow` setting refuses an agy turn (`acp-agy-narrowing-unsupported`) rather than being ignored.
+- **No blind replay.** A prompt-phase exception the agy adapter catches after the prompt is sent seals one fixed verdict that pi's retry and overflow classifiers do not match, and keeps the raw failure as a diagnostic, so pi's automatic retry does not re-send a whole prompt whose tools may already have run. It is not an exactly-once guarantee: a returned stop reason, a tool-level error or a caller's own re-request are outside it. A bootstrap failure keeps its verbatim path. Cost: a transient failure or a real overflow after the prompt is reported instead of retried or compacted. The wording agy uses for an exhausted quota or an expired login is not measured.
+- **Refused by name on an agy row:** pi's summary turn (`/compact`, threshold compaction, overflow recovery, `/tree` summaries: `acp-summary-turn-unsupported`, switch to a Claude row) and a thinking level the row does not offer (`acp-agy-thinking-level-unsupported`).
+- **Known limit.** A command agy hands to a background task outlives the child (re-parented to init); no vendor switch closes it. Accepted by GLG on 2026-11-16, same family as #125.
+- Contract and measurements: `docs/acp-backend-rail.md` §Antigravity.
+
+### Default model and Claude rows
+
+- The entwurf provider registers `claude-opus-5-5` first, then the curated ids, instead of following pi-ai's catalog order. With no `--model`, no saved default and no other authenticated provider ahead of it, pi picks the first row, so a 0.55.0 consumer started on `claude-fable-5-1` and a 0.55.1 consumer starts on `claude-opus-5-5` (`[QK:ACP-ROWS-ANCHOR-FIRST]`).
+- `claude-fable-5-1` is no longer a row; the Claude rows are `claude-fable-5-2`, `claude-opus-5-5` and `claude-sonnet-5-5`.
+
+### Orca (#164)
+
+- `plugins/orca/README.md` and a root README entry: running Entwurf citizens inside an Orca server's terminals (pi and Claude Code; opencode out of scope). It is a guide only: the core installs from npm, and there is no Orca plugin package or check script. Its measurements were taken on 0.55.0 and say so.
+
+### Documentation
+
+- The setup, durable-support, VERIFY, external-MCP-host and adding-a-harness texts now describe the 0.55.1 package: agy ACP rows beside Claude, the opus-first row, and agy native push as paused and separate from the ACP adapter.
+
+### Herdr
+
+- The runtime lock stays on the closed `herdr-checkout` carrier while 0.55.1 is unpublished, as in the 0.55.0 prepare; no npm version or integrity is invented. The last published npm pin is still 0.53.1 (snapshot `v2026.11.14-herdr.0.53.1`); 0.55.0 was not re-pinned. Re-pin to measured 0.55.1 registry bytes after publication is a separate Herdr step.
+
+### Release evidence
+
+The candidate tree is `bcf906ab` (main after the docs land, exact-SHA CI run 43822526404, four required jobs success; its parent `8fabe6ac` had its own frozen FULL, 1011s, and CI run 43821793109) plus this section's release-prep edits: CHANGELOG, `package.json` version, the `plugins/herdr/runtime-lock.json` comment, NEXT and one stale row in `docs/acp-backend-rail.md`.
+
+- P4 (deterministic floor), seal `13f72abaf65ded3d` (before = after; sha256 of HEAD + `git diff --binary` + `git diff --cached --binary` + untracked sha256sums, first 16 hex): frozen offline install sync rc=0, `pnpm run build-bridge` rc=0 and byte-identical to the preserved dist manifest, then `pnpm run check:full` exit 0 in 1026s (2026-11-16 16:43–17:00 KST). Log SHA-256 `7208f650ff835ab06b7d56dcde0db1c3b400fe592306d2c0a029dfbc938276a5`.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-16 17:00–17:24 KST: MUST 25 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0. Log SHA-256 `03b902ce95aee109280a8be027dfad10c050e0fcc56cc51ae62fb859d62c3564`; scratch `/tmp/entwurf-release-gate-0.55.1.qamykB`. The seal was unchanged after the gate.
+  - `smoke-codex-fresh-live` ran against an app-server started for this cut (`entwurf codex-app-server`, pid 1928392, tmux session `codex-as-0551`, separate from the gate's session `rg-0551`), stopped after the run. Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`.
+  - `check-openclaw-home-receipt` (MUST, VERIFY criterion 11) read `~/.local/share/entwurf-lab/160/receipt-0.55.1-bcf906ab/receipt.json` (sha256 `e9a9a7adad24…`) for home `oracle/main/agent:main:entwurf#20261115T215046-12438c`, measured 2026-11-16 16:34–16:38 KST with GLG present. Its candidate is `bcf906ab`, the parent of the prepare commit. Rows: open, address, consume, reply, close, refusal, visibility, modelPolicy, sendScope and resources pass; compactReset unmeasured (no vendor compaction in the window; Entwurf's side is QK OPENCLAW-RESET-KEEPS-GARDEN). Round trip token R0551: the desk's one exec made three `entwurf_v2` calls (Claude Code self-fetch enqueued, a pi control-socket citizen sent and seen in its transcript, a missing garden rejected `bad-target`) and a summary. Visibility is the Gateway's `chat.history` for that key plus two looks by GLG in the OpenClaw web surface, relayed in session, not a captured screen. The close row emptied the operator's declaration for 8 s and restored it byte-identical (sha256 `6fe3c9ea…`). Measured on OpenClaw 2026.11.3 (`847611d`); the desk's `agentRuntime` is now `openclaw` (source `model`), where 0.55.0 measured `codex` (implicit), after an operator config change on 2026-11-16.
+- Saved-default cell, measured twice, the second run being the receipt. Run 2 (2026-11-16 17:32 KST): a fresh sandbox HOME with every command run from the sandbox's own work directory; a tarball packed from this candidate (the tree at seal `13f72abaf65ded3d` plus this evidence text; code identical; sha256 `1679b8f7921b…`) installed with `npm install -g --prefix`; `entwurf setup` (pi PASS, core PASS) wrote its project scope into the sandbox work directory; pi 1.5.2, RPC `get_state`, no prompt sent. With no saved default pi selected `entwurf/claude-opus-5-5`; with `{"defaultProvider": "entwurf", "defaultModel": "claude-fable-5-1"}` seeded it also selected `entwurf/claude-opus-5-5`, printed no model error and left the settings file unchanged (n=1 each; RPC mode only, the interactive TUI was not observed).
+  - Run 1 is kept as an incident. Impact: its `entwurf setup` was run with the checkout as the working directory, so it wrote project-scope wiring (a `/tmp` package path) into the checkout's `.pi/settings.json` for about two minutes, after the gate had finished. Recovery: restored from git; the seal returned to `13f72abaf65ded3d`. Limit of the check: among processes still alive afterwards, no pi had started in the checkout in that window; a short-lived process that started and exited inside it is not ruled out. Run 1's two cells read the same as run 2 but are not the receipt.
+- P9 after P5: reclaimable roots 0. One reparented `/tmp` process, the Emacs daemon. About 61 roots each of `mux-resume-call-pd`, `herdr-resume-pd-pkg`, `herdr-resume-pd-nolauncher` and `herdr-resume-call` remain, from the beside-behaviour `*resume-call.test.ts` files outside the owned-prefix scan. Recorded, not deleted.
+- Kill-power re-measured at this shipped SHA: none (all 1669 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 8f61e895bab4 surface 2d97a2550fe3 -- ["bash","run.sh","check-acp-vendor-rejection"] 6/6 receipt 8346b662c413
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 8f61e895bab4 surface 2d97a2550fe3 -- ["bash","run.sh","check-acp-set-model-readback"] 68/68 receipt 707dabdc9c90
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 8f61e895bab4 surface 2d97a2550fe3 -- ["bash","run.sh","check-acp-prompt-lifecycle"] 15/15 receipt 25b653d5b12f
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 8ed8973d010e surface 2bfbf9ce7b1a -- ["bash","run.sh","check-acp-set-model-readback"] 69/69 receipt 9823f9b5e53d
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 8ed8973d010e surface 2bfbf9ce7b1a -- ["bash","run.sh","check-dep-versions"] 5/5 receipt 462e9e24b41b
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 8fabe6acecd5 surface 075ca6548bfe -- ["bash","run.sh","check-dep-versions"] 5/5 receipt e2a26e953e15
+- Exact prepared-SHA CI and the artifact acceptance belong to make and produce their own receipts.
+
 ## 0.55.0 — 2026-11-15
 
 ### What an npm user gets
