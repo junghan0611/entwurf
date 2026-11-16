@@ -6,11 +6,12 @@
 - [x] **2. Opus 실무코디 합류와 최신 API 확인.** 코디 `20261116T105225-f17648`. Host API 1.10 문서 판독(stablyai/orca main 69edf46e).
 - [x] **3. 로컬 Orca 설치·실측.** M1~M3f 완료, #164 댓글 6906503079.
 - [x] **4. plugins/orca/README.md(영어, 64줄) + 루트 README Orca 절.** `7f7b5359`, Sonnet 작성 · Opus 리뷰 3회(Blocker 0). GLG 요청으로 commit+push.
-- [ ] **5. 후속.** ← CURRENT: (a) 샘플 설정/가이드 보강 여부(GLG: "샘플 설정 파일이나 방법 가이드가 더 필요할 수도") — 예: serve PATH에 npm bin을 넣는 기동 예시, 실측 후에만 싣기 (b) 시험 자원 정리(대상별 GLG 확인) (c) 형제 Sonnet/리뷰어는 GLG 지시로 유지 중 (d) merge 전 이 NEXT 삭제·지속 사실 승격.
+- [x] **5. 소비자 수용 측정.** README만 받은 새 Sonnet `20261116T140211-64a36b`가 sandbox HOME에 npm 0.55.0 설치→setup green→Orca 터미널 시민 출생(로그인 없음). 막힌 곳을 README에 반영(`4bf643b5`), setup/durable 문서 0.55.0 갱신(`348c78aa`), 영수증 #164 댓글 6907955407.
+- [ ] **6. 후속.** ← CURRENT: (a) 시험 자원 정리(대상별 GLG 확인): lab serve/GUI(tmux orca164m3, orca164gui), consumer serve(tmux orca164consumer), Orca 데몬·PTY, worktree cabezon/sturgeon/tarpon + lab repo, 측정 시민(c69848, 6f4745, 6ed129, 92f112, 94355d, 소비자 sandbox 845ceb), Orca가 운영자 HOME에 쓴 설정(settings.json 훅 16+.bak, agent-config keybindings.json+.bak, Pi 확장 3, orca-agent-view.json, ~/.orca, 재생성된 ~/.config/opencode) (b) 형제 Sonnet d5672e·리뷰어 1c8604·소비자 64a36b는 GLG 지시로 유지 중 (c) merge 전 이 NEXT 삭제·지속 사실 승격.
 
 # NOW
 
-- 팀(2026-11-16): 코디 Opus `20261116T105225-f17648` · 구현 Sonnet `20261116T121913-d5672e`(편집 범위 `plugins/orca/**`만, 구성안 승인 전 코드 금지) · 리뷰 Opus `20261116T122714-1c8604`(README 독립 리뷰, 편집 금지). GLG 결정: 코어는 npm pin 설치, 플러그인은 npm 패키징하지 않음, plugins/orca는 안내 문서만(점검 스크립트 없음).
+- 팀(2026-11-16): 코디 Opus `20261116T105225-f17648` · 구현 Sonnet `20261116T121913-d5672e`(편집 범위 `plugins/orca/**`만, 구성안 승인 전 코드 금지) · 리뷰 Opus `20261116T122714-1c8604`(README 독립 리뷰, 편집 금지) · 소비자 Sonnet `20261116T140211-64a36b`(README만 받고 sandbox에서 npm 0.55.0 소비자 설치 수용 측정). GLG 결정: 코어는 npm pin 설치, 플러그인은 npm 패키징하지 않음, plugins/orca는 안내 문서만(점검 스크립트 없음).
 
 - GLG 직접 요청(이 세션): entwurf Opus를 실무코디로 열고, 코디가 필요한 형제들을 불러 진행한다. 이 노트북은 Orca 설치와 실험 가능. oracle은 코어 이슈 작업 전용이며 이 lane에서 Orca 설치·원격 변경을 하지 않는다.
 - 목적(GLG 전달): 이번 주 회사 동료에게 설치해서 쓸 수 있는 Orca용 Entwurf 플러그인을 남긴다. 동료들은 headless Orca 서버에 GUI와 휴대폰으로 접속한다. TUI 데스크톱만 검증해서 끝내지 않는다.
@@ -22,6 +23,8 @@
 - Do not touch: oracle 호스트, 다른 코어 lane, main NEXT.md, 인증/구독, 기존 시민 임의 종료, push/release. commit은 GLG의 별도 요청과 commit workflow에서만. worktree/개발 clone 금지. 병합 전에 이 branch NEXT를 삭제하고 지속 사실을 승격한다.
 
 # RECENT
+
+- 2026-11-16 lane 밖 관측(미처리, GLG 판단): `plugins/herdr/README.md:526`이 0.55.0을 아직 "unpublished checkout candidate"로 적음 · 0.55.0 소비자 pi 시작 화면 `Extension issues … peerDependencies` 경고(동작 지장 없음) · 0.55.0 소비자 pi 첫 record/상태줄 모델이 main 8f61e895에서 curated 해제된 `claude-fable-5-1`(턴 실패 여부 미측정).
 
 - 2026-11-16 M3 로컬(운영자 HOME, Orca 기본값, orcad v1.4.259 + 페어링된 데스크톱 GUI 클라이언트, 별도 client HOME): 왕복 3건 n=1 성공 — M3a `entwurf claude`(c69848), M3c GUI에서 Orca가 띄운 plain Claude Code(6f4745, 사용자 범위 Entwurf 훅으로 시민), M3b `entwurf pi`(92f112). Claude Code는 메일을 자동으로 읽되 실행은 pane 사람 승인 후(inbox_read 도구 설명의 untrusted 규칙), Pi는 즉시 회신. 영수증 `~/.local/share/entwurf-lab/164/m3-operator-home/receipts/SUMMARY.md`. GLG 방향: `plugins/orca`(herdr처럼), npm 사용자 설치, herdr 플러그인과 세트 출시, 대상 하네스는 pi·claude-code만, opencode 범위 밖(운영자 opencode 설정은 GLG 요청으로 삭제·tar 백업).
 
