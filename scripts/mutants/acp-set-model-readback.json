@@ -36,6 +36,28 @@
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		},
 		{
+			"claim": "ACP-ROWS-ANCHOR-FIRST",
+			"title": "the curated Claude rows come back in pi-ai catalog order — with no other auth pi takes the first entwurf row as its default model, so a catalog reshuffle silently changes the default",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": [
+				"\tconst orderedIds = [",
+				"\t\tCURATED_ANCHOR_MODEL_ID,",
+				"\t\t...SUPPORTED_ANTHROPIC_MODEL_IDS.filter((id) => id !== CURATED_ANCHOR_MODEL_ID),",
+				"\t];",
+				"\treturn orderedIds",
+				"\t\t.flatMap((id) => ANTHROPIC_MODELS_ALL.filter((m) => m.id === id))"
+			],
+			"replace": [
+				"\tconst supported = new Set<string>(SUPPORTED_ANTHROPIC_MODEL_IDS);",
+				"\treturn ANTHROPIC_MODELS_ALL",
+				"\t\t.filter((m) => supported.has(m.id))"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ROWS-ANCHOR-FIRST]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
 			"claim": "ACP-CLAUDE-THINKING-REFUSE-UNMAPPED",
 			"title": "any mapped string passes as an effort — a map value the driver does not offer reaches the wire instead of a named refusal",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",

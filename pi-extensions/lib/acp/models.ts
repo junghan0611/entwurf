@@ -137,18 +137,26 @@ export function claudeAcpThinkingLevelMap(registry: RegistryModel["thinkingLevel
  * Fail-loud if the anchor is absent from the pi-ai registry.
  */
 export function curatedClaudeModels() {
-	const supported = new Set<string>(SUPPORTED_ANTHROPIC_MODEL_IDS);
+	// Row order is part of the surface: with no other auth, pi picks the first registered row of
+	// this provider as the default model, so the anchor is first and the rest follow the curated
+	// id list — never pi-ai's catalog order.
 	requireRegistryModel(ANTHROPIC_MODELS_ALL, CURATED_ANCHOR_MODEL_ID);
-	return ANTHROPIC_MODELS_ALL.filter((m) => supported.has(m.id)).map((m) => ({
-		id: m.id,
-		name: m.name,
-		reasoning: m.reasoning,
-		thinkingLevelMap: claudeAcpThinkingLevelMap(m.thinkingLevelMap),
-		input: [...ACP_ROW_INPUT],
-		cost: m.cost,
-		contextWindow: claudeContextWindow(m),
-		maxTokens: m.maxTokens,
-	}));
+	const orderedIds = [
+		CURATED_ANCHOR_MODEL_ID,
+		...SUPPORTED_ANTHROPIC_MODEL_IDS.filter((id) => id !== CURATED_ANCHOR_MODEL_ID),
+	];
+	return orderedIds
+		.flatMap((id) => ANTHROPIC_MODELS_ALL.filter((m) => m.id === id))
+		.map((m) => ({
+			id: m.id,
+			name: m.name,
+			reasoning: m.reasoning,
+			thinkingLevelMap: claudeAcpThinkingLevelMap(m.thinkingLevelMap),
+			input: [...ACP_ROW_INPUT],
+			cost: m.cost,
+			contextWindow: claudeContextWindow(m),
+			maxTokens: m.maxTokens,
+		}));
 }
 
 // ---------------------------------------------------------------------------
