@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
 	certifyActiveStore,
 	claimedNativeSessionIds,
+	FRESH_CUT_COMMAND,
 	listAllMetaIdentitiesDir,
 	type MetaIdentity,
 	parseMetaIdentity,
@@ -276,5 +277,83 @@ describe("#151 R-1b: the latest outline slot and the chapter model", () => {
 		const back = parseMetaIdentity(serializeMetaIdentity({ ...BASE, renewing: RENEWING }));
 		expect(back.outline).toBeUndefined();
 		expect(back.renewing?.outline).toBe(CANDIDATE);
+	});
+});
+
+describe("#151 R-1c: chapter times are the original's own, and an unknown key is not a generation by itself", () => {
+	it("[QK:RENEW-R1C-CHAPTER-TIME-NULLABLE] a chapter whose original times could not be read keeps null, round-trips, and an empty string is still refused", () => {
+		// Each time is undetermined on its own: both, the start only, the end only.
+		for (const [startedAt, endedAt] of [
+			[null, null],
+			[null, CHAPTERS[0].endedAt],
+			[CHAPTERS[0].startedAt, null],
+		] as const) {
+			const one = serializeMetaIdentity(lived({ ...BASE, chapters: [{ ...CHAPTERS[0], startedAt, endedAt }] }));
+			const parsed = parseMetaIdentity(one);
+			expect(parsed.chapters?.[0].startedAt).toBe(startedAt);
+			expect(parsed.chapters?.[0].endedAt).toBe(endedAt);
+			expect(serializeMetaIdentity(parsed)).toBe(one);
+		}
+		const text = serializeMetaIdentity(
+			lived({ ...BASE, chapters: [{ ...CHAPTERS[0], startedAt: null, endedAt: null }] }),
+		);
+		for (const key of ["startedAt", "endedAt"] as const) {
+			const raw = JSON.parse(text);
+			raw.chapters[0][key] = "";
+			expect(() => parseMetaIdentity(JSON.stringify(raw))).toThrow(new RegExp(`chapters\\[0\\]\\.${key}`));
+		}
+	});
+
+	it("[QK:RENEW-R1C-UNKNOWN-KEY-STALE-READER-FIRST] an unexpected V3 key is refused with the stale-reader check named before the generation cut", () => {
+		const raw = JSON.parse(serializeMetaIdentity(BASE));
+		raw.futureKey = { anything: true };
+		let message = "";
+		try {
+			parseMetaIdentity(JSON.stringify(raw));
+		} catch (e) {
+			message = (e as Error).message;
+		}
+		expect(message).toContain('unexpected key(s) "futureKey"');
+		expect(message).toContain("reader-version skew");
+		expect(message).toContain("damaged or foreign data");
+		expect(message).toContain("keep the identity");
+		expect(message).toContain("never by itself a reason to archive");
+		expect(message.indexOf("matching reader")).toBeGreaterThan(-1);
+		expect(message.indexOf("matching reader")).toBeLessThan(message.indexOf(FRESH_CUT_COMMAND));
+	});
+
+	it("[QK:RENEW-R1C-STORE-REFUSAL-NAMES-KEY-SKEW] a store holding a newer reader's key refuses writes and says the reader may be stale", () => {
+		const raw = JSON.parse(serializeMetaIdentity(BASE));
+		raw.futureKey = 1;
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "renew-r1c-"));
+		tmpDirs.push(dir);
+		fs.writeFileSync(path.join(dir, `${BASE.gardenId}.meta.json`), `${JSON.stringify(raw)}\n`);
+		const before = snapshot(dir);
+		expect(() =>
+			upsertMetaSession({ dir, input: { backend: "pi", nativeSessionId: "native-other", cwd: "/tmp/w" } }),
+		).toThrow(
+			/An unexpected key may be the same skew, an older schema or damaged data: .*do not archive for the key alone/,
+		);
+		expect(snapshot(dir)).toEqual(before);
+	});
+
+	it("[QK:RENEW-R1C-STORE-REFUSAL-CHECK-BEFORE-ARCHIVE] the store refusal names the cause check before any archive, and archives only what is confirmed rotten", () => {
+		const raw = JSON.parse(serializeMetaIdentity(BASE));
+		raw.futureKey = 1;
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "renew-r1c-"));
+		tmpDirs.push(dir);
+		fs.writeFileSync(path.join(dir, `${BASE.gardenId}.meta.json`), `${JSON.stringify(raw)}\n`);
+		let message = "";
+		try {
+			upsertMetaSession({ dir, input: { backend: "pi", nativeSessionId: "native-other", cwd: "/tmp/w" } });
+		} catch (e) {
+			message = (e as Error).message;
+		}
+		const check = message.indexOf("Find the cause in the listed defects first");
+		const archive = message.indexOf("archiving the generation");
+		expect(check).toBeGreaterThan(-1);
+		expect(archive).toBeGreaterThan(check);
+		expect(message).toContain("Only entries confirmed to be a previous or unusable generation");
+		expect(message.indexOf(FRESH_CUT_COMMAND)).toBeGreaterThan(check);
 	});
 });

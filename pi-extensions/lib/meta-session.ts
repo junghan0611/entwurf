@@ -473,8 +473,24 @@ export interface RenewChapter {
 	 * record's model as it goes. Not proof of what a provider served, and not a kind of being.
 	 */
 	model: string | null;
-	startedAt: string;
-	endedAt: string;
+	/**
+	 * The time the chapter's ORIGINAL recorded first: its transcript header `timestamp` (#151, GLG:
+	 * "각 세션원본의 시작과 끝시간"). Read once, at the commit that closes the chapter, from the file's
+	 * metadata alone — never by opening it as a session and never to summarise. Null when it could
+	 * not be determined (absent from the original, or unreadable): null says the value is not known,
+	 * not that the original proved it absent, and it is never filled from the garden birthday, the
+	 * commit time or a neighbour chapter. A null time does not turn a failed integrity, ownership or
+	 * path check of the original into a success.
+	 */
+	startedAt: string | null;
+	/**
+	 * The `timestamp` of the original's last persisted entry, read the same way; null when it could
+	 * not be determined, independently of `startedAt`. The last thing the original RECORDED — not proof of its last physical write, its
+	 * seal or its process's exit. Chapter times need not meet: a gap, an overlap, an inherited fork
+	 * entry or a clock skew is shown as it is, never smoothed into a continuous span. When the
+	 * record's pointer moved is a transition fact, not this.
+	 */
+	endedAt: string | null;
 }
 
 const RENEW_TOKEN_RE = /^[0-9a-f]{32}$/;
@@ -585,8 +601,8 @@ export function requireRenewChapters(value: unknown): RenewChapter[] {
 			nativeSessionId: requireNonEmptyString(obj.nativeSessionId, `chapters[${i}].nativeSessionId`),
 			transcriptPath: requireNullableString(obj.transcriptPath, `chapters[${i}].transcriptPath`),
 			model: requireNullableString(obj.model, `chapters[${i}].model`),
-			startedAt: requireNonEmptyString(obj.startedAt, `chapters[${i}].startedAt`),
-			endedAt: requireNonEmptyString(obj.endedAt, `chapters[${i}].endedAt`),
+			startedAt: requireNullableString(obj.startedAt, `chapters[${i}].startedAt`),
+			endedAt: requireNullableString(obj.endedAt, `chapters[${i}].endedAt`),
 		};
 	});
 }
@@ -728,6 +744,23 @@ export function midCutExit(archivedCount: number): typeof FRESH_CUT_EXIT.NO_MOVE
 	return archivedCount === 0 ? FRESH_CUT_EXIT.NO_MOVE : FRESH_CUT_EXIT.HALF_CUT;
 }
 
+/**
+ * What an unexpected V3 key asks of the operator (#151, Hard Rule 7). The key may be reader-version
+ * skew (a newer entwurf's key), a retired field of an older schema, or damaged or foreign data, and
+ * the key alone cannot say which — not even "no installed entwurf writes it", since every installed
+ * copy may be the stale one. So the refusal names the check first, keeps the identity for a valid
+ * newer key, and admits the generation cut only for a record confirmed to be a previous or unusable
+ * generation. Already-installed older readers keep their older wording — that is why the renew
+ * rollout documents "do not follow an old reader's fresh-cut prescription for a renew key".
+ */
+export const UNEXPECTED_KEY_PRESCRIPTION =
+	"An unexpected key may be reader-version skew (a key a newer entwurf writes), a retired field of an older " +
+	"schema, or damaged or foreign data, and the key alone does not say which. Check first which entwurf version " +
+	"and schema wrote this record and whether a matching reader exists. If the key is a valid newer one, this " +
+	"reader is stale: redeploy it (the matching doctor names the install verb) and keep the identity — do not " +
+	"archive the record. An unexpected key is never by itself a reason to archive; only a record confirmed to " +
+	`belong to a previous or unusable generation is answered by the generation cut, with ${FRESH_CUT_PRESCRIPTION}.`;
+
 /** The uniform "this record is not a live-generation v3 record" error, naming the fresh-cut fix. */
 function nonV3RecordMessage(version: unknown): string {
 	return (
@@ -799,14 +832,18 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 		throw new MetaRecordError(nonV3RecordMessage(obj.schemaVersion));
 	}
 	// Strict keyset: any key outside the v3 set makes the record unreadable —
-	// stray keys are never coerced away. A record from a previous generation
-	// carrying retired fields lands here, and the fix is the generation cut.
+	// stray keys are never coerced away. Different records land here: a previous
+	// generation carrying retired fields, damaged or foreign data, and a record a
+	// NEWER entwurf wrote with a key this reader does not know yet (#151 renew keys
+	// were the first case on a shipped host). That last one is reader-version skew,
+	// not a generation change (Hard Rule 7), and the key alone cannot tell them
+	// apart — so the refusal names the check first and never prescribes the cut alone.
 	const stray = Object.keys(obj).filter((k) => !META_IDENTITY_KEYS.includes(k));
 	if (stray.length > 0) {
 		throw new MetaRecordError(
 			`v3 meta-record carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
-				`(allowed: ${META_IDENTITY_KEYS.join(", ")}). A record from a previous generation is ` +
-				`never read or coerced — archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
+				`(allowed: ${META_IDENTITY_KEYS.join(", ")}). It is refused — never read, coerced or stripped. ` +
+				`${UNEXPECTED_KEY_PRESCRIPTION}`,
 		);
 	}
 	const identity: MetaIdentity = {
@@ -1441,18 +1478,21 @@ export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & {
 
 /**
  * The refusal an uncertifiable ACTIVE store earns, in the words both the runtime
- * writers and the install doctor use. Rotten records (previous generation,
- * corruption, drift, duplicate, symlink) are answered by archiving. An
- * unknown-backend defect is a stale reader, not a rotten store — the listed
- * defect says so; this headline tells the operator to distinguish. No branch:
- * both sentences always print.
+ * writers and the install doctor use. It names the check before any archive (#151):
+ * an unknown-backend defect is a stale reader, not a rotten store; an unexpected key
+ * may be the same skew, an older schema or damaged data, never an archive reason by
+ * itself. Only records confirmed rotten (previous generation, corruption, drift,
+ * duplicate, symlink) are answered by archiving. No branch: every sentence always
+ * prints, in that order.
  */
 export function activeStoreRefusal(cert: ActiveStoreCertification & { dir: string }, shown = 3): string {
 	const headline =
-		`meta-record store ${cert.dir} holds ${cert.defects.length} entry/entries this generation cannot certify — ` +
+		`meta-record store ${cert.dir} holds ${cert.defects.length} entry/entries this reader cannot certify — ` +
 		`refusing to write (the active store is v3-only and carries no cross-generation continuity). ` +
-		`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}. ` +
-		`If a listed defect says "backend" must be one of this reader's known set, the reader is stale — redeploy the sibling unit (the matching doctor names the install verb); do not archive those records.`;
+		`Find the cause in the listed defects first. ` +
+		`If one says "backend" must be one of this reader's known set, the reader is stale — redeploy the sibling unit (the matching doctor names the install verb); do not archive those records. ` +
+		`An unexpected key may be the same skew, an older schema or damaged data: check which entwurf wrote it and its matching reader, and do not archive for the key alone. ` +
+		`Only entries confirmed to be a previous or unusable generation are answered by archiving the generation and opening a fresh one with ${FRESH_CUT_PRESCRIPTION}.`;
 	// `shown = 0` is for a caller that ALREADY printed every cause per entry (the
 	// store-doctor): repeating them here doubles the wall on a large previous
 	// generation, which is exactly the aggregation lesson F8 taught. The count and

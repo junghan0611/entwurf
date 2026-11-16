@@ -218,6 +218,54 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-R1B-FIRST-RENEW-NO-OUTLINE]",
 			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1C-CHAPTER-TIME-NULLABLE",
+			"title": "a chapter whose original times could not be read is refused — the commit would have to invent a time from the birthday or the commit instead of keeping null",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tstartedAt: requireNullableString(obj.startedAt, `chapters[${i}].startedAt`),"],
+			"replace": ["\t\t\tstartedAt: requireNonEmptyString(obj.startedAt, `chapters[${i}].startedAt`),"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1C-CHAPTER-TIME-NULLABLE]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1C-UNKNOWN-KEY-STALE-READER-FIRST",
+			"title": "an unexpected V3 key prescribes the generation cut alone — a newer entwurf's renew key, or damaged data, would send the operator to archive every birthday instead of checking the writer and its matching reader",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\t\t`${UNEXPECTED_KEY_PRESCRIPTION}`,"],
+			"replace": [
+				"\t\t\t\t`A record from a previous generation is never read or coerced — archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1C-UNKNOWN-KEY-STALE-READER-FIRST]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1C-STORE-REFUSAL-NAMES-KEY-SKEW",
+			"title": "the store refusal drops the unexpected-key clause — a store holding a newer reader's key reads as a generation to archive",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"An unexpected key may be the same skew, an older schema or damaged data: check which entwurf wrote it and its matching reader, and do not archive for the key alone. "
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1C-STORE-REFUSAL-NAMES-KEY-SKEW]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1C-STORE-REFUSAL-CHECK-BEFORE-ARCHIVE",
+			"title": "the store refusal opens with the archive again — the first instruction an operator reads is to fresh-cut every birthday before any cause is checked",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t`Find the cause in the listed defects first. ` +"],
+			"replace": ["\t\t`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}. ` +"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1C-STORE-REFUSAL-CHECK-BEFORE-ARCHIVE]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
 		}
 	]
 }
