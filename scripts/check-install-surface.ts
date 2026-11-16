@@ -609,9 +609,16 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh check_acp_compaction -> run_vitest over the #163 S8 ACP compaction beside tests (compaction-record, backend.compaction and compaction-roundtrip)",
 		},
-		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the acp-compaction one.
+		// #151 R-1: the /renew reader-boundary mutant execution coordinate, right after the acp-compaction one.
 		{
 			after: "  entwurf check-acp-compaction        # ",
+			line: "  entwurf check-renew-beside          # #151 mutant execution coordinate (VERIFY rule 3): run_vitest over the /renew reader-boundary beside test (renew keys in the V3 reader, claimed-id uniqueness, the named upsert refusals) — the gate argv of the renew claims. Same file check-tests-beside-behavior already runs.",
+			receipt:
+				"run.sh check_renew_beside -> run_vitest over the #151 R-1 /renew reader-boundary beside test (meta-session.renew)",
+		},
+		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the renew one (#151 R-1 slotted in between).
+		{
+			after: "  entwurf check-renew-beside          # ",
 			line: "  entwurf check-native-push-runner    # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs.",
 			receipt:
 				"run.sh check_native_push_runner -> run_vitest over pi-extensions/lib/native-push/adapter.test.ts (#160 S5 SOL D1)",

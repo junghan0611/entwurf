@@ -391,6 +391,167 @@ export interface MetaIdentity {
 	 * inference. Every writer that does not mint PRESERVES it.
 	 */
 	attachIncarnation: string | null;
+	/**
+	 * #151 /renew — a transition in progress on a `pi` citizen. Present ONLY while one human
+	 * `/renew` moves this birthday from its current native chapter (`from`, which must equal
+	 * `nativeSessionId`) to a next one (`to`, reserved before the next file exists). Its
+	 * presence is the record fact every verb reads to refuse by name instead of reading a dead
+	 * socket as dormancy (MP receipt r3 §5) or minting a birthday for the next native id. It
+	 * proves intent and re-entry blocking only — never that the previous chapter's last write
+	 * has ended. Absent (never serialized) on every record that is not mid-transition.
+	 */
+	renewing?: RenewingState;
+	/**
+	 * #151 /renew — the closed native chapters this birthday has lived through, oldest first.
+	 * Coordinates and times only; the closed originals are recalled, never reopened. Every id
+	 * here is claimed store-wide exactly like `nativeSessionId`. Absent (never serialized) on a
+	 * record with no closed chapter.
+	 */
+	chapters?: readonly RenewChapter[];
+}
+
+/** The process that owns an in-progress /renew (#151): its own pid and {@link processStartKey}. */
+export interface RenewOwner {
+	pid: number;
+	startKey: string;
+}
+
+/** An in-progress /renew transition on a `pi` record (#151, contract C1.2). */
+export interface RenewingState {
+	/** The chapter being left — equals the record's `nativeSessionId` while renewing. */
+	from: string;
+	/** The reserved next native id, or null before the reservation. */
+	to: string | null;
+	/** One-renew correlation carrier (32 lowercase hex), never an address or a secret. */
+	token: string;
+	/** sha256 (64 lowercase hex) of the agreed outline body bytes; kept here, never in the body. */
+	outlineSha: string;
+	/** The agreed outline body, carried verbatim (A7: its persistent copy before the switch). */
+	outline: string;
+	owner: RenewOwner;
+	startedAt: string;
+}
+
+/** One closed native chapter of a `pi` birthday (#151). */
+export interface RenewChapter {
+	nativeSessionId: string;
+	transcriptPath: string | null;
+	startedAt: string;
+	endedAt: string;
+}
+
+const RENEW_TOKEN_RE = /^[0-9a-f]{32}$/;
+const RENEW_SHA_RE = /^[0-9a-f]{64}$/;
+
+function requireRenewObject(value: unknown, what: string, keys: readonly string[]): Record<string, unknown> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		throw new MetaRecordError(`meta-record "${what}" must be an object (got ${describe(value)}).`);
+	}
+	const obj = value as Record<string, unknown>;
+	const stray = Object.keys(obj).filter((k) => !keys.includes(k));
+	if (stray.length > 0) {
+		throw new MetaRecordError(
+			`meta-record "${what}" carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} (allowed: ${keys.join(", ")}).`,
+		);
+	}
+	return obj;
+}
+
+/** Validate a `renewing` value (#151). Throws on any drift; never coerces. */
+export function requireRenewingState(value: unknown): RenewingState {
+	const obj = requireRenewObject(value, "renewing", [
+		"from",
+		"to",
+		"token",
+		"outlineSha",
+		"outline",
+		"owner",
+		"startedAt",
+	]);
+	const token = obj.token;
+	if (typeof token !== "string" || !RENEW_TOKEN_RE.test(token)) {
+		throw new MetaRecordError(
+			`meta-record "renewing.token" must be 32 lowercase hex characters (got ${describe(token)}).`,
+		);
+	}
+	const outlineSha = obj.outlineSha;
+	if (typeof outlineSha !== "string" || !RENEW_SHA_RE.test(outlineSha)) {
+		throw new MetaRecordError(
+			`meta-record "renewing.outlineSha" must be 64 lowercase hex characters (got ${describe(outlineSha)}).`,
+		);
+	}
+	const ownerObj = requireRenewObject(obj.owner, "renewing.owner", ["pid", "startKey"]);
+	if (!isPlausibleOwnerPid(ownerObj.pid)) {
+		throw new MetaRecordError(
+			`meta-record "renewing.owner.pid" is not a plausible owner pid (got ${describe(ownerObj.pid)}).`,
+		);
+	}
+	return {
+		from: requireNonEmptyString(obj.from, "renewing.from"),
+		to: requireNullableString(obj.to, "renewing.to"),
+		token,
+		outlineSha,
+		outline: requireNonEmptyString(obj.outline, "renewing.outline"),
+		owner: { pid: ownerObj.pid, startKey: requireNonEmptyString(ownerObj.startKey, "renewing.owner.startKey") },
+		startedAt: requireNonEmptyString(obj.startedAt, "renewing.startedAt"),
+	};
+}
+
+/** Validate a `chapters` value (#151): a NON-EMPTY array of closed chapters. */
+export function requireRenewChapters(value: unknown): RenewChapter[] {
+	if (!Array.isArray(value) || value.length === 0) {
+		throw new MetaRecordError(
+			`meta-record "chapters" must be a non-empty array when present (got ${describe(value)}); a record with no closed chapter omits the key.`,
+		);
+	}
+	return value.map((entry, i) => {
+		const obj = requireRenewObject(entry, `chapters[${i}]`, [
+			"nativeSessionId",
+			"transcriptPath",
+			"startedAt",
+			"endedAt",
+		]);
+		return {
+			nativeSessionId: requireNonEmptyString(obj.nativeSessionId, `chapters[${i}].nativeSessionId`),
+			transcriptPath: requireNullableString(obj.transcriptPath, `chapters[${i}].transcriptPath`),
+			startedAt: requireNonEmptyString(obj.startedAt, `chapters[${i}].startedAt`),
+			endedAt: requireNonEmptyString(obj.endedAt, `chapters[${i}].endedAt`),
+		};
+	});
+}
+
+/**
+ * Every native session id one record claims store-wide (#151): its current chapter, every
+ * closed chapter, and a reserved `renewing.to`. The native→garden mapping is one-to-one over
+ * THIS set, so a closed chapter can never be re-attached as, or reborn into, another birthday.
+ */
+export function claimedNativeSessionIds(identity: MetaIdentity): string[] {
+	const ids = [identity.nativeSessionId];
+	for (const chapter of identity.chapters ?? []) ids.push(chapter.nativeSessionId);
+	if (identity.renewing?.to) ids.push(identity.renewing.to);
+	return ids;
+}
+
+/** The record-internal coherence a renew-bearing record must hold (#151). Throws on drift. */
+function assertRenewCoherence(identity: MetaIdentity): void {
+	if (identity.renewing === undefined && identity.chapters === undefined) return;
+	if (identity.backend !== "pi") {
+		throw new MetaRecordError(
+			`meta-record backend "${identity.backend}" carries renew state; /renew lineage exists only on "pi" records (#151).`,
+		);
+	}
+	if (identity.renewing && identity.renewing.from !== identity.nativeSessionId) {
+		throw new MetaRecordError(
+			`meta-record "renewing.from" (${identity.renewing.from}) must equal nativeSessionId (${identity.nativeSessionId}).`,
+		);
+	}
+	const ids = claimedNativeSessionIds(identity);
+	const dup = ids.find((id, i) => ids.indexOf(id) !== i);
+	if (dup !== undefined) {
+		throw new MetaRecordError(
+			`meta-record claims native session id ${JSON.stringify(dup)} more than once across nativeSessionId, chapters and renewing.to.`,
+		);
+	}
 }
 
 export function requireCitizenBackend(value: unknown): MetaCitizenBackend {
@@ -514,6 +675,11 @@ const META_IDENTITY_KEYS: readonly string[] = [
 	"createdAt",
 	"recordUpdatedAt",
 	"attachIncarnation",
+	// #151 /renew — optional, `pi` only, omitted when empty. A reader that predates them
+	// refuses a record carrying them, so every installed reader rolls forward before any
+	// /renew writer opens (reader-first; AGENTS Hard Rule 7 reader-version skew).
+	"renewing",
+	"chapters",
 ];
 
 /** `attachIncarnation` grammar: 32 lowercase hex characters (`randomBytes(16)`). */
@@ -561,7 +727,7 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 				`never read or coerced — archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
 		);
 	}
-	return {
+	const identity: MetaIdentity = {
 		schemaVersion: META_SCHEMA_VERSION_V3,
 		gardenId: requireGardenId(obj.gardenId),
 		backend: requireCitizenBackend(obj.backend),
@@ -576,6 +742,38 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 		// not a legacy alias: every serialize emits the key.
 		attachIncarnation: requireAttachIncarnation(obj.attachIncarnation === undefined ? null : obj.attachIncarnation),
 	};
+	// #151: optional renew state, present only when non-empty (a record that never renewed
+	// stays byte-identical to what every earlier reader wrote).
+	if (obj.renewing !== undefined) identity.renewing = requireRenewingState(obj.renewing);
+	if (obj.chapters !== undefined) identity.chapters = requireRenewChapters(obj.chapters);
+	assertRenewCoherence(identity);
+	return identity;
+}
+
+/** Append the #151 renew keys, in fixed order, only when present. */
+function withRenewKeys<T extends Record<string, unknown>>(base: T, identity: MetaIdentity): T {
+	const out: Record<string, unknown> = { ...base };
+	if (identity.renewing !== undefined) {
+		const r = identity.renewing;
+		out.renewing = {
+			from: r.from,
+			to: r.to,
+			token: r.token,
+			outlineSha: r.outlineSha,
+			outline: r.outline,
+			owner: { pid: r.owner.pid, startKey: r.owner.startKey },
+			startedAt: r.startedAt,
+		};
+	}
+	if (identity.chapters !== undefined && identity.chapters.length > 0) {
+		out.chapters = identity.chapters.map((c) => ({
+			nativeSessionId: c.nativeSessionId,
+			transcriptPath: c.transcriptPath,
+			startedAt: c.startedAt,
+			endedAt: c.endedAt,
+		}));
+	}
+	return out as T;
 }
 
 /**
@@ -584,18 +782,21 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
  * caller never depends on incidental key order.
  */
 export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
-	return {
-		schemaVersion: META_SCHEMA_VERSION_V3,
-		gardenId: record.gardenId,
-		backend: record.backend,
-		nativeSessionId: record.nativeSessionId,
-		cwd: record.cwd,
-		model: record.model,
-		transcriptPath: record.transcriptPath,
-		createdAt: record.createdAt,
-		recordUpdatedAt: record.recordUpdatedAt,
-		attachIncarnation: record.attachIncarnation,
-	};
+	return withRenewKeys(
+		{
+			schemaVersion: META_SCHEMA_VERSION_V3,
+			gardenId: record.gardenId,
+			backend: record.backend,
+			nativeSessionId: record.nativeSessionId,
+			cwd: record.cwd,
+			model: record.model,
+			transcriptPath: record.transcriptPath,
+			createdAt: record.createdAt,
+			recordUpdatedAt: record.recordUpdatedAt,
+			attachIncarnation: record.attachIncarnation,
+		},
+		record,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -611,18 +812,21 @@ export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
  * `parseMetaRecordV3`. This is the ONE write shape in the repo.
  */
 export function serializeMetaIdentity(identity: MetaIdentity): string {
-	const ordered = {
-		schemaVersion: identity.schemaVersion,
-		gardenId: identity.gardenId,
-		backend: identity.backend,
-		nativeSessionId: identity.nativeSessionId,
-		cwd: identity.cwd,
-		model: identity.model,
-		transcriptPath: identity.transcriptPath,
-		createdAt: identity.createdAt,
-		recordUpdatedAt: identity.recordUpdatedAt,
-		attachIncarnation: identity.attachIncarnation,
-	};
+	const ordered = withRenewKeys(
+		{
+			schemaVersion: identity.schemaVersion,
+			gardenId: identity.gardenId,
+			backend: identity.backend,
+			nativeSessionId: identity.nativeSessionId,
+			cwd: identity.cwd,
+			model: identity.model,
+			transcriptPath: identity.transcriptPath,
+			createdAt: identity.createdAt,
+			recordUpdatedAt: identity.recordUpdatedAt,
+			attachIncarnation: identity.attachIncarnation,
+		},
+		identity,
+	);
 	return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 
@@ -989,9 +1193,13 @@ export function certifyActiveStore(
 			});
 			continue;
 		}
-		const seen = byNative.get(identity.nativeSessionId) ?? [];
-		seen.push(entry.filename);
-		byNative.set(identity.nativeSessionId, seen);
+		// #151: uniqueness covers every id the record claims (current, closed chapters,
+		// reserved renewing.to), so a closed chapter can never be another birthday's address.
+		for (const claimed of claimedNativeSessionIds(identity)) {
+			const seen = byNative.get(claimed) ?? [];
+			seen.push(entry.filename);
+			byNative.set(claimed, seen);
+		}
 		records.push({ filename: entry.filename, identity });
 	}
 	for (const [nativeSessionId, files] of byNative.entries()) {
@@ -1195,9 +1403,11 @@ export interface ListIdentitiesResult {
 function groupByNativeSessionId(identities: readonly MetaIdentity[]): Map<string, MetaIdentity[]> {
 	const byNative = new Map<string, MetaIdentity[]>();
 	for (const identity of identities) {
-		const seen = byNative.get(identity.nativeSessionId);
-		if (seen) seen.push(identity);
-		else byNative.set(identity.nativeSessionId, [identity]);
+		for (const claimed of claimedNativeSessionIds(identity)) {
+			const seen = byNative.get(claimed);
+			if (seen) seen.push(identity);
+			else byNative.set(claimed, [identity]);
+		}
 	}
 	return byNative;
 }
@@ -1282,12 +1492,17 @@ export function listAllMetaIdentities(
 	// mint the authority the certification refuses to mint. Everyone else keeps
 	// listing — the same rule an unreadable record follows, because one broken pair
 	// must not blind `entwurf_peers` (the 0.10 lesson).
+	// #151: one record can now meet a rival on several claimed ids; it is reported ONCE (the
+	// first shared id names it), so the error count stays a count of records, not of ids.
+	const duplicateReported = new Set<string>();
 	for (const [nativeSessionId, holders] of groupByNativeSessionId(identities)) {
 		if (holders.length < 2) continue;
 		const files = holders.map((h) => metaRecordFilename(h));
 		for (const holder of holders) {
 			const index = identities.indexOf(holder);
 			if (index >= 0) identities.splice(index, 1);
+			if (duplicateReported.has(metaRecordFilename(holder))) continue;
+			duplicateReported.add(metaRecordFilename(holder));
 			errors.push({
 				filename: metaRecordFilename(holder),
 				message:
@@ -2291,6 +2506,7 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	if (cert.defects.length > 0) throw new MetaRecordError(activeStoreRefusal(cert));
 	const target = requireNonEmptyString(opts.input.nativeSessionId, "nativeSessionId");
 	const existing = cert.records.find((record) => record.identity.nativeSessionId === target)?.identity ?? null;
+	assertRenewUpsertBoundary(existing, target, cert.records);
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	if (opts.expectAction !== undefined && decision.action !== opts.expectAction) {
 		throw new UpsertActionMismatchError(opts.expectAction, decision.action, target);
@@ -2299,6 +2515,70 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	if (decision.action === "create") publishExclusiveIdentity(file, decision.record);
 	else atomicWriteIdentity(file, decision.record);
 	return { action: decision.action, record: decision.record, dir, path: file };
+}
+
+/** Why a write met the #151 renew boundary. */
+export type RenewBoundaryCode = "renew-in-progress" | "native-id-is-closed-chapter" | "native-id-reserved-by-renew";
+
+/**
+ * A write refused at the #151 /renew boundary, before anything is written. Named so a caller
+ * (and an operator) can tell a transition in progress, a closed chapter and a reserved next
+ * chapter apart from an ordinary store defect — none of them is repaired by a fresh-cut.
+ */
+export class RenewBoundaryError extends MetaRecordError {
+	readonly code: RenewBoundaryCode;
+	readonly gardenId: string;
+	readonly nativeSessionId: string;
+	constructor(code: RenewBoundaryCode, gardenId: string, nativeSessionId: string, detail: string) {
+		super(`${code}: ${detail} Nothing was written.`);
+		this.name = "RenewBoundaryError";
+		this.code = code;
+		this.gardenId = gardenId;
+		this.nativeSessionId = nativeSessionId;
+	}
+}
+
+/**
+ * The #151 reader-side write boundary (contract C1.2, reader first). An ordinary upsert:
+ *   - never attaches to a record whose transition is in progress (a late old-chapter writer,
+ *     or any other attach, must not move a renewing record);
+ *   - never creates or attaches for a native id another record claims as a CLOSED chapter
+ *     (a reopened old file must not be reborn as a new birthday — G4);
+ *   - never creates a birthday for a native id a renewing record has RESERVED as its next
+ *     chapter (the new session of a transition is bound by the /renew writer, not by upsert — G2).
+ * The /renew writer itself is not this function's caller; it lands in a later contract.
+ */
+export function assertRenewUpsertBoundary(
+	existing: MetaIdentity | null,
+	target: string,
+	records: readonly { identity: MetaIdentity }[],
+): void {
+	if (existing?.renewing) {
+		throw new RenewBoundaryError(
+			"renew-in-progress",
+			existing.gardenId,
+			target,
+			`garden ${existing.gardenId} is mid-/renew (from ${existing.renewing.from}); an ordinary write may not move it.`,
+		);
+	}
+	for (const { identity } of records) {
+		if (identity.chapters?.some((c) => c.nativeSessionId === target)) {
+			throw new RenewBoundaryError(
+				"native-id-is-closed-chapter",
+				identity.gardenId,
+				target,
+				`native session ${target} is a closed chapter of garden ${identity.gardenId}; a closed chapter is recalled, never re-attached.`,
+			);
+		}
+		if (identity.renewing?.to === target) {
+			throw new RenewBoundaryError(
+				"native-id-reserved-by-renew",
+				identity.gardenId,
+				target,
+				`native session ${target} is reserved as the next chapter of garden ${identity.gardenId}; only that /renew binds it.`,
+			);
+		}
+	}
 }
 
 /** The upsert refused before writing because its decision was not the expected action. */
@@ -2654,7 +2934,10 @@ export function nativeSessionIdRivals(
 			continue; // unreachable by the live schema — not an addressable rival
 		}
 		if (metaRecordFilename(other) !== filename) continue; // drifted — unreachable by garden id
-		if (other.nativeSessionId === identity.nativeSessionId) rivals.push(filename);
+		// #151: the same claimed-id axis certify and listing use — a rival claims ANY id this
+		// record claims (current, closed chapters, reserved renewing.to), in either direction.
+		const mine = claimedNativeSessionIds(identity);
+		if (claimedNativeSessionIds(other).some((id) => mine.includes(id))) rivals.push(filename);
 	}
 	return rivals.sort();
 }
@@ -2697,8 +2980,9 @@ export function readAddressableMetaIdentity(
 	const rivals = nativeSessionIdRivals(identity, readActiveStoreEntries(dir), makeStoreRecordReader(dir));
 	if (rivals.length > 0) {
 		throw new MetaRecordError(
-			`meta-record ${metaRecordFilename(identity)} shares nativeSessionId ` +
-				`${JSON.stringify(identity.nativeSessionId)} with ${rivals.join(", ")} — the native→garden mapping ` +
+			`meta-record ${metaRecordFilename(identity)} shares a claimed native session id (current ` +
+				`${JSON.stringify(identity.nativeSessionId)}, closed chapters or a reserved next chapter) with ` +
+				`${rivals.join(", ")} — the native→garden mapping ` +
 				`must be unique, so this store cannot say which record owns that session and dispatching at either ` +
 				`garden id would reach the same native session twice. Archive the generation with ` +
 				`${FRESH_CUT_PRESCRIPTION}.`,

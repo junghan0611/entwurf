@@ -10,6 +10,26 @@
 
 # NOW
 
+- **2026-11-16 저녁 진척 (6a8b34·SOL, 미커밋):**
+  - GLG가 "진행하자"(DM 1171의 답)로 M-P1–P5 격리 측정을 승인했고, "더 진행해보자. 물음표가 더 줄어야겠다"로 M-P6을 추가했다.
+  - 영수증: `/tmp/entwurf-151/mp/MP-RECEIPT-20261116.md`(18f6ea2e…), `-r2`(910c2728…, SOL이 찾은 fixture 결함 정정), `-r3`(9e6bf55d…). 조건: Pi 1.5.2, stub, 격리, n=1.
+  - 측정으로 닫힌 것:
+    - setup에서 `sm.appendMessage(user 얼개)`를 하면 모델 턴 없이 n+1 파일이 생긴다. kill -9 뒤에도 남고, 다시 열 수 있으며, 얼개는 1회 전달된다.
+    - custom 주입만 하면 첫 턴 전에 죽을 때 얼개가 사라진다.
+    - 전환 중 옛 n의 바이트는 변하지 않는다(sha256).
+    - setup에서 throw하면 G5가 된다. 주소 없는 현재가 생기고, peer-facts는 dead를 보고한다.
+    - withSession에서 throw하면 native n+1이 유지된다.
+  - 시작 경로 열기(P3/P4)는 조건부로 원본을 바꾼다(개행 없음, 옛 version, thinking 항목 없음, `--fork`). 읽기 전용이면 EACCES로 드러난다. **red는 유지한다.**
+  - 계약 후보 C1.2: `/tmp/entwurf-151/renew-contract-c1.2.md`(8bb68177…). 순서는 K1 → newSession → setup 예약 → append → session_start 결속(token) → withSession 확인 → 확정. owner는 공유 정책으로 판정하고, 수습은 "예약 → 채택"으로 한다. SOL은 GLG에게 올릴 후보로 인정했지만 **구멍 없음은 아니다**. 수습 bootstrap에서 Pi가 파일을 열기 전에 채택할 수 있는지(`main.js:603`→`:755`)와 lock 인계 순서가 미측정이다.
+  - GLG 결정 시트: `/tmp/entwurf-151/glg-decision-sheet-20261116-evening.md`(395d6e32…). ① 최초 전환(reader·거절 먼저, 그다음 writer)의 구현 승인 여부와 ② P3/P4의 W 선택을 묻는다. ③ 수습은 별도 단위이고 아직 미측정이다.
+  - 스킬: SOL 초안 `/tmp/entwurf-151/skill-draft-sol-1.md`(450dbd03…). 요구: addendum 1.1(156fa7e1…).
+- **R-1 체크포인트 커밋 (2026-11-16 밤, GLG "1 2 다 커밋하고"):** V3 reader가 `pi` 전용 선택 키 `renewing`과 `chapters`를 읽는다. 닫힌 장과 예약된 next 장 id는 claimed id로 store 전체에서 유일해야 한다(certify, listing, addressable reader). 일반 upsert는 `RenewBoundaryError`(`renew-in-progress`, `native-id-is-closed-chapter`, `native-id-reserved-by-renew`)로 쓰기 **전에** 거절한다. SOL 독립 리뷰(`/tmp/entwurf-151/review-r1-sol.md` c252e589…)를 받아 한 amendment로 수선했다.
+  - **검증 경계 (숨기지 않음):**
+    - beside QK 15개와 PARTIAL `check-renew-beside` 13/13 KILLED(`/tmp/entwurf-151/r1c-partial-receipt.json`, 테스트의 token 리터럴을 hook 오탐 회피용으로 바꾼 뒤 재측정), `pnpm check` exit 0.
+    - 공유 checkout FULL은 **RED**다. hermetic `check-bridge-delivery`가 stale dist로 실패했다. 운영 dist는 승인 없이 build하지 않았다.
+    - 동결 사본 FULL은 exit 0이지만 pnpm `verify_deps_before_run=false`로 완화한 실행이라 **UNQUALIFIED**다. 불일치는 workspace-state의 절대 경로 하나였고 deps는 같았다(lock 36b24b04…, 패키지 집합 일치). offline frozen 정상 설치로 동등 실행을 시도했으나 store 경로 때문에 purge 확인에서 멈췄고, 우회하지 않았다.
+    - **정식 FULL은 reader 롤아웃(build) 창에서 받는다.** 운영 dist는 아직 옛 reader다.
+  - **다음:** GLG 지시로 SOL과 다른 학교 형제 Gemini 4(`20261116T214026-8e532e`)와 함께 개념·코드·스킬의 정합성을 논의한다. GLG: "격리 테스트는 한계가 있어. 격리 환경 만드는게 힘들어서 개념 코드와 스킬이 정합성이 맞는지 봐."
 - **바로 다음 (GLG, 2026-11-16):** "SOL이랑 정해지면 커밋 푸시한번하고, 실제 작업 레일을 논의해보자." 이 레일에 SOL이 동의하면 문서 커밋 한 번과 push 한 번을 하고, 그 뒤 실제 작업 레일(2와 3의 구체 순서)을 논의한다. 이 push 요청은 그 한 번에만 해당하고, 이후 push를 미리 허락한 것이 아니다.
 - **Next (2):** 리포 밖 `/tmp/entwurf-151/`에 requirements addendum 파일 하나를 쓴다. 쓰는 사람은 6a8b34이고, 검토는 SOL과 코디가 한다. 담을 것:
   - **GLG 결정** (아래 원문)

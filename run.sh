@@ -1586,6 +1586,13 @@ check_acp_compaction() {
   run_vitest pi-extensions/lib/acp/compaction-record.test.ts pi-extensions/lib/acp/backend.compaction.test.ts pi-extensions/lib/acp/compaction-roundtrip.test.ts
 }
 
+check_renew_beside() {
+  # #151 R-1: the execution coordinate for the /renew reader-boundary claims (VERIFY 「Four rules」
+  # rule 3). Not a discovery path — check-tests-beside-behavior already finds the file; one renew
+  # mutant re-runs only this beside test.
+  run_vitest pi-extensions/lib/meta-session.renew.test.ts
+}
+
 check_native_push_runner() {
   # #160 S5 SOL D1: the execution coordinate for the production native-push runner's deadline
   # (VERIFY 「Four rules」 rule 3). Not a discovery path — check-tests-beside-behavior already finds the

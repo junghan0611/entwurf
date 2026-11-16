@@ -1,0 +1,153 @@
+{
+	"schemaVersion": 1,
+	"lane": "renew",
+	"mutants": [
+		{
+			"claim": "RENEW-R1-ABSENT-BYTES-STABLE",
+			"title": "a record that never renewed gains a null renewing key, so its bytes differ from the pre-#151 golden",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tconst out: Record<string, unknown> = { ...base };"],
+			"replace": ["\tconst out: Record<string, unknown> = { ...base, renewing: null };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-ABSENT-BYTES-STABLE]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-ROUND-TRIP",
+			"title": "the serializer drops renewing.startedAt, so a renewing record no longer round-trips",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tstartedAt: r.startedAt,\n"],
+			"replace": ["\n"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-ROUND-TRIP]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-PI-ONLY",
+			"title": "renew state is accepted on a non-pi record",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (identity.backend !== \"pi\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-PI-ONLY]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-FROM-IS-CURRENT",
+			"title": "renewing.from is no longer required to equal the current nativeSessionId",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (identity.renewing && identity.renewing.from !== identity.nativeSessionId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-FROM-IS-CURRENT]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-NO-SELF-DUP",
+			"title": "a record may claim the same native id twice",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tconst dup = ids.find((id, i) => ids.indexOf(id) !== i);"],
+			"replace": ["\tconst dup = undefined as string | undefined;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-NO-SELF-DUP]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-STRICT-SUBKEYS",
+			"title": "a stray key inside a renew object is silently accepted",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tconst stray = Object.keys(obj).filter((k) => !keys.includes(k));"],
+			"replace": ["\tconst stray: string[] = [];"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-STRICT-SUBKEYS]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-CERTIFY-CHAPTER-UNIQUE",
+			"title": "certification checks only the current nativeSessionId, so a closed chapter id can be another record's address",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t\tfor (const claimed of claimedNativeSessionIds(identity)) {\n\t\t\tconst seen = byNative.get(claimed) ?? [];"
+			],
+			"replace": [
+				"\t\tfor (const claimed of [identity.nativeSessionId]) {\n\t\t\tconst seen = byNative.get(claimed) ?? [];"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-CERTIFY-CHAPTER-UNIQUE]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-ATTACH-REFUSED-WHILE-RENEWING",
+			"title": "an ordinary attach moves a record that is mid-/renew",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (existing?.renewing) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-ATTACH-REFUSED-WHILE-RENEWING]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-CLOSED-CHAPTER-NOT-REBORN",
+			"title": "a closed chapter's native id is reborn as a new birthday",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif (identity.chapters?.some((c) => c.nativeSessionId === target)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-CLOSED-CHAPTER-NOT-REBORN]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-RESERVED-NOT-BORN",
+			"title": "the reserved next native id is born as a new birthday (G2)",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif (identity.renewing?.to === target) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-RESERVED-NOT-BORN]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-ORDINARY-UNCHANGED",
+			"title": "the reader validates but drops chapters, so an ordinary attach loses the lineage",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (obj.chapters !== undefined) identity.chapters = requireRenewChapters(obj.chapters);"],
+			"replace": ["\tif (obj.chapters !== undefined) requireRenewChapters(obj.chapters);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-ORDINARY-UNCHANGED]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-ADDRESSABLE-CLAIMED-RIVAL",
+			"title": "the addressable reader compares only current ids, so a closed or reserved chapter rival leaves both garden ids addressable",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif (claimedNativeSessionIds(other).some((id) => mine.includes(id))) rivals.push(filename);"],
+			"replace": ["\t\tif (other.nativeSessionId === identity.nativeSessionId) rivals.push(filename);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-ADDRESSABLE-CLAIMED-RIVAL]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1-LISTING-ONE-ERROR-PER-RECORD",
+			"title": "the listing reports a record once per shared claimed id, so the error count stops counting records",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tif (duplicateReported.has(metaRecordFilename(holder))) continue;"],
+			"replace": ["\t\t\t// (mutant) per-record dedupe removed"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1-LISTING-ONE-ERROR-PER-RECORD]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		}
+	]
+}

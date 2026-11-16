@@ -3523,6 +3523,7 @@ let manifestCount: number;
 		"remote-pair-roundtrip": 9,
 		"remote-pair-send": 22,
 		"remote-pair-transport": 4,
+		renew: 13,
 		"retired-sent-surface": 2,
 		"resume-args": 6,
 		"resume-launch-identity": 11,

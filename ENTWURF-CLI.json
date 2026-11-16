@@ -339,6 +339,11 @@
 					"summary": "#163 mutant execution coordinate (VERIFY rule 3): run_vitest over the ACP compaction beside tests (the per-prompt collector, the turn driver's capability, prompt fence, scope and stranded-record drop, and the provider's record writer) — the gate argv of the acp-compaction claims. Same files check-tests-beside-behavior already runs."
 				},
 				{
+					"synopsis": "check-renew-beside",
+					"column": 38,
+					"summary": "#151 mutant execution coordinate (VERIFY rule 3): run_vitest over the /renew reader-boundary beside test (renew keys in the V3 reader, claimed-id uniqueness, the named upsert refusals) — the gate argv of the renew claims. Same file check-tests-beside-behavior already runs."
+				},
+				{
 					"synopsis": "check-native-push-runner",
 					"column": 38,
 					"summary": "#160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs."
