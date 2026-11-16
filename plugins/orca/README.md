@@ -39,7 +39,7 @@ Open a tab in the same workspace and start `entwurf claude` or `entwurf pi` from
 The + button on the GUI tab bar lets you pick a terminal or an agent and open it as a tab in the same workspace. It is the same place as opening one more tmux window beside the current one (the maintainer's GUI observation). Pick Claude Code as the agent and it should become a citizen as is (inferred from the measured GUI launches; the + button path itself is unmeasured); start pi from a terminal tab with `entwurf pi` (or `pi --entwurf-control`).
 
 - Measured: starting from a workspace terminal creates no new worktree.
-- Measured: the first `entwurf pi` in a new repo makes pi show a project trust prompt; choose one. The start screen also showed `Extension issues: … must be declared in peerDependencies …` (seen with 0.55.0; pi still started).
+- Measured: the first `entwurf pi` in a new repo makes pi show a project trust prompt; choose one. The start screen also showed `Extension issues: … must be declared in peerDependencies …` (seen with 0.55.0; pi still started; published 0.55.1 prints the same warning, measured outside Orca).
 - Measured: Claude Code started from the GUI became a citizen in both Terminal and Chat mode. In the measured runs, two Claude Code agents started from the GUI each landed in its own new worktree (`~/orca/workspaces/<repo>/<name>`; Orca picks the branch name). Which GUI action was used then was not recorded. Cleaning up and merging a worktree is done by a person in Orca.
 - Unmeasured: round trips between tabs.
 - Measured: putting `--entwurf-control` in the GUI Settings Pi Arguments is saved but did not apply to a pi started from the GUI (cause unmeasured).
@@ -59,7 +59,7 @@ After `orca serve` was stopped, the terminal processes were still alive, and res
 
 ## 5. Scope and unmeasured
 
-One host, Orca v1.4.259, n=1 each, and the GUI was paired over 127.0.0.1 on the same host. A consumer install of 0.55.0 into a fresh HOME was also run (no harness login). Evidence: [the #164 measurement summary](https://github.com/junghan0611/entwurf/issues/164#issuecomment-6906503079) and [the consumer install run](https://github.com/junghan0611/entwurf/issues/164#issuecomment-6907955407).
+One host, Orca v1.4.259, n=1 each, and the GUI was paired over 127.0.0.1 on the same host. A consumer install of 0.55.0 into a fresh HOME was also run (no harness login). These measurements are on 0.55.0; 0.55.1 was not re-measured in Orca. Evidence: [the #164 measurement summary](https://github.com/junghan0611/entwurf/issues/164#issuecomment-6906503079) and [the consumer install run](https://github.com/junghan0611/entwurf/issues/164#issuecomment-6907955407).
 
 Not done here: an Orca code plugin (`orca plugin install` works only on the Electron runtime, and the default `orca serve` has no plugin service), installing or logging in a harness, and using key input such as `terminal send` as a delivery path.
 

@@ -1,22 +1,28 @@
-# NEXT — 0.55.0 cut: #160 OpenClaw home + ACP in-turn steer and compaction record
+# NEXT — 0.55.1 shipped: #167 agy ACP backend + #164 Orca guide + opus-first entwurf row
 
-**현재 개발 레일 (GLG, 2026-11-16):** #151은 브랜치 `151-renew`의 [NEXT--151-renew.md](NEXT--151-renew.md)에서 진행한다. 아래는 0.55.0 후속 레일이며 Herdr re-pin·registry proof를 #151에 섞지 않는다. 이 링크는 브랜치 한정이며 main 병합 전에 정리한다.
+**현재 개발 레일 (GLG, 2026-11-16):** #151은 브랜치 `151-renew`의 [NEXT--151-renew.md](NEXT--151-renew.md)에서 진행한다. 아래는 main의 0.55.1 출하 기록이다(0.55.1·Herdr snapshot·#164/#167 종결까지 끝남). 이 링크는 브랜치 한정이며 main 병합 전에 정리한다.
 
-0.55.0은 #160(OpenClaw 집 연결)과 ACP in-turn steer(S7)·compaction 기록(S8)을 묶는다. 브랜치 `160-openclaw`는 main `1255adbb`로 land했다(exact-SHA CI run 43717547419, 4개 job success). 브랜치 handoff의 지속 사실은 ROADMAP 맨 위 "0.55.0 후보" 절에 있다.
+0.55.0은 npm에 나갔다(GLG publish, 2026-11-16, dist-tags latest=0.55.0; 기록은 CHANGELOG 0.55.0). 0.55.1(2026-11-16 npm `latest`, GitHub release `v0.55.1`)은 세 묶음을 출하했다: #167 agy ACP backend 첫 출하(`5504cbd8` 어댑터와 `entwurf/agy-gemini-*` 3행, 설치 oracle `fc7d3d83`)와 그 prompt 단계 실패 재전송 차단(`39cadf51`), #164 Orca 안내(`plugins/orca/README.md`, 루트 README Orca 절), pi 기본 모델을 `claude-opus-5-5`로 고정하는 첫 행 등록(`6d7adf84`, QK ACP-ROWS-ANCHOR-FIRST). retired `claude-fable-5-1` 제거(`8f61e895`)도 0.55.0 뒤라 여기서 처음 나간다. #151 계획 문서는 브랜치 `151-renew`에만 있고 이 cut에 들어가지 않는다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. land.** main `1255adbb`, CI 4 job green(2026-11-15 22:09 KST push, GLG 요청).
-- [x] **2. landlord-home receipt.** `1255adbb` 위에서 11행 측정(10 pass, compactReset unmeasured), `check-openclaw-home-receipt` green. 정본 `~/.local/share/entwurf-lab/160/receipt-0.55.0-1255adbb/receipt.json`. visibility는 chat.history + GLG의 OpenClaw 노드 앱 관측.
-- [x] **3. prepare 0.55.0.** FULL green(seal cd1bbd97, 1025s), `release-gate --cut` MUST 25/0/0 cut OK(3회차; 1·2회차 red는 stale installed writer와 OMP gave-up 로그 — CHANGELOG Release evidence). 원래 계획: CHANGELOG·버전·문서 → 리뷰(bc72e5) → build-bridge → frozen `check:full` → `release-gate --cut`(Codex triple + `ENTWURF_OPENCLAW_HOME_RECEIPT`/`_TARGET`) → release-prep 커밋.
-- [x] **4. make → publish.** make 완료: main `40ff473d`, exact-SHA CI run 43730621013 green, Windows preview run 43731910023, candidate `~/.local/state/entwurf-releases/0.55.0-40ff473dd88d/candidate.b9MKgr/junghanacs-entwurf-0.55.0.tgz`(sha256 `7908bb49…98a3c`, container acceptance PASS), tag `v0.55.0`, GitHub release, U0 receipt `publish-u0.7OwVgF`. GLG가 npm에 직접 publish했다(2026-11-16 `npm view` dist-tags latest=0.55.0). publish U2/U3 registry proof는 아직 하지 않았다.
-- [ ] **5. Herdr re-pin.** ← CURRENT: publish 뒤 `plugins/herdr/runtime-lock.json`을 npm 0.55.0 측정 바이트로 다시 pin하고 snapshot tag(prepare 동안은 herdr-checkout carrier).
-- [x] **6. #167 agy ACP backend.** 브랜치 `167-agy-acp`(`5504cbd8` + 후속 문서 커밋)를 main에 land. `entwurf/agy-gemini-{4-hydrogen,4-argon,3.8-flash}`, fresh/resume 입장, global skillPlugins 투영, cwd AGENTS 중복 제거. 증거: PARTIAL 3그룹 green, frozen FULL green(1012s), LIVE n=1(fresh 왕복 a1f47f, 운영 HOME 스킬 투영 d8da36), 리뷰 4패스 Blocker 0, #167 영수증 댓글. 알려진 제한(백그라운드 고아 D6, 넓은 native 표면)은 `docs/acp-backend-rail.md`.
+- [x] **1. main 후보.** main `8fabe6ac`(frozen FULL 1011s green, check-pack-install green, exact-SHA CI run 43821793109) → terra 73d3a8 문서 정리 `bcf906ab`(68bd94 리뷰 B0/D0, focused gates + PARTIAL dep-versions 5/5, exact-SHA CI run 43822526404; FULL 미승계). OpenClaw landlord-home receipt `bcf906ab` green(`~/.local/share/entwurf-lab/160/receipt-0.55.1-bcf906ab/receipt.json`, GLG 웹 관측 포함).
+- [x] **2. prepare 0.55.1.** `2c0e36e5`: P4 FULL 1026s, P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0 on seal `13f72abaf65ded3d`; saved-default 셀 run 2(sandbox) opus 선택, run 1은 사고 기록. 증거는 CHANGELOG 0.55.1 Release evidence.
+- [x] **3. make → publish.** exact-SHA CI run 43834942508, Windows preview run 43836522833, candidate sha256 `8298b99f…71745`(container 수용), tag `v0.55.1`, GitHub release. GLG가 npm publish(2026-11-16); U2 latest=0.55.1/repair 유지, U3 registry 설치 6행 확인.
+- [x] **4. Herdr re-pin.** `29594b9a`(exact-SHA CI run 43845189555): `runtime-lock.json` npm 0.55.1(registry sha512 = integrity, sha256 = 수용 후보), Orca 가이드 범위 문장 정렬. snapshot tag + GitHub release `v2026.11.16-herdr.0.55.1`(Latest는 v0.55.1 유지).
+- [x] **5. 이슈와 브랜치 복귀.** #167·#164 닫음(2026-11-16, 출하 댓글 6913578444·6913579384). main을 `151-renew`에 merge하고 #151 lane(브랜치 `151-renew`의 `NEXT--151-renew.md`)으로 돌아간다.
+
+# #164 Orca 증거 (노트북 lane에서 승격, oracle은 Orca를 설치하지 않는다)
+
+- 측정 요약: #164 댓글 6906503079 — orcad v1.4.259 + 페어링된 GUI 클라이언트에서 `entwurf claude`·GUI가 띄운 plain Claude Code·`entwurf pi` 왕복 각 n=1 성공. Claude Code는 메일을 자동으로 읽되 실행은 pane 사람 승인 뒤, Pi는 즉시 회신.
+- 소비자 수용: #164 댓글 6907955407 — README만 받은 새 Sonnet이 sandbox HOME에 npm 0.55.0 설치 → setup green → Orca 터미널 시민 출생.
+- 영수증 원본은 노트북 host-local(`~/.local/share/entwurf-lab/164/*/receipts`)이다. 시험 자원은 회수했다.
+- GLG 결정: 코어는 npm pin 설치, Orca 플러그인은 npm 패키징하지 않고 안내 문서만 둔다(점검 스크립트 없음). 대상 하네스는 pi·claude-code, opencode는 범위 밖.
+- 0.55.0 소비자 관측(노트북): pi 첫 record·상태줄 모델이 `claude-fable-5-1`이었다(턴 실패 여부 미측정). 시작 화면에 `Extension issues … peerDependencies` 경고가 뜨지만 동작에는 지장이 없다(아래 U3 경고와 같은 것).
 
 # NOW
 
-- **receipt와 HEAD:** receipt의 candidate는 `1255adbb`(prepare 커밋의 부모)다. prepare 커밋 전에 다른 커밋을 넣으면 receipt가 무효가 되어 11행을 다시 재야 한다.
-- **역할 (2026-11-15):** ff08d4 코디·prepare, bc72e5(ACP Opus) 리뷰, 8216f4 운영(OpenClaw Gateway). OpenClaw 책상 `agent:main:entwurf` = garden `20261115T215046-12438c`.
+- **역할 (2026-11-16):** 운영코디 68bd94, ff08d4 main 수용·prepare. #151 팀(6a8b34 구현, a30dda)은 이 cut 동안 공유 checkout 쓰기를 멈춘다.
 - **운영 관찰:**
   - oracle의 pi는 이 checkout을 package로 로드한다(`pi.extensions`가 `.ts` 소스). 새로 뜨는 pi는 미커밋 작업트리를 그대로 쓰고, 편집 중간 상태에서 뜨면 entwurf provider 전체가 등록에 실패할 수 있다. MCP bridge는 dist라 `build-bridge` 전까지 src/dist가 어긋난다(#167 리뷰 895788 관찰, #165 맥락).
   - 새 backend를 store에 처음 쓰기 전에는 installed writer 전부(`doctor-codex-birth`는 helper bytes staleness를 보지 않으므로 `install-state.json`의 unit 버전도), omp·copilot doctor를 확인한다. 0.55.0 cut에서 Codex birth helper(0.41.1)·OMP·Copilot receive가 `openclaw` record를 보고 store 쓰기를 거절했다.
