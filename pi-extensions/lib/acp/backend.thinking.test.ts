@@ -131,6 +131,21 @@ async function rejected(promise: Promise<unknown>): Promise<Error> {
 	throw new Error("expected a rejection");
 }
 
+describe("curated row order — pi's default model when no other auth exists", () => {
+	it("[QK:ACP-ROWS-ANCHOR-FIRST] the first registered row is claude-opus-5-5, the other Claude rows follow, and the agy rows come after them", () => {
+		// With no other auth pi takes the first row of the entwurf provider as its default model, so the
+		// order is an operator-visible fact. The literal is the decision (opus first), not a copy of the code.
+		expect(adapters.allCuratedModels().map((r) => r.id)).toEqual([
+			"claude-opus-5-5",
+			"claude-sonnet-5-5",
+			"claude-fable-5-2",
+			"agy-gemini-4-hydrogen",
+			"agy-gemini-4-argon",
+			"agy-gemini-3.8-flash",
+		]);
+	});
+});
+
 describe("curated Claude rows — pi's own thinking menu (#142)", () => {
 	it("[QK:ACP-CLAUDE-THINKING-MENU] every curated row, registered through pi's ModelRuntime, offers low..max and pi's clamp lands off/minimal on low", async () => {
 		const runtime = await ModelRuntime.create({

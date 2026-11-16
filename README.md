@@ -117,6 +117,10 @@ An Entwurf release does not re-pin that runtime by itself; the
 ref installs and owns install, use, evidence and removal. The plugin owns neither delivery nor the
 Herdr launch rail.
 
+### Orca workbench
+
+On an Orca server, install Entwurf with `npm install -g @junghanacs/entwurf@<version>` and run `entwurf setup`; Claude Code started by Orca and `entwurf pi` in a terminal then become citizens (measured on one host, Orca v1.4.259). See the [Orca guide](./plugins/orca/README.md).
+
 ## First steps
 
 Start a citizen in your project:
