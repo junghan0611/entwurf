@@ -148,6 +148,76 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-R1-LISTING-ONE-ERROR-PER-RECORD]",
 			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1B-OUTLINE-ROUND-TRIP",
+			"title": "the serializer drops the latest outline, so a lived record no longer round-trips",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t\tout.outline = { body: o.body, sha: o.sha, forNativeSessionId: o.forNativeSessionId, writtenAt: o.writtenAt };"
+			],
+			"replace": ["\t\tvoid o;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1B-OUTLINE-ROUND-TRIP]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1B-OUTLINE-SHA-VERIFIED",
+			"title": "an outline whose body drifted from its sha is accepted",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (renewOutlineSha(body) !== sha) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1B-OUTLINE-SHA-VERIFIED]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1B-CANDIDATE-SHA-VERIFIED",
+			"title": "a renewing candidate whose body drifted from outlineSha is accepted",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (renewOutlineSha(outline) !== outlineSha) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1B-CANDIDATE-SHA-VERIFIED]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1B-OUTLINE-FOR-CURRENT",
+			"title": "an outline for a closed or reserved chapter is accepted as the current chapter's",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (identity.outline && identity.outline.forNativeSessionId !== identity.nativeSessionId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1B-OUTLINE-FOR-CURRENT]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1B-CHAPTERS-IFF-OUTLINE",
+			"title": "chapters without an outline (or the reverse) are accepted, so a committed renew can lose its outline",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif ((identity.chapters === undefined) !== (identity.outline === undefined)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1B-CHAPTERS-IFF-OUTLINE]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-R1B-FIRST-RENEW-NO-OUTLINE",
+			"title": "the reader demands an outline whenever a renew is in progress, so a first renew (no chapter yet) is unreadable",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif ((identity.chapters === undefined) !== (identity.outline === undefined)) {"],
+			"replace": [
+				"\tif ((identity.renewing !== undefined || identity.chapters !== undefined) !== (identity.outline !== undefined)) {"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-R1B-FIRST-RENEW-NO-OUTLINE]",
+			"signatureSource": "pi-extensions/lib/meta-session.renew.test.ts"
 		}
 	]
 }

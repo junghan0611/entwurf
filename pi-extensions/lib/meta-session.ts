@@ -408,6 +408,37 @@ export interface MetaIdentity {
 	 * record with no closed chapter.
 	 */
 	chapters?: readonly RenewChapter[];
+	/**
+	 * #151 /renew — the LATEST layered outline this birthday handed to its current chapter: one
+	 * edition, written by the agent with GLG and carried verbatim (Entwurf never splits, trims or
+	 * rewrites it; chapter separation lives inside the body). Replaced at each committed renew; an
+	 * older edition survives as the first message of the chapter it was handed to, never as a
+	 * second store here. Present exactly when `chapters` is (every committed renew yields both):
+	 * a record with chapters and no outline is NOT "the first chapter" — it is refused on read, so
+	 * a missing edition can never be handed silently to the next renew as an empty input.
+	 */
+	outline?: RenewOutline;
+}
+
+/** The latest layered outline of a `pi` birthday (#151). */
+export interface RenewOutline {
+	/** The agreed body, verbatim. */
+	body: string;
+	/** sha256 (64 lowercase hex) of `body`'s UTF-8 bytes — verified on read. */
+	sha: string;
+	/**
+	 * The chapter this edition was handed to — always the record's current `nativeSessionId`.
+	 * A REFERENCE checked for coherence, not a claimed id (never in {@link claimedNativeSessionIds}).
+	 */
+	forNativeSessionId: string;
+	/**
+	 * The `renewing.startedAt` of the renew that committed this edition: the time the agreed body
+	 * was recorded as the K1 transition copy. It does not reconstruct when the agent wrote the text
+	 * or the exact moment of the human confirmation, it is never overwritten by the commit's own
+	 * time, and it is never a chapter's end — the time an event happened and the time it was
+	 * retold are different axes.
+	 */
+	writtenAt: string;
 }
 
 /** The process that owns an in-progress /renew (#151): its own pid and {@link processStartKey}. */
@@ -436,6 +467,12 @@ export interface RenewingState {
 export interface RenewChapter {
 	nativeSessionId: string;
 	transcriptPath: string | null;
+	/**
+	 * The model the record carried when this chapter CLOSED (`provider/id`), or null when it never
+	 * knew one. Not a model history: a chapter can switch models, and turn_end refreshes the
+	 * record's model as it goes. Not proof of what a provider served, and not a kind of being.
+	 */
+	model: string | null;
 	startedAt: string;
 	endedAt: string;
 }
@@ -486,14 +523,46 @@ export function requireRenewingState(value: unknown): RenewingState {
 			`meta-record "renewing.owner.pid" is not a plausible owner pid (got ${describe(ownerObj.pid)}).`,
 		);
 	}
+	const outline = requireNonEmptyString(obj.outline, "renewing.outline");
+	if (renewOutlineSha(outline) !== outlineSha) {
+		throw new MetaRecordError(
+			`meta-record "renewing.outlineSha" does not match sha256 of "renewing.outline"; the candidate is not what was agreed.`,
+		);
+	}
 	return {
 		from: requireNonEmptyString(obj.from, "renewing.from"),
 		to: requireNullableString(obj.to, "renewing.to"),
 		token,
 		outlineSha,
-		outline: requireNonEmptyString(obj.outline, "renewing.outline"),
+		outline,
 		owner: { pid: ownerObj.pid, startKey: requireNonEmptyString(ownerObj.startKey, "renewing.owner.startKey") },
 		startedAt: requireNonEmptyString(obj.startedAt, "renewing.startedAt"),
+	};
+}
+
+/** sha256 hex of a string's UTF-8 bytes (#151 outline integrity). */
+export function renewOutlineSha(body: string): string {
+	return crypto.createHash("sha256").update(body, "utf8").digest("hex");
+}
+
+/** Validate an `outline` value (#151). The sha is verified against the body; never coerced. */
+export function requireRenewOutline(value: unknown): RenewOutline {
+	const obj = requireRenewObject(value, "outline", ["body", "sha", "forNativeSessionId", "writtenAt"]);
+	const body = requireNonEmptyString(obj.body, "outline.body");
+	const sha = obj.sha;
+	if (typeof sha !== "string" || !RENEW_SHA_RE.test(sha)) {
+		throw new MetaRecordError(`meta-record "outline.sha" must be 64 lowercase hex characters (got ${describe(sha)}).`);
+	}
+	if (renewOutlineSha(body) !== sha) {
+		throw new MetaRecordError(
+			`meta-record "outline.sha" does not match sha256 of "outline.body"; the outline is not what was agreed.`,
+		);
+	}
+	return {
+		body,
+		sha,
+		forNativeSessionId: requireNonEmptyString(obj.forNativeSessionId, "outline.forNativeSessionId"),
+		writtenAt: requireNonEmptyString(obj.writtenAt, "outline.writtenAt"),
 	};
 }
 
@@ -508,12 +577,14 @@ export function requireRenewChapters(value: unknown): RenewChapter[] {
 		const obj = requireRenewObject(entry, `chapters[${i}]`, [
 			"nativeSessionId",
 			"transcriptPath",
+			"model",
 			"startedAt",
 			"endedAt",
 		]);
 		return {
 			nativeSessionId: requireNonEmptyString(obj.nativeSessionId, `chapters[${i}].nativeSessionId`),
 			transcriptPath: requireNullableString(obj.transcriptPath, `chapters[${i}].transcriptPath`),
+			model: requireNullableString(obj.model, `chapters[${i}].model`),
 			startedAt: requireNonEmptyString(obj.startedAt, `chapters[${i}].startedAt`),
 			endedAt: requireNonEmptyString(obj.endedAt, `chapters[${i}].endedAt`),
 		};
@@ -534,7 +605,7 @@ export function claimedNativeSessionIds(identity: MetaIdentity): string[] {
 
 /** The record-internal coherence a renew-bearing record must hold (#151). Throws on drift. */
 function assertRenewCoherence(identity: MetaIdentity): void {
-	if (identity.renewing === undefined && identity.chapters === undefined) return;
+	if (identity.renewing === undefined && identity.chapters === undefined && identity.outline === undefined) return;
 	if (identity.backend !== "pi") {
 		throw new MetaRecordError(
 			`meta-record backend "${identity.backend}" carries renew state; /renew lineage exists only on "pi" records (#151).`,
@@ -543,6 +614,16 @@ function assertRenewCoherence(identity: MetaIdentity): void {
 	if (identity.renewing && identity.renewing.from !== identity.nativeSessionId) {
 		throw new MetaRecordError(
 			`meta-record "renewing.from" (${identity.renewing.from}) must equal nativeSessionId (${identity.nativeSessionId}).`,
+		);
+	}
+	if ((identity.chapters === undefined) !== (identity.outline === undefined)) {
+		throw new MetaRecordError(
+			`meta-record carries ${identity.chapters ? "chapters without an outline" : "an outline without chapters"}; every committed /renew records both.`,
+		);
+	}
+	if (identity.outline && identity.outline.forNativeSessionId !== identity.nativeSessionId) {
+		throw new MetaRecordError(
+			`meta-record "outline.forNativeSessionId" (${identity.outline.forNativeSessionId}) must equal nativeSessionId (${identity.nativeSessionId}); the latest outline belongs to the current chapter.`,
 		);
 	}
 	const ids = claimedNativeSessionIds(identity);
@@ -680,6 +761,7 @@ const META_IDENTITY_KEYS: readonly string[] = [
 	// /renew writer opens (reader-first; AGENTS Hard Rule 7 reader-version skew).
 	"renewing",
 	"chapters",
+	"outline",
 ];
 
 /** `attachIncarnation` grammar: 32 lowercase hex characters (`randomBytes(16)`). */
@@ -746,6 +828,7 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 	// stays byte-identical to what every earlier reader wrote).
 	if (obj.renewing !== undefined) identity.renewing = requireRenewingState(obj.renewing);
 	if (obj.chapters !== undefined) identity.chapters = requireRenewChapters(obj.chapters);
+	if (obj.outline !== undefined) identity.outline = requireRenewOutline(obj.outline);
 	assertRenewCoherence(identity);
 	return identity;
 }
@@ -769,9 +852,14 @@ function withRenewKeys<T extends Record<string, unknown>>(base: T, identity: Met
 		out.chapters = identity.chapters.map((c) => ({
 			nativeSessionId: c.nativeSessionId,
 			transcriptPath: c.transcriptPath,
+			model: c.model,
 			startedAt: c.startedAt,
 			endedAt: c.endedAt,
 		}));
+	}
+	if (identity.outline !== undefined) {
+		const o = identity.outline;
+		out.outline = { body: o.body, sha: o.sha, forNativeSessionId: o.forNativeSessionId, writtenAt: o.writtenAt };
 	}
 	return out as T;
 }

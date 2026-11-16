@@ -30,6 +30,23 @@
     - 동결 사본 FULL은 exit 0이지만 pnpm `verify_deps_before_run=false`로 완화한 실행이라 **UNQUALIFIED**다. 불일치는 workspace-state의 절대 경로 하나였고 deps는 같았다(lock 36b24b04…, 패키지 집합 일치). offline frozen 정상 설치로 동등 실행을 시도했으나 store 경로 때문에 purge 확인에서 멈췄고, 우회하지 않았다.
     - **정식 FULL은 reader 롤아웃(build) 창에서 받는다.** 운영 dist는 아직 옛 reader다.
   - **다음:** GLG 지시로 SOL과 다른 학교 형제 Gemini 4(`20261116T214026-8e532e`)와 함께 개념·코드·스킬의 정합성을 논의한다. GLG: "격리 테스트는 한계가 있어. 격리 환경 만드는게 힘들어서 개념 코드와 스킬이 정합성이 맞는지 봐."
+- **정합성 논의와 R-1b(2026-11-16 밤, 미커밋):** GLG가 "개념 코드와 스킬이 정합성이 맞는지 봐"라고 했고, SOL과 Gemini 4(`20261116T214026-8e532e`, Pi + agy ACP)가 같은 구멍을 짚었다. **확정 뒤 최신 층별 얼개가 record에서 사라져 2→3 renew가 성립하지 않는다.**
+  - 합의안: `/tmp/entwurf-151/coherence-synthesis-1.md`(70666b92…). 최신 판 하나를 두고, 장 구분은 본문 안에서 에이전트가 하며, 코드는 얼개를 쪼개지 않는다. SOL은 "다음 장에서 받고 싶은 모양과 맞다"고 답했다.
+  - R-1b(reader 확장): `chapters[i].model`(장이 **닫힐 때** record가 가진 모델. 이력이 아니다. 모르면 null)과 최상위 `outline`{body, sha, forNativeSessionId, writtenAt}.
+  - 정합성 규칙:
+    - chapters와 outline은 함께 있거나 함께 없다. chapters만 있고 outline이 없으면 "첫 장"이 아니라 거절이다.
+    - `outline.forNativeSessionId`는 늘 `nativeSessionId`와 같다. 이것은 참조이지 claim이 아니다.
+    - reader가 `sha256(body)`를 검증한다(outline과 후보 둘 다).
+    - `writtenAt`은 그 renew의 `renewing.startedAt`, 즉 합의 본문을 K1 전환 사본으로 기록한 시각이다. 에이전트가 글을 쓴 시각이나 GLG 확인의 정확한 순간을 재구성한 값이 아니다. 확정 시각으로 덮어쓰지 않고, 장이 끝난 시각도 아니다.
+    - **롤아웃 주의(SOL):** R-1b는 renew 흔적이 없는 기존 record와는 호환된다. 하지만 R-1 모양(chapters는 있고 outline·model은 없음)의 record는 이제 거절한다. 그래서 모든 상태에 대한 단순 선택 키 확장이 아니다. R-1 writer를 운영에 연 적이 없다는 전제 아래 reader를 먼저 올리는 순서이고, schema generation 변경이나 fresh-cut이 아니다.
+  - 검증: beside 21개, PARTIAL 19/19(`/tmp/entwurf-151/r1b-final-partial-receipt.json`), `pnpm check` exit 0.
+  - C1.3과 스킬로 넘길 것:
+    - 가벼운 진입. 이때의 진행 의사는 **인터뷰를 시작할 뜻**이지 final이 아니다.
+    - 입력면, 유효·철회 후보면, 해시로 특정한 판에 대한 사람 확인, 거절 사유 피드백.
+    - 옛 ACP child 닫기. 호출처가 `acp-provider.ts:78` 하나뿐이다.
+    - agy 크기 상한을 보수적으로 잡는다.
+    - Claude에서 `<project-context>` 태그가 오매칭되는 함정.
+    - agy에서 renew의 위치는 "현재 조사한 동일 생일·얼개 연속성을 위한 후보"로 둔다. 유일성은 주장하지 않는다(SOL).
 - **바로 다음 (GLG, 2026-11-16):** "SOL이랑 정해지면 커밋 푸시한번하고, 실제 작업 레일을 논의해보자." 이 레일에 SOL이 동의하면 문서 커밋 한 번과 push 한 번을 하고, 그 뒤 실제 작업 레일(2와 3의 구체 순서)을 논의한다. 이 push 요청은 그 한 번에만 해당하고, 이후 push를 미리 허락한 것이 아니다.
 - **Next (2):** 리포 밖 `/tmp/entwurf-151/`에 requirements addendum 파일 하나를 쓴다. 쓰는 사람은 6a8b34이고, 검토는 SOL과 코디가 한다. 담을 것:
   - **GLG 결정** (아래 원문)
