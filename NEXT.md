@@ -1,14 +1,14 @@
-# NEXT — 0.55.1 cut: #167 agy ACP backend + #164 Orca guide + opus-first entwurf row
+# NEXT — 0.55.1 shipped: #167 agy ACP backend + #164 Orca guide + opus-first entwurf row
 
-0.55.0은 npm에 나갔다(GLG publish, 2026-11-16, dist-tags latest=0.55.0; 기록은 CHANGELOG 0.55.0). 0.55.1은 main에 land할 세 묶음이다: #167 agy ACP backend 첫 출하(`5504cbd8` 어댑터와 `entwurf/agy-gemini-*` 3행, 설치 oracle `fc7d3d83`)와 그 prompt 단계 실패 재전송 차단(`39cadf51`), #164 Orca 안내(`plugins/orca/README.md`, 루트 README Orca 절), pi 기본 모델을 `claude-opus-5-5`로 고정하는 첫 행 등록(`6d7adf84`, QK ACP-ROWS-ANCHOR-FIRST). retired `claude-fable-5-1` 제거(`8f61e895`)도 0.55.0 뒤라 여기서 처음 나간다. #151 계획 문서는 브랜치 `151-renew`에만 있고 이 cut에 들어가지 않는다.
+0.55.0은 npm에 나갔다(GLG publish, 2026-11-16, dist-tags latest=0.55.0; 기록은 CHANGELOG 0.55.0). 0.55.1(2026-11-16 npm `latest`, GitHub release `v0.55.1`)은 세 묶음을 출하했다: #167 agy ACP backend 첫 출하(`5504cbd8` 어댑터와 `entwurf/agy-gemini-*` 3행, 설치 oracle `fc7d3d83`)와 그 prompt 단계 실패 재전송 차단(`39cadf51`), #164 Orca 안내(`plugins/orca/README.md`, 루트 README Orca 절), pi 기본 모델을 `claude-opus-5-5`로 고정하는 첫 행 등록(`6d7adf84`, QK ACP-ROWS-ANCHOR-FIRST). retired `claude-fable-5-1` 제거(`8f61e895`)도 0.55.0 뒤라 여기서 처음 나간다. #151 계획 문서는 브랜치 `151-renew`에만 있고 이 cut에 들어가지 않는다.
 
 # RAIL — 현재 좌표
 
 - [x] **1. main 후보.** main `8fabe6ac`(frozen FULL 1011s green, check-pack-install green, exact-SHA CI run 43821793109) → terra 73d3a8 문서 정리 `bcf906ab`(68bd94 리뷰 B0/D0, focused gates + PARTIAL dep-versions 5/5, exact-SHA CI run 43822526404; FULL 미승계). OpenClaw landlord-home receipt `bcf906ab` green(`~/.local/share/entwurf-lab/160/receipt-0.55.1-bcf906ab/receipt.json`, GLG 웹 관측 포함).
 - [x] **2. prepare 0.55.1.** `2c0e36e5`: P4 FULL 1026s, P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0 on seal `13f72abaf65ded3d`; saved-default 셀 run 2(sandbox) opus 선택, run 1은 사고 기록. 증거는 CHANGELOG 0.55.1 Release evidence.
 - [x] **3. make → publish.** exact-SHA CI run 43834942508, Windows preview run 43836522833, candidate sha256 `8298b99f…71745`(container 수용), tag `v0.55.1`, GitHub release. GLG가 npm publish(2026-11-16); U2 latest=0.55.1/repair 유지, U3 registry 설치 6행 확인.
-- [ ] **4. Herdr re-pin.** ← CURRENT: `runtime-lock.json` npm 0.55.1(registry sha512 = integrity, sha256 = 수용 후보)과 Orca 가이드 범위 문장 정렬(0.55.1은 Orca 재측정 안 함)은 로컬 커밋까지. 남은 것: push(GLG 승인) → exact-SHA CI → snapshot tag `v2026.11.16-herdr.0.55.1` + GitHub release.
-- [ ] **5. 이슈와 브랜치 복귀.** #164와 #167은 0.55.1 릴리스와 Herdr·Orca 후속까지 처리된 뒤 함께 닫는다(GLG 2026-11-16: "164 167 닫아야지 릴리즈하고 herdr orca 까지 처리되면"). 끝나면 main을 `151-renew`에 merge하고 #151 lane으로 돌아간다.
+- [x] **4. Herdr re-pin.** `29594b9a`(exact-SHA CI run 43845189555): `runtime-lock.json` npm 0.55.1(registry sha512 = integrity, sha256 = 수용 후보), Orca 가이드 범위 문장 정렬. snapshot tag + GitHub release `v2026.11.16-herdr.0.55.1`(Latest는 v0.55.1 유지).
+- [x] **5. 이슈와 브랜치 복귀.** #167·#164 닫음(2026-11-16, 출하 댓글 6913578444·6913579384). main을 `151-renew`에 merge하고 #151 lane(브랜치 `151-renew`의 `NEXT--151-renew.md`)으로 돌아간다.
 
 # #164 Orca 증거 (노트북 lane에서 승격, oracle은 Orca를 설치하지 않는다)
 
