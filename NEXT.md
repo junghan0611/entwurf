@@ -5,9 +5,9 @@
 # RAIL — 현재 좌표
 
 - [x] **1. main 후보.** main `8fabe6ac`(frozen FULL 1011s green, check-pack-install green, exact-SHA CI run 43821793109) → terra 73d3a8 문서 정리 `bcf906ab`(68bd94 리뷰 B0/D0, focused gates + PARTIAL dep-versions 5/5, exact-SHA CI run 43822526404; FULL 미승계). OpenClaw landlord-home receipt `bcf906ab` green(`~/.local/share/entwurf-lab/160/receipt-0.55.1-bcf906ab/receipt.json`, GLG 웹 관측 포함).
-- [ ] **2. prepare 0.55.1.** ← CURRENT: CHANGELOG·버전과 함께 설치 예시를 0.55.1로 맞춘다: `plugins/orca/README.md`, `docs/setup-clean-host.md`, `plugins/herdr/README.md:526`의 "unpublished 0.55.0"(현재 checkout/pending 0.55.1 사실로). 실측 영수증이 0.55.0이었다는 과거 사실은 그대로 둔다. sandbox 소비자 셀 하나를 더 잰다: pi settings에 `{"defaultProvider": "entwurf", "defaultModel": "claude-fable-5-1"}`(pi SDK는 둘을 따로 저장한다)를 seed하고 `--model` 없이 띄운 소비자가 0.55.1에서 어떤 모델로 뜨는지(NEXT--164-orca에서는 추론·미측정이었다).
-- [ ] **3. make → publish.** make·tag·release는 GLG 승인, npm publish는 GLG. publish 뒤 U2/U3 registry proof.
-- [ ] **4. Herdr re-pin.** publish 뒤 별도 커밋으로 `plugins/herdr/runtime-lock.json`을 npm 0.55.1 registry 바이트로 pin하고 기존 snapshot 절차를 밟는다(`faa535a3` 선례). 게시 후 확인된 runtime-pin 문구만 이때 고친다. 0.55.0 re-pin은 하지 않았다.
+- [x] **2. prepare 0.55.1.** `2c0e36e5`: P4 FULL 1026s, P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0 on seal `13f72abaf65ded3d`; saved-default 셀 run 2(sandbox) opus 선택, run 1은 사고 기록. 증거는 CHANGELOG 0.55.1 Release evidence.
+- [x] **3. make → publish.** exact-SHA CI run 43834942508, Windows preview run 43836522833, candidate sha256 `8298b99f…71745`(container 수용), tag `v0.55.1`, GitHub release. GLG가 npm publish(2026-11-16); U2 latest=0.55.1/repair 유지, U3 registry 설치 6행 확인.
+- [ ] **4. Herdr re-pin.** ← CURRENT: `runtime-lock.json` npm 0.55.1(registry sha512 = integrity, sha256 = 수용 후보)과 Orca 가이드 범위 문장 정렬(0.55.1은 Orca 재측정 안 함)은 로컬 커밋까지. 남은 것: push(GLG 승인) → exact-SHA CI → snapshot tag `v2026.11.16-herdr.0.55.1` + GitHub release.
 - [ ] **5. 이슈와 브랜치 복귀.** #164와 #167은 0.55.1 릴리스와 Herdr·Orca 후속까지 처리된 뒤 함께 닫는다(GLG 2026-11-16: "164 167 닫아야지 릴리즈하고 herdr orca 까지 처리되면"). 끝나면 main을 `151-renew`에 merge하고 #151 lane으로 돌아간다.
 
 # #164 Orca 증거 (노트북 lane에서 승격, oracle은 Orca를 설치하지 않는다)

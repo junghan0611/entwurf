@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.16-herdr.0.55.1 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.55.1` runtime and its measured npm sha512; it is not a new core release. Core 0.55.0 was published to npm but never pinned here, so the previous pin is 0.53.1 (`v2026.11.14-herdr.0.53.1`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically. The Herdr install guidance and the Orca guide's version scope are aligned with the published version.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `8298b99fb1d552651254c1ba3e70f634ec35f59efcb754993b887c66d9f71745` matches the accepted core artifact byte for byte; independently computed sha512 matches the npm integrity and this lock. The publication moved `latest` to 0.55.1 and left `repair` at the value recorded before publication (`0.12.8-repair.1`). Core `v0.55.1`, its accepted artifact and npm bytes are unchanged.
+- In a private sandbox (private HOME, XDG roots and agent directory), `pi install npm:@junghanacs/entwurf@0.55.1` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the three Claude rows and the three agy rows with no provider error.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.55.1, a source swap, a real Herdr registration, public-ref installation, a vendor model turn, an operating-host upgrade, or 0.55.1 inside Orca (the Orca guide's measurements are on 0.55.0 and say so).
+- On the uncommitted candidate over `2c0e36e5`, the affected Herdr gates (`check-herdr-supply`, `-plugin`, `-runtime-bootstrap`, `-activation`, `-plugin-build`, `-plugin-profile`, `-sandbox`) and `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` were green. No gate, mutant or matrix changed, so no PARTIAL was run. Exact pushed-SHA CI requires its own receipt.
+
 ## 0.55.1 — 2026-11-16
 
 ### What an npm user gets
