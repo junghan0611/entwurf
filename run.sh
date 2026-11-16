@@ -1348,6 +1348,7 @@ check_acp_set_model_readback() {
   # and (#142) pi's thinking level reaches Claude effort, set and read back before the prompt;
   # and (#142) what a cancel leaves: the operator notice and the aborted-turn status in a rebuild;
   # and (#163) Pi's summary request as a one-shot tool-less turn, and the child closed on compaction;
+  # and (#151) the child closed when this process replaces its session (/new, /resume, /fork, /renew);
   # and (#163) the display-only tool title, output preview and compaction lines in the event mapper;
   # and (#167) the Antigravity ACP adapter: routing, rows, launch argv, carrier seat, model and
   # thought-level readback, the overlay link policy, the refused summary turn and operator

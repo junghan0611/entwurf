@@ -37,6 +37,10 @@ import { registerAcpSteerSeam } from "./lib/acp-steer-seam.js";
 // set redundantly. Symbol.for keeps the marker stable across module instances.
 const REGISTERED_SYMBOL = Symbol.for("entwurf.acp-provider.registered");
 
+// The session_shutdown reasons that replace the session in this process (#151). Pi 1.5.2's union is
+// quit | reload | new | resume | fork (dist/core/extensions/types.d.ts:657-662).
+const REPLACING_SHUTDOWN_REASONS: ReadonlySet<string> = new Set(["new", "resume", "fork"]);
+
 function isRegisteredOnRuntime(pi: ExtensionAPI): boolean {
 	return Boolean((pi as unknown as Record<PropertyKey, unknown>)[REGISTERED_SYMBOL]);
 }
@@ -76,6 +80,20 @@ export default function (pi: ExtensionAPI) {
 	// `closeRetainedAcpSession`). A session that never used an ACP model has nothing to close.
 	pi.on("session_compact", (_event, ctx) => {
 		closeRetainedAcpSession(ctx.sessionManager.getSessionId());
+	});
+
+	// #151, GLG 2026-11-17: a session REPLACED inside this process — /new, /resume, /fork, and
+	// /renew, which rides newSession — closes the retained ACP child (Claude or agy alike) of the
+	// session it leaves. Until now only a compaction closed one (above), so every in-process
+	// replacement kept the old child until the process exited. Pi settles the running turn before it emits this event, and the session
+	// manager still names the leaving session (pi-coding-agent 1.5.2
+	// dist/core/agent-session-runtime.js:102-113). A turn whose bookkeeping has not settled is left
+	// alone by the same busy guard as compaction. "reload" keeps the same session, and "quit" is
+	// reaped by the backend's exit hook, which SIGKILLs every retained group — both stay as they were.
+	pi.on("session_shutdown", (event, ctx) => {
+		if (!REPLACING_SHUTDOWN_REASONS.has(event.reason)) return;
+		const leaving = ctx.sessionManager.getSessionId();
+		closeRetainedAcpSession(leaving);
 	});
 
 	// #163 S8: the ACP child's own compactions of the prompt that just ended become out-of-context

@@ -107,8 +107,9 @@ try {
 		registerProvider(id: string, cfg: CapturedCfg) {
 			calls.push({ id, cfg });
 		},
-		// #163: the entry closes a session's Claude child on compaction, and (S8) writes the child's own
-		// compaction records at message_end. Behaviour is proven in backend.summary-turn.test.ts and
+		// #163: the entry closes a session's Claude child on compaction, (#151) closes the child of a
+		// session this process replaces, and (S8) writes the child's own compaction records at
+		// message_end. Behaviour is proven in backend.summary-turn.test.ts and
 		// compaction-roundtrip.test.ts; here only the registrations and their count.
 		on(event: string) {
 			events.push(event);
@@ -126,8 +127,8 @@ try {
 	);
 	assert.deepEqual(
 		events,
-		["session_compact", "message_end"],
-		`entry must subscribe to session_compact and message_end exactly once each — got ${events}`,
+		["session_compact", "session_shutdown", "message_end"],
+		`entry must subscribe to session_compact, session_shutdown and message_end exactly once each — got ${events}`,
 	);
 	const cap = calls[0];
 	assert.equal(cap.id, PROVIDER_ID, `entry registered the wrong provider id: ${cap.id}`);

@@ -630,3 +630,54 @@ describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11
 		expect(backend.closeRetainedAcpSession("never-used")).toBe(false);
 	});
 });
+
+describe("a session replaced in this process closes the child it leaves (#151, GLG 2026-11-17)", () => {
+	/** Load the provider entry against a fake Pi and return its session_shutdown handler. */
+	async function shutdownHandler() {
+		const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+		const fakePi = {
+			registerProvider() {},
+			on(event: string, handler: (event: unknown, ctx: unknown) => unknown) {
+				handlers.set(event, handler);
+			},
+		};
+		const entry = (await import("../../acp-provider.ts")).default;
+		entry(fakePi as never);
+		const handler = handlers.get("session_shutdown");
+		if (!handler) throw new Error("acp-provider registered no session_shutdown handler");
+		return (reason: string, sessionId: string) =>
+			handler({ type: "session_shutdown", reason }, { sessionManager: { getSessionId: () => sessionId } });
+	}
+
+	it("[QK:ACP-REPLACED-SESSION-CLOSES-CHILD] /new, /resume and /fork (and /renew, which rides newSession) close the leaving session's retained child at once, and the next session opens its own", async () => {
+		const shutdown = await shutdownHandler();
+		for (const reason of ["new", "resume", "fork"]) {
+			const world = makeWorld();
+			const leaving = `S-leave-${reason}`;
+			await ordinaryTurn(world, transcript("chapter n"), leaving);
+			await ordinaryTurn(world, transcript("chapter n", "more"), leaving);
+			expect(world.children).toHaveLength(1);
+
+			shutdown(reason, leaving);
+			expect(world.killed.has(world.children[0])).toBe(true);
+			expect(backend.closeRetainedAcpSession(leaving)).toBe(false);
+
+			const sealed = await ordinaryTurn(world, transcript("outline", "hello"), `S-next-${reason}`);
+			expect(sealed.type).toBe("done");
+			expect(world.children).toHaveLength(2);
+		}
+	});
+
+	it("[QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD] reload keeps the same session and quit is reaped by the exit hook — neither closes the retained child here", async () => {
+		const shutdown = await shutdownHandler();
+		for (const reason of ["reload", "quit"]) {
+			const world = makeWorld();
+			const staying = `S-stay-${reason}`;
+			await ordinaryTurn(world, transcript("one"), staying);
+			shutdown(reason, staying);
+			expect(world.killed.size).toBe(0);
+			await ordinaryTurn(world, transcript("one", "two"), staying);
+			expect(world.children).toHaveLength(1);
+		}
+	});
+});

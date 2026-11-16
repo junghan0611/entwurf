@@ -47,6 +47,11 @@
     - agy 크기 상한을 보수적으로 잡는다.
     - Claude에서 `<project-context>` 태그가 오매칭되는 함정.
     - agy에서 renew의 위치는 "현재 조사한 동일 생일·얼개 연속성을 위한 후보"로 둔다. 유일성은 주장하지 않는다(SOL).
+- **2026-11-17 아침 (6a8b34, oracle):** R-1b는 `018c6122`로 push됐다. GLG가 agy ACP 지원 미비 문제를 #167·#168로 나눴다.
+  - **계약 C1.3 → C1.3a:** `/tmp/entwurf-151/renew-contract-c1.3a.md`(033aeb84…, C1.3 1488c783…를 한 amendment로 대체). 앞 관문을 처음 정했다: `/renew`(가벼운 진입, customType 진입 표지) → 에이전트가 마지막 완료 응답에 `renew-outline` 블록 제출 → `/renew confirm`(fullSha·진입·후보 위치 결속) → `/renew confirm <sha8>`(결속 대조, lock 뒤 K1 직전 재대조). 마지막 응답에 제출이 없으면 후보 없음(옛 후보로 회귀하지 않음). SOL·Gemini 리뷰 반영, SOL의 C1.3a 확인 대기.
+  - **GLG 결정 대기:** ① chapters 시각 = "record 현재 포인터 점유 구간"(원본 파일 시각 아님)이 맞는지 ② 크기 상한 16 KiB ③ 오토비 지적 처리(아래).
+  - **오토비(OpenClaw B) 지적, 6a8b34 확인:** 옛 reader는 낯선 V3 키에 fresh-cut을 처방한다(`meta-session.ts:805-810`, `:1452-1455`; Hard Rule 7과 어긋남). Claude Code hook의 reader 사본(`~/.claude/plugins/cache/meta-bridge-local/entwurf-meta-receive/0.1.0/lib/meta-session.ts`)은 R-1 이전 바이트(758f7f9a…)라, 첫 renew 뒤 그 호스트의 Claude Code 세션 등록이 막힌다. 첫 renew는 그 호스트 reader 버전에 되돌릴 수 없는 바닥을 만든다. doctor는 hook 사본을 바이트로 비교한다(`meta-bridge-doctor.sh:1194-1201`). 사본 목록은 하한이다(전역 npm·Herdr 런타임·omp/copilot 미확인). 제안 (가) 문구 수정 (나) NEXT·롤아웃 문서 (다) 운영코디 전달 — GLG 결정 대기.
+  - **떠나는 세션의 ACP child 닫기(GLG "여기서 고쳐"):** `acp-provider.ts` session_shutdown, reason new·resume·fork만. 일반 ACP lifecycle 수정이며 renew가 이것을 전제로 쓴다. Gemini 독립 리뷰 LGTM, PARTIAL `check-acp-set-model-readback` 71/71 KILLED(`/tmp/entwurf-151/child-close-partial-receipt.json` 304c58d2…), `pnpm check` exit 0. FULL은 공유 checkout에서 stale dist로 RED인 채이며 reader 롤아웃 창에서 받는다.
 - **바로 다음 (GLG, 2026-11-16):** "SOL이랑 정해지면 커밋 푸시한번하고, 실제 작업 레일을 논의해보자." 이 레일에 SOL이 동의하면 문서 커밋 한 번과 push 한 번을 하고, 그 뒤 실제 작업 레일(2와 3의 구체 순서)을 논의한다. 이 push 요청은 그 한 번에만 해당하고, 이후 push를 미리 허락한 것이 아니다.
 - **Next (2):** 리포 밖 `/tmp/entwurf-151/`에 requirements addendum 파일 하나를 쓴다. 쓰는 사람은 6a8b34이고, 검토는 SOL과 코디가 한다. 담을 것:
   - **GLG 결정** (아래 원문)

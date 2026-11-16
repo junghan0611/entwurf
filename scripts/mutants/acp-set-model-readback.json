@@ -348,6 +348,28 @@
 			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
 		},
 		{
+			"claim": "ACP-REPLACED-SESSION-CLOSES-CHILD",
+			"title": "a session replaced in this process (/new, /resume, /fork, /renew) keeps the leaving session's retained ACP child (Claude or agy) running until the process exits",
+			"subject": "pi-extensions/acp-provider.ts",
+			"find": ["\t\tcloseRetainedAcpSession(leaving);"],
+			"replace": ["\t\tvoid leaving;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REPLACED-SESSION-CLOSES-CHILD]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD",
+			"title": "every session_shutdown closes the retained child — a reload drops the child of the session it keeps, and quit trades the exit hook's SIGKILL for a SIGTERM",
+			"subject": "pi-extensions/acp-provider.ts",
+			"find": ["\t\tif (!REPLACING_SHUTDOWN_REASONS.has(event.reason)) return;"],
+			"replace": ["\t\tvoid event;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
 			"claim": "ACP-SUMMARY-TURN-NO-SETTING-SOURCES",
 			"title": "the summary child inherits the operator's settingSources — CLAUDE.md, hooks and plugins from disk reach a turn that should carry only the carrier and Pi's instructions",
 			"subject": "pi-extensions/lib/acp/backend.ts",
