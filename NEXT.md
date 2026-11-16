@@ -1,5 +1,7 @@
 # NEXT — 0.55.0 cut: #160 OpenClaw home + ACP in-turn steer and compaction record
 
+**현재 개발 레일 (GLG, 2026-11-16):** #151은 브랜치 `151-renew`의 [NEXT--151-renew.md](NEXT--151-renew.md)에서 진행한다. 아래는 0.55.0 후속 레일이며 Herdr re-pin·registry proof를 #151에 섞지 않는다. 이 링크는 브랜치 한정이며 main 병합 전에 정리한다.
+
 0.55.0은 #160(OpenClaw 집 연결)과 ACP in-turn steer(S7)·compaction 기록(S8)을 묶는다. 브랜치 `160-openclaw`는 main `1255adbb`로 land했다(exact-SHA CI run 43717547419, 4개 job success). 브랜치 handoff의 지속 사실은 ROADMAP 맨 위 "0.55.0 후보" 절에 있다.
 
 # RAIL — 현재 좌표
