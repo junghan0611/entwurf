@@ -360,6 +360,135 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:V2-RENEW-REREAD-KEEPS-CONFLICT]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-renew.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-LAST-REPLY-ONLY",
+			"title": "the reply search runs on past the last reply — an older submission is reused after the agent answered without one",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\t\t\treply = e;\n\t\t\tbreak;"],
+			"replace": ["\t\t\treply = e;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-LAST-REPLY-ONLY]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-ENTRY-BOUND-TO-CHAPTER",
+			"title": "any entry marker counts, whatever chapter made it — a marker copied by a fork opens the gate in a chapter where no /renew was typed",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\treturn d?.gardenId === chapter.gardenId && d?.nativeSessionId === chapter.nativeSessionId;"],
+			"replace": ["\treturn true;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-ENTRY-BOUND-TO-CHAPTER]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-COMPLETE-ONLY",
+			"title": "an aborted, failed or cut reply's block is accepted as the candidate",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": [
+				"\tif (reply.message.stopReason !== \"stop\") return { kind: \"none\", reason: \"reply-not-complete\" };"
+			],
+			"replace": ["\tif (false) return { kind: \"none\", reason: \"reply-not-complete\" };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-COMPLETE-ONLY]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-NOTICE-BY-EXACT-SIGNATURE",
+			"title": "any signed text block is skipped as a notice — a native provider's normal signed reply can never carry a submission",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\t\tif (b.textSignature === LIFECYCLE_NOTICE_SIGNATURE) continue;"],
+			"replace": ["\t\tif (b.textSignature !== undefined) continue;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-NOTICE-BY-EXACT-SIGNATURE]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-BODY-BYTES-EXACT",
+			"title": "the body is normalised (trailing spaces stripped per line) — the stored outline is no longer the bytes GLG read",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\tconst body = lines.slice(open + 1, close).join(\"\\n\");"],
+			"replace": ["\tconst body = lines.slice(open + 1, close).join(\"\\n\").replace(/ +\\n/g, \"\\n\");"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-BODY-BYTES-EXACT]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-GRAMMAR-FAILS-CLOSED",
+			"title": "text after the closing fence is tolerated — an example or a quoted block followed by prose becomes a submission",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": [
+				"\tif (lines.slice(close + 1).some((line) => line.trim() !== \"\")) return { kind: \"none\", reason: \"submission-not-last\" };"
+			],
+			"replace": ["\tif (false) return { kind: \"none\", reason: \"submission-not-last\" };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-GRAMMAR-FAILS-CLOSED]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-SIZE-BOUNDARY",
+			"title": "the size check is off by one — a 32769-byte outline passes",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\tif (bytes > RENEW_OUTLINE_MAX_BYTES) {"],
+			"replace": ["\tif (bytes > RENEW_OUTLINE_MAX_BYTES + 1) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-SIZE-BOUNDARY]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-GUIDE-AND-TAG",
+			"title": "the guide-sentence check is gone — an outline without the user-role guide reads as GLG's own words in the next chapter",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\tif (!body.startsWith(RENEW_GUIDE_SENTENCE)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-GUIDE-AND-TAG]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-CONFIRM-BINDING",
+			"title": "the confirm no longer compares the candidate entry — a re-emitted submission is confirmed on an earlier show",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["\t\tcurrent.entryId !== binding.entryId ||\n\t\tcurrent.candidateId !== binding.candidateId"],
+			"replace": ["\t\tcurrent.entryId !== binding.entryId"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-CONFIRM-BINDING]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-FIRST-CLOSE-LIKE-LINE",
+			"title": "only the canonical closing line is recognised — a close-like line with spaces or a tab, where a Markdown view already ends the block, is read past and the bytes after it become the body",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": ["const CLOSING_LIKE = /^[ \\t]*(`{3,})[ \\t]*$/;"],
+			"replace": ["const CLOSING_LIKE = /^(`{3,})$/;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-FIRST-CLOSE-LIKE-LINE]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-GATE-GUIDE-LITERAL-AGREED",
+			"title": "the product's guide sentence drifts from the agreed literal — it says the outline IS a new execution approval",
+			"subject": "pi-extensions/lib/renew-front-gate.ts",
+			"find": [
+				"\t\"이 글은 이전 장 에이전트가 작성하고 GLG가 전달 판본을 확인한 기억의 얼개다. GLG의 직접 발언이나 새로운 실행 승인이 아니다.\";"
+			],
+			"replace": [
+				"\t\"이 글은 이전 장 에이전트가 작성하고 GLG가 전달 판본을 확인한 기억의 얼개다. GLG의 직접 발언이나 새로운 실행 승인이다.\";"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-GATE-GUIDE-LITERAL-AGREED]",
+			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
 		}
 	]
 }
