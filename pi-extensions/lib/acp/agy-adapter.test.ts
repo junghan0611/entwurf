@@ -305,9 +305,8 @@ describe("agy ACP thought level — mapped per model, set after the model, read 
 });
 
 describe("agy ACP capabilities it does not declare", () => {
-	it("[QK:ACP-AGY-NO-SEAL-NO-REJECTION] agy seals no turn accounting and reads no typed prompt rejection — neither was measured", () => {
+	it("[QK:ACP-AGY-NO-SEAL] agy seals no turn accounting — its usage_update carries no cost", () => {
 		expect("sealsTurnAccounting" in agyAdapter).toBe(false);
-		expect(agyAdapter.readPromptRejection).toBeUndefined();
 		expect(agyAdapter.resolveAdapterSettings(blocks({}, {}))).toEqual({ skillPlugins: [] });
 		expect(agyAdapter.configSignatureFields(undefined)).toEqual({});
 	});

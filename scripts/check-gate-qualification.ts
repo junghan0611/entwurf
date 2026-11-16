@@ -3447,7 +3447,7 @@ let manifestCount: number;
 		"acp-stop-reason": 7,
 		"acp-stream-hooks": 10,
 		"acp-usage-accounting": 12,
-		"acp-vendor-rejection": 4,
+		"acp-vendor-rejection": 6,
 		"agent-guidance": 14,
 		"agy-permission": 6,
 		"bridge-boot-resume": 5,

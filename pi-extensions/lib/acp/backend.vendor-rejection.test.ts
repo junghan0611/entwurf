@@ -61,6 +61,7 @@ const savedEnv = new Map<string, string | undefined>();
 let backend: typeof import("./backend.ts");
 let adapters: typeof import("./backend-adapter.ts");
 let config: typeof import("./config.ts");
+let models: typeof import("./models.ts");
 
 beforeAll(async () => {
 	for (const key of SANDBOXED_ENV) savedEnv.set(key, process.env[key]);
@@ -79,6 +80,7 @@ beforeAll(async () => {
 	backend = await import("./backend.ts");
 	adapters = await import("./backend-adapter.ts");
 	config = await import("./config.ts");
+	models = await import("./models.ts");
 });
 
 afterAll(() => {
@@ -290,10 +292,11 @@ async function runTurn(
 	context: TranscriptContext,
 	sessionId: string,
 	signal?: AbortSignal,
+	model: Model<Api> = SONNET,
 ): Promise<AssistantMessageEvent[]> {
 	const events: AssistantMessageEvent[] = [];
 	for await (const event of backend.streamAcpTurn(
-		SONNET,
+		model,
 		context,
 		{ sessionId, signal, reasoning: "medium" },
 		world.deps,
@@ -530,5 +533,125 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		world.script(endTurn);
 		await runTurn(world, transcript("first", "second", "third"), "cell-cancel");
 		expect(world.children).toHaveLength(1); // retained and reused
+	});
+});
+
+// --- #167: every prompt-phase agy failure is non-replayable -----------------------------------
+// agy's typed rejection vocabulary is unmeasured, and its tools run with permission prompts
+// bypassed. The rows are the synthetic sweep posted on #167 (2026-11-16): four of them read as
+// transient to pi when sealed verbatim. The oracle is pi's own classifier pair again.
+describe("agy prompt-phase failure (#167)", () => {
+	const agyFlash = (): Model<Api> => {
+		const row = models.curatedAgyModels().find((r) => r.id === "agy-gemini-3.8-flash");
+		if (!row) throw new Error("agy-gemini-3.8-flash is not curated");
+		return { ...row, api: "entwurf", provider: "entwurf", baseUrl: "" } as Model<Api>;
+	};
+	const AGY_TOOL_ID = "agy-run-1";
+	const SWEEP: Array<{ label: string; make: () => Error; transientIfVerbatim: boolean }> = [
+		{
+			label: "bare JSON-RPC internal",
+			make: () => new RequestError(-32603, "Internal error"),
+			transientIfVerbatim: true,
+		},
+		{
+			label: "internal + 429",
+			make: () => new RequestError(-32603, "Internal error: 429 Too Many Requests"),
+			transientIfVerbatim: true,
+		},
+		{
+			label: "internal + UNAUTHENTICATED",
+			make: () => new RequestError(-32603, "Internal error: UNAUTHENTICATED: invalid authentication credentials"),
+			transientIfVerbatim: true,
+		},
+		{ label: "untyped rate limit", make: () => new Error("rate limit exceeded"), transientIfVerbatim: true },
+		{
+			label: "internal + quota exceeded",
+			make: () => new RequestError(-32603, "Internal error: RESOURCE_EXHAUSTED: Quota exceeded for model"),
+			transientIfVerbatim: false,
+		},
+		{
+			label: "ACP auth_required",
+			make: () => new RequestError(-32000, "Authentication required"),
+			transientIfVerbatim: false,
+		},
+	];
+	/** One completed native tool, then the rejection — the tool already ran when the prompt fails. */
+	const toolThenFail =
+		(make: () => Error): PromptScript =>
+		async ({ handlers, sessionId }) => {
+			await handlers.sessionUpdate({
+				sessionId,
+				update: { sessionUpdate: "tool_call", toolCallId: AGY_TOOL_ID, title: "run_command", status: "in_progress" },
+			});
+			await handlers.sessionUpdate({
+				sessionId,
+				update: { sessionUpdate: "tool_call_update", toolCallId: AGY_TOOL_ID, status: "completed", content: [] },
+			});
+			throw make();
+		};
+	const assertAgyNoReplay = (message: AssistantMessage, raw: Error, label: string) => {
+		expect(message.stopReason, label).toBe("error");
+		expect(message.errorMessage, label).toBe(adapters.AGY_PROMPT_FAILURE_VERDICT);
+		expect(isRetryableAssistantError(message), label).toBe(false);
+		expect(isContextOverflow(message, agyFlash().contextWindow), label).toBe(false);
+		const [diagnostic] = message.diagnostics ?? [];
+		expect(diagnostic?.type, label).toBe(adapters.ACP_PROMPT_REJECTION_DIAGNOSTIC);
+		expect(diagnostic?.error?.message, label).toBe(raw.message);
+		expect(String(diagnostic?.details?.errorKind), label).toBe(
+			raw instanceof RequestError ? `jsonrpc:${raw.code}` : `error:${raw.name}`,
+		);
+	};
+
+	it("controls: the verbatim sweep texts classify as the thread measured", () => {
+		for (const row of SWEEP) {
+			const verbatim: AssistantMessage = {
+				...assistantReply(""),
+				stopReason: "error",
+				errorMessage: row.make().message,
+			};
+			expect(isRetryableAssistantError(verbatim), row.label).toBe(row.transientIfVerbatim);
+		}
+	});
+
+	it("[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY] new path: after a completed tool, every sweep row seals the fixed verdict, keeps the raw failure, and drops the child", async () => {
+		for (const [i, row] of SWEEP.entries()) {
+			const world = makeWorld();
+			const raw = row.make();
+			world.script(toolThenFail(() => raw));
+			const sessionId = `cell-agy-new-${i}`;
+			const { message } = sealedOf(await runTurn(world, transcript("build it"), sessionId, undefined, agyFlash()));
+			assertAgyNoReplay(message, raw, row.label);
+			world.script(endTurn);
+			await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash());
+			expect(world.children, row.label).toHaveLength(2);
+		}
+	});
+
+	it("reuse path: a retained agy session's prompt failure seals the same verdict", async () => {
+		const world = makeWorld();
+		world.script(endTurn);
+		await runTurn(world, transcript("first"), "cell-agy-reuse", undefined, agyFlash());
+		const raw = new RequestError(-32603, "Internal error");
+		world.script(toolThenFail(() => raw));
+		const { message } = sealedOf(
+			await runTurn(world, transcript("first", "second"), "cell-agy-reuse", undefined, agyFlash()),
+		);
+		expect(world.children).toHaveLength(1);
+		assertAgyNoReplay(message, raw, "reuse");
+	});
+
+	it("[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM] a failure before the prompt is sent ran no tool: it keeps the verbatim path and gains no diagnostic", async () => {
+		const world = makeWorld();
+		const createConnection = world.deps.createConnection;
+		world.deps.createConnection = (spawned, handlers) => ({
+			...createConnection(spawned, handlers),
+			newSession: async () => {
+				throw new RequestError(-32603, "Internal error");
+			},
+		});
+		const { message } = sealedOf(await runTurn(world, transcript("go"), "cell-agy-boot", undefined, agyFlash()));
+		expect(message.stopReason).toBe("error");
+		expect(message.errorMessage?.startsWith("Internal error")).toBe(true);
+		expect(message.diagnostics).toBeUndefined();
 	});
 });

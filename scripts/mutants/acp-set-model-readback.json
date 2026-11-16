@@ -626,7 +626,7 @@
 			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
 		},
 		{
-			"claim": "ACP-AGY-NO-SEAL-NO-REJECTION",
+			"claim": "ACP-AGY-NO-SEAL",
 			"title": "agy declares measured turn accounting it does not have — a cost baseline and a Claude-only cache-miss bound run on a wire with no cost",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
 			"find": ["\t// NO sealsTurnAccounting — a deliberate absence. agy's `usage_update` carries `used` and `size`"],
@@ -636,7 +636,7 @@
 			],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:ACP-AGY-NO-SEAL-NO-REJECTION]",
+			"signature": "[QK:ACP-AGY-NO-SEAL]",
 			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
 		},
 		{

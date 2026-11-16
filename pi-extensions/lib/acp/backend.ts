@@ -1720,7 +1720,8 @@ export function streamAcpTurn(
 		stderrTail?: string[],
 		lifecycle?: string,
 		launchObservation?: AcpLaunchObservation,
-		/** Passed only from the two prompt-phase catches, where the turn's adapter is resolved. */
+		/** Passed only from the two turn catches, and only once the prompt is on the wire
+		 *  (`phase === "prompt"`): a bootstrap failure ran no tool and keeps the verbatim path. */
 		adapter?: AcpBackendAdapter,
 	): void {
 		finalizeAcpStreamState(state);
@@ -2361,7 +2362,7 @@ export function streamAcpTurn(
 				session?.stderrTail ?? stderrTail,
 				lifecycle,
 				session?.launchObservation ?? launchObservation,
-				adapter,
+				phase === "prompt" ? adapter : undefined,
 			);
 			// error/abort → drop the (uncertain) session and close its child; an
 			// uncertain connection must never be reused (GPT ④).
@@ -2466,7 +2467,14 @@ export function streamAcpTurn(
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.
-			finishError(err, aborted, session.stderrTail, lifecycle, session.launchObservation, adapter);
+			finishError(
+				err,
+				aborted,
+				session.stderrTail,
+				lifecycle,
+				session.launchObservation,
+				phase === "prompt" ? adapter : undefined,
+			);
 			// error/abort on a reused session → drop it and close the child (GPT ④).
 			session.retiring = true;
 			retainedChildren.delete(session.child);

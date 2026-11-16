@@ -57,6 +57,31 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:ACP-REUSE-COOPERATIVE-CANCEL]",
 			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-PROMPT-FAILURE-NO-REPLAY",
+			"title": "agy stops declaring its prompt-failure reader — a plain 'Internal error' after a completed tool reads as transient and pi replays a turn whose tools ran with permissions bypassed",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\treadPromptRejection: readAgyPromptRejection,"],
+			"replace": ["\t// mutant: agy declares no prompt-failure reader"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM",
+			"title": "the new-turn catch consults the reader before the prompt is sent — a bootstrap failure that ran no tool is sealed as unsafe-to-replay",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\tsession?.launchObservation ?? launchObservation,",
+				"\t\t\t\tphase === \"prompt\" ? adapter : undefined,"
+			],
+			"replace": ["\t\t\t\tsession?.launchObservation ?? launchObservation,", "\t\t\t\tadapter,"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
 		}
 	]
 }

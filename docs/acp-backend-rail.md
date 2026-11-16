@@ -162,9 +162,10 @@ is JSON-RPC's internal error; the kind is Claude's extension vocabulary, not a s
 retry permission. AIR session-failure metadata remains capability-gated off: since #163 S8
 entwurf declares only `clientCapabilities: { session: { compaction: {} } }`, and no AIR capability.
 
-Only the Claude adapter declares `readPromptRejection`. The common loop passes the
-once-resolved adapter at the two prompt catches, not at bootstrap failures, and skips
-this reader when the operator's abort wins. A recognized rejection seals once as
+The Claude adapter reads one typed kind; the agy adapter (#167) reads every prompt-phase
+failure (§Antigravity, Known limits). The common loop passes the once-resolved adapter at
+the two turn catches only once the prompt is on the wire (`phase === "prompt"`), never for a
+bootstrap failure, and skips this reader when the operator's abort wins. A recognized rejection seals once as
 `error/error`, drops the new or reused session under the existing policy, and sets a
 fixed semantic `errorMessage` which pi's real retry **and** overflow classifiers must
 reject. No global retry disable, substring sanitizer, or new failure ledger is added.
@@ -710,10 +711,17 @@ named no MCP server and five built-in skills.
   accepted this as a known limit on 2026-11-16; it is the same family as #125. A measured candidate,
   NOT adopted: at teardown, stop agy's group, collect its descendants from `/proc`, kill each
   descendant's group, then agy's. It closed the three orphan shapes measured, in 20–34 ms.
-- **A replayed prompt can repeat a side effect.** The error agy answers `session/prompt` with on an
-  exhausted quota or an expired login is not measured. If its text reads as transient to pi, pi
-  replays the whole prompt, and on a child with bypassed permissions any tool that already ran runs
-  again.
+- **A prompt-phase failure is never replayed by pi.** The error agy answers `session/prompt` with on
+  an exhausted quota or an expired login is not measured, and a synthetic sweep showed a plain
+  `Internal error`, a `429`, a wrapped `UNAUTHENTICATED` and a `rate limit` text all read as
+  transient to pi after a tool had completed — a replay would run that tool again with
+  permissions bypassed. So every agy failure after the prompt is sent seals the fixed
+  `AGY_PROMPT_FAILURE_VERDICT` and keeps the raw failure as a diagnostic
+  (`[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`); a bootstrap failure keeps the verbatim path
+  (`[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]`). The cost: a transient failure a replay would have
+  cured is reported instead, and so is a real overflow pi would have compacted and replayed. The
+  operator inspects the preserved failure and any effects already completed before deciding how to
+  continue; the whole prompt is not to be re-sent blindly.
 - **A level a row does not offer refuses the first turn.** A sibling opened on Argon or Flash with
   pi's level at `off`, `minimal`, `xhigh` or `max` fails its first turn (`acp-agy-thinking-level-unsupported`)
   rather than running at a level nobody chose; Hydrogen takes `xhigh`.

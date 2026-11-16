@@ -307,7 +307,8 @@ export const ACP_SUMMARY_TURN_UNSUPPORTED = "acp-summary-turn-unsupported";
 
 /** A vendor rejection an adapter recognised (`readPromptRejection`). */
 export interface AcpPromptRejection {
-	/** The vendor's own failure kind, as it named it on the wire. */
+	/** What failed: the vendor's own kind as it named it on the wire (claude), or an entwurf tag
+	 *  for a failure the adapter does not type by kind (agy: `jsonrpc:<code>` / `error:<name>`). */
 	errorKind: string;
 	/** Entwurf-authored and fixed — no vendor text, ids or numbers: this is what pi classifies. */
 	verdict: string;
@@ -321,6 +322,12 @@ export const ACP_PROMPT_REJECTION_DIAGNOSTIC = "entwurf_acp_prompt_rejection";
 /** The verdict for claude-agent-acp's `incomplete_tool_call` (#127; upstream #1212, 0.85.0+). */
 export const INCOMPLETE_TOOL_CALL_VERDICT =
 	"ACP turn failed because foreground tool results are incomplete. Some tools may already have run; automatic replay is unsafe. Inspect the preserved vendor rejection before continuing.";
+
+/** The verdict for EVERY prompt-phase failure of an agy turn (#167). Fixed, no vendor text: pi's
+ *  retry and overflow classifiers read it as neither, so a turn whose tools may have run under
+ *  bypassed permissions is never replayed by pi. */
+export const AGY_PROMPT_FAILURE_VERDICT =
+	"agy ACP turn failed after its prompt was sent. Tools may already have run with permission prompts bypassed; automatic replay is unsafe. Inspect the preserved backend failure before continuing.";
 
 // ---------------------------------------------------------------------------
 // claude adapter — the first implementation (the rail's reference backend)
@@ -347,6 +354,28 @@ function readClaudePromptRejection(err: unknown): AcpPromptRejection | undefined
 	if (typeof data !== "object" || data === null || !("errorKind" in data)) return undefined;
 	if (data.errorKind !== CLAUDE_INCOMPLETE_TOOL_CALL) return undefined;
 	return { errorKind: CLAUDE_INCOMPLETE_TOOL_CALL, verdict: INCOMPLETE_TOOL_CALL_VERDICT, dataJson: jsonText(data) };
+}
+
+/**
+ * The agy reader for `readPromptRejection` (#167). Unlike claude's it names no single kind: which
+ * typed rejections agy answers a prompt with is unmeasured, and a synthetic sweep (#167 thread,
+ * 2026-11-16) showed the plain JSON-RPC `Internal error`, a `429`, a wrapped `UNAUTHENTICATED` and
+ * a `rate limit` text all read as transient to pi after a tool had completed. finishError consults
+ * this only for a failure after the prompt went on the wire (never bootstrap, never an abort), and
+ * agy runs with its permission prompts bypassed — so every such failure gets the fixed verdict, and
+ * the raw failure rides the diagnostic. A transient failure that a replay would have cured is the
+ * cost, accepted over a tool running twice.
+ */
+function readAgyPromptRejection(err: unknown): AcpPromptRejection {
+	if (err instanceof RequestError) {
+		return {
+			errorKind: `jsonrpc:${err.code}`,
+			verdict: AGY_PROMPT_FAILURE_VERDICT,
+			dataJson: jsonText(err.data ?? null),
+		};
+	}
+	const errorKind = err instanceof Error ? `error:${err.name}` : `thrown:${typeof err}`;
+	return { errorKind, verdict: AGY_PROMPT_FAILURE_VERDICT, dataJson: "null" };
 }
 
 /** Evidence text for a wire value. A value that came off the wire serializes; one that cannot
@@ -838,7 +867,9 @@ export const agyAdapter: AcpBackendAdapter = {
 	// rests on a recurrence observed for Claude Code alone. The common mapper still relays `used`
 	// as the context occupancy pi reads.
 
-	// NO readPromptRejection — nobody has read which typed rejections agy answers a prompt with.
+	// Every prompt-phase failure is non-replayable (readAgyPromptRejection): agy's own rejection
+	// vocabulary is unmeasured, and its tools run with permission prompts bypassed.
+	readPromptRejection: readAgyPromptRejection,
 
 	// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on
 	// session/new; `plan` mode still ran a shell command; and a denied permission stops only the
