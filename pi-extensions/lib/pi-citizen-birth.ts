@@ -38,7 +38,7 @@
  */
 
 import { controlSocketPathIn } from "./control-socket-path.js";
-import { acquireLock, type LockClaim, type ReleaseResult, releaseLock } from "./entwurf-v2-lock.ts";
+import type { ReleaseResult } from "./entwurf-v2-lock.ts";
 import {
 	findCertifiedIdentityByNativeSessionId,
 	type MetaIdentity,
@@ -49,6 +49,7 @@ import {
 	type UpsertMetaSessionResult,
 	upsertMetaSession,
 } from "./meta-session.ts";
+import { type LockedWriteSeam, withRecordArmLock } from "./record-arm-lock.ts";
 
 export interface PiCitizenBirthInput {
 	/** pi's OWN session id (`ctx.sessionManager.getSessionId()`) — a uuidv7 in the
@@ -70,108 +71,14 @@ export interface PiCitizenBirthInput {
 	/** `"bounded"` polls up to {@link ARM_LOCK_WAIT_MS} (session_start: the address must be
 	 * established); `"once"` makes one attempt (a refresh, which may skip). Default bounded. */
 	armLockWait?: "bounded" | "once";
-	/** TEST-ONLY seam (the lock primitive's `_test_*` precedent): called inside the lock, right
-	 * before the record write and right after it returns, with the held lock's path. Never set
-	 * outside a gate. */
-	_test_lockedWrite?: { before?: (lockPath: string) => void; after?: (lockPath: string) => void };
+	/** TEST-ONLY seam (record-arm-lock.ts `LockedWriteSeam`). Never set outside a gate. */
+	_test_lockedWrite?: LockedWriteSeam;
 	/** control-socket dir. Caller policy (pi side: HOME-derived `ENTWURF_DIR`). */
 	controlSocketDir: string;
 	now?: Date;
 }
 
-/** The same bounds the Claude Code hook uses for an arm-capable event. */
-export const ARM_LOCK_WAIT_MS = 2_000;
-const ARM_LOCK_POLL_MS = 25;
-
-/** The record-arm lock for this garden was held by someone else; nothing was written. */
-export class RecordArmLockBusyError extends Error {
-	readonly code = "record-arm-lock-busy";
-	readonly gardenId: string;
-	readonly detail: string;
-	constructor(gardenId: string, detail: string) {
-		super(`record-arm lock busy for garden ${gardenId}; nothing was written (${detail})`);
-		this.name = "RecordArmLockBusyError";
-		this.gardenId = gardenId;
-		this.detail = detail;
-	}
-}
-
-function sleepSync(ms: number): void {
-	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-/** Take the lock: one attempt or a bounded poll. A busy lock throws the named error; a throw
- * from the primitive (its claim could not be written) is NOT busy and propagates as itself. */
-function takeArmLock(gardenId: string, dir: string, wait: "bounded" | "once"): LockClaim {
-	const deadline = Date.now() + (wait === "bounded" ? ARM_LOCK_WAIT_MS : 0);
-	for (;;) {
-		const acquired = acquireLock(gardenId, { dir });
-		if (acquired.ok) return acquired.claim;
-		if (Date.now() >= deadline) throw new RecordArmLockBusyError(gardenId, acquired.conflict.detail);
-		sleepSync(ARM_LOCK_POLL_MS);
-	}
-}
-
-const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
-
-/**
- * The record WAS written, and then its record-arm lock could not be released. The write stands
- * (`written`). The lock file names this live process, so a later writer of this garden sees it
- * held until this process exits (stale reclaim needs the holder gone).
- */
-export class RecordArmLockReleaseError extends Error {
-	readonly code = "record-arm-lock-release-failed";
-	readonly written: UpsertMetaSessionResult;
-	constructor(gardenId: string, lockPath: string, written: UpsertMetaSessionResult, cause: unknown) {
-		super(
-			`the record for garden ${gardenId} was written (${written.action}, ${written.path}), but its record-arm lock ` +
-				`${lockPath} was not released: ${messageOf(cause)}`,
-			{ cause },
-		);
-		this.name = "RecordArmLockReleaseError";
-		this.written = written;
-	}
-}
-
-/**
- * Attach under the lock. A release that throws is reported, never swallowed: a lock this live
- * process failed to unlink would hold every later write to this garden until the process exits.
- * A release that finds the lock `absent` or `not-owned` is NOT evidence this call's lock was
- * released normally — it is returned as the outcome it is, and nothing else is removed or retried.
- */
-function attachUnderLock(
-	gardenId: string,
-	dir: string,
-	wait: "bounded" | "once",
-	attach: () => UpsertMetaSessionResult,
-	seam: PiCitizenBirthInput["_test_lockedWrite"],
-): { written: UpsertMetaSessionResult; release: ReleaseResult } {
-	const claim = takeArmLock(gardenId, dir, wait);
-	let written: UpsertMetaSessionResult;
-	try {
-		seam?.before?.(claim.lockPath);
-		written = attach();
-		seam?.after?.(claim.lockPath);
-	} catch (err) {
-		try {
-			releaseLock(claim, { dir });
-		} catch (releaseErr) {
-			throw new AggregateError(
-				[err, releaseErr],
-				`the record write for garden ${gardenId} did not complete (${messageOf(err)}), and its record-arm lock ` +
-					`${claim.lockPath} was not released (${messageOf(releaseErr)})`,
-			);
-		}
-		throw err;
-	}
-	let release: ReleaseResult;
-	try {
-		release = releaseLock(claim, { dir });
-	} catch (releaseErr) {
-		throw new RecordArmLockReleaseError(gardenId, claim.lockPath, written, releaseErr);
-	}
-	return { written, release };
-}
+export { ARM_LOCK_WAIT_MS, RecordArmLockBusyError, RecordArmLockReleaseError } from "./record-arm-lock.ts";
 
 export interface PiCitizenBirth {
 	/** The garden address. Minted by the record, NOT by pi. */
@@ -226,7 +133,7 @@ export function birthPiCitizen(input: PiCitizenBirthInput): PiCitizenBirth {
 	}
 	if (result === null && existing !== null) {
 		const gardenId = existing.gardenId;
-		const locked = attachUnderLock(
+		const locked = withRecordArmLock(
 			gardenId,
 			locksDir,
 			wait,
@@ -238,7 +145,7 @@ export function birthPiCitizen(input: PiCitizenBirthInput): PiCitizenBirth {
 					dir: input.sessionsDir,
 					now: input.now,
 				}),
-			input._test_lockedWrite,
+			{ describeWritten: (w) => `${w.action}, ${w.path}`, seam: input._test_lockedWrite },
 		);
 		result = locked.written;
 		armLockRelease = locked.release;

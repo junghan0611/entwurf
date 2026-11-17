@@ -229,6 +229,13 @@
 		// enters the emit-capable root program. Typechecked by scripts/tsconfig.json via its
 		// gate (smoke-pi-attach.ts).
 		"pi-extensions/lib/pi-citizen-birth.ts",
+		// record-arm-lock.ts is the one record-arm lock hold every record writer uses (#151 b1/b2) and
+		// renew-writer.ts the /renew transition writer (#151 b2) — lib→lib VALUE importers
+		// (entwurf-v2-lock.ts, meta-session.ts) with explicit `.ts` extensions, same fence.
+		// Typechecked by scripts/tsconfig.json (its `../pi-extensions/lib/**/*.ts` include) via their
+		// beside tests.
+		"pi-extensions/lib/record-arm-lock.ts",
+		"pi-extensions/lib/renew-writer.ts",
 		// mux-launch.ts is the T1-a launch composition — a lib→lib VALUE importer (the
 		// placement leaf's grammar/binding/run helpers from mux-placement.ts) with an explicit
 		// `.ts` extension, same fence. mux-placement.ts itself stays in the root program: it

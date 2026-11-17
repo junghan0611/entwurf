@@ -15,7 +15,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { acquireLock, type LockClaim, releaseLock } from "./entwurf-v2-lock.ts";
-import { defaultMetaRecordArmLocksDir, UpsertGardenMismatchError, upsertMetaSession } from "./meta-session.ts";
+import {
+	defaultMetaRecordArmLocksDir,
+	UpsertGardenMismatchError,
+	type UpsertMetaSessionResult,
+	upsertMetaSession,
+} from "./meta-session.ts";
 import {
 	ARM_LOCK_WAIT_MS,
 	birthPiCitizen,
@@ -302,7 +307,7 @@ describe("pi birth under the record-arm lock (#151 b1)", () => {
 			fs.rmSync(path.join(s.locksDir, `${gardenId}.lock`), { force: true });
 		}
 		expect(caught).toBeInstanceOf(RecordArmLockReleaseError);
-		const fault = caught as RecordArmLockReleaseError;
+		const fault = caught as RecordArmLockReleaseError<UpsertMetaSessionResult>;
 		expect(fault.code).toBe("record-arm-lock-release-failed");
 		expect(fault.written.record.transcriptPath).toBe("/tmp/b1-kept.jsonl");
 		expect((JSON.parse(fs.readFileSync(recordPath, "utf8")) as { transcriptPath?: string }).transcriptPath).toBe(

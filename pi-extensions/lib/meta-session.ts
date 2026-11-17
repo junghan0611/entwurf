@@ -2788,9 +2788,10 @@ export function findCertifiedIdentityByNativeSessionId(
  * half-written record (#30 crash-safety). rename(2) REPLACES an existing final
  * path, which is exactly right for attach (the record being rewritten is the
  * caller's own) and exactly wrong for create — a freshly minted garden id must
- * never land on this path (#66).
+ * never land on this path (#66). Exported for the #151 /renew writer (renew-writer.ts), which
+ * rewrites its own garden's record under the record-arm lock — never for a create.
  */
-function atomicWriteIdentity(file: string, identity: MetaIdentity): void {
+export function atomicWriteIdentity(file: string, identity: MetaIdentity): void {
 	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
 	fs.writeFileSync(tmp, serializeMetaIdentity(identity), { mode: 0o600 });
 	fs.renameSync(tmp, file);

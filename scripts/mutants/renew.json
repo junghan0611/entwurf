@@ -673,7 +673,7 @@
 		{
 			"claim": "RENEW-B1-ATTACH-RELEASES-LOCK",
 			"title": "a successful attach never releases its record-arm lock — this live process then holds every later write to its garden, the /renew writer's included, until it exits",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
 			"find": ["\t\trelease = releaseLock(claim, { dir });"],
 			"replace": ["\t\trelease = \"released\";"],
 			"gate": ["bash", "run.sh", "check-renew-beside"],
@@ -685,9 +685,9 @@
 			"claim": "RENEW-B1-BUSY-WRITES-NOTHING",
 			"title": "the attach runs without the record-arm lock — an ordinary refresh can rename an older snapshot over a record the /renew writer just moved",
 			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
-			"find": ["\t\tconst locked = attachUnderLock("],
+			"find": ["\t\tconst locked = withRecordArmLock("],
 			"replace": [
-				"\t\tconst locked = ((_g: string, _d: string, _w: string, f: () => UpsertMetaSessionResult, _s: unknown) => ({ written: f(), release: \"released\" as const }))("
+				"\t\tconst locked = ((_g: string, _d: string, _w: string, f: () => UpsertMetaSessionResult, _o: unknown) => ({ written: f(), release: \"released\" as const }))("
 			],
 			"gate": ["bash", "run.sh", "check-renew-beside"],
 			"timeoutSeconds": 600,
@@ -697,7 +697,7 @@
 		{
 			"claim": "RENEW-B1-BOUNDED-WAITS",
 			"title": "session_start gives up on the first busy answer — a short writer hold refuses the session its garden address",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
 			"find": ["\tconst deadline = Date.now() + (wait === \"bounded\" ? ARM_LOCK_WAIT_MS : 0);"],
 			"replace": ["\tconst deadline = Date.now();"],
 			"gate": ["bash", "run.sh", "check-renew-beside"],
@@ -708,7 +708,7 @@
 		{
 			"claim": "RENEW-B1-PRIMITIVE-THROW-NOT-BUSY",
 			"title": "a lock the primitive could not write is reported as busy — an unwritable lock dir hides behind the one skip a refresh may take",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
 			"find": ["\t\tconst acquired = acquireLock(gardenId, { dir });"],
 			"replace": [
 				"\t\tconst acquired = (() => { try { return acquireLock(gardenId, { dir }); } catch (e) { throw new RecordArmLockBusyError(gardenId, String(e)); } })();"
@@ -806,7 +806,7 @@
 		{
 			"claim": "RENEW-B1-HOLDS-LOCK-DURING-WRITE",
 			"title": "the lock is released before the record write — the write runs unexcluded while every other cell still passes",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
 			"find": ["\tconst claim = takeArmLock(gardenId, dir, wait);"],
 			"replace": ["\tconst claim = takeArmLock(gardenId, dir, wait);\n\treleaseLock(claim, { dir });"],
 			"gate": ["bash", "run.sh", "check-renew-beside"],
@@ -817,8 +817,10 @@
 		{
 			"claim": "RENEW-B1-RELEASE-FAULT-AFTER-WRITE",
 			"title": "a release that throws after a successful write is swallowed — a leaked lock blocks the garden with no word",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
-			"find": ["\t\tthrow new RecordArmLockReleaseError(gardenId, claim.lockPath, written, releaseErr);"],
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
+			"find": [
+				"\t\tthrow new RecordArmLockReleaseError(gardenId, claim.lockPath, written, opts.describeWritten(written), releaseErr);"
+			],
 			"replace": ["\t\trelease = \"released\";"],
 			"gate": ["bash", "run.sh", "check-renew-beside"],
 			"timeoutSeconds": 600,
@@ -828,7 +830,7 @@
 		{
 			"claim": "RENEW-B1-RELEASE-FAULT-AFTER-FAILED-WRITE",
 			"title": "a failed write with a failed release reports one generic sentence — neither cause, garden nor lock reaches the operator",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
 			"find": [
 				"\t\t\t\t`the record write for garden ${gardenId} did not complete (${messageOf(err)}), and its record-arm lock ` +"
 			],
@@ -841,7 +843,7 @@
 		{
 			"claim": "RENEW-B1-RELEASE-NOT-PROVEN",
 			"title": "a lock gone or someone else's at release is reported as a normal release — an unproven exclusion reads as proven",
-			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
 			"find": ["\treturn { written, release };"],
 			"replace": ["\treturn { written, release: \"released\" as const };"],
 			"gate": ["bash", "run.sh", "check-renew-beside"],
@@ -859,6 +861,313 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-B1-REFRESH-ONCE-DOES-NOT-WAIT]",
 			"signatureSource": "pi-extensions/entwurf-control.refresh.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-START-WRITES-K1",
+			"title": "the K1 mark carries a time that is not when this renew recorded the agreed body",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\tstartedAt: (t.now ?? new Date()).toISOString(),"],
+			"replace": ["\t\t\tstartedAt: new Date(0).toISOString(),"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-START-WRITES-K1]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-START-PRECONDITION-IN-SECTION",
+			"title": "the front gate's re-check is MOVED before the lock — a newer reply can land between it and the K1 write",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\tconst owner = requireThisOwner(t.gardenId);",
+				"\treturn underLock(t, \"renew start\", () => {",
+				"\t\tconst { identity, file } = readCertified(t);",
+				"\t\tif (identity.backend !== \"pi\") refuse(\"not-pi\", t.gardenId, `backend is ${identity.backend}`);",
+				"\t\tif (identity.nativeSessionId !== t.expectedNative) {",
+				"\t\t\trefuse(\"native-moved\", t.gardenId, `current is ${identity.nativeSessionId}, expected ${t.expectedNative}`);",
+				"\t\t}",
+				"\t\tif (identity.renewing !== undefined)",
+				"\t\t\trefuse(\"already-renewing\", t.gardenId, `renewing from ${identity.renewing.from}`);",
+				"\t\ttry {",
+				"\t\t\tconst returned: unknown = t.precondition();",
+				"\t\t\tif (typeof (returned as { then?: unknown } | null | undefined)?.then === \"function\") {",
+				"\t\t\t\tthrow new Error(\"the re-check returned a promise; it must be synchronous\");",
+				"\t\t\t}",
+				"\t\t} catch (err) {",
+				"\t\t\trefuse(\"precondition-failed\", t.gardenId, messageOf(err));",
+				"\t\t}"
+			],
+			"replace": [
+				"\tconst owner = requireThisOwner(t.gardenId);",
+				"\ttry {",
+				"\t\tconst returned: unknown = t.precondition();",
+				"\t\tif (typeof (returned as { then?: unknown } | null | undefined)?.then === \"function\") {",
+				"\t\t\tthrow new Error(\"the re-check returned a promise; it must be synchronous\");",
+				"\t\t}",
+				"\t} catch (err) {",
+				"\t\trefuse(\"precondition-failed\", t.gardenId, messageOf(err));",
+				"\t}",
+				"\treturn underLock(t, \"renew start\", () => {",
+				"\t\tconst { identity, file } = readCertified(t);",
+				"\t\tif (identity.backend !== \"pi\") refuse(\"not-pi\", t.gardenId, `backend is ${identity.backend}`);",
+				"\t\tif (identity.nativeSessionId !== t.expectedNative) {",
+				"\t\t\trefuse(\"native-moved\", t.gardenId, `current is ${identity.nativeSessionId}, expected ${t.expectedNative}`);",
+				"\t\t}",
+				"\t\tif (identity.renewing !== undefined)",
+				"\t\t\trefuse(\"already-renewing\", t.gardenId, `renewing from ${identity.renewing.from}`);"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-START-PRECONDITION-IN-SECTION]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-START-REFUSES-MOVED-OR-RENEWING",
+			"title": "a second K1 writes over a record already mid-/renew",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tif (identity.renewing !== undefined)\n"],
+			"replace": ["\t\tif (false)\n"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-START-REFUSES-MOVED-OR-RENEWING]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-RESERVE-ONLY-FROM-NULL",
+			"title": "an already reserved next chapter is reserved again — a caller reads it as leave to append",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tif (r.to !== null) refuse(\"to-already-reserved\", t.gardenId, `renewing.to is already ${r.to}`);"],
+			"replace": ["\t\tif (false) refuse(\"to-already-reserved\", t.gardenId, `renewing.to is already ${r.to}`);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-RESERVE-ONLY-FROM-NULL]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-RESERVE-UNCLAIMED",
+			"title": "a next chapter id another record already claims is reserved",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tif (all.some((rec) => claimedNativeSessionIds(rec).includes(t.to))) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-RESERVE-UNCLAIMED]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-OWNER-IS-THIS-PROCESS",
+			"title": "owner is compared by pid alone — a reused pid's old run writes over another process's renew",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\tif (r.owner.pid !== owner.pid || r.owner.startKey !== owner.startKey) {"],
+			"replace": ["\tif (r.owner.pid !== owner.pid) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-OWNER-IS-THIS-PROCESS]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-TOKEN-IS-THIS-RENEW",
+			"title": "another renew's mark is written over",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\tif (r.token !== t.token) refuse("],
+			"replace": ["\tif (false) refuse("],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-TOKEN-IS-THIS-RENEW]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-CLEAR-ONLY-UNRESERVED",
+			"title": "a mark with a reserved next chapter is cleared — the record says open while a new chapter file may exist",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\tif (r.to !== null) refuse(\"to-already-reserved\", t.gardenId, `renewing.to is ${r.to}; the mark is not cleared`);"
+			],
+			"replace": [
+				"\t\tif (false) refuse(\"to-already-reserved\", t.gardenId, `renewing.to is ${r.to}; the mark is not cleared`);"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-CLEAR-ONLY-UNRESERVED]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-COORDINATES",
+			"title": "the closed chapter loses the model the record carried when it closed",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\t\tmodel: identity.model ?? null,"],
+			"replace": ["\t\t\t\tmodel: null,"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-COORDINATES]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-OUTLINE-EXACT",
+			"title": "the latest outline's time is the commit's, not when the agreed body was recorded",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\t\t\toutline: { body: r.outline, sha: r.outlineSha, forNativeSessionId: t.to, writtenAt: r.startedAt },"
+			],
+			"replace": [
+				"\t\t\t\toutline: { body: r.outline, sha: r.outlineSha, forNativeSessionId: t.to, writtenAt: (t.now ?? new Date()).toISOString() },"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-OUTLINE-EXACT]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-TIMES",
+			"title": "the last line is cut at the tail's first newline, not its last — the chapter's end is not the last entry",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tconst nl = tail.lastIndexOf(0x0a, end - 1);"],
+			"replace": ["\t\tconst nl = tail.indexOf(0x0a);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-TIMES]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-ORIGINAL-NAMES-FROM",
+			"title": "an original that names another session is accepted as the leaving chapter",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tif (head === null || header?.type !== \"session\" || header.id !== from) {"],
+			"replace": ["\t\tif (head === null || header?.type !== \"session\") {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-ORIGINAL-NAMES-FROM]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-ORIGINAL-NO-LINK",
+			"title": "the original is opened through a symlink — W2 and the times act on a file the record does not name",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\tfd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);"
+			],
+			"replace": ["\t\tfd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-ORIGINAL-NO-LINK]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-NEEDS-RESERVED-TO",
+			"title": "the commit moves the current pointer to a chapter this renew never reserved",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\tif (r.to !== t.to) refuse("],
+			"replace": ["\t\t\tif (false) refuse("],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-NEEDS-RESERVED-TO]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-W2-WRITE-BITS-ONLY",
+			"title": "W2 sets 0444 — group and other gain read access to a private transcript",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\tconst target = original.mode & ~0o222;"],
+			"replace": ["\t\t\tconst target = 0o444;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-W2-WRITE-BITS-ONLY]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-W2-FAILURE-KEEPS-COMMIT",
+			"title": "a W2 failure throws after the rename — a committed renew reads as failed",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\t\tprotection = { kind: \"closed-chapter-not-write-protected\", detail: messageOf(err) };"],
+			"replace": ["\t\t\t\tthrow err;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-W2-FAILURE-KEEPS-COMMIT]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-CLASSIFY",
+			"title": "a record that closed the chapter with another edition is read as this renew's commit",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\tif (last?.nativeSessionId === opts.from && identity.outline?.sha === opts.outlineSha) {"],
+			"replace": ["\tif (last?.nativeSessionId === opts.from) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-CLASSIFY]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-WRITES-UNDER-LOCK",
+			"title": "the writer runs without the record-arm lock — an ordinary refresh can rename over a transition write",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\tconst { written, release } = withRecordArmLock(t.gardenId, dir, t.armLockWait ?? \"bounded\", step, {"
+			],
+			"replace": [
+				"\tconst { written, release } = ((_g: string, _d: string, _w: unknown, f: () => T, _o: unknown) => ({ written: f(), release: \"released\" as const }))(t.gardenId, dir, t.armLockWait ?? \"bounded\", step, {"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-WRITES-UNDER-LOCK]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-COMMIT-OUTLINE-CONFIRMED",
+			"title": "the commit checks only that the record's outline hashes to its own sha — another valid edition is committed in place of the confirmed one",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\tif (r.outlineSha !== t.expectedOutlineSha) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-COMMIT-OUTLINE-CONFIRMED]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-ORIGINAL-READS-ENDS-ONLY",
+			"title": "the leaf reads the whole original to find its last entry — a long chapter is read and held in memory end to end",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\tendedAt: timestampOf(readLastLine(fd, st.size, head.next)),"],
+			"replace": [
+				"\t\t\tendedAt: timestampOf(fs.readFileSync(fd, \"utf8\").split(\"\\n\").filter((l) => l.trim() !== \"\").slice(1).at(-1) ?? null),"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-ORIGINAL-READS-ENDS-ONLY]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-ORIGINAL-FIFO-NO-WAIT",
+			"title": "the original is opened without O_NONBLOCK — a FIFO with no writer blocks the Pi event loop before any regular-file check",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\tfd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);"
+			],
+			"replace": ["\t\tfd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-ORIGINAL-FIFO-NO-WAIT]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-PRECONDITION-SYNC",
+			"title": "a re-check that returns a promise is read as a pass — its result arrives after the K1 write",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\t\tif (typeof (returned as { then?: unknown } | null | undefined)?.then === \"function\") {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-PRECONDITION-SYNC]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-B2-LOCKED-WRITE-SYNC",
+			"title": "the lock hold accepts a write that returns a promise — the write finishes after the lock is released",
+			"subject": "pi-extensions/lib/record-arm-lock.ts",
+			"find": ["\t\tif (typeof (written as { then?: unknown } | null | undefined)?.then === \"function\") {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B2-LOCKED-WRITE-SYNC]",
+			"signatureSource": "pi-extensions/lib/record-arm-lock.test.ts"
 		}
 	]
 }
