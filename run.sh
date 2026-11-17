@@ -1597,10 +1597,11 @@ check_renew_beside() {
   # writes (renew-writer.ts), and (b3) for the switch admission (renew-admission.ts and the registered
   # before-switch/before-fork guards, a third child-process harness), and (b3-2) for the transition carried
   # out end to end through the registered handler (a fourth child-process harness) and the transition's own
-  # conditions without Pi (renew-transition.ts).
+  # conditions without Pi (renew-transition.ts), and (C1.4o) the offline recovery: the owner hand-over
+  # beside the writer and its orchestration (renew-recover.ts).
   # Not a discovery path — check-tests-beside-behavior already finds the files; one renew mutant
   # re-runs only these beside tests.
-  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts pi-extensions/lib/renew-front-gate.test.ts pi-extensions/lib/renew-command.test.ts pi-extensions/entwurf-control.renew.test.ts pi-extensions/lib/pi-citizen-birth.test.ts pi-extensions/entwurf-control.refresh.test.ts pi-extensions/lib/renew-writer.test.ts pi-extensions/lib/record-arm-lock.test.ts pi-extensions/lib/renew-admission.test.ts pi-extensions/entwurf-control.admission.test.ts pi-extensions/lib/renew-transition.test.ts pi-extensions/entwurf-control.transition.test.ts
+  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts pi-extensions/lib/renew-front-gate.test.ts pi-extensions/lib/renew-command.test.ts pi-extensions/entwurf-control.renew.test.ts pi-extensions/lib/pi-citizen-birth.test.ts pi-extensions/entwurf-control.refresh.test.ts pi-extensions/lib/renew-writer.test.ts pi-extensions/lib/record-arm-lock.test.ts pi-extensions/lib/renew-admission.test.ts pi-extensions/entwurf-control.admission.test.ts pi-extensions/lib/renew-transition.test.ts pi-extensions/entwurf-control.transition.test.ts pi-extensions/lib/renew-recover.test.ts
 }
 
 check_native_push_runner() {
@@ -8633,6 +8634,14 @@ case "$cmd" in
     # + [--ttl-days N] to override.
     shift || true
     run_ts scripts/meta-bridge-prune.ts "$@"
+    ;;
+  renew-recover)
+    # #151 C1.4o: the explicit OFFLINE recovery of a /renew whose owner Pi is gone. A human runs it
+    # once, in a quiet window: read-only status, --continue the reserved chapter (hand-over, then
+    # the same commit; Pi is not opened), or --abort an unreserved attempt (save the body, hand-over,
+    # then the same clear). Exit 0/2/4/5/1 — see scripts/renew-recover.ts.
+    shift || true
+    run_ts scripts/renew-recover.ts "$@"
     ;;
   meta-facts)
     # #65 owner-normalized READ-ONLY projection of the meta-record store: the

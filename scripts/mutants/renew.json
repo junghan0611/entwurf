@@ -1734,6 +1734,176 @@
 			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
 		},
 		{
+			"claim": "RENEW-REC-ADOPT-DEAD-ONLY-OWNER",
+			"title": "the hand-over rewrites more than the owner — the attempt's start time moves with it",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\treturn { record: writeRecord(t, file, { ...identity, renewing: { ...r, owner: self } }), recordPath: file };"
+			],
+			"replace": [
+				"\t\treturn { record: writeRecord(t, file, { ...identity, renewing: { ...r, owner: self, startedAt: new Date().toISOString() } }), recordPath: file };"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-ADOPT-DEAD-ONLY-OWNER]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-ADOPT-LIVE-OR-UNCERTAIN-REFUSED",
+			"title": "only an uncertain owner is refused — a live owner's mark is taken over",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tif (verdict !== \"dead\") {"],
+			"replace": ["\t\tif (verdict === \"uncertain\") {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-ADOPT-LIVE-OR-UNCERTAIN-REFUSED]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-ADOPT-TUPLE-DRIFT",
+			"title": "the hand-over does not compare the attempt's token — another attempt's mark is taken",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\tif (t.token !== r.token) refuse(\"token-mismatch\", t.gardenId, \"renewing.token is not the attempt named\");"
+			],
+			"replace": ["\t\t// token not compared"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-ADOPT-TUPLE-DRIFT]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-ADOPT-EXCLUSIVE",
+			"title": "the hand-over keeps the gone owner — a second recovery takes the same mark again",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": [
+				"\t\treturn { record: writeRecord(t, file, { ...identity, renewing: { ...r, owner: self } }), recordPath: file };"
+			],
+			"replace": [
+				"\t\treturn { record: writeRecord(t, file, { ...identity, renewing: { ...r, owner: r.owner } }), recordPath: file };"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-ADOPT-EXCLUSIVE]",
+			"signatureSource": "pi-extensions/lib/renew-writer.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-STATUS-READ-ONLY",
+			"title": "the status falls through to a recovery instead of only reading",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\tif (o.plan.kind === \"status\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-STATUS-READ-ONLY]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-CONTINUE-COMMITS-SAME-TO",
+			"title": "the continue commits another transcript path than the reserved chapter's named file",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\t\t\t\tnewTranscriptPath: plan.file,"],
+			"replace": ["\t\t\t\tnewTranscriptPath: plan.file.replace(/\\.jsonl$/, \".x.jsonl\"),"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-CONTINUE-COMMITS-SAME-TO]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-CONTINUE-FILE-CHECKED",
+			"title": "the reserved file's body is not checked — a file with the body twice or not first is committed",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\treturn checked.ok ? null : checked.reason;"],
+			"replace": ["\treturn null;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-CONTINUE-FILE-CHECKED]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-HANDOVER-RELEASE-STOPS",
+			"title": "a hand-over whose exclusion is not proven goes on to the commit",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\t\t\tif (a.release === \"released\") return null;"],
+			"replace": ["\t\t\treturn null;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-HANDOVER-RELEASE-STOPS]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-ABORT-SAVES-THEN-CLEARS",
+			"title": "the abort saves the body but never clears — the garden stays mid-/renew",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\t\tconst c = clearRenewStart({ ...writer, from: r.from });"],
+			"replace": ["\t\tconst c = { release: \"released\" as const };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-ABORT-SAVES-THEN-CLEARS]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-ABORT-KEEPS-MARK-WHEN-UNSAVED",
+			"title": "the save overwrites a file that already exists instead of refusing",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\t\tfs.writeFileSync(plan.saveOutline, r.outline, { flag: \"wx\", mode: 0o600 });"],
+			"replace": ["\t\tfs.writeFileSync(plan.saveOutline, r.outline, { flag: \"w\", mode: 0o600 });"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-ABORT-KEEPS-MARK-WHEN-UNSAVED]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-PLAN-MATCHES-RESERVATION",
+			"title": "an abort is attempted on a reserved chapter",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\tif (r.to !== null) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-PLAN-MATCHES-RESERVATION]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-LIVE-OWNER-NOTHING",
+			"title": "a live owner is not refused up front — the body is saved before the hand-over refuses",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": ["\tif (verdict !== \"dead\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-LIVE-OWNER-NOTHING]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-SAVE-NAMED-ON-REFUSAL",
+			"title": "a hand-over refused after the save does not name the save file it already wrote",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": [
+				"\t\t\t\treturn { kind: \"refused\", code: err.code, detail: err.message, ...(saved === undefined ? {} : { saved }) };"
+			],
+			"replace": ["\t\t\t\treturn { kind: \"refused\", code: err.code, detail: err.message };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-SAVE-NAMED-ON-REFUSAL]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
+			"claim": "RENEW-REC-STOP-READS-RECORD-BACK",
+			"title": "a stop after the hand-over reports an assumed record state instead of reading it back",
+			"subject": "pi-extensions/lib/renew-recover.ts",
+			"find": [
+				"\t\treturn { kind: \"stopped\", code, detail, record, ownerPid, ...(saved === undefined ? {} : { saved }) };"
+			],
+			"replace": [
+				"\t\treturn { kind: \"stopped\", code, detail, record: { state: \"renewing\" as const, to: r.to }, ownerPid, ...(saved === undefined ? {} : { saved }) };"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-REC-STOP-READS-RECORD-BACK]",
+			"signatureSource": "pi-extensions/lib/renew-recover.test.ts"
+		},
+		{
 			"claim": "RENEW-CMD-TRANSITION-RECHECK",
 			"title": "the K1 recheck ignores a newer reply — a candidate replaced after the confirm is still written",
 			"subject": "pi-extensions/lib/renew-command.ts",

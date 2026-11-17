@@ -1120,6 +1120,11 @@
 					"summary": "#65 owner-normalized READ-ONLY store projection: deterministic JSON {schemaVersion:1, storeDir, citizens: full v3 records sorted by gardenId, defects: {filename,message}} — THE listing contract emitted by the owner so consumers stop copying the certification. No liveness/sockets/transcript contents. EXIT: 0 readable (defects in-band; missing store = empty), 2 usage, 3 unreadable ([dir])"
 				},
 				{
+					"synopsis": "renew-recover <gardenId>",
+					"column": 38,
+					"summary": "#151 C1.4o: the explicit OFFLINE recovery of a /renew whose owner Pi is gone — a human runs it once, in a quiet window. No flag: read-only status (from, to, owner pid and whether it is proven gone, body sha). --continue <abs session file>: the reserved chapter's file is checked (header, first user message exactly the agreed body, once), the mark is handed over to this process and the SAME commit runs; no append, and Pi is NOT opened — open that file with pi --session and check the address and first input there. --abort --save-outline <abs new file>: only when nothing is reserved; the body is saved and read back first, then hand-over and the SAME clear. A live or uncertain owner refuses. EXIT: 0 status/done, 2 usage, 4 refused (the record is unchanged; an abort names any save file it already wrote), 5 stopped after the hand-over (the line carries what the record says now — it may already be committed or open), 1 unexpected"
+				},
+				{
 					"synopsis": "check-remote-pair-installed",
 					"column": 39,
 					"summary": "#107 rail 3, CHECKOUT-ONLY: install a caller-supplied candidate tarball (--tgz <abs>) into a sandboxed consumer prefix, check its compiled remote-pair surface, run the installed `entwurf remote-pair-receive` (usage exit 2 = twin reached), run the T2 roundtrip cells against the installed bridge+entry, and audit that the subject processes resolve every module inside the consumer prefix (with a checkout control). Never repacks; no real ssh, no model"

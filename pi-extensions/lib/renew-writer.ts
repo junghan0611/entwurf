@@ -35,12 +35,15 @@ import {
 	atomicWriteIdentity,
 	certifyActiveStoreDir,
 	claimedNativeSessionIds,
+	classifyMarkerOwner,
 	defaultMetaSessionsDir,
 	isPlausibleOwnerPid,
+	type MarkerOwnerFacts,
 	type MetaIdentity,
 	MetaRecordError,
 	metaRecordFilename,
 	parseMetaRecordV3,
+	probePidExistence,
 	processStartKey,
 	type RenewChapter,
 	type RenewingState,
@@ -62,6 +65,7 @@ export type RenewWriteRefusalCode =
 	| "token-mismatch"
 	| "owner-unprovable"
 	| "owner-mismatch"
+	| "owner-not-dead"
 	| "precondition-failed"
 	| "to-already-reserved"
 	| "to-claimed"
@@ -224,6 +228,51 @@ export function writeRenewStart(
 			startedAt: (t.now ?? new Date()).toISOString(),
 		};
 		return { record: writeRecord(t, file, { ...identity, renewing }), recordPath: file };
+	});
+}
+
+/**
+ * The explicit offline recovery's hand-over (#151; GLG "최소수습하는것을 넣자", SOL design read
+ * 2026-11-17T10:58Z). A renew whose owner process is gone can never be finished by the ordinary
+ * functions here — each takes only its own owner — so the human-invoked recovery first takes the
+ * mark over, and only then calls the SAME commit or clear. Under the record-arm lock: the record is
+ * mid-/renew; its from, token and to are exactly what the caller named (read moments before, so a
+ * drift between that read and this lock refuses); and the owner recorded THEN is proven dead by
+ * the one owner rule (`classifyMarkerOwner`) — live or uncertain refuses. Only `renewing.owner`
+ * changes, to this process; from, to, token, outlineSha, the body, startedAt and the record's
+ * outline and chapters stay as they were. Two recoveries cannot both take it: the first makes
+ * itself the owner, and a live owner refuses the second. Nothing here launches or opens a session.
+ */
+export function adoptRenewOwner(
+	t: RenewWriterTarget & {
+		from: string;
+		to: string | null;
+		/** TEST-ONLY: the facts about the recorded owner's pid; the real probes otherwise. */
+		_test_ownerFacts?: (owner: RenewOwner) => MarkerOwnerFacts;
+	},
+): RenewWriteResult {
+	const self = requireThisOwner(t.gardenId);
+	return underLock(t, "renew owner hand-over", () => {
+		const { identity, file } = readCertified(t);
+		const r = identity.renewing ?? refuse("not-renewing", t.gardenId, "the record is not mid-/renew");
+		if (identity.nativeSessionId !== t.from || r.from !== t.from) {
+			refuse(
+				"from-mismatch",
+				t.gardenId,
+				`current ${identity.nativeSessionId}, renewing.from ${r.from}, expected ${t.from}`,
+			);
+		}
+		if (t.token !== r.token) refuse("token-mismatch", t.gardenId, "renewing.token is not the attempt named");
+		if (r.to !== t.to) refuse("to-mismatch", t.gardenId, `renewing.to is ${r.to}, expected ${t.to}`);
+		const facts = t._test_ownerFacts?.(r.owner) ?? {
+			currentStartKey: processStartKey(r.owner.pid),
+			pidExists: probePidExistence(r.owner.pid),
+		};
+		const verdict = classifyMarkerOwner(r.owner.startKey, facts);
+		if (verdict !== "dead") {
+			refuse("owner-not-dead", t.gardenId, `the recorded owner pid ${r.owner.pid} is ${verdict}, not proven gone`);
+		}
+		return { record: writeRecord(t, file, { ...identity, renewing: { ...r, owner: self } }), recordPath: file };
 	});
 }
 

@@ -175,6 +175,7 @@
 		"../../scripts/meta-bridge-prune.ts",
 		"../../scripts/meta-bridge-fresh-cut.ts",
 		"../../scripts/meta-facts.ts",
+		"../../scripts/renew-recover.ts",
 		"../../scripts/peer-facts.ts",
 		"../../scripts/omp-receive-facts.ts",
 		"../../scripts/codex-socket-path.ts",

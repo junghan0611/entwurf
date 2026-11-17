@@ -580,6 +580,14 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			line: "  entwurf herdr-plugin-withdraw-operator  # #153 the opt-out of herdr-plugin-expose-operator: removes exactly the receipt's link — only while it is still that link — and then the receipt; the ledger stays at schema 3. Runs only as the active runtime's package. herdr-plugin-deactivate removes the same link first, before any component",
 			receipt: "run.sh `herdr-plugin-withdraw-operator)` arm -> scripts/herdr-operator-link.mjs withdraw (#153)",
 		},
+		// #151 C1.4o (GLG 2026-11-17 "최소수습하는것을 넣자", SOL design read 10:58Z): the offline /renew
+		// recovery, right after meta-facts — receipt: the run.sh `renew-recover)` arm.
+		{
+			after: "  entwurf meta-facts                  # ",
+			line: "  entwurf renew-recover <gardenId>    # #151 C1.4o: the explicit OFFLINE recovery of a /renew whose owner Pi is gone — a human runs it once, in a quiet window. No flag: read-only status (from, to, owner pid and whether it is proven gone, body sha). --continue <abs session file>: the reserved chapter's file is checked (header, first user message exactly the agreed body, once), the mark is handed over to this process and the SAME commit runs; no append, and Pi is NOT opened — open that file with pi --session and check the address and first input there. --abort --save-outline <abs new file>: only when nothing is reserved; the body is saved and read back first, then hand-over and the SAME clear. A live or uncertain owner refuses. EXIT: 0 status/done, 2 usage, 4 refused (the record is unchanged; an abort names any save file it already wrote), 5 stopped after the hand-over (the line carries what the record says now — it may already be committed or open), 1 unexpected",
+			receipt:
+				"run.sh `renew-recover)` arm -> scripts/renew-recover.ts -> pi-extensions/lib/renew-recover.ts (#151 C1.4o)",
+		},
 		// #160 (relayed by 9fc008, GLG approval 2026-11-13): the OpenClaw send entry and birth verb, right after
 		// remote-pair-receive — receipts: the run.sh `openclaw-send)` / `openclaw-birth)` arms.
 		{
@@ -1011,9 +1019,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// Moved for #160: two arms `openclaw-send)` and `openclaw-birth)` after `remote-pair-receive)`, nothing
 	// else changed (134 -> 136 labels, re-reviewed: both are described entries and outside the debt). The
 	// diff against the bfdafcfa… case is exactly those 13 added lines.
-	const REVIEWED_CASE_SHA256 = "6ca06d6809320e2879e8bf0eed8a9b93e1e525c3c77997cc70741b48299f70b0";
+	// Moved for #151 C1.4o: one `renew-recover)` arm before `meta-facts)`, nothing else changed (136 -> 137
+	// labels, re-reviewed: a described entry and outside the debt). The diff against the 6ca06d68… case is
+	// exactly those 8 added lines.
+	const REVIEWED_CASE_SHA256 = "73038f7a71df9c58286bedab4612b19fb5bb679a0af98d04835d7dc42d33c3c8";
 	ok(
-		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus its reviewed #153, #157 and #160 amendments, byte for byte",
+		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus its reviewed #153, #157, #160 and #151 amendments, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,
 		"the top-level case changed: re-review its labels against ENTWURF-CLI.json and the debt below, then move the pin",
 	);

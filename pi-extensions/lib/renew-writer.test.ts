@@ -12,7 +12,7 @@
  * Isolation as in pi-citizen-birth.test.ts: every call names a throwaway store and lock dir, and
  * PI_CODING_AGENT_DIR points at a different throwaway root.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -24,6 +24,7 @@ import { processStartKey, readAddressableMetaIdentity } from "./meta-session.ts"
 import { birthPiCitizen } from "./pi-citizen-birth.ts";
 import { RecordArmLockBusyError } from "./record-arm-lock.ts";
 import {
+	adoptRenewOwner,
 	classifyRenewRecord,
 	clearRenewStart,
 	commitRenew,
@@ -569,5 +570,84 @@ describe("/renew writer (#151 b2)", () => {
 		} finally {
 			releaseLock(held.claim, { dir: s.locksDir });
 		}
+	});
+});
+
+/** A real process that ran and is gone: its pid and the start key it had while it ran. */
+async function deadOwner(): Promise<{ pid: number; startKey: string }> {
+	const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore" });
+	await new Promise((r) => setTimeout(r, 150));
+	const pid = child.pid as number;
+	const startKey = processStartKey(pid);
+	const exited = new Promise((r) => child.once("exit", r));
+	child.kill("SIGKILL");
+	await exited;
+	return { pid, startKey };
+}
+function setOwner(recordPath: string, owner: { pid: number; startKey: string }): void {
+	const raw = JSON.parse(fs.readFileSync(recordPath, "utf8")) as { renewing: { owner: unknown } };
+	raw.renewing.owner = owner;
+	fs.writeFileSync(recordPath, JSON.stringify(raw, null, 2));
+}
+
+describe("/renew offline recovery hand-over (#151 C1.4o)", () => {
+	it("[QK:RENEW-REC-ADOPT-DEAD-ONLY-OWNER] a mark whose recorded owner is proven gone is handed to this process, and nothing but the owner changes", async () => {
+		const s = store();
+		const { gardenId, recordPath } = born(s);
+		start(s, gardenId);
+		reserveRenewTo({ ...at(s, gardenId), from: N0, to: N1 });
+		const dead = await deadOwner();
+		expect(dead.startKey).not.toBe("");
+		setOwner(recordPath, dead);
+		const before = JSON.parse(fs.readFileSync(recordPath, "utf8")) as Record<string, unknown>;
+		const a = adoptRenewOwner({ ...at(s, gardenId), from: N0, to: N1 });
+		expect(a.release).toBe("released");
+		const after = JSON.parse(fs.readFileSync(recordPath, "utf8")) as Record<string, unknown>;
+		expect((after.renewing as { owner: unknown }).owner).toEqual({
+			pid: process.pid,
+			startKey: processStartKey(process.pid),
+		});
+		const strip = (r: Record<string, unknown>) => ({
+			...r,
+			recordUpdatedAt: null,
+			renewing: { ...(r.renewing as object), owner: null },
+		});
+		expect(strip(after)).toEqual(strip(before));
+	});
+
+	it("[QK:RENEW-REC-ADOPT-LIVE-OR-UNCERTAIN-REFUSED] a live or an uncertain recorded owner is never taken over; nothing is written", () => {
+		const s = store();
+		const { gardenId, recordPath } = born(s);
+		start(s, gardenId); // the owner is this process: live
+		const marked = bytes(recordPath);
+		refusal("owner-not-dead", () => adoptRenewOwner({ ...at(s, gardenId), from: N0, to: null }));
+		expect(bytes(recordPath).equals(marked)).toBe(true);
+		setOwner(recordPath, { pid: 2147483646, startKey: "not-a-start-key" }); // unrecognized key: uncertain
+		const uncertain = bytes(recordPath);
+		refusal("owner-not-dead", () => adoptRenewOwner({ ...at(s, gardenId), from: N0, to: null }));
+		expect(bytes(recordPath).equals(uncertain)).toBe(true);
+	});
+
+	it("[QK:RENEW-REC-ADOPT-TUPLE-DRIFT] the hand-over takes only the attempt that was named: another from, token or to refuses, writing nothing", async () => {
+		const s = store();
+		const { gardenId, recordPath } = born(s);
+		start(s, gardenId);
+		setOwner(recordPath, await deadOwner());
+		const marked = bytes(recordPath);
+		refusal("to-mismatch", () => adoptRenewOwner({ ...at(s, gardenId), from: N0, to: N1 }));
+		refusal("token-mismatch", () => adoptRenewOwner({ ...at(s, gardenId, OTHER_TOKEN), from: N0, to: null }));
+		refusal("from-mismatch", () => adoptRenewOwner({ ...at(s, gardenId), from: N2, to: null }));
+		expect(bytes(recordPath).equals(marked)).toBe(true);
+	});
+
+	it("[QK:RENEW-REC-ADOPT-EXCLUSIVE] of two hand-overs of the same gone owner only the first takes it: the second meets a live owner", async () => {
+		const s = store();
+		const { gardenId, recordPath } = born(s);
+		start(s, gardenId);
+		setOwner(recordPath, await deadOwner());
+		expect(adoptRenewOwner({ ...at(s, gardenId), from: N0, to: null }).release).toBe("released");
+		const taken = bytes(recordPath);
+		refusal("owner-not-dead", () => adoptRenewOwner({ ...at(s, gardenId), from: N0, to: null }));
+		expect(bytes(recordPath).equals(taken)).toBe(true);
 	});
 });

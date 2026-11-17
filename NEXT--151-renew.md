@@ -102,6 +102,44 @@
 - **재현과 upstream 조사 (GLG 2026-11-17, 이 세션):** GLG "실제 해보고, 진짜 발생 재현가능한지 보고 방법을 찾아보자. 매력적인 방법이 아니어도 규약으로 피할수 있어도 좋다." 격리 실제 Pi 1.5.2 재현 영수증 `/tmp/entwurf-151/reentry/RECEIPT-20261117.md` f00feb94…: first-come은 독립 교체에 짐, 동기 구간 설계는 앞선 async handler(GLG 프로필의 andenken·heartbeat) 때문에 우리 호출까지 막음, ALS는 독립 교체를 가르고 우리 호출을 통과시킴, 확장의 중첩 교체는 ALS로 못 가름(재현). 운영 프로필 감사: 세션 교체를 시작하는 확장 코드 0, custom editor 0. 제안(GLG 결정 대기): ALS + 규약("/renew 프로필의 확장은 스스로 세션 교체를 시작하지 않는다") + 사후 감지(`renew-switch-preempted`). GLG "혹시 upstream에서 해결되는 문제인지도 파악해보자. 소넷을 새로 불러서 조사를 맡겨봐" → Sonnet 형제 `20261117T134544-541544`(entwurf/claude-sonnet-5-5, 콜백 nonce 일치) 조사 중, 보고서 `/tmp/entwurf-151/upstream/`.
 - **미감사 symlink 검수 (SOL 2026-11-17T05:09Z):** `session-recall-compat.ts`는 현재 source가 없는 은퇴 링크다(agent-config 1c5b893b에서 삭제). 현재 디스크 프로필의 기본 자동 선택에서 빠진다(PackageManager 자동 발견과 1.5.2 bundle이 끊어진 symlink를 statSync 실패로 건너뜀, 소스 근거). 이미 떠 있는 runtime의 실제 미로딩은 관측하지 않았다. 역사적 위임 upstream은 미확인이다. "안전한 파일" PASS가 아니다. 감사 덧붙임 `AUDIT-20261117.md` 이제 057b1af5…, 보고서 `REVIEW-session-recall-compat-SOL-20261117.md` 3792a402…. 링크 정리는 agent-config의 몫(GLG 결정).
 - **정숙 구간의 자동 입력원 — 짧은 안내로 (GLG 정렬, 운영코디 전달; C1.4n `/tmp/entwurf-151/renew-contract-c1.4n.md`):** GLG "작은정정 맞지? 정숙하라는게 강제로 다 확인해서 하던거 멈추게 하려는것은 아니니까 이런거 다 코드로 막으려면 귀찮은 일이다." 오토비 자문(자동 입력원 누락)은 스킬 12절의 짧은 안내로만 반영했다. 하던 일 마무리, 조용할 때 창 열기, 타이머·작업 완료 알림·continuation도 잠시 배려, 확인부터 넘어간 신호까지는 자동 입력도 보내지 않음, 강제 멈춤 아님, 코드가 막지 않음. 잠깐 넣었던 `pending-input` 코드 거절은 철회했다(C1.4m → C1.4n). 운영코디 07:07Z 요청으로 12절에 GLG 원문을 두고 "조용한 때를 고르고 필요한 자동 진행만 사람이 잠시 쉬게 한다"로 다듬었다(강제 절차·전수 점검·늘 조작할 목록 아님, runtime 자동 검사 대상 아님). 향후 입력 방지는 규약이며 새 기능·감시를 늘리지 않는다. SDK 사실(isIdle은 대기 메시지 미포함)과 감사의 입력원 목록(4ab5b312…)은 사실로 남긴다.
+- **① 최소 수습 C1.4o (GLG "박살나면 옆에 에이전트한테 고쳐달라고 하면된다. 허나 최소수습하는것을 넣자 1 2 3하자"; SOL C1.4o B0/D3/O2 → C1.4o-a B0/D0 11:43Z, 읽기 판독):** 순서는 ① 최소 수습 → ② 운영 반영 창 → ③ 실제 SOL renew이다. push는 이 결정에 없다. 계약 메모: `/tmp/entwurf-151/renew-contract-c1.4o.md` f19b758b…(SOL 설계 판독 10:58Z: 동의, 연결 조건 넷).
+  - writer `adoptRenewOwner`: lock 안에서 명시한 from·token·to가 맞고, 그때 기록된 owner가 `classifyMarkerOwner`로 dead일 때만 `renewing.owner`를 이 프로세스로 바꾼다. 일반 함수는 그대로다.
+  - lib `renew-recover.ts`와 CLI `entwurf renew-recover <gid>`: status / `--continue <abs file>`(예약 장만, 파일 엄격 검사 → 인계 → 재검사 → 기존 commit, append 0, Pi는 열지 않음) / `--abort --save-outline <abs new>`(미예약만, 원본 확인 → 본문 저장·대조 → 인계 → 기존 clear). 인계의 release가 `released`가 아니면 멈춘다.
+  - CLI 노출: run.sh arm, ENTWURF-CLI.json usage, install-surface의 help-all amendment와 case pin 이동(136→137), tsconfig.build 컴파일 twin(임시 outDir로 emit을 확인했고, 운영 dist는 건드리지 않음).
+  - 스킬 "멈췄을 때"에 오프라인 수습 절차를 적었다.
+  - 셀: writer 옆 4개, recover 8개. 변이 140→152, 손 확인 12/12. renew 160/160.
+  - **격리 실제 Pi T6(예약 → continue → `pi --session` → 첫 입력: 같은 garden, 본문 1회, 재append 0)과 T7(미예약 → abort, 저장 sha = K1 sha → N0 다시 열기).** T6·T7의 "주소"는 상태 줄과 get_state까지만 본 것이다. SOL D3 뒤 다시 잰 T6b·T7b는 다시 연 Pi의 listener get_info로 같은 garden, 그 장의 native, 그 pi의 pid, 비어 있지 않은 incarnation을 확인했다.
+  - SOL C1.4o 판독 B0/D3/O2(11:30Z)에 따른 수정:
+    - D1: 거절은 record를 바꾸지 않는다는 뜻이다. abort의 저장 파일은 `saved`(verified·unverified)로 따로 알린다.
+    - D2: 인계 뒤의 두 번째 파일 읽기 I/O 오류는 stopped로 남긴다. effect 뒤 오류는 `classifyRenewRecord`로 지금 record 상태와 ownerPid를 읽어 함께 낸다.
+    - D3: get_info 측정. 셀 +2(SAVE-NAMED-ON-REFUSAL, STOP-READS-RECORD-BACK), 변이 152→154, 수습 변이 14개 손 확인 14/14.
+  - 영수증은 이제 640eab8c…이다.
+  - SOL이 남긴 한계: 실제 두 프로세스의 경쟁과 수습 뒤 TUI는 측정하지 않았다. 권한 000 셀은 비-root 조건이다. original fd close 경로는 소스 판독뿐이다. 실제 vendor, ACP child, MCP·운영 프로필 공존은 이 증거와 따로 본다. SOL의 B0/D0는 PARTIAL·FULL·rollout PASS를 대신하지 않는다.
+  - 다음: freeze → PARTIAL renew(154) → frozen `pnpm check`(F1 RED는 그대로 표시) → 로컬 커밋. 그 뒤 ② 운영 반영은 GLG 창, ③ 실제 SOL renew. push는 없다.
+- **b3-2 커밋과 격리 실제 Pi 측정 (2026-11-17 저녁, 6a8b34):** 로컬 커밋 `d8fb3e12`(push 없음). `git diff 9a107417 d8fb3e12`는 두 번째 freeze candidate 8fa07bc8…와 같다. PARTIAL renew는 140/140 KILLED이고 control은 green이다(receipt `/tmp/entwurf-151/b3-2-freeze2/PARTIAL-renew.json` 7831a111…). `pnpm check`는 F1에서만 RED이고, 그 뒤 75개는 red 0이다. 측정 영수증은 `/tmp/entwurf-151/measure/RECEIPT-b3-2-20261117.md` 7d03b8f7…이다(Pi 1.5.2, stub provider, 격리 store, n=1).
+  - T1 RPC와 T4 TUI: 같은 가든으로 커밋했다. record는 1개이고 chapters가 하나 늘었으며, outline sha가 확인한 sha8과 같고, 원본은 0444가 됐다. **새 장의 첫 모델 요청 맨 앞에 본문이 정확히 1회 있다.** T4는 TUI에서도 ALS 허가가 전달됨을 보였다.
+  - T2: 느린 before handler가 기다리는 동안 들어온 바깥 RPC `new_session`은 `renew-switch-not-admitted`로 취소됐고, /renew는 커밋했다.
+  - T3 kill: K1 뒤에 죽으면 `renewing.to=null`, commit 전에 죽으면 `to=N1`이고 새 파일에 본문 1회가 남는다. 다시 열면 떠난 장은 `renew-in-progress`, 예약 장은 `native-id-reserved-by-renew`로 주소를 받지 못하고, meta-record 쓰기는 거절되며 새 가든도 없다. 원본 JSONL 바이트가 그대로인지는 재지 않았다.
+  - 측정하지 않은 것: 실제 vendor 직렬화, ACP child, MCP·운영 확장을 함께 실은 상태, 최소 수습(사람 몫).
+  - SOL이 harness 수정을 판독했다(09:13Z): B0/D0. 셀 의미를 바꾸지 않고, oracle을 그 호출이 남긴 새 note로만 좁힌 수정이다. 첫 receipt c3a06a9d…의 group-RED는 과거 결과로 남는다. 제품 판독(e)과 proof 판독은 따로 유지한다.
+  - SOL이 측정을 판독했다(10:30Z): 이 범위에서 제품 수선 요구는 없다. 영수증 문구 둘을 좁혔다(system content 텍스트만 빔, 재개 "Nothing was written"은 meta-record 거절일 뿐 원본 바이트 판정이 아님). SOL 권고는 첫 실제 사용 전제(C1.4 §5)인 최소 same-to 수습을 격리 1회로 확인하는 것이다.
+  - **T5 수습 시도: 현재 표면으로 불가.** 기존 `commitRenew`가 `owner-mismatch`로 거절한다. reserve·clear·commit 모두 원래 owner 프로세스만 받는다. 그래서 전환 도중 Pi가 죽으면 그 가든은 모든 장에서 주소를 받지 못하고, record를 손으로 고치는 길밖에 없다. 영수증은 이제 d5b4ef39…이다.
+  - GLG 결정을 나눈다: ① push ② 운영 build·restart·reader rollout 창(F1·MCP 포함 바이트 일치) ③ 실제 SOL renew는 최소 수습이 생긴 뒤 별도로. 최소 수습을 무엇으로 둘지는 GLG가 정한다(C1.2 §4의 owner 인계를 좁게 구현할지, 다른 방법을 쓸지).
+  - GLG에게 DM 한 건을 보냈다(10:33Z, messageId 1189). 재발송하지 않고 기다린다. SOL 판독(10:35Z·10:37Z):
+    - 이번 결과는 owner guard가 작동한 것이고, 빠진 것은 명시적 인계 surface라는 확인이다. 결함이 아니다.
+    - 일반 reserve·clear·commit을 느슨하게 하지 않는다. 죽은 owner로의 자동 인계는 없다. record 손 수정을 수습 경로로 권하지 않는다.
+    - 인계를 택하더라도 범위는 명시한 대상, 확인된 종료, 같은 reservation뿐이다. 자동 복구·watcher·manager는 두지 않는다.
+    - **clear는 미예약(`to:null`)에만 쓰는 별도의 안전 조건이다.** 예약된 `to`는 owner가 죽었다는 것만으로 지우지 않고, 같은 행선지와 파일을 보존한다. owner 인계와 전환 phase 초기화는 구별한다(DM의 예시 "commit 또는 clear"를 이렇게 읽는다).
+    - 설계·구현은 GLG 결정 전에는 시작하지 않는다.
+  - **운영코디 인수 (10:42Z):** GLG가 "이거 운영코디랑 이야기해서 정하자 상황 정리하게 보내"라고 해서 상황 정리를 보냈다(68bd94 메일함).
+    - 운영코디가 GLG께 올릴 권고는 (가)다. 좁은 명시적 owner 인계 한 경로를 먼저 확인한 뒤 실제 장수 시민을 전환한다. 확률이나 40ms 수치로 이 공백을 없다고 보지 않는다.
+    - 이 권고는 착수 지시가 아니다. 구현·운영·push 승인도 아니다.
+    - 채택되면 범위는 이렇다:
+      - 일반 owner guard는 완화하지 않는다.
+      - 명시 대상, 실제로 죽은 이전 owner, 같은 reservation·to·file, 본문 재append 0.
+      - **완료 기준은 owner 필드 변경이 아니다.** 실제 Pi가 같은 garden, 예약 native, 같은 file로 이어지고, 기존 본문이 새 모델 요청에 1회 쓰이는 데까지 확인해야 한다.
+      - 새 bootstrap·launcher나 넓은 기능이 꼭 필요하다면 범위를 키우기 전에 그 차이를 먼저 보고한다.
+    - push, 운영 reader·writer rollout과 정식 floor, 실제 SOL의 consent·final·전환은 각각 따로 GLG와 정한다.
 - **마무리 기준 (GLG 2026-11-17, SOL 세션에서 직접; SOL 08:06Z 전달) — 컴팩트 뒤에도 이것부터:** GLG 원문 "내가 계속 규약으로 풀자는 것도 코드로 다 못막고 유연하지 못하기 때문이거든. 일단 오푸스가 계속 컴팩트 받아가면서 가고 있으니 잘 마무리해줘." 앞선 말("작은정정 맞지? … 코드로 막으려면 귀찮은 일이다")과 같은 뜻으로, 코드가 무거워지는 것을 염려한다.
   - 기준: 모든 상황을 코드로 포위하지 않는다. 코드에는 생일·원본·합의 판을 훼손하지 않는 최소 경계와 정확한 중단·관측만 둔다. 정숙·배려·드문 수습 판단은 규약과 사람에게 둔다. 별도 phase 체계·새 reason 체계·입력 차단·manager로 넓히지 않는다. SOL도 후속 리뷰에서 추가 복잡성이 실제로 필요한지 함께 본다.
   - 현재 후보: b3-2-e(전체 diff `/tmp/entwurf-151/b3-2-e.diff` f3f687e5…, d 이후 `b3-2-e-since-d.diff` a415dba8…, 파일별 `b3-2-e.files.sha`; 이 NEXT 줄이 더해져 NEXT의 해시는 바뀐다). **SOL B0/D0(08:15Z, 읽기 판독)**: 세 항목 닫힘, 추가 제품 수선 요구 없음. NEXT 말고 15개 source·proof 바이트가 e와 일치함을 SOL이 대조했다. 판독은 frozen worktree receipt가 아니다. 그래서 handoff를 포함해 freeze한 뒤 PARTIAL을 다시 받는다.
