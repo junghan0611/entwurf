@@ -38,6 +38,7 @@ import {
 	existsSync,
 	lstatSync,
 	mkdirSync,
+	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	readlinkSync,
@@ -483,6 +484,9 @@ export const AGY_REAL_GEMINI_DIR = join(homedir(), ".gemini");
 /** pi-owned overlay dir — the `--gemini-dir` target for agy ACP child spawns. */
 export const AGY_GEMINI_OVERLAY_DIR = join(homedir(), ".pi", "agent", "agy-gemini-overlay");
 
+/** User-owned root outside git (#168) — per-turn agy summary children get `<turn>/{gemini,cwd}` here. */
+export const AGY_SUMMARY_ROOT_DIR = join(homedir(), ".pi", "agent", "agy-summary");
+
 /** agy's own subdirectory under the gemini dir (its `--app-data-dir` default). */
 export const AGY_APP_DATA_DIRNAME = "antigravity-cli";
 
@@ -537,6 +541,9 @@ export const AGY_ACP_HOOK_NAME = "entwurf-acp-policy";
 /** The named refusal for a hook seat that is a directory, so no file can be written there. */
 export const ACP_AGY_HOOKS_SEAT_NOT_A_FILE = "acp-agy-hooks-seat-not-a-file";
 
+/** The named refusal when the written hook seat bytes do not read back identically. */
+export const ACP_AGY_HOOKS_SEAT_VERIFY_FAILED = "acp-agy-hooks-seat-verify-failed";
+
 /**
  * The seat's bytes: one named PreToolUse hook on every tool (`matcher: "*"`) running `command`.
  * The shape is agy's own `hooks.json` (measured, agy 1.5.9, #168): `{name: {PreToolUse: [{matcher,
@@ -587,6 +594,11 @@ function writeAgyHooksSeat(configDir: string, bytes: string): void {
 	} catch (err) {
 		rmSync(temp, { force: true });
 		throw err;
+	}
+	if (readFileSync(seat, "utf8") !== bytes) {
+		throw new Error(
+			`entwurf: ${ACP_AGY_HOOKS_SEAT_VERIFY_FAILED} — ${seat} did not read back the expected hook bytes. Nothing was started.`,
+		);
 	}
 }
 
@@ -724,4 +736,63 @@ export function ensureAgyGeminiOverlay(
 			);
 		}
 	}
+}
+
+export interface AgySummaryRoot {
+	rootDir: string;
+	geminiDir: string;
+	cwd: string;
+}
+
+/**
+ * Create an isolated per-turn root under `AGY_SUMMARY_ROOT_DIR` (`0700`) with `gemini/` and
+ * `cwd/`. Keeping the summary child outside git repositories prevents `.agents/hooks.json`
+ * walk-up (#168 Step 0/0b), and isolating `gemini/` keeps `v1:deny-all` off the shared overlay.
+ */
+export function createAgySummaryRoot(baseDir: string = AGY_SUMMARY_ROOT_DIR): AgySummaryRoot {
+	mkdirSync(baseDir, { recursive: true, mode: 0o700 });
+	const rootDir = mkdtempSync(join(baseDir, "turn-"));
+	const geminiDir = join(rootDir, "gemini");
+	const cwd = join(rootDir, "cwd");
+	mkdirSync(geminiDir, { recursive: true, mode: 0o700 });
+	mkdirSync(cwd, { recursive: true, mode: 0o700 });
+	return { rootDir, geminiDir, cwd };
+}
+
+/**
+ * Clean up one per-turn summary root after the turn settles (#168 S3).
+ *
+ * - If child exit is unconfirmed (`!childExited`), touch NOTHING (preserve evidence + leave the
+ *   running child's state intact).
+ * - Once child exit is confirmed (or `spawned === false`, meaning no child was ever started),
+ *   iterate `AGY_OVERLAY_PASSTHROUGH` and unlink each entry that is a symlink inside this summary
+ *   root's own `gemini/antigravity-cli/` dir (never the operator's state or shared overlay).
+ * - Remove the rest of `rootDir` when `succeeded` or `!spawned`; failed/incomplete spawned turns
+ *   keep logs/transcript for diagnosis.
+ */
+export function cleanupAgySummaryRoot(
+	summaryRoot: AgySummaryRoot,
+	opts: { childExited: boolean; succeeded: boolean; spawned?: boolean },
+): { cleaned: boolean; unlinkedPassthrough: string[] } {
+	if (!opts.childExited) {
+		return { cleaned: false, unlinkedPassthrough: [] };
+	}
+	const unlinkedPassthrough: string[] = [];
+	const appDataDir = join(summaryRoot.geminiDir, AGY_APP_DATA_DIRNAME);
+	for (const entry of AGY_OVERLAY_PASSTHROUGH) {
+		const linkPath = join(appDataDir, entry);
+		try {
+			if (lstatSync(linkPath).isSymbolicLink()) {
+				unlinkSync(linkPath);
+				unlinkedPassthrough.push(entry);
+			}
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+		}
+	}
+	if (opts.succeeded || opts.spawned === false) {
+		rmSync(summaryRoot.rootDir, { recursive: true, force: true });
+		return { cleaned: true, unlinkedPassthrough };
+	}
+	return { cleaned: false, unlinkedPassthrough };
 }

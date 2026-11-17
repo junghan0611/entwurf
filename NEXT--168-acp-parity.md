@@ -5,12 +5,12 @@
 - [x] **1. GLG 방향 확정·main에서 브랜치 분리.** `168-acp-parity`.
 - [x] **2. Native Claude Code 실무코디·팀 구성.** 코디 `20261117T111822-10220d`, 팀 impl `12a832`·lab-claude `2d5b03`·lab-agy `9c64a8`·review `e02599`(2026-11-17, 전원 GLG 요청으로 은퇴 완료).
 - [x] **3. 1단계 — 비교표·raw wire 측정·비중첩 수선.** 문서 parity, Claude ACP 0.107.3 bump, Claude·agy 버전 floor, agy ① 숨은 턴 기본 차단. 동결 FULL green, 브랜치 커밋·푸시(GLG 승인 2026-11-17).
-- [ ] **4. #151 병합 후 2단계.** ← NEXT: oracle이 이 브랜치를 회수해 다음 릴리스에서 머지 → 아래 "2단계" 목록.
+- [x] **4. 2단계 — #151을 기다리지 않는다(GLG, #168 댓글 6942260793).** ← 완료: agy 요약 턴(Gemini hydrogen `20261117T140640-747ccd` 구현, Claude 검수) + ① 설치 증명(코디). 충돌은 oracle이 병합 때 푼다.
 - [x] **5. #167 흡수.** #167 흡수 댓글 + 닫음(not planned, #168로 추적 이전). 미측정 잔여는 아래와 #168 댓글.
 
 # HANDOFF — 다음 세션이 여기서 시작
 
-- **상태:** #168 1단계는 frozen candidate 검증 완료(`pnpm run check:full` 865s exit 0, 전후 해시 동일) 후 브랜치 커밋·푸시. **release 불가 표기 유지** — ①의 tarball 셀(check-pack)과 installed-consumer(check-install-surface)가 #151 뒤.
+- **상태:** 1단계는 `a1438a73`로 브랜치 커밋·푸시(동결 FULL 865s green). 2단계(아래)는 focused·PARTIAL·check-pack(-install)·lab LIVE·동결 FULL green으로 브랜치 커밋·push. ①의 설치 증명이 채워져 1단계의 "release 불가" 사유는 해소 — release 판단은 oracle 병합 쪽.
 - **들어간 것:**
   - docs/acp-backend-rail.md "Backend parity" 절(seat·common loop 표), agy 측정 칸·Known limits, BASELINE #168 LIVE 행.
   - Claude ACP `@agentclientprotocol/claude-agent-acp` 0.107.3 / wire SDK 2.7.0(release-age 예외 정확 버전).
@@ -19,13 +19,18 @@
   - thinking 정정(`ACP-AGY-THINKING-MENU`), Fable 5.2는 세션 생성 모델 한정 문서 정정.
 - **검증 영수증:** PARTIAL `check-acp-set-model-readback` group 70/70 → 80/80 → 93/93 killed, seal stable(receipts: `/tmp/impl168-occ/partial2-…json` `1a1cef21…`, `/tmp/impl168-occ/partial3-floor.json` `ea98557b…`, `~/.local/share/entwurf-lab/168/agy/receipts/partial-stage1.json` `27abea0a…`). FULL 기록 `/tmp/impl168-occ/full/`. LIVE n=1(lab sandbox, production 코드): Claude 0.107.3 ADMIT·0.107.2 REFUSE, agy 1.5.9 admit·`invoke_subagent:failed`·숨은 호출 0·`run_command:completed`. 결정적 줄은 #168 댓글 6936815216 / 6937086428 / 6938404329.
 - **거절 유지(결정):** agy 도구 좁히기(`acp-agy-narrowing-unsupported`, 재개 조건 = agy가 자식이 다시 쓸 수 없는 제한 표면 제공), 무도구 요약 턴(`toollessSummaryTurn` 미선언), agy steer(턴 중 두 번째 prompt는 선점 — 이름 붙은 거절).
-- **2단계(#151 병합 뒤):**
+- **2단계(#151과 병행, GLG 2026-11-17):**
   - `run.sh` `check_pack()` required에 hook 파일 셀(패치 `~/.local/share/entwurf-lab/168/agy/impl-stage1/phase2/run.sh.check-pack.patch` `344b04fc…`), check-install-surface installed-consumer 증명 → ① release 가능.
   - floor SSOT(package.json)·doctor/smoke arm·ENTWURF-CLI.
   - #151 통합 인계 메모 `/tmp/impl168-occ/handoff-151.md`: summary-turn test hunk 6개(-39 import, -148/149 env clearing+launchOf, -150, -166, -169, -173 agentInfo answer — fixture answer만, #151 `@@ -632,0 +633,51 @@` 비접촉), package.json:105-106, gate-qual `"acp-parity": 24` L3536 끝자리(#151 L3445·L3526 인접 회피). 병합 시 #151 makeWorld 사용 describe가 env clearing·agentInfo answer를 물려받음.
   - main NEXT.md:11 정정(#151 접촉 파일).
-- **GLG 결정 대기:** (1) workspace `<cwd>/.agents/hooks.json` notice/거절 표면(현재 Known limit만, SOL: 무검증 차단 금지) (2) 운영 `~/.pi/agent/claude-config-overlay`의 12:14 smoke 흔적(`projects/-tmp-entwurf-s2a-raw-*` 등) 정리 — 보존 중.
-- **운영 경계:** 운영 pi가 이 checkout을 package로 로드 — 브랜치 상태 코드가 새 pi/bridge에 적용된다(첫 agy 턴에서 운영 overlay에 hook 좌석 작성).
+- **GLG 결정(#168 댓글 6942260793, oracle 작성):** "168 하는데 151 신경쓰지 않고 제대로 밀고 가길 바라는거야. 좀 충돌나도 상관없어." 앞서 대기였던 두 건(workspace `.agents/hooks.json` 표면, 운영 claude-config-overlay 12:14 smoke 흔적)도 "신경 안 써도 된다" — Known limit 유지, 흔적 그대로. #151 답(같은 댓글): `/renew`는 agy 요약 거절에 기대지 않음(grep 0), 미커밋 포함 merge-tree exit 0, 겹침은 `check-gate-qualification.ts`(#151 L3526 vs #168 L3536)·ENTWURF.json revision(#168은 22를 써도 oracle이 23으로)·tsconfig.json fence.
+- **2단계 후보 (18:2x KST, 미커밋, base `a1438a73`):**
+  - **agy 요약 턴 `execution-denied` (747ccd 구현, 코디 리뷰 2회 + O5):** `summaryTurnMode: "toolless" | "execution-denied"`(dispatch `ALLOWED_SUMMARY_TURN_MODES` 명시 열거), agy 턴별 root `~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`(0700, git 밖) + 전용 `--gemini-dir`에 `v1:deny-all` 좌석(bytes readback), `AGY_ACP_COMMAND` override면 root 생성 전 `acp-agy-summary-override-unsupported`, cleanup은 자식 종료 확인 뒤 passthrough 링크만 unlink·성공(`stop`)이면 root 삭제·미스폰이면 root 삭제·종료 불명이면 전부 보존+warn, overlay 쓰기 실패면 root 삭제 후 rethrow. `ACP-AGY-SUMMARY-REFUSED` 은퇴 → `ACP-AGY-SUMMARY-EXECUTION-DENIED`·`ACP-SUMMARY-MODE-EXPLICIT`·`ACP-AGY-SUMMARY-CLEANUP-S3`·`ACP-AGY-HOOK-DENY-ALL`·`ACP-AGY-SUMMARY-OVERRIDE-REFUSED`·`ACP-AGY-SUMMARY-ISOLATED-DIR`; acp-parity 29.
+  - **검증:** focused(vitest 4파일 97, tsc 0, biome, check-gate-manifests 1698/100) green. PARTIAL `check-acp-set-model-readback` 98/98 killed·seal stable·868s(`~/.local/share/entwurf-lab/168/agy/receipts/partial-summary-readback-4.json` 내부 `f85e29ea…`; 앞선 두 회차는 WRONG-REASON·SURVIVED → 중복 단언 일원화, 고정 sleep 대신 `vi.waitFor`), `check-acp-session-reuse` 1/1·31s(`partial-summary-reuse.json` `5b562134…`). `check-pack` 690 files·`check-pack-install` 2m03s green(설치 트리 hook 셀). lab LIVE(`live-summary-turn.md`): 요약 n=3·유혹·숨은 턴/자기수정 red·공유 좌석 오염 red·compact→자식 닫기→새 agy 자식 회상·cleanup 1,119ms. 앞선 스크립트 예외 2회가 lab root 3개를 남겼고(warn 0, 원인 기록 뒤 삭제) 운영 `~/.pi/agent/agy-summary` 없음.
+  - **① 설치 증명(코디):** `run.sh` check_pack `required`·`tar_required` + check-pack-install 설치 트리 hook 실행 셀. "check-install-surface"는 .ts fence라 대상이 아니었다(정정).
+  - BASELINE #168 행 → 포인터, 본문은 `docs/baseline-receipts.md` #168 절.
+  - **동결 FULL green(18:24–18:37 KST, 775s, exit 0, 전후 diff·porcelain·NEXT 동일) → GLG 승인으로 브랜치 커밋·push.** 이후 NEXT 편집은 이 줄뿐. 미측정: interactive Pi `/compact`(GLG가 실사용으로 관측), agy `entwurf_resume_call`, agy 자동 compaction·overflow 원문(K6 — overflow 복구는 계속 막힘).
 
 # LEDGER — 2026-11-17 진행 기록
 

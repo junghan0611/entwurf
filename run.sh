@@ -3810,6 +3810,9 @@ check_pack() {
     "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/model-ids.js" "pi-extensions/lib/acp/backend.ts"
     "pi-extensions/lib/acp/overlay.ts" "pi-extensions/lib/acp/tool-surface.ts"
     "pi-extensions/lib/acp/event-mapper.ts" "pi-extensions/lib/acp/context.ts"
+    # #168 ① — the agy ACP child's PreToolUse hook. The overlay names it by absolute path beside
+    # backend-adapter.ts; a tarball without it would leave every agy tool call denied.
+    "pi-extensions/lib/acp/agy-acp-hook.mjs"
     "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/entwurf-bridge/src/index.ts"
@@ -4858,6 +4861,7 @@ _check_pack_install_impl() {
     "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/model-ids.js" "pi-extensions/lib/acp/backend.ts"
     "pi-extensions/lib/acp/overlay.ts" "pi-extensions/lib/acp/tool-surface.ts"
     "pi-extensions/lib/acp/event-mapper.ts" "pi-extensions/lib/acp/context.ts"
+    "pi-extensions/lib/acp/agy-acp-hook.mjs"
     "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/entwurf-bridge/src/index.ts"
@@ -5171,6 +5175,47 @@ _check_pack_install_impl() {
     return 1
   }
   echo "[check-pack-install] installed durable bootstrap: $durable_proof"
+
+  # #168 ① — the agy ACP child's PreToolUse hook, run FROM the installed tree. The agy adapter
+  # writes the seat command as node + the hook beside its own module (agyAcpHookPath, a sibling of
+  # backend-adapter.ts; [QK:ACP-AGY-HOOK-PATH-RESOLVES]), so the installed package must carry the
+  # hook in that same directory, and the installed copy must decide on its own: a hidden-turn tool
+  # denied, an ordinary tool allowed, and a seat naming no policy denied rather than allowing by
+  # silence (an exit 0 with an empty stdout is an allow to agy). No agy, no credential, no seat write.
+  local agy_hook_proof
+  agy_hook_proof=$(cd "$tmp" && node --input-type=module -e "
+    const { realpathSync, existsSync } = await import('node:fs');
+    const { spawnSync } = await import('node:child_process');
+    const pkg = realpathSync(process.cwd() + '/node_modules/@junghanacs/entwurf');
+    const dir = pkg + '/pi-extensions/lib/acp';
+    for (const f of ['backend-adapter.ts', 'agy-acp-hook.mjs']) {
+      if (!existsSync(dir + '/' + f)) { console.error(f + ' is not in the installed ' + dir); process.exit(1); }
+    }
+    const hook = dir + '/agy-acp-hook.mjs';
+    const run = (args, tool) => {
+      const r = spawnSync(process.execPath, [hook, ...args], { input: JSON.stringify({ toolCall: { name: tool } }), encoding: 'utf8' });
+      const lines = r.stdout.trim().split('\n').filter(Boolean);
+      return { status: r.status, decision: lines.length === 1 ? JSON.parse(lines[0]).decision : '<' + lines.length + ' lines>' };
+    };
+    const cells = [
+      [['v1:hidden-turns'], 'invoke_subagent', 'deny'],
+      [['v1:hidden-turns'], 'run_command', 'allow'],
+      [[], 'run_command', 'deny'],
+    ];
+    for (const [args, tool, want] of cells) {
+      const got = run(args, tool);
+      if (got.status !== 0 || got.decision !== want) {
+        console.error('installed hook ' + JSON.stringify(args) + ' ' + tool + ': exit ' + got.status + ', decision ' + got.decision + ' (expected exit 0, ' + want + ')');
+        process.exit(1);
+      }
+    }
+    console.log('beside the installed backend-adapter.ts; v1:hidden-turns denies invoke_subagent and allows run_command; no policy denies');
+  " 2>&1) || {
+    fail "[check-pack-install] installed agy ACP hook failed:"
+    echo "$agy_hook_proof" | sed 's/^/    /' >&2
+    return 1
+  }
+  echo "[check-pack-install] installed agy ACP hook: $agy_hook_proof"
 
   # #116 M3-b1/b2 — THE ACTUAL-PACKAGE RUNTIME PROOF, THROUGH THE SHIPPED OWNER.
   # The Herdr plugin's runtime verifier decides whether a tree npm placed is a runtime the scoped

@@ -65,6 +65,8 @@ import {
 	ACP_PROMPT_REJECTION_DIAGNOSTIC,
 	ACP_SUMMARY_TURN_UNSUPPORTED,
 	type AcpBackendAdapter,
+	type AcpOverlayResult,
+	type AcpSummaryTurnMode,
 	assertSupportedDeclaredBackend,
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
@@ -270,6 +272,8 @@ export interface AcpTurnDeps {
 	 * an abort — never a running prompt.
 	 */
 	abortGraceMs?: number;
+	/** Bound for waiting on summary-child exit before cleaning its isolated root (#168 S3). */
+	childExitTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1164,6 +1168,29 @@ function teardownChild(child: AcpChildLike, graceMs = 2_000): void {
 	}
 }
 
+/** Explicit summary-turn modes accepted by the common dispatch (#168 S1). */
+export const ALLOWED_SUMMARY_TURN_MODES: readonly AcpSummaryTurnMode[] = ["toolless", "execution-denied"];
+
+/** Wait up to `timeoutMs` for `child` to exit so isolated summary cleanup never runs on a live child (#168 S3).
+ *  3_000 ms exceeds `teardownChild`'s 2_000 ms SIGTERM→SIGKILL grace so a slow child settles before cleanup checks it (O4). */
+async function waitForChildExit(child: AcpChildLike, timeoutMs = 3_000): Promise<boolean> {
+	if (child.exitCode !== null || child.signalCode !== null) return true;
+	return await new Promise<boolean>((resolve) => {
+		let settled = false;
+		const finish = (exited: boolean) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			resolve(exited);
+		};
+		const timer = setTimeout(() => {
+			finish(child.exitCode !== null || child.signalCode !== null);
+		}, timeoutMs);
+		timer.unref?.();
+		child.once("exit", () => finish(true));
+	});
+}
+
 // unref (NOT destroy) a retained process-scoped child so its live stdio handles
 // do not pin pi's event loop. While the resident runs, the control socket (and
 // the next turn) keeps the loop alive, so reads still flow and reuse works; on
@@ -1855,13 +1882,14 @@ export function streamAcpTurn(
 			return;
 		}
 		if (summaryTurn) {
-			// #167: honouring the empty surface is only honest where the child really has none. A
-			// backend that declares no tool-less summary child is refused here, before any spawn.
-			if (!adapter.toollessSummaryTurn) {
+			// #167/#168 S1: dispatch only explicitly enumerated summary-turn modes; an absent or
+			// unknown mode is refused by name before any spawn.
+			const summaryMode = adapter.summaryTurnMode;
+			if (!summaryMode || !ALLOWED_SUMMARY_TURN_MODES.includes(summaryMode)) {
 				finishError(
 					new Error(
 						`entwurf: ${ACP_SUMMARY_TURN_UNSUPPORTED} — Pi asked ${model.id} for a summary, which declares no tools, ` +
-							`but the ${adapter.backend} ACP backend has no way to open a child without its native tools. ` +
+							`but the ${adapter.backend} ACP backend declares no supported summaryTurnMode. ` +
 							`Nothing was started. Switch this session to a Claude row to summarize; repeating this request cannot change that.`,
 					),
 					false,
@@ -2070,6 +2098,8 @@ export function streamAcpTurn(
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
 		let onAbort: (() => void) | undefined;
+		let overlay: AcpOverlayResult | undefined;
+		let summarySucceeded = false;
 		/** Which phase a failure belongs to — flipped once the prompt is on the wire. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		const stderrTail: string[] = [];
@@ -2102,9 +2132,24 @@ export function streamAcpTurn(
 			// opts.sessionId → PI_SESSION_ID → cwd) — a session-scoped overlay must
 			// scope on it, so it rides the params explicitly and the adapter never
 			// re-derives a weaker key from ambient env (P0-1).
-			const overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config, sessionKey });
-			const launch = adapter.resolveLaunch({ cwd, modelId: model.id, nativeModelId, config });
-			child = deps.spawnChild(launch, cwd, { ...adapter.launchEnvDefaults(), ...overlay.envOverrides });
+			overlay = adapter.ensureOverlay({
+				cwd,
+				modelId: model.id,
+				nativeModelId,
+				config,
+				sessionKey,
+				summaryTurn: Boolean(summary),
+			});
+			const effectiveCwd = overlay.effectiveCwd ?? cwd;
+			const launch = adapter.resolveLaunch({
+				cwd,
+				modelId: model.id,
+				nativeModelId,
+				config,
+				summaryTurn: Boolean(summary),
+				overlayDir: overlay.overlayDir,
+			});
+			child = deps.spawnChild(launch, effectiveCwd, { ...adapter.launchEnvDefaults(), ...overlay.envOverrides });
 			const spawned = child;
 
 			// Drain stderr (an unconsumed pipe can backpressure-deadlock a long turn).
@@ -2219,8 +2264,8 @@ export function streamAcpTurn(
 			// (sessionMeta === undefined), not `_meta: undefined`.
 			const newSessionArgs =
 				sessionMeta === undefined
-					? { cwd, mcpServers: wireMcpServers }
-					: { cwd, mcpServers: wireMcpServers, _meta: sessionMeta };
+					? { cwd: effectiveCwd, mcpServers: wireMcpServers }
+					: { cwd: effectiveCwd, mcpServers: wireMcpServers, _meta: sessionMeta };
 			const created = await withTimeout("newSession", connection.newSession(newSessionArgs), NEW_SESSION_TIMEOUT_MS);
 			const acpSessionId = created?.sessionId;
 			if (!acpSessionId) throw new Error("newSession returned no sessionId");
@@ -2330,6 +2375,9 @@ export function streamAcpTurn(
 			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
 				pushAcpLifecycleNotice(state, retain ? ACP_CANCEL_KEPT_NOTICE : ACP_CANCEL_CLOSED_NOTICE);
 			}
+			if (summary && !signal?.aborted && mapPromptStopReason(promptResult?.stopReason).stopReason === "stop") {
+				summarySucceeded = true;
+			}
 			finishSuccess(adapter, session, promptResult);
 
 			if (retain) {
@@ -2376,6 +2424,14 @@ export function streamAcpTurn(
 			}
 		} finally {
 			if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+			if (overlay?.cleanup) {
+				const spawned = child !== undefined;
+				const childExited = child ? await waitForChildExit(child, deps.childExitTimeoutMs) : true;
+				overlay.cleanup({ childExited, succeeded: summarySucceeded, spawned });
+				if (!childExited) {
+					console.warn(`[acp] summary child exit unconfirmed; preserved ${overlay.overlayDir ?? "summary root"}`);
+				}
+			}
 		}
 	}
 

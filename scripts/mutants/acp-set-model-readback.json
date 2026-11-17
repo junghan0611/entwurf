@@ -689,17 +689,14 @@
 			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
 		},
 		{
-			"claim": "ACP-AGY-SUMMARY-REFUSED",
-			"title": "agy declares a tool-less summary child it cannot open — Pi's summary runs on a child holding a shell with permissions bypassed",
-			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": ["\t// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on"],
-			"replace": [
-				"\ttoollessSummaryTurn: true,",
-				"\t// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on"
-			],
+			"claim": "ACP-SUMMARY-MODE-EXPLICIT",
+			"title": "backend dispatch accepts any truthy summaryTurnMode without checking ALLOWED_SUMMARY_TURN_MODES — an unenumerated mode runs unrefused",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tif (!summaryMode || !ALLOWED_SUMMARY_TURN_MODES.includes(summaryMode)) {"],
+			"replace": ["\t\t\tif (!summaryMode) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:ACP-AGY-SUMMARY-REFUSED]",
+			"signature": "[QK:ACP-SUMMARY-MODE-EXPLICIT]",
 			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
 		},
 		{

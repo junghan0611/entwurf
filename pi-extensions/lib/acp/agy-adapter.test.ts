@@ -9,6 +9,7 @@
 import { spawnSync } from "node:child_process";
 import {
 	copyFileSync,
+	existsSync,
 	lstatSync,
 	mkdirSync,
 	mkdtempSync,
@@ -918,5 +919,115 @@ describe("agy ACP tool hook — the adapter's own ensureOverlay, and a seat read
 			for (const tool of ["invoke_subagent", "schedule", "run_workflow"])
 				expect(run(tool), `${reader} ${tool}`).toBe("deny");
 		}
+	});
+
+	it("[QK:ACP-AGY-HOOK-DENY-ALL] v1:deny-all denies every tool with the summary-turn reason and stays fail-closed on malformed input", () => {
+		for (const tool of ["run_command", "write_file", "read_file", "search_web", "invoke_subagent"]) {
+			const res = spawnSync(process.execPath, [agyAcpHookPath(), "v1:deny-all"], {
+				input: hookStdin(tool),
+				encoding: "utf8",
+				timeout: 10000,
+			});
+			expect(res.status, tool).toBe(0);
+			const parsed = decisionOf(res.stdout);
+			expect(parsed.decision, tool).toBe("deny");
+			expect(parsed.reason, tool).toContain("summary turn runs no tool");
+		}
+		const bad = spawnSync(process.execPath, [agyAcpHookPath(), "v1:deny-all"], {
+			input: "{not json",
+			encoding: "utf8",
+			timeout: 10000,
+		});
+		expect(bad.status).toBe(0);
+		expect(decisionOf(bad.stdout).decision).toBe("deny");
+	});
+
+	it("[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED] AGY_ACP_COMMAND refuses a summary turn by name without leaking its value", async () => {
+		const { home, adapterMod } = await sandboxedAdapter();
+		const secretSentinel = "/opt/secret-agy-wrapper --token=XYZ";
+		const prev = process.env.AGY_ACP_COMMAND;
+		process.env.AGY_ACP_COMMAND = secretSentinel;
+		try {
+			expect(() =>
+				adapterMod.agyAdapter.ensureOverlay({
+					cwd: sandbox,
+					modelId: "agy-gemini-3.8-flash",
+					nativeModelId: "gemini-3.8-flash",
+					config: { adapterSettings: { skillPlugins: [] } } as never,
+					sessionKey: "override-s",
+					summaryTurn: true,
+				}),
+			).toThrow(/acp-agy-summary-override-unsupported/);
+			expect(existsSync(join(home, ".pi", "agent", "agy-summary"))).toBe(false);
+			expect(() =>
+				adapterMod.agyAdapter.resolveLaunch({
+					cwd: sandbox,
+					modelId: "agy-gemini-3.8-flash",
+					nativeModelId: "gemini-3.8-flash",
+					config: { adapterSettings: { skillPlugins: [] } } as never,
+					summaryTurn: true,
+				}),
+			).toThrow(/acp-agy-summary-override-unsupported/);
+			try {
+				adapterMod.agyAdapter.resolveLaunch({
+					cwd: sandbox,
+					modelId: "agy-gemini-3.8-flash",
+					nativeModelId: "gemini-3.8-flash",
+					config: { adapterSettings: { skillPlugins: [] } } as never,
+					summaryTurn: true,
+				});
+			} catch (err) {
+				const msg = (err as Error).message;
+				expect(msg).toContain("AGY_ACP_COMMAND");
+				expect(msg).not.toContain(secretSentinel);
+			}
+		} finally {
+			if (prev === undefined) delete process.env.AGY_ACP_COMMAND;
+			else process.env.AGY_ACP_COMMAND = prev;
+		}
+	});
+
+	it("[QK:ACP-AGY-SUMMARY-ISOLATED-DIR] summary ensureOverlay isolates under ~/.pi/agent/agy-summary/<turn>, leaves shared seat bytes intact, and honors S3 cleanup", async () => {
+		const { home, adapterMod } = await sandboxedAdapter();
+		const sharedOverlay = join(home, ".pi", "agent", "agy-gemini-overlay");
+		adapterMod.agyAdapter.ensureOverlay({
+			cwd: sandbox,
+			modelId: "agy-gemini-3.8-flash",
+			nativeModelId: "gemini-3.8-flash",
+			config: { adapterSettings: { skillPlugins: [] } } as never,
+			sessionKey: "shared-s",
+		});
+		const sharedSeat = join(sharedOverlay, "config", "hooks.json");
+		const sharedBefore = readFileSync(sharedSeat, "utf8");
+
+		const sumOverlay = adapterMod.agyAdapter.ensureOverlay({
+			cwd: sandbox,
+			modelId: "agy-gemini-3.8-flash",
+			nativeModelId: "gemini-3.8-flash",
+			config: { adapterSettings: { skillPlugins: [] } } as never,
+			sessionKey: "sum-s",
+			summaryTurn: true,
+		});
+		expect(sumOverlay.overlayDir).toBeDefined();
+		expect(sumOverlay.effectiveCwd).toBeDefined();
+		expect(sumOverlay.overlayDir!.startsWith(join(home, ".pi", "agent", "agy-summary"))).toBe(true);
+		expect(sumOverlay.overlayDir).not.toBe(sharedOverlay);
+		expect(readFileSync(join(sumOverlay.overlayDir!, "config", "hooks.json"), "utf8")).toContain("v1:deny-all");
+		expect(readFileSync(sharedSeat, "utf8")).toBe(sharedBefore);
+
+		const launch = adapterMod.agyAdapter.resolveLaunch({
+			cwd: sandbox,
+			modelId: "agy-gemini-3.8-flash",
+			nativeModelId: "gemini-3.8-flash",
+			config: { adapterSettings: { skillPlugins: [] } } as never,
+			summaryTurn: true,
+			overlayDir: sumOverlay.overlayDir,
+		});
+		expect(launch.args).toContain(sumOverlay.overlayDir);
+
+		// S3: confirmed child exit + success cleans up (unconfirmed-exit preservation is owned by [QK:ACP-AGY-SUMMARY-CLEANUP-S3]).
+		const exited = sumOverlay.cleanup!({ childExited: true, succeeded: true });
+		expect(exited.cleaned).toBe(true);
+		expect(existsSync(sumOverlay.overlayDir!)).toBe(false);
 	});
 });

@@ -3533,7 +3533,7 @@ let manifestCount: number;
 		"v2-surface": 16,
 		"v2-visible-resume": 62,
 		"win32-preview": 19,
-		"acp-parity": 24,
+		"acp-parity": 29,
 	};
 	const laneTally: Record<string, number> = {};
 	for (const man of manifests) laneTally[man.lane] = (laneTally[man.lane] ?? 0) + man.mutants.length;

@@ -18,6 +18,7 @@
 // Fence: imported by the root program with `.js` suffixes, same as the sibling
 // lib/acp modules — no new strip-types fence.
 
+import { rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -41,6 +42,8 @@ import {
 import {
 	AGY_GEMINI_OVERLAY_DIR,
 	claudeLaunchEnvDefaults,
+	cleanupAgySummaryRoot,
+	createAgySummaryRoot,
 	ensureAgyGeminiOverlay,
 	ensureClaudeConfigOverlay,
 	ensureCortexDualHomeOverlay,
@@ -84,6 +87,9 @@ export interface AcpLaunchParams {
 	modelId: string;
 	nativeModelId: string;
 	config: ResolvedAcpConfig;
+	/** Set for Pi summary turns (#168): lets an adapter pass a per-turn isolated overlayDir. */
+	summaryTurn?: boolean;
+	overlayDir?: string;
 }
 
 /** loadCarrier input — the mcp server names plus the resolved config (so a backend
@@ -109,6 +115,8 @@ export interface AcpOverlayParams {
 	 *  re-derived form drops `opts.sessionId`, so two sessions in one process/cwd
 	 *  would alias one overlay (GPT review 2026-07-29, cortex P0-1). */
 	sessionKey: string;
+	/** Set for Pi summary turns (#168) so adapters can isolate per-turn state from the shared overlay. */
+	summaryTurn?: boolean;
 }
 
 /** buildSessionMeta input — mirrors the newSession `_meta` inputs. */
@@ -146,6 +154,15 @@ export interface AcpEnforceThinkingParams {
 /** ensureOverlay result — env overrides backend.ts merges into the spawn env. */
 export interface AcpOverlayResult {
 	envOverrides: Record<string, string>;
+	/** Optional per-turn cwd override (e.g. an isolated empty cwd outside git for agy summary turns). */
+	effectiveCwd?: string;
+	/** Optional per-turn overlay directory passed to `resolveLaunch`. */
+	overlayDir?: string;
+	/** Optional per-turn cleanup run after child exit is settled (#168 S3). */
+	cleanup?: (opts: { childExited: boolean; succeeded: boolean; spawned?: boolean }) => {
+		cleaned: boolean;
+		unlinkedPassthrough: string[];
+	};
 }
 
 /** resolveAdapterSettings input — the RAW (untyped) `entwurfProvider` blocks plus
@@ -277,15 +294,12 @@ export interface AcpBackendAdapter {
 	 *  shape it never inspects. */
 	sealsTurnAccounting?: true;
 
-	/** Declares that THIS backend's summary child is tool-less in fact (#163, #167). Pi's summary
-	 *  request declares no tools, and the common loop honours it only because the child it opens
-	 *  can call none: a summarizer that could still run a command would act where Pi cannot see it.
-	 *  Claude's child is narrowed by the session meta the common loop hands it (`tools: []`, no MCP,
-	 *  nothing pre-approved).
-	 *
-	 *  ABSENT means no such surface was measured for this backend, so backend.ts refuses the
-	 *  summary turn by name before any child starts rather than run it with tools. */
-	toollessSummaryTurn?: true;
+	/** Summary-turn capability (#163, #168).
+	 *  - `"toolless"`: the child has no tool surface in fact (`tools: []`, no MCP, no plugin).
+	 *  - `"execution-denied"`: the model still sees tool schemas, and a per-turn isolated
+	 *    `PreToolUse` `v1:deny-all` hook blocks every tool execution before it runs.
+	 *  ABSENT means no summary mode is declared, so backend.ts refuses the summary turn by name. */
+	summaryTurnMode?: AcpSummaryTurnMode;
 
 	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
 	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
@@ -307,7 +321,10 @@ export interface AcpBackendAdapter {
 	admitAgent?(initializeAnswer: unknown): void;
 }
 
-/** The named refusal for a summary turn on a backend with no tool-less child. Fixed text,
+/** Explicit summary-turn modes a backend adapter may declare (#168 S1). */
+export type AcpSummaryTurnMode = "toolless" | "execution-denied";
+
+/** The named refusal for a summary turn on a backend with no declared summary mode. Fixed text,
  *  non-transient to pi: replaying the request cannot give the backend a surface it lacks. */
 export const ACP_SUMMARY_TURN_UNSUPPORTED = "acp-summary-turn-unsupported";
 
@@ -687,7 +704,7 @@ export const claudeAdapter: AcpBackendAdapter = {
 
 	// #163: the summary child gets `tools: []`, no MCP, no plugin and nothing pre-approved through
 	// buildSessionMeta ([QK:ACP-SUMMARY-TURN-TOOLLESS]).
-	toollessSummaryTurn: true,
+	summaryTurnMode: "toolless",
 
 	// #127: claude-agent-acp 0.85.0+ rejects an `end_turn` with unanswered foreground tools as
 	// -32603 `incomplete_tool_call` (upstream #1212). Its raw text reads as transient to pi.
@@ -726,6 +743,20 @@ export const AGY_UNSUPPORTED_NARROWING_KEYS = ["tools", "disallowedTools", "perm
  *  child env: the overlay is shared by every pi on the host, and a pi that predates the seat sets no
  *  env for its children, which re-read the seat on every call. */
 export const AGY_HOOK_POLICY_HIDDEN_TURNS = "v1:hidden-turns";
+
+/** Summary-turn hook policy (#168): denies every tool call in an isolated per-turn gemini-dir. */
+export const AGY_HOOK_POLICY_DENY_ALL = "v1:deny-all";
+
+/** Named refusal when AGY_ACP_COMMAND override is active on a summary turn (#168 C1). */
+export const ACP_AGY_SUMMARY_OVERRIDE_UNSUPPORTED = "acp-agy-summary-override-unsupported";
+
+function refuseAgySummaryOverride(): never {
+	throw new Error(
+		`entwurf: ${ACP_AGY_SUMMARY_OVERRIDE_UNSUPPORTED} — AGY_ACP_COMMAND owns the whole command line, ` +
+			`so entwurf cannot isolate --gemini-dir or enforce ${AGY_HOOK_POLICY_DENY_ALL} on a summary turn. ` +
+			`Nothing was started. Unset AGY_ACP_COMMAND or switch to a Claude row to summarize.`,
+	);
+}
 
 /** Where the hook ships: beside this module, as source (`pi-extensions/` is in the package). Resolved
  *  when an overlay is written, never at import — the bridge's compiled tree carries this module but
@@ -894,11 +925,15 @@ export const agyAdapter: AcpBackendAdapter = {
 
 	// `agy` from PATH — the CLI is the ACP server. `AGY_ACP_COMMAND` is the explicit operator
 	// override and, like Claude's, owns its whole command line: the overlay and permission
-	// arguments are not appended to it.
-	resolveLaunch() {
+	// arguments are not appended to it. Because an override owns the command line, a summary turn
+	// cannot force `--gemini-dir` isolation or `v1:deny-all` and is refused by name (#168 C1).
+	resolveLaunch({ summaryTurn, overlayDir } = {} as AcpLaunchParams) {
 		const override = process.env.AGY_ACP_COMMAND?.trim();
-		if (override) return { command: "bash", args: ["-lc", override] };
-		return { command: "agy", args: agyLaunchArgs() };
+		if (override) {
+			if (summaryTurn) refuseAgySummaryOverride();
+			return { command: "bash", args: ["-lc", override] };
+		}
+		return { command: "agy", args: agyLaunchArgs(overlayDir) };
 	},
 
 	// Nothing rides the environment: the overlay is an argument (agyLaunchArgs), and the hook policy is
@@ -907,8 +942,32 @@ export const agyAdapter: AcpBackendAdapter = {
 		return {};
 	},
 
-	// The overlay, with its tool-hook seat (#168 ①); the policy is in the seat's command.
-	ensureOverlay({ config }) {
+	// Ordinary turns use the shared overlay with `v1:hidden-turns`. Summary turns (#168) get an
+	// isolated per-turn root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`) with `v1:deny-all`
+	// so the shared overlay is never mutated. Under AGY_ACP_COMMAND, refuse BEFORE creating a root (D1).
+	ensureOverlay({ config, summaryTurn }) {
+		if (summaryTurn) {
+			if (process.env.AGY_ACP_COMMAND?.trim()) refuseAgySummaryOverride();
+			const summaryRoot = createAgySummaryRoot();
+			try {
+				ensureAgyGeminiOverlay(
+					undefined,
+					summaryRoot.geminiDir,
+					[],
+					agyAcpHookCommand(process.execPath, agyAcpHookPath(), AGY_HOOK_POLICY_DENY_ALL),
+				);
+			} catch (err) {
+				// No child was spawned; remove the summary root (and any partial token symlink) before rethrowing (O5).
+				rmSync(summaryRoot.rootDir, { recursive: true, force: true });
+				throw err;
+			}
+			return {
+				envOverrides: {},
+				effectiveCwd: summaryRoot.cwd,
+				overlayDir: summaryRoot.geminiDir,
+				cleanup: (opts) => cleanupAgySummaryRoot(summaryRoot, opts),
+			};
+		}
 		ensureAgyGeminiOverlay(
 			undefined,
 			undefined,
@@ -977,10 +1036,9 @@ export const agyAdapter: AcpBackendAdapter = {
 	// #168: the server that answered initialize must be agy's own ACP server at the measured floor or newer.
 	admitAgent: (answer) => admitAcpAgent(answer, "agy", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, "AGY_ACP_COMMAND"),
 
-	// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on
-	// session/new; `plan` mode still ran a shell command; and a denied permission stops only the
-	// tools that ask. With no way to open a child that can call nothing, Pi's summary request is
-	// refused by name instead of being run by a summarizer that holds a shell.
+	// #168: agy takes no tool list on session/new, so the model still sees tool schemas; summary
+	// turns run in an isolated per-turn root with a `v1:deny-all` PreToolUse hook and neutral cwd.
+	summaryTurnMode: "execution-denied",
 };
 
 // ---------------------------------------------------------------------------

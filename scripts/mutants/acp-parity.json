@@ -313,6 +313,68 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-AGY-HOOK-MIXED-READER]",
 			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-DENY-ALL",
+			"title": "v1:deny-all allows tools instead of denying them — a summary child can run shell commands",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": [
+				"\t\"v1:deny-all\": () =>",
+				"\t\tdeny(\"entwurf ACP policy v1:deny-all: this summary turn runs no tool; answer from the conversation text\"),"
+			],
+			"replace": ["\t\"v1:deny-all\": () => ({ decision: \"allow\" }),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-DENY-ALL]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-OVERRIDE-REFUSED",
+			"title": "AGY_ACP_COMMAND override is not refused on summary turns — the summary child runs under the operator override without v1:deny-all isolation",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\t\tif (process.env.AGY_ACP_COMMAND?.trim()) refuseAgySummaryOverride();"],
+			"replace": ["\t\t\tif (false && process.env.AGY_ACP_COMMAND?.trim()) refuseAgySummaryOverride();"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-ISOLATED-DIR",
+			"title": "agy summary turns skip per-turn root isolation and reuse the shared overlay — risking shared-seat contamination",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tensureOverlay({ config, summaryTurn }) {", "\t\tif (summaryTurn) {"],
+			"replace": ["\tensureOverlay({ config, summaryTurn }) {", "\t\tif (false && summaryTurn) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-EXECUTION-DENIED",
+			"title": "agyAdapter drops summaryTurnMode — Pi summary turns on agy are refused again",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tsummaryTurnMode: \"execution-denied\","],
+			"replace": ["\t// summaryTurnMode removed"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-CLEANUP-S3",
+			"title": "cleanupAgySummaryRoot deletes the isolated summary dir even when child exit is unconfirmed",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tif (!opts.childExited) {", "\t\treturn { cleaned: false, unlinkedPassthrough: [] };", "\t}"],
+			"replace": [
+				"\tif (false && !opts.childExited) {",
+				"\t\treturn { cleaned: false, unlinkedPassthrough: [] };",
+				"\t}"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-CLEANUP-S3]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
 		}
 	]
 }

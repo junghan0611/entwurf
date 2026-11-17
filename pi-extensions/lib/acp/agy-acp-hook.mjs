@@ -30,6 +30,9 @@ const POLICIES = {
 					`entwurf ACP policy v1:hidden-turns: ${tool} starts a model turn with no ACP frame and is not allowed on this row`,
 				)
 			: { decision: "allow" },
+	// Summary turns run no tool at all (#168); keep the reason explicit so the model answers from text.
+	"v1:deny-all": () =>
+		deny("entwurf ACP policy v1:deny-all: this summary turn runs no tool; answer from the conversation text"),
 };
 
 function deny(reason) {
