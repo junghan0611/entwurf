@@ -1594,10 +1594,11 @@ check_renew_beside() {
   # /renew command's decisions and its registered handler (a child-process harness), and (b1) for the
   # ordinary pi record write serializing on the record-arm lock — the birth itself and the registered
   # turn_end refresh (a second child-process harness), and (b2) for the transition writer's conditional
-  # writes (renew-writer.ts).
+  # writes (renew-writer.ts), and (b3) for the switch admission (renew-admission.ts and the registered
+  # before-switch/before-fork guards, a third child-process harness).
   # Not a discovery path — check-tests-beside-behavior already finds the files; one renew mutant
   # re-runs only these beside tests.
-  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts pi-extensions/lib/renew-front-gate.test.ts pi-extensions/lib/renew-command.test.ts pi-extensions/entwurf-control.renew.test.ts pi-extensions/lib/pi-citizen-birth.test.ts pi-extensions/entwurf-control.refresh.test.ts pi-extensions/lib/renew-writer.test.ts pi-extensions/lib/record-arm-lock.test.ts
+  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts pi-extensions/lib/renew-front-gate.test.ts pi-extensions/lib/renew-command.test.ts pi-extensions/entwurf-control.renew.test.ts pi-extensions/lib/pi-citizen-birth.test.ts pi-extensions/entwurf-control.refresh.test.ts pi-extensions/lib/renew-writer.test.ts pi-extensions/lib/record-arm-lock.test.ts pi-extensions/lib/renew-admission.test.ts pi-extensions/entwurf-control.admission.test.ts
 }
 
 check_native_push_runner() {

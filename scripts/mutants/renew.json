@@ -1168,6 +1168,225 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-B2-LOCKED-WRITE-SYNC]",
 			"signatureSource": "pi-extensions/lib/record-arm-lock.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-CLOSED-COPY",
+			"title": "a copy of a closed chapter under another inode is not recognised by its session id — a closed chapter is reopened from a copy",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": ["\t\tif (closedOf !== undefined) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-CLOSED-COPY]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-RESERVED-COPY",
+			"title": "a file of another garden's reserved next chapter is reopened before that renew binds it",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": ["\t\tif (reservedOf !== undefined) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-RESERVED-COPY]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-CLOSED-INODE",
+			"title": "a closed original reached by a hard link or alias passes once its header no longer reads",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": ["\t\tif (targetInode !== null && targetInode.dev === st.dev && targetInode.ino === st.ino) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-CLOSED-INODE]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-UNIDENTIFIABLE",
+			"title": "an unidentified target (an import before its copy) passes while closed or reserved chapters exist — unknown is read as not protected",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": ["\tif (target === null && closed.size + reserved.size > 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-UNIDENTIFIABLE]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-PLAIN-PASS",
+			"title": "an ordinary target is refused — every resume is blocked in a store that has nothing to protect",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": ["\treturn { kind: \"pass\" };", "}"],
+			"replace": ["\treturn { kind: \"cancel\", code: \"renew-admission-target-unidentifiable\", detail: \"\" };", "}"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-PLAIN-PASS]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-FIFO-NO-WAIT",
+			"title": "the target is opened without O_NONBLOCK — a FIFO target blocks the Pi event loop inside a before-handler",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tfd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);"],
+			"replace": ["\t\tfd = fs.openSync(file, fs.constants.O_RDONLY);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-FIFO-NO-WAIT]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-IS-RENEWING",
+			"title": "a garden mid-/renew reads as open — a switch leaves it mid-transition",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": [
+				"\treturn readAddressableMetaIdentity(gardenId, sessionsDir ?? defaultMetaSessionsDir()).renewing !== undefined;"
+			],
+			"replace": ["\treturn false;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-IS-RENEWING]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-CLEAN-PASSES",
+			"title": "the guard cancels every switch — /new and /resume stop working in every entwurf Pi",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\tif (!verdict.cancel) return undefined;"],
+			"replace": ["\t\tif (!verdict.cancel) return { cancel: true };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-CLEAN-PASSES]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-RESUME-RESERVED",
+			"title": "the guard ignores the target verdict — a reserved or closed chapter is reopened by resume",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\t\tif (verdict.kind === \"cancel\") return { cancel: true, code: verdict.code, detail: verdict.detail };"
+			],
+			"replace": ["\t\t\tif (false) return { cancel: true, code: verdict.code, detail: verdict.detail };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-RESUME-RESERVED]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-RENEWING-CANCELS",
+			"title": "a garden mid-/renew lets a new switch or a fork through",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\tif (gardenId !== null && mod.isRenewing(gardenId)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-RENEWING-CANCELS]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-NOTICE-FAILS-STILL-CANCELS",
+			"title": "a failing notice throws out of the guard — Pi logs it and carries on with the switch",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\ttry {",
+				"\t\t\tif (ctx.hasUI) ctx.ui.notify(line, \"warning\");",
+				"\t\t} catch (notifyErr) {",
+				"\t\t\t// The cancel is the returned value, not this notice; the notice's own failure is said once.",
+				"\t\t\ttry {",
+				"\t\t\t\tprocess.stderr.write(",
+				"\t\t\t\t\t`[entwurf-control] notice of a cancelled session ${kind} failed: ${notifyErr instanceof Error ? notifyErr.message : String(notifyErr)}\\n`,",
+				"\t\t\t\t);",
+				"\t\t\t} catch {",
+				"\t\t\t\t// both channels failed: the cancel below still stands",
+				"\t\t\t}",
+				"\t\t}"
+			],
+			"replace": ["\t\tif (ctx.hasUI) ctx.ui.notify(line, \"warning\");"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-NOTICE-FAILS-STILL-CANCELS]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-ERROR-CANCELS",
+			"title": "an error inside the decision is rethrown — Pi logs it and carries on with the switch (fail-open)",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tverdict = await decideAdmission(kind, event);", "\t\t} catch (err) {"],
+			"replace": ["\t\t\tverdict = await decideAdmission(kind, event);", "\t\t} catch (err) {", "\t\t\tthrow err;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-ERROR-CANCELS]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-RESERVED-ONLY-IMPORT",
+			"title": "an unidentified import target passes when the store has a reserved next chapter but no closed one",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": ["\tif (target === null && closed.size + reserved.size > 0) {"],
+			"replace": ["\tif (target === null && closed.size > 0) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-RESERVED-ONLY-IMPORT]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-IO-TARGET-THROWS",
+			"title": "every open error on the target reads as an absence — an EACCES target passes",
+			"subject": "pi-extensions/lib/renew-writer.ts",
+			"find": ["\t\tif (isAbsence(err)) return null;", "\t\tthrow err;"],
+			"replace": ["\t\treturn null;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-IO-TARGET-THROWS]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-ADMIT-IO-ORIGINAL-THROWS",
+			"title": "a closed original that cannot be stat'd is skipped as gone — an identified target passes over it",
+			"subject": "pi-extensions/lib/renew-admission.ts",
+			"find": [
+				"\t\t\tif (isAbsence(err)) continue; // a closed original that is gone has no inode to match",
+				"\t\t\tthrow err; // any other stat error is not a non-match: the caller cancels on it"
+			],
+			"replace": ["\t\t\tcontinue;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-ADMIT-IO-ORIGINAL-THROWS]",
+			"signatureSource": "pi-extensions/lib/renew-admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-NOTICE-FAILURE-LOGGED",
+			"title": "a notice's own failure is dropped silently — the operator sees a cancel without the reason its notice never arrived",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\t\ttry {",
+				"\t\t\t\tprocess.stderr.write(",
+				"\t\t\t\t\t`[entwurf-control] notice of a cancelled session ${kind} failed: ${notifyErr instanceof Error ? notifyErr.message : String(notifyErr)}\\n`,",
+				"\t\t\t\t);",
+				"\t\t\t} catch {",
+				"\t\t\t\t// both channels failed: the cancel below still stands",
+				"\t\t\t}"
+			],
+			"replace": ["\t\t\t// dropped"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-NOTICE-FAILURE-LOGGED]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B3-GUARD-SCOPES",
+			"title": "the target protection runs only in a Pi with a resident garden — a flag-off Pi resumes a closed or reserved chapter",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\tif (kind === \"switch\" && event.reason === \"resume\" && typeof event.targetSessionFile === \"string\") {"
+			],
+			"replace": [
+				"\t\tif (gardenId !== null && kind === \"switch\" && event.reason === \"resume\" && typeof event.targetSessionFile === \"string\") {"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B3-GUARD-SCOPES]",
+			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
 		}
 	]
 }

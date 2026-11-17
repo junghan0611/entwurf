@@ -1022,6 +1022,76 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	// #151 b3 admission (contracts C1.4c D2·D3, C1.4e D2, C1.4j): before Pi opens a target or
+	// replaces the runtime, a switch or fork that would leave a garden mid-/renew, or reopen a closed
+	// or reserved chapter, is cancelled. Pi carries on after a THROWING before-handler (runner.js
+	// 821-846), so every outcome here is a returned value: any error is a cancel, and a failing
+	// diagnostic never undoes it. This is not an SDK-wide guarantee — see the /renew skill §12.
+	// Two scopes, kept apart: the RESIDENT garden's mid-/renew mark is read only when this Pi has a
+	// resident garden (flag on and birth done) — a Pi without one does not certify the store on
+	// /new or /fork; the TARGET protection of a resume or import reads the certified store in every
+	// Pi that loads this extension, whatever its flag, because it guards the closed and reserved
+	// chapters themselves.
+	type Admission = { cancel: false } | { cancel: true; code: string; detail: string };
+	const decideAdmission = async (
+		kind: "switch" | "fork",
+		event: { reason?: string; targetSessionFile?: string },
+	): Promise<Admission> => {
+		const mod = (await import(RENEW_ADMISSION_MODULE)) as unknown as RenewAdmissionModule;
+		const gardenId = residentGardenId;
+		if (gardenId !== null && mod.isRenewing(gardenId)) {
+			return {
+				cancel: true,
+				code: "renew-in-progress",
+				detail: `garden ${gardenId} is mid-/renew; a session ${kind} now would leave it`,
+			};
+		}
+		if (kind === "switch" && event.reason === "resume" && typeof event.targetSessionFile === "string") {
+			const verdict = mod.classifySwitchTarget(event.targetSessionFile);
+			if (verdict.kind === "cancel") return { cancel: true, code: verdict.code, detail: verdict.detail };
+		}
+		return { cancel: false };
+	};
+	const admit = async (
+		kind: "switch" | "fork",
+		event: { reason?: string; targetSessionFile?: string },
+		ctx: ExtensionContext,
+	): Promise<{ cancel: true } | undefined> => {
+		let verdict: Admission;
+		try {
+			verdict = await decideAdmission(kind, event);
+		} catch (err) {
+			verdict = {
+				cancel: true,
+				code: "renew-admission-error",
+				detail: err instanceof Error ? err.message : String(err),
+			};
+		}
+		if (!verdict.cancel) return undefined;
+		const line = `🪛 session ${kind} cancelled (${verdict.code}): ${verdict.detail}`;
+		try {
+			process.stderr.write(`[entwurf-control] ${line}\n`);
+		} catch {
+			// a broken diagnostic channel never undoes the cancel (C1.4c D3)
+		}
+		try {
+			if (ctx.hasUI) ctx.ui.notify(line, "warning");
+		} catch (notifyErr) {
+			// The cancel is the returned value, not this notice; the notice's own failure is said once.
+			try {
+				process.stderr.write(
+					`[entwurf-control] notice of a cancelled session ${kind} failed: ${notifyErr instanceof Error ? notifyErr.message : String(notifyErr)}\n`,
+				);
+			} catch {
+				// both channels failed: the cancel below still stands
+			}
+		}
+		return { cancel: true };
+	};
+	pi.on("session_before_switch", (event, ctx) => admit("switch", event, ctx));
+	// A fork event carries no reason or target ({entryId, position}); it is judged by the garden only.
+	pi.on("session_before_fork", (_event, ctx) => admit("fork", {}, ctx));
+
 	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
 	// GONE with the id grammar they defended (#50 C2). They existed because pi mints a
 	// uuidv7 for an in-process session and the garden guard hard-exited on a non-garden
@@ -1145,10 +1215,11 @@ export default function (pi: ExtensionAPI) {
 		noteCompactionTerminal(state.compaction);
 	});
 
-	// No session_before_switch / session_before_fork guards: `/new`, `/fork`, `/clone`
-	// and RPC session replacement are pi's own again (#50 C2). Each replacement fires
-	// session_start, which attaches the new pi session to its own record — the socket
-	// simply rebinds to the new address. There is no id to police at the pre-event.
+	// The #50 C2 cut removed the old pre-event guards that policed pi's own session id:
+	// `/new`, `/fork`, `/clone` and RPC session replacement are pi's own again, and each
+	// replacement fires session_start, which attaches the new pi session to its own record
+	// — the socket simply rebinds to the new address. The before-switch / before-fork
+	// handlers registered above are a different thing: the #151 /renew lineage admission.
 
 	pi.on("session_shutdown", async () => {
 		const previousContext = state.context;
@@ -1260,6 +1331,15 @@ function isRecordArmLockBusy(err: unknown): boolean {
 // #151 /renew ④-a. Same fence, same reason: lib/renew-command.ts is a lib→lib VALUE importer
 // (readAddressableMetaIdentity, the front-gate functions) with explicit `.ts`-extension imports.
 const RENEW_COMMAND_MODULE = "./lib/renew-command.ts";
+// #151 b3 admission. Same fence, same reason: lib/renew-admission.ts reads the certified store and
+// a target's header through `.ts`-extension imports.
+const RENEW_ADMISSION_MODULE = "./lib/renew-admission.ts";
+
+/** Mirrors lib/renew-admission.ts — the local contract for the fence. */
+interface RenewAdmissionModule {
+	classifySwitchTarget(targetFile: string): { kind: "pass" } | { kind: "cancel"; code: string; detail: string };
+	isRenewing(gardenId: string): boolean;
+}
 
 /** Mirrors lib/renew-command.ts's custom message and effect — the local contract for the fence. */
 interface RenewCustomMessageLike {

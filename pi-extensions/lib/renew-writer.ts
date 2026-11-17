@@ -375,6 +375,49 @@ function openOriginal(gardenId: string, file: string, from: string): OpenedOrigi
 	}
 }
 
+/** ENOENT / ENOTDIR: the path is simply not there. Everything else is an error, not an absence. */
+export function isAbsence(err: unknown): boolean {
+	const code = (err as { code?: unknown } | null)?.code;
+	return code === "ENOENT" || code === "ENOTDIR";
+}
+
+/**
+ * A switch target's identity for admission (#151 b3, C1.4c D2 / C1.4e D2), read the way the
+ * original leaf reads: opened read-only without waiting (O_NONBLOCK, so a FIFO is not waited on),
+ * required to be a regular file, and only its first line (within the header limit) parsed — never
+ * opened as a session. It follows a symlink: a target is judged by the file it is. Null when the
+ * target is absent or is not identified by value (not a regular file, no session header): unknown,
+ * never "not a protected file". Any other I/O error is thrown, never folded into that null.
+ */
+export function readSessionHeaderIdentity(file: string): { dev: number; ino: number; id: string } | null {
+	let fd: number;
+	try {
+		fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+	} catch (err) {
+		// An expected absence (an import's destination before its copy) is "not identified"; any other
+		// I/O error is thrown, so the caller's admission turns it into a cancel (C1.4c D3).
+		if (isAbsence(err)) return null;
+		throw err;
+	}
+	try {
+		const st = fs.fstatSync(fd);
+		if (!st.isFile()) return null;
+		const head = readHeaderLine(fd, st.size);
+		if (head === null) return null;
+		let header: { type?: unknown; id?: unknown } | null;
+		try {
+			header = JSON.parse(head.line) as { type?: unknown; id?: unknown } | null;
+		} catch {
+			return null;
+		}
+		return header?.type === "session" && typeof header.id === "string" && header.id !== ""
+			? { dev: st.dev, ino: st.ino, id: header.id }
+			: null;
+	} finally {
+		fs.closeSync(fd);
+	}
+}
+
 /**
  * Step 5: commit. Under the lock the record must still be this renew's — same from, the reserved
  * `to`, token, this process as owner — and carry exactly the outline the human confirmed: its
