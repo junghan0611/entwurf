@@ -237,6 +237,7 @@
 		"pi-extensions/lib/record-arm-lock.ts",
 		"pi-extensions/lib/renew-writer.ts",
 		"pi-extensions/lib/renew-admission.ts",
+		"pi-extensions/lib/renew-transition.ts",
 		// mux-launch.ts is the T1-a launch composition — a lib→lib VALUE importer (the
 		// placement leaf's grammar/binding/run helpers from mux-placement.ts) with an explicit
 		// `.ts` extension, same fence. mux-placement.ts itself stays in the root program: it

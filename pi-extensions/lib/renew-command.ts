@@ -15,9 +15,9 @@
  * the store read itself is not smaller — only what reaches the model is (#151, OpenClaw B's report
  * relayed by coordinator 68bd94).
  *
- * Nothing here writes a record. At this checkpoint a confirmation that matches all the way is still
- * refused as `transition-not-connected`: the transition writer (④-b) is a separate subject, and a
- * matching confirmation must not read as a renew that happened.
+ * Nothing here writes a record. A confirmation that matches all the way returns a `transition`
+ * effect; the handler carries it out (lib/renew-transition.ts) and re-runs this module's `recheck`
+ * inside K1's locked section, so a confirmation is never itself a renew that happened (#151 b3-2).
  *
  * Every refusal drops an unused show binding. A refusal after the interview began in THIS chapter
  * (its entry marker is on the branch) also leaves a short note for the agent (a custom message that
@@ -70,7 +70,20 @@ export type RenewCommandEffect =
 	/** Send `message` WITHOUT a turn and show `notice`: the current outline, looked up. */
 	| { kind: "outline"; message: RenewCustomMessage; notice: string }
 	/** Show `notice`; when `note` is present, also leave it for the agent without opening a turn. */
-	| { kind: "refused"; reason: string; notice: string; note: RenewCustomMessage | null };
+	| { kind: "refused"; reason: string; notice: string; note: RenewCustomMessage | null }
+	/**
+	 * The confirmation matched all the way: start the transition (#151 b3-2) for exactly this body
+	 * and sha. `recheck` is the front gate again, against the branch and idleness at the moment it
+	 * is called — the writer runs it inside the K1 locked section, right before the rename (C1.4b
+	 * D4). It is synchronous and throws the reason when anything moved.
+	 */
+	| {
+			kind: "transition";
+			chapter: RenewChapterRef;
+			body: string;
+			fullSha: string;
+			recheck: (io: RenewCommandIo) => undefined;
+	  };
 
 export interface RenewCommandDeps {
 	/** The garden id this session is resident under, or null when it is not a citizen. */
@@ -116,8 +129,6 @@ const REASON_TEXT: Record<string, string> = {
 	"chapter-changed": "보여 준 뒤 현재 장이 바뀌었다",
 	"candidate-changed": "보여 준 뒤 후보가 바뀌었다(새 응답이나 새 /renew). /renew confirm으로 다시 본다",
 	"sha-prefix-mismatch": "입력한 8자가 보여 준 판의 해시와 다르다",
-	"transition-not-connected":
-		"확인은 맞았다. 그러나 장을 넘기는 writer가 아직 연결되지 않았다(#151 ④-b). 전환은 시작하지 않았다 — 현재 장·계보·최신 얼개는 바뀌지 않았다",
 };
 
 function say(reason: string, detail?: string): string {
@@ -221,7 +232,20 @@ export function createRenewCommand(deps: RenewCommandDeps) {
 		if (candidate.kind !== "candidate") return refuse("no-submission", noteTo);
 		const body = checkRenewBody(candidate.body);
 		if (!body.ok) return refuse(body.reason, noteTo, body.detail);
-		return refuse("transition-not-connected", noteTo);
+		if (bound === null) return refuse("no-binding", noteTo); // matchRenewConfirm already refused a null binding
+		const pinned = bound;
+		const recheck = (now: RenewCommandIo): undefined => {
+			if (!now.isIdle) throw new Error("not-idle");
+			if (now.nativeSessionId !== chapter.nativeSessionId) throw new Error("native-moved");
+			const current = findRenewCandidate(now.branch, chapter);
+			const again = matchRenewConfirm(pinned, chapter, current, pinned.fullSha.slice(0, 8));
+			if (!again.ok) throw new Error(again.reason);
+			if (current.kind !== "candidate") throw new Error("no-submission");
+			const checked = checkRenewBody(current.body);
+			if (!checked.ok) throw new Error(checked.reason);
+			return undefined;
+		};
+		return { kind: "transition", chapter, body: candidate.body, fullSha: candidate.sha, recheck };
 	};
 
 	/**

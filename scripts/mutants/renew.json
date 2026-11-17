@@ -1387,6 +1387,362 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-B3-GUARD-SCOPES]",
 			"signatureSource": "pi-extensions/entwurf-control.admission.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-SAME-GARDEN-AND-LINEAGE",
+			"title": "the K1 copy is not the confirmed edition — the commit never lands and the lineage does not move",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\t\t\tconst k1 = writeRenewStart({ ...writer, expectedNative: t.from, outline: t.body, precondition: t.recheck });"
+			],
+			"replace": [
+				"\t\t\tconst k1 = writeRenewStart({ ...writer, expectedNative: t.from, outline: `${t.body}\\n`, precondition: t.recheck });"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-SAME-GARDEN-AND-LINEAGE]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-REBIND-NO-NEW-BIRTH",
+			"title": "the new chapter's session_start takes the ordinary birth path — the reserved id is refused an address and the garden's listener never answers for it",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tif (flight !== null && flight.to !== null && native === flight.to) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-REBIND-NO-NEW-BIRTH]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-NEW-FILE-CARRIES-BODY-ONCE",
+			"title": "the setup appends a body that is not the agreed bytes — the new chapter never receives the confirmed outline",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\t\t\t\tsm.appendMessage({ role: \"user\", content: [{ type: \"text\", text: t.body }], timestamp: Date.now() });"
+			],
+			"replace": [
+				"\t\t\t\tsm.appendMessage({ role: \"user\", content: [{ type: \"text\", text: `${t.body}\\n` }], timestamp: Date.now() });"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-NEW-FILE-CARRIES-BODY-ONCE]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-OWN-SWITCH-ONLY",
+			"title": "the guard admits the first new switch in flight, whoever started it — an outside switch takes the permit",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\trenewSwitchScope.getStore() === flight.permit &&"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-OWN-SWITCH-ONLY]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-W2-AND-LOCK",
+			"title": "the transition never releases the garden's v2 lock — every later delivery to it reads target-locked",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\tconst released = releaseLock(lock.claim, lockDeps);"],
+			"replace": ["\t\tconst released = \"released\";"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-W2-AND-LOCK]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-CANCEL-CLEARS-WHEN-OBSERVED",
+			"title": "an observed, cleanly cancelled switch leaves the K1 mark — the garden stays mid-/renew with nothing in flight",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\t\tif (listenerSaysFrom && oldIdNow === t.from && reserved === null) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-CANCEL-CLEARS-WHEN-OBSERVED]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-DOUBLE-BODY-NO-COMMIT",
+			"title": "a new file carrying the agreed body twice is committed",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\tif (copies !== 1) return { ok: false, reason: `the new file carries the agreed body ${copies} times` };"
+			],
+			"replace": [
+				"\tif (copies < 1) return { ok: false, reason: `the new file carries the agreed body ${copies} times` };"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-DOUBLE-BODY-NO-COMMIT]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-BASELINE-UNPROVEN",
+			"title": "a listener answering for another garden passes as the baseline — K1 is written and the switch is asked for",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\t\tbefore.gardenId !== t.gardenId ||"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-BASELINE-UNPROVEN]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-K1-RELEASE-NOT-PROVEN",
+			"title": "a K1 whose lock was not this call's at release goes on to the switch",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\t\tif (k1.release !== \"released\") {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-K1-RELEASE-NOT-PROVEN]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-RESERVE-RELEASE-NO-APPEND",
+			"title": "a reservation whose lock was not this call's at release still appends the body",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\t\t\tif (r.release !== \"released\")"],
+			"replace": ["\t\t\t\tif (false)"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-RESERVE-RELEASE-NO-APPEND]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-TARGET-RELEASE-BESIDE",
+			"title": "a target lock that was not this call's at release overwrites a commit as a stop",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\t\tif (released !== \"released\") notes.push(`the garden's v2 target lock was ${released} at release`);"
+			],
+			"replace": ["\t\tif (released !== \"released\") return stopped(\"renew-target-lock-not-released\", released);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-TARGET-RELEASE-BESIDE]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-CTX2-MOVED-AFTER-AWAIT",
+			"title": "a new-session context that moved while the listener was awaited is committed",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\tif (againId !== to || againFile !== file) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-CTX2-MOVED-AFTER-AWAIT]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-CANCEL-REREADS-OLD-ID",
+			"title": "the old id is read before the listener's await — a chapter that moved during it is cleared as if live",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\t\t\tconst listenerSaysFrom = (await t.probeListener())?.nativeSessionId === t.from;",
+				"\t\t\tconst oldIdNow = t.oldSessionId();"
+			],
+			"replace": [
+				"\t\t\tconst oldIdNow = t.oldSessionId();",
+				"\t\t\tconst listenerSaysFrom = (await t.probeListener())?.nativeSessionId === t.from;"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-CANCEL-REREADS-OLD-ID]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-FILE-FIRST-USER-EXACT",
+			"title": "a new file whose body is not its first user message passes the check",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\tif (userTexts[0] !== body)"],
+			"replace": ["\tif (!userTexts.includes(body))"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-FILE-FIRST-USER-EXACT]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-COMMIT-SETTLES-FLIGHT",
+			"title": "a committed transition keeps its flight — every later switch in that Pi is refused",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tif (settled && renewFlight === flight) renewFlight = null;"],
+			"replace": ["\t\t\tif (false) renewFlight = null;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-COMMIT-SETTLES-FLIGHT]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-STOPPED-FLIGHT-HELD",
+			"title": "an unsettled stop drops the flight as if the transition had ended",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\t\t\t(outcome.kind === \"committed\" || outcome.kind === \"refused\" || (outcome.kind === \"stopped\" && outcome.cleared));"
+			],
+			"replace": [
+				"\t\t\t\t(outcome.kind === \"committed\" || outcome.kind === \"refused\" || outcome.kind === \"stopped\");"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-STOPPED-FLIGHT-HELD]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-STOPPED-PERMIT-CLOSED",
+			"title": "a kept flight's unused permit stays open — a continuation inside its context passes a switch",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\telse flight.permit.used = true;"],
+			"replace": ["\t\t\t// permit left open"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-STOPPED-PERMIT-CLOSED]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-MISMATCH-NO-BIRTH",
+			"title": "a session that is not the reserved chapter takes the ordinary birth during the flight — a second garden is minted",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tif (flight !== null && (flight.to === null || native !== flight.to)) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-MISMATCH-NO-BIRTH]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-REBIND-NEEDS-TOKEN",
+			"title": "the reserved chapter re-binds without the record naming this renew's token",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\tif (!adm.isRenewRebind(flight.gardenId, native, flight.token)) {"],
+			"replace": ["\t\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-REBIND-NEEDS-TOKEN]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32-FLIGHT-CLAIM-ATOMIC",
+			"title": "the flight-exists check runs before the module import's await — a second effect overwrites the first one's flight and its own settling drops it",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\trenewTransitionModule ??= (import(RENEW_TRANSITION_MODULE) as unknown as Promise<RenewTransitionModule>).catch(",
+				"\t\t\t(err: unknown) => {",
+				"\t\t\t\trenewTransitionModule = null;",
+				"\t\t\t\tthrow err;",
+				"\t\t\t},",
+				"\t\t);",
+				"\t\tconst mod = await renewTransitionModule;",
+				"\t\t// From here to `renewFlight = flight` is ONE synchronous section, after the last await before",
+				"\t\t// the claim: of two effects that both got this far, one claims the flight and the other is",
+				"\t\t// refused without touching it (SOL b3-2-d residual 1).",
+				"\t\tif (renewFlight !== null) {",
+				"\t\t\tconst line = `🪛 /renew refused (renew-flight-exists): garden ${renewFlight.gardenId} already has a /renew attempt held in this Pi`;",
+				"\t\t\tprocess.stderr.write(`[entwurf-control] ${line}\\n`);",
+				"\t\t\tif (ctx.hasUI) ctx.ui.notify(line, \"warning\");",
+				"\t\t\treturn;",
+				"\t\t}"
+			],
+			"replace": [
+				"\t\t// From here to `renewFlight = flight` is ONE synchronous section, after the last await before",
+				"\t\t// the claim: of two effects that both got this far, one claims the flight and the other is",
+				"\t\t// refused without touching it (SOL b3-2-d residual 1).",
+				"\t\tif (renewFlight !== null) {",
+				"\t\t\tconst line = `🪛 /renew refused (renew-flight-exists): garden ${renewFlight.gardenId} already has a /renew attempt held in this Pi`;",
+				"\t\t\tprocess.stderr.write(`[entwurf-control] ${line}\\n`);",
+				"\t\t\tif (ctx.hasUI) ctx.ui.notify(line, \"warning\");",
+				"\t\t\treturn;",
+				"\t\t}",
+				"\t\trenewTransitionModule ??= (import(RENEW_TRANSITION_MODULE) as unknown as Promise<RenewTransitionModule>).catch(",
+				"\t\t\t(err: unknown) => {",
+				"\t\t\t\trenewTransitionModule = null;",
+				"\t\t\t\tthrow err;",
+				"\t\t\t},",
+				"\t\t);",
+				"\t\tconst mod = await renewTransitionModule;"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32-FLIGHT-CLAIM-ATOMIC]",
+			"signatureSource": "pi-extensions/entwurf-control.transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-BASELINE-INCARNATION-PROVEN",
+			"title": "an empty incarnation passes as a proven baseline — K1 is written and the switch is asked for",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\t\t!provenIncarnation(before.listenerIncarnation)"],
+			"replace": ["\t\t\tbefore.listenerIncarnation === null"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-BASELINE-INCARNATION-PROVEN]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-NEW-INCARNATION-PROVEN",
+			"title": "a new listener with an empty incarnation passes as bound — the commit lands",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\t\t!provenIncarnation(now.listenerIncarnation) ||"],
+			"replace": ["\t\t\tnow.listenerIncarnation === null ||"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-NEW-INCARNATION-PROVEN]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-DECODE-INCARNATION",
+			"title": "get_info's empty incarnation decodes as a proven one",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": ["\t\tlistenerIncarnation: provenIncarnation(d.listenerIncarnation) ? d.listenerIncarnation : null,"],
+			"replace": [
+				"\t\tlistenerIncarnation: typeof d.listenerIncarnation === \"string\" ? d.listenerIncarnation : null,"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-DECODE-INCARNATION]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-RELEASE-THROW-KEEPS-WRITE",
+			"title": "a commit whose lock release throws is reported as a failed commit though it was written",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\t\t\tif (err instanceof RecordArmLockReleaseError) {",
+				"\t\t\t\t// The commit was written (the error carries what it wrote); only the release of its"
+			],
+			"replace": [
+				"\t\t\tif (false) {",
+				"\t\t\t\t// The commit was written (the error carries what it wrote); only the release of its"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-RELEASE-THROW-KEEPS-WRITE]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-B32U-FILE-EVERY-USER-TEXT",
+			"title": "only the first user message is held to text blocks — a later image or empty message passes",
+			"subject": "pi-extensions/lib/renew-transition.ts",
+			"find": [
+				"\t\tif (blocks.length === 0 || !blocks.every((b) => b?.type === \"text\" && typeof b.text === \"string\"))"
+			],
+			"replace": [
+				"\t\tif (userTexts.length === 0 && (blocks.length === 0 || !blocks.every((b) => b?.type === \"text\" && typeof b.text === \"string\")))"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B32U-FILE-EVERY-USER-TEXT]",
+			"signatureSource": "pi-extensions/lib/renew-transition.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-TRANSITION-RECHECK",
+			"title": "the K1 recheck ignores a newer reply — a candidate replaced after the confirm is still written",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\tif (!again.ok) throw new Error(again.reason);"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-TRANSITION-RECHECK]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
 		}
 	]
 }

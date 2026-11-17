@@ -81,8 +81,12 @@ if (!renew) {
 	console.log(JSON.stringify({ loadErrors: ["no /renew command registered"] }));
 	process.exit(2);
 }
-const lastNoteReason = () => {
-	const note = deliveries.filter((d) => d.message.customType === "entwurf-renew-refusal").at(-1);
+/** The reason of the refusal note THIS call left (deliveries since `before`), or null when it left none. */
+const noteReasonSince = (before) => {
+	const note = deliveries
+		.slice(before)
+		.filter((d) => d.message.customType === "entwurf-renew-refusal")
+		.at(-1);
 	return note ? note.message.details.reason : null;
 };
 
@@ -120,8 +124,10 @@ out.show = { delivered: deliveries.length - beforeShow, notice: notices.at(-1) ?
 const sha8 = /sha256 ([0-9a-f]{8})/.exec(out.show.notice?.text ?? "")?.[1] ?? null;
 out.sha8 = sha8;
 
-// 3. Confirm what was shown: refused as transition-not-connected, with a note that opens no turn.
-await renew(`confirm ${sha8}`, ctx);
+// 3. Confirm with eight characters that are NOT what was shown: refused inside the interview, with
+//    a note that opens no turn. (A matching confirm starts the transition — its own harness.)
+const wrong = sha8 === null ? "00000000" : `${sha8.slice(0, 7)}${sha8[7] === "0" ? "1" : "0"}`;
+await renew(`confirm ${wrong}`, ctx);
 out.confirm = { note: deliveries.at(-1) ?? null, notice: notices.at(-1) ?? null };
 
 // 4. Every session_shutdown reason drops an unused show binding.
@@ -130,8 +136,9 @@ for (const reason of ["new", "resume", "fork", "reload", "quit"]) {
 	await renew("confirm", ctx);
 	await run("session_shutdown", { type: "session_shutdown", reason });
 	await run("session_start", { type: "session_start", reason: "startup" });
+	const before = deliveries.length;
 	await renew(`confirm ${sha8}`, ctx);
-	out.resets[reason] = lastNoteReason();
+	out.resets[reason] = noteReasonSince(before);
 }
 
 // 5. A show whose notice fails leaves no binding behind.
@@ -143,8 +150,10 @@ try {
 	out.failedShowThrew = String(err instanceof Error ? err.message : err);
 }
 throwOnInfo = false;
+const beforeLateConfirm = deliveries.length;
 await renew(`confirm ${sha8}`, ctx);
-out.afterFailedShow = lastNoteReason();
+// Only a note from THIS confirm counts: a matching confirm starts a transition and leaves none.
+out.afterFailedShow = noteReasonSince(beforeLateConfirm);
 
 // 6. The lookup: the born record has never renewed, so the outline says so — and asks for no turn.
 const beforeOutline = deliveries.length;

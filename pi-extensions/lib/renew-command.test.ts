@@ -1,8 +1,9 @@
 /**
  * #151 /renew ④-a: what the human-typed command decides. The subject is `renew-command.ts`; the
  * record and the branch are injected, so each effect is checked as the exact thing the handler
- * would send or show. Nothing here writes a record — and a confirmation that matches all the way is
- * still refused as transition-not-connected until the writer (④-b) exists.
+ * would send or show. Nothing here writes a record: a confirmation that matches all the way returns
+ * the transition effect (#151 b3-2) with its synchronous recheck, which the handler and the writer
+ * carry out.
  */
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
@@ -110,17 +111,29 @@ describe("#151 ④-a /renew: the entry", () => {
 });
 
 describe("#151 ④-a /renew confirm: show, bind, confirm", () => {
-	it("[QK:RENEW-CMD-SHOW-THEN-CONFIRM] show binds the candidate and names its sha8; confirming those eight characters reaches the end and is still refused as transition-not-connected", () => {
+	it("[QK:RENEW-CMD-SHOW-THEN-CONFIRM] show binds the candidate and names its sha8; confirming those eight characters returns the transition for exactly that body and full sha", () => {
 		const cmd = command();
 		const branch = [markerEntry(), submitted(BODY)];
 		const shown = cmd.handle("confirm", io(branch));
 		expect(shown.kind).toBe("show");
 		const sha8 = sha(BODY).slice(0, 8);
 		if (shown.kind === "show") expect(shown.notice).toContain(`/renew confirm ${sha8}`);
-		expect(cmd.handle(`confirm ${sha8}`, io(branch))).toMatchObject({
-			kind: "refused",
-			reason: "transition-not-connected",
-		});
+		const confirmed = cmd.handle(`confirm ${sha8}`, io(branch));
+		expect(confirmed).toMatchObject({ kind: "transition", body: BODY, fullSha: sha(BODY) });
+	});
+
+	it("[QK:RENEW-CMD-TRANSITION-RECHECK] the transition's recheck passes on the same conversation and throws when a newer reply, a busy agent or another chapter appears", () => {
+		const cmd = command();
+		const branch = [markerEntry(), submitted(BODY)];
+		cmd.handle("confirm", io(branch));
+		const t = cmd.handle(`confirm ${sha(BODY).slice(0, 8)}`, io(branch));
+		if (t.kind !== "transition") throw new Error(`expected a transition, got ${t.kind}`);
+		expect(t.recheck(io(branch))).toBeUndefined();
+		expect(() => t.recheck(io([...branch, submitted(`${BODY}\n고친 판`)]))).toThrow();
+		expect(() => t.recheck({ ...io(branch), isIdle: false })).toThrow(/not-idle/);
+		expect(() => t.recheck({ ...io(branch), nativeSessionId: "01900000-0000-7000-8000-00000000dead" })).toThrow(
+			/native-moved/,
+		);
 	});
 
 	it("[QK:RENEW-CMD-CONFIRM-NEEDS-FRESH-SHOW] a confirm without a show, after a reset, after any refusal (a mistyped /renew too), or a second time after one confirm is refused as no-binding", () => {
@@ -251,8 +264,6 @@ describe("#151 ④-a /renew outline: the agent's own current outline, looked up"
 		const branch = [markerEntry(), submitted(BODY)];
 		cmd.handle("confirm", io(branch));
 		expect(cmd.handle("outline", io(branch)).kind).toBe("outline");
-		expect(cmd.handle(`confirm ${sha(BODY).slice(0, 8)}`, io(branch))).toMatchObject({
-			reason: "transition-not-connected",
-		});
+		expect(cmd.handle(`confirm ${sha(BODY).slice(0, 8)}`, io(branch))).toMatchObject({ kind: "transition" });
 	});
 });

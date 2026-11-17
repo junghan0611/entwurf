@@ -116,3 +116,10 @@ function statIdentity(file: string): { dev: number; ino: number } | null {
 export function isRenewing(gardenId: string, sessionsDir?: string): boolean {
 	return readAddressableMetaIdentity(gardenId, sessionsDir ?? defaultMetaSessionsDir()).renewing !== undefined;
 }
+
+/** Does this garden's record reserve `nativeSessionId` as the next chapter of the renew carrying
+ * `token`? The new runtime's re-bind asks this before standing the same garden's socket up. */
+export function isRenewRebind(gardenId: string, nativeSessionId: string, token: string, sessionsDir?: string): boolean {
+	const r = readAddressableMetaIdentity(gardenId, sessionsDir ?? defaultMetaSessionsDir()).renewing;
+	return r !== undefined && r.to === nativeSessionId && r.token === token;
+}

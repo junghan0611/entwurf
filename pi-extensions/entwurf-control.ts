@@ -65,12 +65,19 @@
  *    Send-is-throw cleanup; see note above.)
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { TextContent } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext, MessageRenderer } from "@earendil-works/pi-coding-agent";
+import type {
+	ExtensionAPI,
+	ExtensionCommandContext,
+	ExtensionContext,
+	MessageRenderer,
+} from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Box, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { lookupAcpSteerSeam } from "./lib/acp-steer-seam.js";
@@ -90,7 +97,7 @@ import {
 	retireResponseEnvelope,
 	startOrRebindControlServer,
 } from "./lib/control-retire.js";
-import { CONTROL_SOCKET_SUFFIX, defaultControlSocketDir } from "./lib/control-socket-path.js";
+import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import { deliverControlSend } from "./lib/control-steer.js";
 import {
 	attachAcceptedSocketDisconnectPolicy,
@@ -150,6 +157,29 @@ let residentGardenId: string | null = null;
 /** Bumped at every session_shutdown (#151 b1): a refresh that waited across a session
  * replacement must not write this module's state, which now belongs to the new session. */
 let sessionEpoch = 0;
+/**
+ * #151 b3-2: the /renew transition in flight in THIS process, from its K1 until it commits or stops.
+ * session_shutdown does not clear it — the switch it starts ends the old session. The guard lets
+ * through only the switch that runs inside its permit (AsyncLocalStorage scope of our own
+ * ctx.newSession call), and the new runtime's session_start re-binds the same garden only for the
+ * reserved `to` with this token. Not an SDK guarantee: see the /renew skill §12.
+ */
+interface RenewFlight {
+	gardenId: string;
+	token: string;
+	from: string;
+	to: string | null;
+	permit: { used: boolean };
+}
+let renewFlight: RenewFlight | null = null;
+const renewSwitchScope = new AsyncLocalStorage<{ used: boolean }>();
+/**
+ * ONE import of the transition module, shared by every caller. Two concurrent first imports through
+ * Pi's extension loader (jiti) were measured to hand the second caller a module still being
+ * evaluated (a TDZ ReferenceError inside it; the transition harness's concurrent scenario). A failed
+ * import is forgotten so a later call tries again.
+ */
+let renewTransitionModule: Promise<RenewTransitionModule> | null = null;
 
 // ============================================================================
 // Utilities
@@ -504,6 +534,7 @@ async function handleCommand(
 	command: RpcCommand,
 	socket: net.Socket,
 	serverBinding: ControlBinding | null,
+	listenerIncarnation: string,
 ): Promise<void> {
 	const id = "id" in command && typeof command.id === "string" ? command.id : undefined;
 	const respond = (success: boolean, commandName: string, data?: unknown, error?: string) => {
@@ -558,6 +589,12 @@ async function handleCommand(
 			cwd: ctx.cwd,
 			model: modelInfo,
 			idle: ctx.isIdle(),
+			// #151 b3-2: THIS listener's own binding — the native session it was bound to, the
+			// process and the listener's incarnation — never a module variable another listener of
+			// the same process could have updated (C1.2 step 5 ②, C1-e). No turn is started.
+			nativeSessionId: serverBinding?.nativeSessionId ?? null,
+			pid: process.pid,
+			listenerIncarnation,
 		});
 		return;
 	}
@@ -694,6 +731,7 @@ async function handleCommand(
 // ============================================================================
 
 async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: string): Promise<net.Server> {
+	const listenerIncarnation = randomBytes(8).toString("hex");
 	const server = net.createServer((socket) => {
 		const serverBinding = acceptControlConnection(state, socket);
 		// FIRST — before setEncoding, before the data handler, and before any response can be
@@ -735,7 +773,7 @@ async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: st
 				// here would serialize subsequent commands on the same socket and
 				// tangle teardown ordering during socket close.
 				const commandName = parsed.command?.type ?? "unknown";
-				void handleCommand(pi, state, parsed.command!, socket, serverBinding).catch((error) => {
+				void handleCommand(pi, state, parsed.command!, socket, serverBinding, listenerIncarnation).catch((error) => {
 					const message = error instanceof Error ? error.message : String(error);
 					writeResponse(socket, {
 						type: "response",
@@ -975,8 +1013,8 @@ export default function (pi: ExtensionAPI) {
 	// path reaches it, because control-socket sends arrive as custom messages, which Pi never
 	// dispatches as slash commands. The decisions live in lib/renew-command.ts (behind the same
 	// non-literal import fence as the birth seam); this handler only performs the one effect each
-	// call returns. Nothing here writes a record: until the transition writer lands, a confirm that
-	// matches all the way is refused as transition-not-connected.
+	// call returns. A confirm that matches all the way is carried out by runRenewTransitionEffect
+	// below (#151 b3-2); the records are written only by lib/renew-transition.ts through the writer.
 	let renewCommand: RenewCommandLike | null = null;
 	pi.registerCommand("renew", {
 		description:
@@ -1016,11 +1054,124 @@ export default function (pi: ExtensionAPI) {
 				}
 				return;
 			}
+			if (effect.kind === "transition") {
+				await runRenewTransitionEffect(effect, ctx);
+				return;
+			}
 			if (ctx.hasUI) ctx.ui.notify(effect.notice, "warning");
 			else process.stderr.write(`${effect.notice}\n`);
 			if (effect.note) await pi.sendMessage(effect.note, { triggerTurn: false });
 		},
 	});
+
+	/**
+	 * #151 b3-2: carry out a confirmed transition (lib/renew-transition.ts owns the order). What this
+	 * adapter supplies: the in-flight state the guard reads, `ctx.newSession` run inside the permit's
+	 * AsyncLocalStorage scope, and a no-turn get_info of the garden's own control listener. The old
+	 * ctx is stale once the switch happens, so the result is said on stderr and on the live context.
+	 */
+	const runRenewTransitionEffect = async (
+		effect: Extract<RenewCommandEffectLike, { kind: "transition" }>,
+		ctx: ExtensionCommandContext,
+	): Promise<void> => {
+		renewTransitionModule ??= (import(RENEW_TRANSITION_MODULE) as unknown as Promise<RenewTransitionModule>).catch(
+			(err: unknown) => {
+				renewTransitionModule = null;
+				throw err;
+			},
+		);
+		const mod = await renewTransitionModule;
+		// From here to `renewFlight = flight` is ONE synchronous section, after the last await before
+		// the claim: of two effects that both got this far, one claims the flight and the other is
+		// refused without touching it (SOL b3-2-d residual 1).
+		if (renewFlight !== null) {
+			const line = `🪛 /renew refused (renew-flight-exists): garden ${renewFlight.gardenId} already has a /renew attempt held in this Pi`;
+			process.stderr.write(`[entwurf-control] ${line}\n`);
+			if (ctx.hasUI) ctx.ui.notify(line, "warning");
+			return;
+		}
+		const gardenId = effect.chapter.gardenId;
+		const socketPath = controlSocketPathIn(ENTWURF_DIR, gardenId);
+		const flight: RenewFlight = {
+			gardenId,
+			token: randomBytes(16).toString("hex"),
+			from: effect.chapter.nativeSessionId,
+			to: null,
+			permit: { used: false },
+		};
+		const probeListener = () => mod.probeControlListener(socketPath);
+		renewFlight = flight;
+		let outcome: RenewTransitionOutcomeLike | null = null;
+		try {
+			outcome = await mod.runRenewTransition({
+				gardenId,
+				token: flight.token,
+				from: flight.from,
+				body: effect.body,
+				fullSha: effect.fullSha,
+				recheck: () =>
+					effect.recheck({
+						nativeSessionId: ctx.sessionManager.getSessionId(),
+						branch: ctx.sessionManager.getBranch(),
+						isIdle: ctx.isIdle(),
+					}),
+				switchSession: (hooks) =>
+					renewSwitchScope.run(flight.permit, () =>
+						ctx.newSession({
+							setup: hooks.setup as unknown as (sm: unknown) => Promise<void>,
+							withSession: hooks.withSession as unknown as (c: unknown) => Promise<void>,
+						} as Parameters<ExtensionCommandContext["newSession"]>[0]),
+					),
+				probeListener,
+				permitUsed: () => flight.permit.used,
+				oldSessionId: () => {
+					try {
+						return ctx.sessionManager.getSessionId();
+					} catch {
+						return null; // a stale ctx: the old session is gone
+					}
+				},
+				onReserved: (to) => {
+					flight.to = to;
+				},
+			});
+		} finally {
+			// The function ending is not the record's transition ending. The flight goes only when the
+			// record is settled: committed, refused before K1, or a confirmed clear. Otherwise it stays —
+			// the guard keeps refusing switches and session_start keeps refusing other natives — but its
+			// permit is closed, so nothing can ever pass on it again.
+			const settled =
+				outcome !== null &&
+				(outcome.kind === "committed" || outcome.kind === "refused" || (outcome.kind === "stopped" && outcome.cleared));
+			if (settled && renewFlight === flight) renewFlight = null;
+			else flight.permit.used = true;
+		}
+		if (outcome === null) return;
+		const held = renewFlight === flight;
+		const notes = outcome.notes.length > 0 ? ` [${outcome.notes.join("; ")}]` : "";
+		const line =
+			outcome.kind === "committed"
+				? `🪛 /renew: garden ${gardenId} goes on in a new chapter (${outcome.to}); ${outcome.protection}`
+				: outcome.kind === "refused"
+					? `🪛 /renew refused (${outcome.code}): ${outcome.detail}`
+					: `🪛 /renew stopped (${outcome.code}): ${outcome.detail} — record: ${JSON.stringify(outcome.record)}${outcome.cleared ? " (K1 mark cleared)" : ""}`;
+		// A held attempt is THIS Pi's local state, apart from what the record says (shown above).
+		const heldNote = held
+			? " — this Pi still holds the attempt (local, not the record): it refuses /new, /resume and /fork and gives no address to another session until a person restarts this Pi"
+			: "";
+		const said = `${line}${notes}${heldNote}`;
+		try {
+			process.stderr.write(`[entwurf-control] ${said}\n`);
+		} catch {
+			// the result is also on the live context below
+		}
+		try {
+			const live = state.context;
+			if (live?.hasUI) live.ui.notify(said, outcome.kind === "committed" ? "info" : "warning");
+		} catch {
+			// stderr already carries it
+		}
+	};
 
 	// #151 b3 admission (contracts C1.4c D2·D3, C1.4e D2, C1.4j): before Pi opens a target or
 	// replaces the runtime, a switch or fork that would leave a garden mid-/renew, or reopen a closed
@@ -1037,6 +1188,24 @@ export default function (pi: ExtensionAPI) {
 		kind: "switch" | "fork",
 		event: { reason?: string; targetSessionFile?: string },
 	): Promise<Admission> => {
+		const flight = renewFlight;
+		if (flight !== null) {
+			// Only the switch our own /renew started passes, once: it runs inside the permit's scope.
+			if (
+				kind === "switch" &&
+				event.reason === "new" &&
+				renewSwitchScope.getStore() === flight.permit &&
+				!flight.permit.used
+			) {
+				flight.permit.used = true;
+				return { cancel: false };
+			}
+			return {
+				cancel: true,
+				code: "renew-switch-not-admitted",
+				detail: `this Pi holds a /renew attempt for garden ${flight.gardenId} (local state, apart from the record); only that renew's own switch passes`,
+			};
+		}
 		const mod = (await import(RENEW_ADMISSION_MODULE)) as unknown as RenewAdmissionModule;
 		const gardenId = residentGardenId;
 		if (gardenId !== null && mod.isRenewing(gardenId)) {
@@ -1132,7 +1301,35 @@ export default function (pi: ExtensionAPI) {
 		}
 		let birth: PiCitizenBirth;
 		try {
-			birth = await birthResident(residentBirthInput(ctx), "bounded");
+			const flight = renewFlight;
+			const native = ctx.sessionManager.getSessionId();
+			if (flight !== null && (flight.to === null || native !== flight.to)) {
+				// A session start while a /renew is in flight that is NOT its reserved next chapter: no
+				// address, and never an ordinary birth — a new garden here would hide what went wrong.
+				throw new Error(
+					`renew-flight-session-mismatch: garden ${flight.gardenId} is mid-/renew (reserved ${flight.to ?? "nothing yet"}); session ${native} gets no address`,
+				);
+			}
+			if (flight !== null && flight.to !== null && native === flight.to) {
+				// #151 b3-2: the new chapter of an in-flight /renew re-binds the SAME garden, with no
+				// upsert, and only when the record reserves this native id under this renew's token.
+				// Anything else refuses the address — never a new birthday for a reserved id.
+				const adm = (await import(RENEW_ADMISSION_MODULE)) as unknown as RenewAdmissionModule;
+				if (!adm.isRenewRebind(flight.gardenId, native, flight.token)) {
+					throw new Error(
+						`/renew re-bind refused: garden ${flight.gardenId} does not reserve ${native} under this renew`,
+					);
+				}
+				birth = {
+					gardenId: flight.gardenId,
+					action: "attach",
+					recordPath: "",
+					socketPath: controlSocketPathIn(ENTWURF_DIR, flight.gardenId),
+					armLockRelease: null,
+				};
+			} else {
+				birth = await birthResident(residentBirthInput(ctx), "bounded");
+			}
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
 			// stderr ALWAYS: the TUI may swallow a notify, and this is the durable
@@ -1339,6 +1536,7 @@ const RENEW_ADMISSION_MODULE = "./lib/renew-admission.ts";
 interface RenewAdmissionModule {
 	classifySwitchTarget(targetFile: string): { kind: "pass" } | { kind: "cancel"; code: string; detail: string };
 	isRenewing(gardenId: string): boolean;
+	isRenewRebind(gardenId: string, nativeSessionId: string, token: string): boolean;
 }
 
 /** Mirrors lib/renew-command.ts's custom message and effect — the local contract for the fence. */
@@ -1352,13 +1550,51 @@ type RenewCommandEffectLike =
 	| { kind: "entry"; message: RenewCustomMessageLike }
 	| { kind: "show"; notice: string }
 	| { kind: "outline"; message: RenewCustomMessageLike; notice: string }
-	| { kind: "refused"; reason: string; notice: string; note: RenewCustomMessageLike | null };
+	| { kind: "refused"; reason: string; notice: string; note: RenewCustomMessageLike | null }
+	| {
+			kind: "transition";
+			chapter: { gardenId: string; nativeSessionId: string };
+			body: string;
+			fullSha: string;
+			recheck: (io: { nativeSessionId: string; branch: readonly unknown[]; isIdle: boolean }) => undefined;
+	  };
 interface RenewCommandLike {
 	handle(
 		args: string,
 		io: { nativeSessionId: string; branch: readonly unknown[]; isIdle: boolean },
 	): RenewCommandEffectLike;
 	reset(): void;
+}
+// #151 b3-2. Same fence: lib/renew-transition.ts imports the writer and the v2 lock.
+const RENEW_TRANSITION_MODULE = "./lib/renew-transition.ts";
+interface RenewListenerIdentityLike {
+	gardenId: string | null;
+	nativeSessionId: string | null;
+	pid: number | null;
+	listenerIncarnation: string | null;
+}
+type RenewTransitionOutcomeLike =
+	| { kind: "committed"; to: string; protection: string; notes: string[] }
+	| { kind: "refused"; code: string; detail: string; notes: string[] }
+	| { kind: "stopped"; code: string; detail: string; record: unknown; cleared: boolean; notes: string[] };
+interface RenewTransitionModule {
+	probeControlListener(socketPath: string): Promise<RenewListenerIdentityLike | null>;
+	runRenewTransition(input: {
+		gardenId: string;
+		token: string;
+		from: string;
+		body: string;
+		fullSha: string;
+		recheck: () => undefined;
+		switchSession: (hooks: {
+			setup: (sm: never) => Promise<void>;
+			withSession: (ctx2: never) => Promise<void>;
+		}) => Promise<{ cancelled: boolean }>;
+		probeListener: () => Promise<RenewListenerIdentityLike | null>;
+		permitUsed: () => boolean;
+		oldSessionId: () => string | null;
+		onReserved: (to: string) => void;
+	}): Promise<RenewTransitionOutcomeLike>;
 }
 interface RenewCommandModule {
 	createRenewCommand(deps: { residentGardenId: () => string | null }): RenewCommandLike;

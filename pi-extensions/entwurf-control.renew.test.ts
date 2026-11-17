@@ -81,10 +81,10 @@ describe("#151 ④-a: the registered /renew handler", () => {
 		expect(out.sha8).toMatch(/^[0-9a-f]{8}$/);
 	});
 
-	it("[QK:RENEW-HANDLER-REFUSAL-NOTE-NO-TURN] a matching confirm is refused as transition-not-connected, and its note for the agent asks for no turn", () => {
+	it("[QK:RENEW-HANDLER-REFUSAL-NOTE-NO-TURN] a confirm naming other eight characters is refused inside the interview, and its note for the agent asks for no turn", () => {
 		expect(out.confirm.notice?.level).toBe("warning");
 		expect(out.confirm.note?.message.customType).toBe("entwurf-renew-refusal");
-		expect(out.confirm.note?.message.details).toMatchObject({ reason: "transition-not-connected" });
+		expect(out.confirm.note?.message.details).toMatchObject({ reason: "sha-prefix-mismatch" });
 		expect(out.confirm.note?.options).toEqual({ triggerTurn: false });
 	});
 
