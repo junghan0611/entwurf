@@ -102,6 +102,18 @@
 - **재현과 upstream 조사 (GLG 2026-11-17, 이 세션):** GLG "실제 해보고, 진짜 발생 재현가능한지 보고 방법을 찾아보자. 매력적인 방법이 아니어도 규약으로 피할수 있어도 좋다." 격리 실제 Pi 1.5.2 재현 영수증 `/tmp/entwurf-151/reentry/RECEIPT-20261117.md` f00feb94…: first-come은 독립 교체에 짐, 동기 구간 설계는 앞선 async handler(GLG 프로필의 andenken·heartbeat) 때문에 우리 호출까지 막음, ALS는 독립 교체를 가르고 우리 호출을 통과시킴, 확장의 중첩 교체는 ALS로 못 가름(재현). 운영 프로필 감사: 세션 교체를 시작하는 확장 코드 0, custom editor 0. 제안(GLG 결정 대기): ALS + 규약("/renew 프로필의 확장은 스스로 세션 교체를 시작하지 않는다") + 사후 감지(`renew-switch-preempted`). GLG "혹시 upstream에서 해결되는 문제인지도 파악해보자. 소넷을 새로 불러서 조사를 맡겨봐" → Sonnet 형제 `20261117T134544-541544`(entwurf/claude-sonnet-5-5, 콜백 nonce 일치) 조사 중, 보고서 `/tmp/entwurf-151/upstream/`.
 - **미감사 symlink 검수 (SOL 2026-11-17T05:09Z):** `session-recall-compat.ts`는 현재 source가 없는 은퇴 링크다(agent-config 1c5b893b에서 삭제). 현재 디스크 프로필의 기본 자동 선택에서 빠진다(PackageManager 자동 발견과 1.5.2 bundle이 끊어진 symlink를 statSync 실패로 건너뜀, 소스 근거). 이미 떠 있는 runtime의 실제 미로딩은 관측하지 않았다. 역사적 위임 upstream은 미확인이다. "안전한 파일" PASS가 아니다. 감사 덧붙임 `AUDIT-20261117.md` 이제 057b1af5…, 보고서 `REVIEW-session-recall-compat-SOL-20261117.md` 3792a402…. 링크 정리는 agent-config의 몫(GLG 결정).
 - **정숙 구간의 자동 입력원 — 짧은 안내로 (GLG 정렬, 운영코디 전달; C1.4n `/tmp/entwurf-151/renew-contract-c1.4n.md`):** GLG "작은정정 맞지? 정숙하라는게 강제로 다 확인해서 하던거 멈추게 하려는것은 아니니까 이런거 다 코드로 막으려면 귀찮은 일이다." 오토비 자문(자동 입력원 누락)은 스킬 12절의 짧은 안내로만 반영했다. 하던 일 마무리, 조용할 때 창 열기, 타이머·작업 완료 알림·continuation도 잠시 배려, 확인부터 넘어간 신호까지는 자동 입력도 보내지 않음, 강제 멈춤 아님, 코드가 막지 않음. 잠깐 넣었던 `pending-input` 코드 거절은 철회했다(C1.4m → C1.4n). 운영코디 07:07Z 요청으로 12절에 GLG 원문을 두고 "조용한 때를 고르고 필요한 자동 진행만 사람이 잠시 쉬게 한다"로 다듬었다(강제 절차·전수 점검·늘 조작할 목록 아님, runtime 자동 검사 대상 아님). 향후 입력 방지는 규약이며 새 기능·감시를 늘리지 않는다. SDK 사실(isIdle은 대기 메시지 미포함)과 감사의 입력원 목록(4ab5b312…)은 사실로 남긴다.
+- **② 운영 반영 창 — 체크리스트 (아직 실행하지 않음, GLG 창 대기):** ①은 커밋 `e41ea565`, 스킬 보완은 `dd679f48`이다. origin보다 10커밋 앞서 있고 push는 하지 않았다. 운영코디 조건(12:58Z): 재시작만으로는 설치 사본이 갱신되지 않는다. 실제로 실행되는 reader·writer 바이트와 MCP의 source·dist 일치를 확인하고, F1이 풀린 `pnpm check`와 함께 frozen `check:full`도 확인한다. 개별 75 green은 FULL을 대신하지 않는다. fresh-cut은 하지 않고 roll forward로 간다. 대상 종료·재개는 GLG가 정한다.
+  - 읽기로 확인한 skew(2026-11-17 21:5x KST): 운영 Pi와 `entwurf-bridge`(start.sh, dev clone)는 checkout 소스를 그대로 싣는다. 반면 아래 셋은 #151 이전 바이트다.
+    - (a) `mcp/entwurf-bridge/dist`(2026-11-16 빌드, `renewing` 0): Pi 내장 MCP bridge 자식이 이것을 쓴다.
+    - (b) Claude meta-bridge 조립 사본 `~/.local/share/entwurf/meta-bridge/.assembled/entwurf-meta-receive/lib/meta-session.ts`(2026-11-15, `renewing` 0)
+    - (c) Claude plugin cache `~/.claude/plugins/cache/meta-bridge-local/entwurf-meta-receive/0.1.0/lib/meta-session.ts`(2026-11-15, `renewing` 0)
+  - 옛 parser는 모르는 키를 `unexpected key`로 거절한다. 그러므로 첫 renew가 record에 새 키를 쓰기 **전에** (a)·(b)·(c)와 그것을 들고 떠 있는 프로세스(운영 Pi, MCP bridge 자식, pi-durable, Claude Code 세션)를 roll forward해야 한다.
+  - 순서 후보:
+    1. `pnpm run build-bridge`
+    2. meta-bridge를 다시 설치해 조립 사본과 plugin cache를 갱신(entwurf setup 경로)
+    3. 실행 바이트 대조(설치 사본 ↔ checkout, dist ↔ src)
+    4. `pnpm check`와 `check:full`
+    5. GLG가 정한 대상 재시작
 - **① 최소 수습 C1.4o (GLG "박살나면 옆에 에이전트한테 고쳐달라고 하면된다. 허나 최소수습하는것을 넣자 1 2 3하자"; SOL C1.4o B0/D3/O2 → C1.4o-a B0/D0 11:43Z, 읽기 판독):** 순서는 ① 최소 수습 → ② 운영 반영 창 → ③ 실제 SOL renew이다. push는 이 결정에 없다. 계약 메모: `/tmp/entwurf-151/renew-contract-c1.4o.md` f19b758b…(SOL 설계 판독 10:58Z: 동의, 연결 조건 넷).
   - writer `adoptRenewOwner`: lock 안에서 명시한 from·token·to가 맞고, 그때 기록된 owner가 `classifyMarkerOwner`로 dead일 때만 `renewing.owner`를 이 프로세스로 바꾼다. 일반 함수는 그대로다.
   - lib `renew-recover.ts`와 CLI `entwurf renew-recover <gid>`: status / `--continue <abs file>`(예약 장만, 파일 엄격 검사 → 인계 → 재검사 → 기존 commit, append 0, Pi는 열지 않음) / `--abort --save-outline <abs new>`(미예약만, 원본 확인 → 본문 저장·대조 → 인계 → 기존 clear). 인계의 release가 `released`가 아니면 멈춘다.
