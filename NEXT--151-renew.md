@@ -2,7 +2,7 @@
 
 # RAIL — 현재 좌표
 
-**지금 위치 (2026-11-17 밤, HEAD b0e989ff, push 없음·origin보다 12커밋 앞섬):** ① 최소 수습 커밋 `e41ea565` → ② 운영 반영 1~4 검증 완료(dist 빌드, 두 Claude config·`setup` 전부 PASS, 활성 설치 사본 11곳 바이트 일치, `pnpm check`·frozen `check:full` green) → **지금: GLG 전체 재시작(5)** → 재시작 뒤 각 형제는 같은 장으로 돌아와 새 로딩과 주소를 확인 → **③ 실제 SOL renew**: GLG와 인터뷰 → SOL의 현재 final → 같은 판본 확인 → 별도 전환 창.
+**지금 위치 (2026-11-17 밤, push 없음; 검사는 568a5df6에서 돌렸고 그 뒤 커밋은 이 NEXT만 바꿨다):** ① 최소 수습 커밋 `e41ea565` → ② 운영 반영 1~4 검증 완료(dist 빌드, 두 Claude config·`setup` 전부 PASS, 활성 설치 사본 11곳 바이트 일치, `pnpm check`·frozen `check:full` green) → **지금: GLG 전체 재시작(5)** → 재시작 뒤 각 형제는 같은 장으로 돌아와 새 로딩과 주소를 확인 → **③ 실제 SOL renew**: GLG와 인터뷰 → SOL의 현재 final → 같은 판본 확인 → 별도 전환 창.
 - **재시작은 /renew가 아니다.** 재시작은 같은 장으로 돌아오는 것이다. SOL의 실제 renew용 final이나 판본 확인은 아직 하지 않았다.
 - 자동 진행(heartbeat·goal·background)은 ③ 전에 필요한 것만 조용한 때에 정한다. 새 장에서 자동으로 다시 켤 권한은 없다(스킬 §12).
 
