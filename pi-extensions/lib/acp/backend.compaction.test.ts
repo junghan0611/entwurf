@@ -130,7 +130,9 @@ function makeWorld(
 			return {
 				initialize: async (p: unknown) => {
 					initializeParams.push(p);
-					return {};
+					// #168: the pinned claude-agent-acp, read from the adapter's own floor.
+					const { CLAUDE_ACP_AGENT: a } = await import("./backend-adapter.ts");
+					return { agentInfo: { name: a.name, version: a.floor } };
 				},
 				newSession: async () => {
 					await say(script.bootstrap);

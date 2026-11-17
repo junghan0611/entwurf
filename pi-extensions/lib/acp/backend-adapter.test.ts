@@ -13,10 +13,19 @@
  * the shape claude-agent-acp 0.85.1 answered on 2026-10-12, copied as literals so a change to the
  * adapter's declared names cannot move its own oracle. No vendor runtime is certified here.
  */
+import { readFileSync } from "node:fs";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { describe, expect, it } from "vitest";
-import { claudeAdapter, cortexAdapter, INCOMPLETE_TOOL_CALL_VERDICT } from "./backend-adapter.ts";
+import {
+	AGY_ACP_AGENT,
+	admitAcpAgent,
+	agyAdapter,
+	CLAUDE_ACP_AGENT,
+	claudeAdapter,
+	cortexAdapter,
+	INCOMPLETE_TOOL_CALL_VERDICT,
+} from "./backend-adapter.ts";
 import { CLAUDE_CONFIG_OVERLAY_DIR } from "./overlay.ts";
 
 describe("ACP launch env — claude foreground-only", () => {
@@ -173,6 +182,112 @@ describe("ACP set-model readback — claude", () => {
 			await expect(enforce(id, response), `${id} answered ${JSON.stringify(response)}`).rejects.toThrow(
 				/does not name the requested model/,
 			);
+		}
+	});
+});
+
+describe("claude server admission at initialize (#168)", () => {
+	/** The bundled pin, read from the package manifest: the floor the adapter must hold. */
+	const pin: string = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).dependencies[
+		"@agentclientprotocol/claude-agent-acp"
+	];
+	const NAME = "@agentclientprotocol/claude-agent-acp";
+	const answer = (agentInfo: unknown) => ({ protocolVersion: 1, agentInfo });
+	const admit = (a: unknown) => {
+		if (!claudeAdapter.admitAgent) throw new Error("claude adapter declares no admitAgent seat");
+		claudeAdapter.admitAgent(a);
+	};
+	const below = (v: string) => {
+		const [x, y, z] = v.split(".").map(Number);
+		return z > 0 ? `${x}.${y}.${z - 1}` : y > 0 ? `${x}.${y - 1}.99` : `${x - 1}.99.99`;
+	};
+
+	it("[QK:ACP-CLAUDE-ADMIT-FLOOR] claude-agent-acp at the bundled pin or newer is admitted; an older, malformed, pre-release or absent version is refused by name", () => {
+		const [x, y, z] = pin.split(".").map(Number);
+		for (const version of [pin, `${x}.${y}.${z + 1}`, `${x}.${y + 1}.0`, `${x + 1}.0.0`]) {
+			expect(() => admit(answer({ name: NAME, version })), version).not.toThrow();
+		}
+		for (const a of [
+			answer({ name: NAME, version: below(pin) }),
+			answer({ name: NAME, version: `${pin}-rc.1` }),
+			answer({ name: NAME, version: `${x}.${y}` }),
+			answer({ name: NAME }),
+			answer(null),
+			{ protocolVersion: 1 },
+		]) {
+			expect(() => admit(a), JSON.stringify(a)).toThrow(/acp-claude-version-unsupported/);
+		}
+	});
+
+	it("[QK:ACP-CLAUDE-ADMIT-NAME] a server that does not name itself as claude-agent-acp is refused at the pin", () => {
+		for (const name of ["Antigravity ACP Server", "claude-agent-acp", "", undefined]) {
+			expect(() => admit(answer({ name, version: pin })), String(name)).toThrow(/acp-claude-version-unsupported/);
+		}
+	});
+
+	it("[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN] the Claude floor is the exact version package.json pins", () => {
+		expect(pin).toMatch(/^\d+\.\d+\.\d+$/);
+		expect(CLAUDE_ACP_AGENT.floor).toBe(pin);
+	});
+});
+
+describe("the shared admission rule (#168)", () => {
+	const expected = { name: "Example ACP Server", floor: "2.10.3" };
+	const admit = (version: unknown) =>
+		admitAcpAgent({ agentInfo: { name: expected.name, version } }, "example", "example-refusal", expected);
+
+	it("[QK:ACP-AGENT-ADMIT-COMPARE] versions compare as three numbers, major first — never as text, never one part alone", () => {
+		for (const version of ["2.10.3", "2.10.4", "2.11.0", "3.0.0", "10.0.0", "2.10.10"]) {
+			expect(() => admit(version), version).not.toThrow();
+		}
+		for (const version of ["2.10.2", "2.9.99", "1.99.99", "0.10.3", "2.1.30"]) {
+			expect(() => admit(version), version).toThrow(/example-refusal/);
+		}
+	});
+
+	it("[QK:ACP-AGENT-ADMIT-STRICT-VERSION] only a strict X.Y.Z version is read; a pre-release, build metadata or padding refuses even above the floor", () => {
+		for (const version of [
+			"2.10.3-beta.1",
+			"2.10.3+build.7",
+			"v2.10.3",
+			" 2.10.3",
+			"2.10.3 ",
+			"2.10",
+			"2.10.3.1",
+			2103,
+		]) {
+			expect(() => admit(version), String(version)).toThrow(/example-refusal/);
+		}
+	});
+
+	it("[QK:ACP-AGENT-ADMIT-OVERRIDE-NAMED] a refusal names the operator override that launched the server, never its value; without it, no launch is named", () => {
+		const cells = [
+			{ env: "CLAUDE_AGENT_ACP_COMMAND", adapter: claudeAdapter, name: CLAUDE_ACP_AGENT.name },
+			{ env: "AGY_ACP_COMMAND", adapter: agyAdapter, name: AGY_ACP_AGENT.name },
+		];
+		for (const cell of cells) {
+			const saved = process.env[cell.env];
+			try {
+				const refused = () => cell.adapter.admitAgent?.({ agentInfo: { name: cell.name, version: "0.0.1" } });
+				process.env[cell.env] = "/secret/launcher --token s3cr3t";
+				const withOverride = (() => {
+					try {
+						refused();
+					} catch (err) {
+						return (err as Error).message;
+					}
+					throw new Error(`${cell.env}: no refusal`);
+				})();
+				expect(withOverride).toContain(`launched by ${cell.env}, which owns its whole command line`);
+				expect(withOverride).not.toContain("/secret/launcher");
+				expect(withOverride).not.toContain("s3cr3t");
+				expect(isRetryableAssistantError({ stopReason: "error", errorMessage: withOverride } as never)).toBe(false);
+				delete process.env[cell.env];
+				expect(refused).toThrow(/^(?![\s\S]*launched by)/);
+			} finally {
+				if (saved === undefined) delete process.env[cell.env];
+				else process.env[cell.env] = saved;
+			}
 		}
 	});
 });

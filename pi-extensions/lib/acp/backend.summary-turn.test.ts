@@ -36,7 +36,7 @@ import {
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { generateBranchSummary, generateSummary } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import type { AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 
@@ -146,8 +146,18 @@ function makeWorld(
 	/** What the next prompt does: its stop reason, and a gate it waits on (with a signal that it got there). */
 	const control: { stopReason: string; hold?: Promise<void>; entered?: () => void } = { stopReason: "end_turn" };
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
+	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
+	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
+		const ambient = process.env[name];
+		if (ambient === undefined) continue;
+		delete process.env[name];
+		onTestFinished(() => {
+			process.env[name] = ambient;
+		});
+	}
+	const launchOf = new Map<AcpChildLike, string>();
 	const deps: AcpTurnDeps = {
-		spawnChild: () => {
+		spawnChild: (launch) => {
 			const pipe = () => ({ destroy() {}, unref() {} });
 			const child: AcpChildLike = {
 				pid: undefined,
@@ -164,13 +174,21 @@ function makeWorld(
 				once() {},
 			};
 			children.push(child);
+			launchOf.set(child, launch.command);
 			return child;
 		},
-		createConnection: (_child, registered) => {
+		createConnection: (child, registered) => {
 			handlers = registered;
 			const acpSessionId = `ACP-${children.length}`;
 			return {
-				initialize: async () => ({}),
+				// #168: answer as the server the launch names; an unknown launch fails the world.
+				initialize: async () => {
+					const { AGY_ACP_AGENT, CLAUDE_ACP_AGENT } = await import("./backend-adapter.ts");
+					const command = launchOf.get(child);
+					const a = command === "agy" ? AGY_ACP_AGENT : command === process.execPath ? CLAUDE_ACP_AGENT : undefined;
+					if (!a) throw new Error(`test world: unexpected ACP launch ${command}`);
+					return { agentInfo: { name: a.name, version: a.floor } };
+				},
 				newSession: async (params: unknown) => {
 					wire.push({ method: "newSession", params });
 					return { sessionId: acpSessionId };

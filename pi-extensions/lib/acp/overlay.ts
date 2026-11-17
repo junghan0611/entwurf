@@ -33,13 +33,15 @@
 // which is exactly the "mailbox absence by design" the plugin commits to
 // (no meta-bridge hook on this child's settings surface → no mailbox).
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
 	existsSync,
 	lstatSync,
 	mkdirSync,
 	readdirSync,
+	readFileSync,
 	readlinkSync,
+	renameSync,
 	rmSync,
 	symlinkSync,
 	unlinkSync,
@@ -526,6 +528,68 @@ export function resolveAgySkillLinks(skillPlugins: readonly string[]): Map<strin
 	return links;
 }
 
+/** The agy hook seat under the gemini dir: `config/hooks.json` (#168 ①). */
+export const AGY_HOOKS_FILENAME = "hooks.json";
+
+/** The one named hook the overlay writes into that seat. */
+export const AGY_ACP_HOOK_NAME = "entwurf-acp-policy";
+
+/** The named refusal for a hook seat that is a directory, so no file can be written there. */
+export const ACP_AGY_HOOKS_SEAT_NOT_A_FILE = "acp-agy-hooks-seat-not-a-file";
+
+/**
+ * The seat's bytes: one named PreToolUse hook on every tool (`matcher: "*"`) running `command`.
+ * The shape is agy's own `hooks.json` (measured, agy 1.5.9, #168): `{name: {PreToolUse: [{matcher,
+ * hooks: [{type: "command", command, timeout}]}]}}`. The bytes are the same for every agy child — the
+ * one ordinary policy is the command's own argument — so siblings and every pi on the host converge on
+ * one file.
+ */
+export function agyHooksJson(command: string): string {
+	return `${JSON.stringify(
+		{ [AGY_ACP_HOOK_NAME]: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command, timeout: 10 }] }] } },
+		null,
+		"\t",
+	)}\n`;
+}
+
+/** A temp path beside the seat that no other writer shares: pid plus random bytes. Two bootstraps
+ *  writing one fixed temp could interleave their bytes before either rename. */
+export function agyHooksSeatTempPath(seatPath: string): string {
+	return `${seatPath}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+}
+
+/**
+ * Write the hook seat. A file already holding these exact bytes is left alone; a regular file with
+ * other bytes is replaced; a symlink is removed, never followed (its target is not ours); a
+ * directory refuses by name. The write is a per-writer temp renamed over the seat, so a reader —
+ * agy re-reads this file on every tool call (measured, #168) — sees either the old bytes or the new.
+ */
+function writeAgyHooksSeat(configDir: string, bytes: string): void {
+	const seat = join(configDir, AGY_HOOKS_FILENAME);
+	let stat: ReturnType<typeof lstatSync> | undefined;
+	try {
+		stat = lstatSync(seat);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+	}
+	if (stat?.isDirectory()) {
+		throw new Error(
+			`entwurf: ${ACP_AGY_HOOKS_SEAT_NOT_A_FILE} — ${seat} is a directory, so the agy ACP overlay cannot write its tool hook there. ` +
+				`Nothing was started. Remove that directory and start the turn again.`,
+		);
+	}
+	if (stat?.isSymbolicLink()) unlinkSync(seat);
+	else if (stat?.isFile() && readFileSync(seat, "utf8") === bytes) return;
+	const temp = agyHooksSeatTempPath(seat);
+	try {
+		writeFileSync(temp, bytes, { flag: "wx", mode: 0o644 });
+		renameSync(temp, seat);
+	} catch (err) {
+		rmSync(temp, { force: true });
+		throw err;
+	}
+}
+
 function isSymlink(path: string): boolean {
 	try {
 		return lstatSync(path).isSymbolicLink();
@@ -570,11 +634,16 @@ function assertAgyOverlayDirectory(path: string): void {
  * emptied setting retracts every link. A real directory in that seat is not ours and is never
  * removed; one standing where a link is owed refuses. The seat's two directories are proven real
  * with the rest, unless `config` is itself a foreign link the sweep below is about to remove.
+ *
+ * Tool hook (#168 ①, `hookCommand`): written at `config/hooks.json` after the sweep — so a foreign
+ * `config` link is already gone and the seat lands in the overlay's own directory — by
+ * `writeAgyHooksSeat`. Absent `hookCommand` leaves the seat untouched (tests of the other seats).
  */
 export function ensureAgyGeminiOverlay(
 	realDir: string = AGY_REAL_GEMINI_DIR,
 	overlayDir: string = AGY_GEMINI_OVERLAY_DIR,
 	skillPlugins: readonly string[] = [],
+	hookCommand?: string,
 ): void {
 	const realAppData = join(realDir, AGY_APP_DATA_DIRNAME);
 	const overlayAppData = join(overlayDir, AGY_APP_DATA_DIRNAME);
@@ -625,6 +694,11 @@ export function ensureAgyGeminiOverlay(
 			// outcome this call wanted; anything else at the path is not.
 			if ((err as NodeJS.ErrnoException).code !== "EEXIST" || readlinkSync(overlayPath) !== realPath) throw err;
 		}
+	}
+
+	if (hookCommand !== undefined) {
+		mkdirSync(overlayConfig, { recursive: true });
+		writeAgyHooksSeat(overlayConfig, agyHooksJson(hookCommand));
 	}
 
 	if (skillLinks.size > 0) mkdirSync(overlaySkills, { recursive: true });

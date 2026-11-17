@@ -115,7 +115,11 @@ function makeWorld(initializeAnswer: unknown) {
 		createConnection: () => {
 			const acpSessionId = `ACP-${steers.length}-${Math.random().toString(16).slice(2, 6)}`;
 			return {
-				initialize: async () => initializeAnswer,
+				initialize: async () => {
+					// #168: the pinned claude-agent-acp, read from the adapter's own floor.
+					const { CLAUDE_ACP_AGENT: a } = await import("./backend-adapter.ts");
+					return { ...(initializeAnswer as object), agentInfo: { name: a.name, version: a.floor } };
+				},
 				newSession: async () => ({ sessionId: acpSessionId }),
 				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 				prompt: async (): Promise<AcpPromptResponse> => {

@@ -168,7 +168,7 @@ Only the operator can type `/compact` (Pi handles it from interactive input; a m
 - **c5 O6 `tools: []`.** Record exactly: "delivery path read + non-use observed (summary child transcript has 0 `tool_use`, ended `end_turn`); the provided tool set is unobserved." The ACP wire does not expose it; a stronger check is a separate LIVE probe that needs GLG's approval.
 - **c6 (optional) cancel.** ESC during `/compact` shows `Compaction cancelled`: no compaction entry, no leftover summary child.
 
-**Recording.** Header: n=1, host, date, pi 1.5.2, claude-agent-acp 0.107.0, model id, effective `keepRecentTokens` with its source. States: PASS / FAIL / PARTIAL / UNMEASURED.
+**Recording.** Header: n=1, host, date, pi 1.5.2, claude-agent-acp 0.107.3, model id, effective `keepRecentTokens` with its source. States: PASS / FAIL / PARTIAL / UNMEASURED.
 - Not attempted: `UNMEASURED — not attempted`. `Nothing to compact`: `UNMEASURED — Pi gate not reached: estTokensAfterFirstUser=<n> < keepRecentTokens=<k>`, with the pre-check result and footer % side by side. `Already compacted`: this attempt UNMEASURED.
 - Compacted but an observation missed: only that row is PARTIAL, with the reason. A summary-turn `error` stop is FAIL with the raw reason; repair nothing.
 - Fixture or source passes (`backend.summary-turn.test.ts`) never stand in for this session's compact; success at a short context is not long-context durability, so state the context reached.

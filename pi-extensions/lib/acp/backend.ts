@@ -2197,6 +2197,8 @@ export function streamAcpTurn(
 			);
 			// #163 S7: only an adapter that advertises steering is ever sent one.
 			session.steeringSupported = readSteeringSupported(initialized);
+			// #168: the server that answered must be the adapter's vendor at or above its floor, before any session.
+			adapter.admitAgent?.(initialized);
 
 			// Tool-narrowed session meta (S2b) + the billing carrier (S2d-1c). The
 			// carrier is the SAME rendered engraving folded into configSig above;

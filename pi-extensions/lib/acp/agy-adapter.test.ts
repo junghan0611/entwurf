@@ -6,7 +6,9 @@
  * model, the launch arguments — never the adapter's own constants, so a change to the adapter
  * cannot move its own check. No vendor runtime is certified here; that is the LIVE axis.
  */
+import { spawnSync } from "node:child_process";
 import {
+	copyFileSync,
 	lstatSync,
 	mkdirSync,
 	mkdtempSync,
@@ -14,14 +16,20 @@ import {
 	readFileSync,
 	readlinkSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	agyAcpHookCommand,
+	agyAcpHookPath,
 	agyAdapter,
 	agyLaunchArgs,
 	allCuratedModels,
@@ -32,7 +40,7 @@ import {
 	resolveAgyThoughtLevel,
 } from "./backend-adapter.ts";
 import { isAgyAcpModelId, isCuratedAcpModelId } from "./model-ids.js";
-import { ensureAgyGeminiOverlay } from "./overlay.ts";
+import { agyHooksSeatTempPath, ensureAgyGeminiOverlay } from "./overlay.ts";
 
 /** The `configOptions` agy answers a set with, as measured: the full list, ids model/thought_level/mode. */
 function agyAnswer(model: string, thought: string | undefined, mode = "default") {
@@ -302,13 +310,67 @@ describe("agy ACP thought level — mapped per model, set after the model, read 
 		);
 		expect(() => confirmAgyThoughtLevelAnswer(afterModelSwitch, "agy-gemini-3.8-flash", "high")).not.toThrow();
 	});
+	// #168 (a): pi clamps every level it sets — at session creation (`sdk.js` `clampThinkingLevel`), on
+	// `setModel`, `setThinkingLevel` and a branch's recorded level (pi-coding-agent 1.5.2
+	// `agent-session.js` `_clampThinkingLevel`) — so a turn reaches the adapter with a level the row
+	// offers. A characterization of that composition: the refusal stays for a caller that bypasses the
+	// clamp. Oracle: pi's own ModelRuntime + getSupportedThinkingLevels / clampThinkingLevel.
+	it("[QK:ACP-AGY-THINKING-MENU] pi offers only the levels each row carries, and its clamp lands every other level on one the adapter resolves", async () => {
+		const sandbox = mkdtempSync(join(tmpdir(), "acp-agy-thinking-"));
+		try {
+			const runtime = await ModelRuntime.create({
+				authPath: join(sandbox, "oracle-auth.json"),
+				modelsPath: null,
+				modelsStorePath: join(sandbox, "oracle-models-store.json"),
+				allowModelNetwork: false,
+				refreshOnCreate: false,
+			});
+			const rows = allCuratedModels().filter((row) => row.id.startsWith("agy-"));
+			runtime.registerProvider("acp-agy-thinking-oracle", {
+				baseUrl: "x",
+				apiKey: "x",
+				api: "acp-agy-thinking-oracle",
+				streamSimple: () => {
+					throw new Error("the oracle never streams");
+				},
+				models: rows,
+			});
+			// Literals: the measured offer per native model (#167).
+			const lowToHigh = {
+				menu: ["low", "medium", "high"],
+				clamp: { off: "low", minimal: "low", xhigh: "high", max: "high" },
+			};
+			const expected: Record<string, { menu: string[]; clamp: Record<string, string> }> = {
+				"agy-gemini-3.8-flash": lowToHigh,
+				"agy-gemini-4-argon": lowToHigh,
+				"agy-gemini-4-hydrogen": {
+					menu: ["low", "medium", "high", "xhigh"],
+					clamp: { off: "low", minimal: "low", xhigh: "xhigh", max: "xhigh" },
+				},
+			};
+			expect(rows.map((r) => r.id).sort()).toEqual(Object.keys(expected).sort());
+			for (const row of rows) {
+				const registered = runtime.getModel("acp-agy-thinking-oracle", row.id);
+				expect(registered, row.id).toBeDefined();
+				if (!registered) continue;
+				expect(getSupportedThinkingLevels(registered), row.id).toEqual(expected[row.id].menu);
+				for (const [asked, landed] of Object.entries(expected[row.id].clamp)) {
+					const clamped = clampThinkingLevel(registered, asked as never);
+					expect(clamped, `${row.id} ${asked}`).toBe(landed);
+					// pi sends the clamped level as `reasoning`; the adapter resolves it without its refusal.
+					expect(resolveAgyThoughtLevel(row.id, clamped, row.thinkingLevelMap), `${row.id} ${asked}`).toBe(clamped);
+				}
+			}
+		} finally {
+			rmSync(sandbox, { recursive: true, force: true });
+		}
+	});
 });
 
 describe("agy ACP capabilities it does not declare", () => {
 	it("[QK:ACP-AGY-NO-SEAL] agy seals no turn accounting — its usage_update carries no cost", () => {
 		expect("sealsTurnAccounting" in agyAdapter).toBe(false);
 		expect(agyAdapter.resolveAdapterSettings(blocks({}, {}))).toEqual({ skillPlugins: [] });
-		expect(agyAdapter.configSignatureFields(undefined)).toEqual({});
 	});
 });
 
@@ -513,5 +575,348 @@ describe("agy gemini-dir overlay — one credential link, nothing else crosses",
 		rmSync(join(real, "antigravity-cli", token));
 		ensureAgyGeminiOverlay(real, overlay);
 		expect(() => lstatSync(join(overlay, "antigravity-cli", token))).toThrow();
+	});
+});
+
+describe("agy server admission at initialize (#168)", () => {
+	/** The measured answer (#167, 1.5.9) is the oracle; the adapter's constant is not read here. */
+	const answer = (agentInfo: unknown) => ({ protocolVersion: 1, agentInfo });
+	const admit = (a: unknown) => {
+		if (!agyAdapter.admitAgent) throw new Error("agy adapter declares no admitAgent seat");
+		agyAdapter.admitAgent(a);
+	};
+
+	it("[QK:ACP-AGY-ADMIT-FLOOR] agy's ACP server at 1.5.9 or newer is admitted; an older, malformed, pre-release or absent version is refused by name", () => {
+		for (const version of ["1.5.9", "1.5.10", "1.6.0", "2.0.0"]) {
+			expect(() => admit(answer({ name: "Antigravity ACP Server", version })), version).not.toThrow();
+		}
+		const refused: unknown[] = [
+			answer({ name: "Antigravity ACP Server", version: "1.5.8" }),
+			answer({ name: "Antigravity ACP Server", version: "1.4.99" }),
+			answer({ name: "Antigravity ACP Server", version: "1.5" }),
+			answer({ name: "Antigravity ACP Server", version: "1.5.9-beta.1" }),
+			answer({ name: "Antigravity ACP Server", version: "" }),
+			answer({ name: "Antigravity ACP Server" }),
+			answer(null),
+			{ protocolVersion: 1 },
+			undefined,
+		];
+		for (const a of refused) {
+			expect(() => admit(a), JSON.stringify(a)).toThrow(/acp-agy-version-unsupported/);
+		}
+	});
+
+	it("[QK:ACP-AGY-ADMIT-NAME] a server that does not name itself as agy's ACP server is refused at any version", () => {
+		for (const name of ["@agentclientprotocol/claude-agent-acp", "antigravity acp server", "", undefined]) {
+			expect(() => admit(answer({ name, version: "1.5.9" })), String(name)).toThrow(/acp-agy-version-unsupported/);
+		}
+	});
+});
+
+// #168 ① — the PreToolUse hook seat and its policy. The oracles are agy's measured shapes (agy 1.5.9,
+// #168 lab receipts): the hooks.json literal, the hook stdin key set, and the outcome table — a
+// missing command, exit != 0 and a timeout deny, while exit 0 with empty stdout ALLOWS. The hook is
+// the real file, spawned; nothing here imports it. The policy is the hook's argument in the seat's
+// command, never child env — the shared overlay must not deny a pre-seat pi's children every tool.
+
+/** A PreToolUse stdin as agy 1.5.9 sent it (lab hooklog, paths shortened): the measured key set. */
+function hookStdin(tool: string): string {
+	return JSON.stringify({
+		artifactDirectoryPath: "/g/antigravity-cli/brain/a7bc4f93-04ec-4b90-984c-7fa53baed847",
+		conversationId: "a7bc4f93-04ec-4b90-984c-7fa53baed847",
+		cwd: "/w",
+		hookEventName: "PreToolUse",
+		lastUserInput: "do it",
+		modelName: "gemini-3.8-flash-low",
+		stepIdx: 2,
+		toolCall: { args: {}, id: "call_3639952951078831504", name: tool },
+		transcriptPath:
+			"/g/antigravity-cli/brain/a7bc4f93-04ec-4b90-984c-7fa53baed847/.system_generated/logs/transcript_full.jsonl",
+		workspacePaths: ["/w"],
+	});
+}
+
+/** Run the hook the way agy does: `sh -c <command>`, input on stdin, a scrubbed environment. An absent
+ *  policy is the two-path command a seat without the argument would carry. */
+function runHook(input: string, policy: string | undefined, hook: string = agyAcpHookPath()) {
+	const command =
+		policy === undefined ? `'${process.execPath}' '${hook}'` : agyAcpHookCommand(process.execPath, hook, policy);
+	const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+	const r = spawnSync("sh", ["-c", command], { input, env, encoding: "utf8", timeout: 20000 });
+	return { status: r.status, stdout: r.stdout };
+}
+
+/** One decision line, parsed; anything else fails the caller's assertion. */
+function decisionOf(stdout: string): { decision: string; reason?: string } {
+	const lines = stdout.split("\n").filter((l) => l !== "");
+	expect(lines).toHaveLength(1);
+	return JSON.parse(lines[0]);
+}
+
+describe("agy ACP tool hook (#168 ①) — the seat, the command, the policy", () => {
+	let root: string;
+	let real: string;
+	let overlay: string;
+	const command = "'/n/node' '/h/agy-acp-hook.mjs' 'v1:hidden-turns'";
+	beforeEach(() => {
+		root = mkdtempSync(join(tmpdir(), "agy-hook-"));
+		real = join(root, "real");
+		overlay = join(root, "overlay");
+		mkdirSync(join(real, "antigravity-cli"), { recursive: true });
+		writeFileSync(join(real, "antigravity-cli", "antigravity-oauth-token"), "operator-token");
+	});
+	afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+	it("[QK:ACP-AGY-HOOKS-SEAT-WRITTEN] config/hooks.json holds one named PreToolUse hook on every tool, in agy's measured shape", () => {
+		ensureAgyGeminiOverlay(real, overlay, [], command);
+		const seat = join(overlay, "config", "hooks.json");
+		expect(lstatSync(seat).isFile()).toBe(true);
+		expect(JSON.parse(readFileSync(seat, "utf8"))).toEqual({
+			"entwurf-acp-policy": {
+				PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command, timeout: 10 }] }],
+			},
+		});
+		// Nothing but the seat lands in config/ — no temp file is left behind.
+		expect(readdirSync(join(overlay, "config"))).toEqual(["hooks.json"]);
+	});
+
+	it("[QK:ACP-AGY-HOOKS-SEAT-REPLACES-FOREIGN] foreign bytes are replaced; a link at the seat is removed and its target left untouched", () => {
+		const seat = join(overlay, "config", "hooks.json");
+		mkdirSync(join(overlay, "config"), { recursive: true });
+		writeFileSync(seat, "{}");
+		ensureAgyGeminiOverlay(real, overlay, [], command);
+		expect(JSON.parse(readFileSync(seat, "utf8"))["entwurf-acp-policy"].PreToolUse[0].hooks[0].command).toBe(command);
+
+		const target = join(root, "operator-hooks.json");
+		writeFileSync(target, '{"theirs":{}}');
+		rmSync(seat);
+		symlinkSync(target, seat);
+		ensureAgyGeminiOverlay(real, overlay, [], command);
+		expect(lstatSync(seat).isSymbolicLink()).toBe(false);
+		expect(JSON.parse(readFileSync(seat, "utf8"))["entwurf-acp-policy"]).toBeDefined();
+		expect(readFileSync(target, "utf8")).toBe('{"theirs":{}}');
+	});
+
+	it("[QK:ACP-AGY-HOOKS-SEAT-DIR-REFUSED] a directory at the seat refuses by name and is left as it was", () => {
+		const seat = join(overlay, "config", "hooks.json");
+		mkdirSync(join(seat, "inner"), { recursive: true });
+		expect(() => ensureAgyGeminiOverlay(real, overlay, [], command)).toThrow(/acp-agy-hooks-seat-not-a-file/);
+		expect(statSync(join(seat, "inner")).isDirectory()).toBe(true);
+	});
+
+	it("[QK:ACP-AGY-HOOKS-SEAT-UNIQUE-TEMP] two writers never share a temp name: pid and random bytes, beside the seat", () => {
+		const seat = join(overlay, "config", "hooks.json");
+		const a = agyHooksSeatTempPath(seat);
+		const b = agyHooksSeatTempPath(seat);
+		expect(a).not.toBe(b);
+		for (const temp of [a, b]) {
+			expect(dirname(temp)).toBe(dirname(seat));
+			expect(temp.startsWith(`${seat}.${process.pid}.`)).toBe(true);
+			expect(temp.endsWith(".tmp")).toBe(true);
+		}
+		// Converging bootstraps leave one file with one set of bytes.
+		ensureAgyGeminiOverlay(real, overlay, [], command);
+		const first = readFileSync(seat, "utf8");
+		ensureAgyGeminiOverlay(real, overlay, [], command);
+		expect(readFileSync(seat, "utf8")).toBe(first);
+		expect(readdirSync(join(overlay, "config"))).toEqual(["hooks.json"]);
+	});
+
+	it("[QK:ACP-AGY-HOOK-PATH-RESOLVES] the hook resolves beside the adapter module and exists there as a regular file", () => {
+		const path = agyAcpHookPath();
+		expect(dirname(path)).toBe(dirname(fileURLToPath(import.meta.url)));
+		expect(path.endsWith("/agy-acp-hook.mjs")).toBe(true);
+		expect(statSync(path).isFile()).toBe(true);
+	});
+
+	it("[QK:ACP-AGY-HOOK-COMMAND-QUOTED] the command — both paths and the policy — survives a real sh -c round trip with a space, quote, dollar and backtick", () => {
+		const odd = join(root, "a b'c$HOME`x`");
+		mkdirSync(odd, { recursive: true });
+		const hook = join(odd, "agy-acp-hook.mjs");
+		copyFileSync(agyAcpHookPath(), hook);
+		const cmd = agyAcpHookCommand(process.execPath, hook);
+		expect(cmd.endsWith(" 'v1:hidden-turns'")).toBe(true);
+		const allowed = runHook(hookStdin("run_command"), "v1:hidden-turns", hook);
+		expect(allowed.status).toBe(0);
+		expect(decisionOf(allowed.stdout)).toEqual({ decision: "allow" });
+		// The policy argument arrives byte for byte: an unknown one is echoed back in the reason.
+		const oddPolicy = "v1:x y'$HOME`id`";
+		const echoed = runHook(hookStdin("run_command"), oddPolicy, hook);
+		expect(echoed.status).toBe(0);
+		expect(decisionOf(echoed.stdout).reason).toContain(`unknown policy ${JSON.stringify(oddPolicy)}`);
+	});
+
+	it("[QK:ACP-AGY-HOOK-DECISION] v1:hidden-turns denies the three frameless-turn tools with a reason and allows the rest", () => {
+		for (const tool of ["invoke_subagent", "schedule", "run_workflow"]) {
+			const r = runHook(hookStdin(tool), "v1:hidden-turns");
+			expect(r.status, tool).toBe(0);
+			const d = decisionOf(r.stdout);
+			expect(d.decision, tool).toBe("deny");
+			expect(d.reason, tool).toContain(tool);
+		}
+		for (const tool of ["run_command", "write_file", "view_file", "search_web", "send_message"]) {
+			const r = runHook(hookStdin(tool), "v1:hidden-turns");
+			expect(r.status, tool).toBe(0);
+			expect(decisionOf(r.stdout), tool).toEqual({ decision: "allow" });
+		}
+	});
+
+	it("[QK:ACP-AGY-HOOK-NO-POLICY-DENIES] an absent, empty or unknown policy argument prints a deny with the fault named", () => {
+		for (const policy of [undefined, "", "v2:hidden-turns", "v1:allow-all", "constructor"]) {
+			const r = runHook(hookStdin("run_command"), policy);
+			const label = String(policy);
+			expect(r.status, label).toBe(0);
+			const d = decisionOf(r.stdout);
+			expect(d.decision, label).toBe("deny");
+			expect(d.reason, label).toMatch(/names no policy|unknown policy/);
+		}
+	});
+
+	it("[QK:ACP-AGY-HOOK-BAD-INPUT-DENIES] input that is not JSON, empty, or names no tool prints a deny", () => {
+		for (const input of ["not json at all", "", JSON.stringify({ hookEventName: "PreToolUse", toolCall: {} })]) {
+			const r = runHook(input, "v1:hidden-turns");
+			expect(r.status, input).toBe(0);
+			expect(decisionOf(r.stdout).decision, input).toBe("deny");
+		}
+	});
+
+	// The invariant agy's outcome table makes load-bearing: exit 0 with nothing on stdout ALLOWS.
+	// The hook keeps it with two adjacent defences (the line, and exit 1 when none was written);
+	// this claim's mutant removes both.
+	it("[QK:ACP-AGY-HOOK-FAILS-CLOSED] whatever the policy or input, the hook exits non-zero or prints a deny — never exit 0 with an empty stdout", () => {
+		const cases: Array<[string | undefined, string]> = [
+			[undefined, hookStdin("run_command")],
+			["v9:unknown", hookStdin("run_command")],
+			["v1:hidden-turns", "not json at all"],
+			["v1:hidden-turns", hookStdin("invoke_subagent")],
+		];
+		for (const [policy, input] of cases) {
+			const r = runHook(input, policy);
+			const label = `${String(policy)} / ${input.slice(0, 20)}`;
+			if (r.status !== 0) continue;
+			expect(r.stdout, label).not.toBe("");
+			expect(decisionOf(r.stdout).decision, label).toBe("deny");
+		}
+	});
+
+	it("[QK:ACP-AGY-POLICY-SIGNATURE] the seat's command carries the v1:hidden-turns policy, and the policy is part of the reuse signature", () => {
+		expect(agyAcpHookCommand("/n/node", "/h/agy-acp-hook.mjs")).toBe(
+			"'/n/node' '/h/agy-acp-hook.mjs' 'v1:hidden-turns'",
+		);
+		expect(agyAdapter.configSignatureFields(undefined)).toEqual({ agyHookPolicy: "v1:hidden-turns" });
+		expect(agyAdapter.launchEnvDefaults()).toEqual({});
+	});
+});
+
+describe("agy ACP tool hook — the adapter's own ensureOverlay, and a seat read by children of either pi (#168 ①)", () => {
+	// The overlay and the operator's agy state are module constants resolved from `homedir()` at
+	// import (`AGY_REAL_GEMINI_DIR`, `AGY_GEMINI_OVERLAY_DIR`). So HOME points into a temp dir and the
+	// module graph is reset BEFORE a fresh import — the static imports at the top of this file keep the
+	// operator's values and are not used here. The "token" is meaningless bytes in the sandbox; only the
+	// link is under test. The operator's own overlay is lstat-read before and after, never written.
+	const operatorOverlay = join(homedir(), ".pi", "agent", "agy-gemini-overlay");
+	let sandbox: string;
+	let savedHome: string | undefined;
+	let savedCommand: string | undefined;
+
+	function operatorOverlayFacts(): string {
+		return ["", "config", join("config", "hooks.json"), "antigravity-cli"]
+			.map((rel) => {
+				try {
+					const st = lstatSync(join(operatorOverlay, rel));
+					return `${rel}:${st.mode}:${st.mtimeMs}:${st.ino}`;
+				} catch {
+					return `${rel}:absent`;
+				}
+			})
+			.join("|");
+	}
+
+	async function sandboxedAdapter() {
+		const home = join(sandbox, "home");
+		mkdirSync(join(home, ".gemini", "antigravity-cli"), { recursive: true });
+		writeFileSync(join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token"), "not-a-token");
+		process.env.HOME = home;
+		delete process.env.AGY_ACP_COMMAND;
+		vi.resetModules();
+		const adapterMod = await import("./backend-adapter.ts");
+		const overlayMod = await import("./overlay.ts");
+		return { home, adapterMod, overlayMod };
+	}
+
+	beforeEach(() => {
+		sandbox = mkdtempSync(join(tmpdir(), "agy-wired-"));
+		savedHome = process.env.HOME;
+		savedCommand = process.env.AGY_ACP_COMMAND;
+	});
+	afterEach(() => {
+		if (savedHome === undefined) delete process.env.HOME;
+		else process.env.HOME = savedHome;
+		if (savedCommand === undefined) delete process.env.AGY_ACP_COMMAND;
+		else process.env.AGY_ACP_COMMAND = savedCommand;
+		vi.resetModules();
+		rmSync(sandbox, { recursive: true, force: true });
+	});
+
+	it("[QK:ACP-AGY-HOOK-WIRED] the adapter's ensureOverlay writes the seat naming the shipped hook with its policy argument, links the token, and sets no env — in the sandbox HOME only", async () => {
+		const before = operatorOverlayFacts();
+		const { home, adapterMod, overlayMod } = await sandboxedAdapter();
+		const overlay = join(home, ".pi", "agent", "agy-gemini-overlay");
+		expect(overlayMod.AGY_GEMINI_OVERLAY_DIR).toBe(overlay);
+
+		const result = adapterMod.agyAdapter.ensureOverlay({
+			cwd: sandbox,
+			modelId: "agy-gemini-3.8-flash",
+			nativeModelId: "gemini-3.8-flash",
+			config: { adapterSettings: { skillPlugins: [] } } as never,
+			sessionKey: "wired-test",
+		});
+		// The policy rides the seat's command, never child env (a pre-seat pi's children set none).
+		expect(result.envOverrides).toEqual({});
+
+		const seat = JSON.parse(readFileSync(join(overlay, "config", "hooks.json"), "utf8"));
+		const command: string = seat["entwurf-acp-policy"].PreToolUse[0].hooks[0].command;
+		expect(command).toBe(`'${process.execPath}' '${adapterMod.agyAcpHookPath()}' 'v1:hidden-turns'`);
+		expect(readlinkSync(join(overlay, "antigravity-cli", "antigravity-oauth-token"))).toBe(
+			join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token"),
+		);
+		expect(operatorOverlayFacts()).toBe(before);
+	});
+
+	// The shared overlay is rewritten by whichever pi bootstraps next, and agy re-reads the seat on every
+	// call. A child spawned by a pi that predates the seat carries no hook-policy env; a newer pi's child
+	// carries what the newer adapter sets. Both must get the same default, never a blanket deny.
+	it("[QK:ACP-AGY-HOOK-MIXED-READER] the seat a newer pi writes gives a pre-seat pi's child and a newer pi's child the same hidden-turn default", async () => {
+		const { home, adapterMod } = await sandboxedAdapter();
+		const overlay = join(home, ".pi", "agent", "agy-gemini-overlay");
+		const overlayResult = adapterMod.agyAdapter.ensureOverlay({
+			cwd: sandbox,
+			modelId: "agy-gemini-3.8-flash",
+			nativeModelId: "gemini-3.8-flash",
+			config: { adapterSettings: { skillPlugins: [] } } as never,
+			sessionKey: "mixed-reader",
+		});
+		const command: string = JSON.parse(readFileSync(join(overlay, "config", "hooks.json"), "utf8"))[
+			"entwurf-acp-policy"
+		].PreToolUse[0].hooks[0].command;
+		const base = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+		const readers: Array<[string, Record<string, string>]> = [
+			// (i) a pre-seat pi set nothing for its agy child.
+			["pre-seat pi's child", { ...base }],
+			// (ii) a newer pi's child: exactly the env this adapter hands a spawn (identical to (i) today by
+			// construction: the adapter sets no hook env; kept so a future env key cannot reintroduce a
+			// policy split).
+			["newer pi's child", { ...base, ...adapterMod.agyAdapter.launchEnvDefaults(), ...overlayResult.envOverrides }],
+		];
+		for (const [reader, env] of readers) {
+			const run = (tool: string) => {
+				const r = spawnSync("sh", ["-c", command], { input: hookStdin(tool), env, encoding: "utf8", timeout: 20000 });
+				expect(r.status, `${reader} ${tool}`).toBe(0);
+				return decisionOf(r.stdout).decision;
+			};
+			expect(run("run_command"), reader).toBe("allow");
+			for (const tool of ["invoke_subagent", "schedule", "run_workflow"])
+				expect(run(tool), `${reader} ${tool}`).toBe("deny");
+		}
 	});
 });
