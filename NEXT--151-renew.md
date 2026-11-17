@@ -6,6 +6,20 @@
 - **재시작은 /renew가 아니다.** 재시작은 같은 장으로 돌아오는 것이다. SOL의 실제 renew용 final이나 판본 확인은 아직 하지 않았다.
 - 자동 진행(heartbeat·goal·background)은 ③ 전에 필요한 것만 조용한 때에 정한다. 새 장에서 자동으로 다시 켤 권한은 없다(스킬 §12).
 
+**재시작 뒤 복귀 (GLG "한번 커밋푸시하고 다 껐다가 켜야겠다", 2026-11-17 밤):**
+- 재시작은 **같은 garden id, 같은 현재 native 장으로 돌아오는 것**이다. /renew를 실행하는 것이 아니다. 돌아오면 새 바이트로 떴는지와 주소를 먼저 확인한다.
+- 역할:
+  - 6a8b34(Opus): 이 checkout의 단독 writer. 구현, 커밋, 요청받은 push.
+  - SOL a30dda: 독립 리뷰어, 첫 renew 대상.
+  - 운영코디 68bd94: GLG 중계와 창 조율. stage·commit·push·build는 하지 않는다.
+- GLG의 원칙(원문은 NOW에 있다):
+  - 규약으로 처리한다("코드로 다 못막고 유연하지 못하기 때문").
+  - 코드는 최소 경계와 정확한 중단·관측만 둔다. 정숙·배려·드문 수습은 사람과 규약의 몫이다.
+  - "박살나면 옆에 에이전트한테 고쳐달라고 하면된다. 허나 최소수습하는것을 넣자." 범위는 닫는다. 새 phase·manager·입력 차단·launcher는 두지 않는다.
+- 퇴거·종료 대상은 GLG가 창에서 정한다. 임의 retire·kill은 없다.
+- ③ 실제 SOL renew(인터뷰 → 현재 final → 같은 판본 확인 → 전환)는 재개한 뒤 GLG와 따로 연다.
+- 검증 근거: `pnpm check`와 frozen `check:full`은 568a5df6에서 green이었다. 그 뒤 커밋은 이 NEXT만 바꿨다. 다른 SHA를 FULL로 부르지 않는다.
+
 - [x] **1. 방향·팀·공동 계획.** `151-renew`. 실무 Pi Opus 6a8b34, SOL a30dda, 운영코디 68bd94.
 - [x] **2. 요구 addendum.** 리포 밖 계약 메모 C1.2~C1.4o(`/tmp/entwurf-151/renew-contract-*.md`)로 대신했다. GLG 결정 원문은 NOW에 있다.
 - [x] **3. 두 준비.** (a) 코드: R-1·R-2·③·④-a·b1·b2·b3-1·b3-2·C1.4o를 커밋했고 격리 실제 Pi 측정을 마쳤다(영수증 `/tmp/entwurf-151/measure/RECEIPT-b3-2-20261117.md`). (b) 한국어 스킬 `.claude/skills/entwurf-renew/SKILL.md`.
