@@ -508,6 +508,7 @@ writer_probe() {
           nativeSessionId: "gate-writer-probe",
           cwd: "/tmp/proj",
           sessionsDir: process.env.ENTWURF_META_SESSIONS_DIR,
+          recordArmLocksDir: process.env.ENTWURF_META_SESSIONS_DIR + "-arm-locks",
           controlSocketDir: process.env.ENTWURF_DIR,
         });
         process.exit(0);

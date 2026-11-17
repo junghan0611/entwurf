@@ -147,6 +147,9 @@ interface SocketState {
 // `nativeSessionId`) and must never be published as an address. Null until the record
 // is written, and cleared on shutdown.
 let residentGardenId: string | null = null;
+/** Bumped at every session_shutdown (#151 b1): a refresh that waited across a session
+ * replacement must not write this module's state, which now belongs to the new session. */
+let sessionEpoch = 0;
 
 // ============================================================================
 // Utilities
@@ -1059,7 +1062,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		let birth: PiCitizenBirth;
 		try {
-			birth = await birthResidentCitizen(ctx);
+			birth = await birthResident(residentBirthInput(ctx), "bounded");
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
 			// stderr ALWAYS: the TUI may swallow a notify, and this is the durable
@@ -1072,6 +1075,7 @@ export default function (pi: ExtensionAPI) {
 			updateSessionEnv(ctx, false, null);
 			return;
 		}
+		reportArmLockRelease(birth, "session_start");
 		residentGardenId = birth.gardenId;
 		// An unreadable record can no longer be skipped: the strict upsert throws
 		// before writing, so a dirty store lands in the catch above — loud stderr
@@ -1089,8 +1093,11 @@ export default function (pi: ExtensionAPI) {
 
 	/** Upsert the record for the CURRENT pi session. Reached through the non-literal
 	 * dynamic import fence (the seam lives in the `.ts`-extension lane). */
-	const birthResidentCitizen = async (ctx: ExtensionContext): Promise<PiCitizenBirth> => {
-		const mod = (await import(PI_CITIZEN_BIRTH_MODULE)) as unknown as PiCitizenBirthModule;
+	/** What a birth reads from ctx, read SYNCHRONOUSLY before any wait (#151 b1): a refresh
+	 * that waits (module import, lock) and then reads ctx could find another session there and
+	 * write as it — the event's own native id must be the one the record lock and the renew
+	 * boundary judge. */
+	const residentBirthInput = (ctx: ExtensionContext): ResidentBirthInput => {
 		// getSessionFile() names the path pi WILL use, whether or not anything is on
 		// disk yet — pi writes the file only at the first assistant turn. Recording
 		// the path before the file exists plants a phantom resume target that later
@@ -1099,14 +1106,20 @@ export default function (pi: ExtensionAPI) {
 		const sessionFile = ctx.sessionManager.getSessionFile();
 		const transcriptPath = sessionFile && existsSync(sessionFile) ? sessionFile : undefined;
 		const model = ctx.model?.provider && ctx.model?.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
-		return mod.birthPiCitizen({
+		return {
 			nativeSessionId: ctx.sessionManager.getSessionId(),
 			cwd: ctx.cwd || process.cwd(),
 			// undefined KEEPS a recorded value: a fresh start must not clear a known transcript.
 			model,
 			transcriptPath,
-			controlSocketDir: ENTWURF_DIR,
-		});
+		};
+	};
+
+	/** Upsert the record for the captured session. Reached through the non-literal dynamic import
+	 * fence (the seam lives in the `.ts`-extension lane). */
+	const birthResident = async (input: ResidentBirthInput, armLockWait: "bounded" | "once"): Promise<PiCitizenBirth> => {
+		const mod = (await import(PI_CITIZEN_BIRTH_MODULE)) as unknown as PiCitizenBirthModule;
+		return mod.birthPiCitizen({ ...input, controlSocketDir: ENTWURF_DIR, armLockWait });
 	};
 
 	// session_start is the unified post-event for the whole session lifecycle
@@ -1141,6 +1154,7 @@ export default function (pi: ExtensionAPI) {
 		const previousContext = state.context;
 		invalidateControlBinding(state);
 		residentGardenId = null;
+		sessionEpoch++;
 		// #151 C1.3b: a show binding never outlives the session it was made in.
 		renewCommand?.reset();
 		noteCompactionTerminal(state.compaction);
@@ -1157,19 +1171,30 @@ export default function (pi: ExtensionAPI) {
 	// This is NOT a send/delivery channel — send-is-throw still holds; it never sends.
 	pi.on("turn_end", async (_event, ctx) => {
 		if (pi.getFlag(ENTWURF_FLAG) !== true) return;
+		const epoch = sessionEpoch;
+		const input = residentBirthInput(ctx);
+		let birth: PiCitizenBirth;
 		try {
-			const birth = await birthResidentCitizen(ctx);
-			residentGardenId = birth.gardenId;
-			updateStatus(ctx, true, birth.gardenId);
+			// One attempt at the record-arm lock: a refresh may skip, an address may not (#151 b1).
+			birth = await birthResident(input, "once");
 		} catch (err) {
 			// The address already exists (session_start established it); a failed
 			// refresh must not take the live socket down mid-session. Report and keep
-			// serving on the address we hold.
+			// serving on the address we hold. A busy record-arm lock is the one named
+			// skip; every other failure is reported as the failure it is.
+			const message = err instanceof Error ? err.message : String(err);
 			process.stderr.write(
-				`[entwurf-control] meta-record refresh failed: ${err instanceof Error ? err.message : String(err)}\n`,
+				isRecordArmLockBusy(err)
+					? `[entwurf-control] record-arm lock busy — this refresh skipped: ${message}\n`
+					: `[entwurf-control] meta-record refresh failed: ${message}\n`,
 			);
-			updateStatus(ctx, true, residentGardenId);
+			if (epoch === sessionEpoch) updateStatus(ctx, true, residentGardenId);
+			return;
 		}
+		reportArmLockRelease(birth, "turn_end refresh");
+		if (epoch !== sessionEpoch) return;
+		residentGardenId = birth.gardenId;
+		updateStatus(ctx, true, birth.gardenId);
 	});
 }
 
@@ -1193,6 +1218,25 @@ interface PiCitizenBirth {
 	action: "create" | "attach";
 	recordPath: string;
 	socketPath: string;
+	armLockRelease: "released" | "not-owned" | "absent" | null;
+}
+
+/** A record-arm lock that was gone or someone else's at release: the write happened, but its
+ * exclusion is not proven. Said by name; nothing is removed or retried (#151 b1). */
+function reportArmLockRelease(birth: PiCitizenBirth, where: string): void {
+	if (birth.armLockRelease === null || birth.armLockRelease === "released") return;
+	process.stderr.write(
+		`[entwurf-control] ${where}: the record for garden ${birth.gardenId} was written, but its record-arm lock was ` +
+			`${birth.armLockRelease} at release — this write's exclusion is not proven\n`,
+	);
+}
+
+/** The session facts a birth reads from ctx — captured before any wait (#151 b1). */
+interface ResidentBirthInput {
+	nativeSessionId: string;
+	cwd: string;
+	model?: string;
+	transcriptPath?: string;
 }
 
 interface PiCitizenBirthModule {
@@ -1203,7 +1247,14 @@ interface PiCitizenBirthModule {
 		transcriptPath?: string | null;
 		sessionsDir?: string;
 		controlSocketDir: string;
+		armLockWait?: "bounded" | "once";
 	}): PiCitizenBirth;
+}
+
+/** Mirrors lib/pi-citizen-birth.ts's `RecordArmLockBusyError` — matched by its code, since the
+ * class lives behind the fence. */
+function isRecordArmLockBusy(err: unknown): boolean {
+	return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "record-arm-lock-busy";
 }
 
 // #151 /renew ④-a. Same fence, same reason: lib/renew-command.ts is a lib→lib VALUE importer

@@ -1591,10 +1591,12 @@ check_renew_beside() {
   # #151 R-1: the execution coordinate for the /renew reader-boundary claims (VERIFY 「Four rules」
   # rule 3), (R-2) for the named refusals of delivery and same-id resume on a record mid-/renew, and
   # (③) for the front gate's candidate grammar, body checks and confirm binding, and (④-a) for the
-  # /renew command's decisions and its registered handler (a child-process harness).
+  # /renew command's decisions and its registered handler (a child-process harness), and (b1) for the
+  # ordinary pi record write serializing on the record-arm lock — the birth itself and the registered
+  # turn_end refresh (a second child-process harness).
   # Not a discovery path — check-tests-beside-behavior already finds the files; one renew mutant
   # re-runs only these beside tests.
-  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts pi-extensions/lib/renew-front-gate.test.ts pi-extensions/lib/renew-command.test.ts pi-extensions/entwurf-control.renew.test.ts
+  run_vitest pi-extensions/lib/meta-session.renew.test.ts pi-extensions/lib/entwurf-v2-renew.test.ts pi-extensions/lib/renew-front-gate.test.ts pi-extensions/lib/renew-command.test.ts pi-extensions/entwurf-control.renew.test.ts pi-extensions/lib/pi-citizen-birth.test.ts pi-extensions/entwurf-control.refresh.test.ts
 }
 
 check_native_push_runner() {

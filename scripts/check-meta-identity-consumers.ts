@@ -121,6 +121,7 @@ function birthInto(dir: string, nativeSessionId: string): () => unknown {
 			nativeSessionId,
 			cwd: "/synthetic/proj",
 			sessionsDir: dir,
+			recordArmLocksDir: reclaimOnExit(`${dir}.arm-locks`),
 			controlSocketDir: path.join(dir, "sockets"),
 		});
 }
@@ -794,6 +795,7 @@ withStore(
 			nativeSessionId: "pi-fresh-on-clean-store",
 			cwd: "/synthetic/proj",
 			sessionsDir: dir,
+			recordArmLocksDir: reclaimOnExit(`${dir}.arm-locks`),
 			controlSocketDir: path.join(dir, "sockets"),
 		});
 		ok("birth on a certified store succeeds (create)", birth.action === "create");
@@ -801,6 +803,7 @@ withStore(
 			nativeSessionId: "pi-fresh-on-clean-store",
 			cwd: "/synthetic/proj",
 			sessionsDir: dir,
+			recordArmLocksDir: reclaimOnExit(`${dir}.arm-locks`),
 			controlSocketDir: path.join(dir, "sockets"),
 		});
 		ok(

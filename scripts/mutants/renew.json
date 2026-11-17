@@ -669,6 +669,196 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-HANDLER-OUTLINE-NO-TURN]",
 			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-ATTACH-RELEASES-LOCK",
+			"title": "a successful attach never releases its record-arm lock — this live process then holds every later write to its garden, the /renew writer's included, until it exits",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\t\trelease = releaseLock(claim, { dir });"],
+			"replace": ["\t\trelease = \"released\";"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-ATTACH-RELEASES-LOCK]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-BUSY-WRITES-NOTHING",
+			"title": "the attach runs without the record-arm lock — an ordinary refresh can rename an older snapshot over a record the /renew writer just moved",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\t\tconst locked = attachUnderLock("],
+			"replace": [
+				"\t\tconst locked = ((_g: string, _d: string, _w: string, f: () => UpsertMetaSessionResult, _s: unknown) => ({ written: f(), release: \"released\" as const }))("
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-BUSY-WRITES-NOTHING]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-BOUNDED-WAITS",
+			"title": "session_start gives up on the first busy answer — a short writer hold refuses the session its garden address",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\tconst deadline = Date.now() + (wait === \"bounded\" ? ARM_LOCK_WAIT_MS : 0);"],
+			"replace": ["\tconst deadline = Date.now();"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-BOUNDED-WAITS]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-PRIMITIVE-THROW-NOT-BUSY",
+			"title": "a lock the primitive could not write is reported as busy — an unwritable lock dir hides behind the one skip a refresh may take",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\t\tconst acquired = acquireLock(gardenId, { dir });"],
+			"replace": [
+				"\t\tconst acquired = (() => { try { return acquireLock(gardenId, { dir }); } catch (e) { throw new RecordArmLockBusyError(gardenId, String(e)); } })();"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-PRIMITIVE-THROW-NOT-BUSY]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-EXPECT-GARDEN",
+			"title": "the upsert writes a record whose garden its caller never locked",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (opts.expectGardenId !== undefined && existing?.gardenId !== opts.expectGardenId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-EXPECT-GARDEN]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-REFRESH-READS-EVENT-SESSION",
+			"title": "the refresh reads its session after waiting — a turn_end of the chapter that left writes as the session that replaced it",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tbirth = await birthResident(input, \"once\");"],
+			"replace": [
+				"\t\t\tbirth = await (async () => { await Promise.resolve(); return birthResident(residentBirthInput(ctx), \"once\"); })();"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-REFRESH-READS-EVENT-SESSION]",
+			"signatureSource": "pi-extensions/entwurf-control.refresh.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-REFRESH-BUSY-IS-NAMED-SKIP",
+			"title": "a busy record-arm lock is reported as a generic refresh failure — the operator cannot tell the one expected skip from a defect",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\treturn typeof err === \"object\" && err !== null && (err as { code?: unknown }).code === \"record-arm-lock-busy\";"
+			],
+			"replace": ["\treturn false;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-REFRESH-BUSY-IS-NAMED-SKIP]",
+			"signatureSource": "pi-extensions/entwurf-control.refresh.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-REFRESH-OTHER-FAILURE-NOT-SKIP",
+			"title": "every refresh failure is reported as the busy skip — a store defect reads as a harmless lock wait",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\treturn typeof err === \"object\" && err !== null && (err as { code?: unknown }).code === \"record-arm-lock-busy\";"
+			],
+			"replace": ["\treturn true;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-REFRESH-OTHER-FAILURE-NOT-SKIP]",
+			"signatureSource": "pi-extensions/entwurf-control.refresh.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-REFRESH-STALE-WRITES-NO-STATE",
+			"title": "a refresh that waited across session_shutdown writes the departed session's garden into the module state and status",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\tif (epoch !== sessionEpoch) return;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-REFRESH-STALE-WRITES-NO-STATE]",
+			"signatureSource": "pi-extensions/entwurf-control.refresh.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-NAMED-STORE-NAMES-LOCK",
+			"title": "a named store silently locks beside itself — two ways of naming one store pick two mutexes for one garden",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (opts.sessionsDir !== undefined) {\n\t\tthrow new Error("],
+			"replace": [
+				"\tif (opts.sessionsDir !== undefined) {\n\t\treturn path.join(path.dirname(path.resolve(opts.sessionsDir)), \"meta-record-arm-locks\");\n\t\tthrow new Error("
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-NAMED-STORE-NAMES-LOCK]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-DEFAULT-LOCK-IS-HOOKS",
+			"title": "the default lock namespace follows the store's parent, not the hook's — a default birth and a hook-dir writer miss each other",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\treturn defaultMetaRecordArmLocksDir();\n}"],
+			"replace": ["\treturn path.join(path.dirname(defaultMetaSessionsDir()), \"meta-record-arm-locks\");\n}"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-DEFAULT-LOCK-IS-HOOKS]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-HOLDS-LOCK-DURING-WRITE",
+			"title": "the lock is released before the record write — the write runs unexcluded while every other cell still passes",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\tconst claim = takeArmLock(gardenId, dir, wait);"],
+			"replace": ["\tconst claim = takeArmLock(gardenId, dir, wait);\n\treleaseLock(claim, { dir });"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-HOLDS-LOCK-DURING-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-RELEASE-FAULT-AFTER-WRITE",
+			"title": "a release that throws after a successful write is swallowed — a leaked lock blocks the garden with no word",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\t\tthrow new RecordArmLockReleaseError(gardenId, claim.lockPath, written, releaseErr);"],
+			"replace": ["\t\trelease = \"released\";"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-RELEASE-FAULT-AFTER-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-RELEASE-FAULT-AFTER-FAILED-WRITE",
+			"title": "a failed write with a failed release reports one generic sentence — neither cause, garden nor lock reaches the operator",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": [
+				"\t\t\t\t`the record write for garden ${gardenId} did not complete (${messageOf(err)}), and its record-arm lock ` +"
+			],
+			"replace": ["\t\t\t\t`record write failed, ` +"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-RELEASE-FAULT-AFTER-FAILED-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-RELEASE-NOT-PROVEN",
+			"title": "a lock gone or someone else's at release is reported as a normal release — an unproven exclusion reads as proven",
+			"subject": "pi-extensions/lib/pi-citizen-birth.ts",
+			"find": ["\treturn { written, release };"],
+			"replace": ["\treturn { written, release: \"released\" as const };"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-RELEASE-NOT-PROVEN]",
+			"signatureSource": "pi-extensions/lib/pi-citizen-birth.test.ts"
+		},
+		{
+			"claim": "RENEW-B1-REFRESH-ONCE-DOES-NOT-WAIT",
+			"title": "the turn_end refresh waits the session_start bound — every refresh at a held lock stalls the session for 2 s",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tbirth = await birthResident(input, \"once\");"],
+			"replace": ["\t\t\tbirth = await birthResident(input, \"bounded\");"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-B1-REFRESH-ONCE-DOES-NOT-WAIT]",
+			"signatureSource": "pi-extensions/entwurf-control.refresh.test.ts"
 		}
 	]
 }

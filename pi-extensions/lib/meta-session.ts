@@ -1848,6 +1848,25 @@ export function defaultMetaRecordArmLocksDir(receiversDir: string = defaultMetaR
 	return path.join(path.dirname(receiversDir), "meta-record-arm-locks");
 }
 
+/**
+ * The record-arm lock namespace a record writer uses (#151 b1): ONE rule, so two ways of naming
+ * the same store never pick two mutexes for the same garden. An explicit lock dir wins (an
+ * isolated fixture names its own). Otherwise it is {@link defaultMetaRecordArmLocksDir} — the dir
+ * the Claude Code hook and the pi-durable birth take — and a caller that named its own store dir
+ * without naming a lock dir is refused: the store's own parent is never a second guess, and a
+ * sandboxed store is never paired with the operator's namespace.
+ */
+export function resolveRecordArmLocksDir(opts: { sessionsDir?: string; recordArmLocksDir?: string }): string {
+	if (opts.recordArmLocksDir !== undefined) return path.resolve(expandTilde(opts.recordArmLocksDir));
+	if (opts.sessionsDir !== undefined) {
+		throw new Error(
+			`a record writer that names its store dir (${opts.sessionsDir}) must also name its record-arm lock dir; ` +
+				"the default lock namespace belongs to the default store",
+		);
+	}
+	return defaultMetaRecordArmLocksDir();
+}
+
 // ---------------------------------------------------------------------------
 // OMP meta-root policy (#87 B1) — ADDITIVE, and only for backend `omp`.
 //
@@ -2588,6 +2607,12 @@ export interface UpsertMetaSessionOptions {
 	 * the record-arm lock exists to keep out (#147 L2 B1).
 	 */
 	expectAction?: UpsertAction;
+	/**
+	 * Refuse, BEFORE any write, unless the record this native id has, read under the caller's
+	 * lock, carries this garden id. A writer that locked a garden by an earlier read-only lookup
+	 * must not write a record the lock does not cover (#151 b1: the lock is per garden id).
+	 */
+	expectGardenId?: string;
 	/** Override the store directory (defaults to {@link defaultMetaSessionsDir}). */
 	dir?: string;
 	now?: Date;
@@ -2635,6 +2660,9 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	const target = requireNonEmptyString(opts.input.nativeSessionId, "nativeSessionId");
 	const existing = cert.records.find((record) => record.identity.nativeSessionId === target)?.identity ?? null;
 	assertRenewUpsertBoundary(existing, target, cert.records);
+	if (opts.expectGardenId !== undefined && existing?.gardenId !== opts.expectGardenId) {
+		throw new UpsertGardenMismatchError(opts.expectGardenId, existing?.gardenId ?? null, target);
+	}
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	if (opts.expectAction !== undefined && decision.action !== opts.expectAction) {
 		throw new UpsertActionMismatchError(opts.expectAction, decision.action, target);
@@ -2717,6 +2745,20 @@ export class UpsertActionMismatchError extends MetaRecordError {
 		super(
 			`upsert expected to ${expected} the record for nativeSessionId "${nativeSessionId}" but would ${actual} ` +
 				"it; nothing was written.",
+		);
+		this.expected = expected;
+		this.actual = actual;
+	}
+}
+
+/** The record a native id has, read under a garden lock, is not the garden that lock covers. */
+export class UpsertGardenMismatchError extends MetaRecordError {
+	readonly expected: string;
+	readonly actual: string | null;
+	constructor(expected: string, actual: string | null, nativeSessionId: string) {
+		super(
+			`upsert expected the record for nativeSessionId "${nativeSessionId}" to be garden ${expected} (the garden ` +
+				`it locked) but found ${actual ?? "no record"}; nothing was written.`,
 		);
 		this.expected = expected;
 		this.actual = actual;

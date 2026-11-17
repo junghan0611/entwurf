@@ -85,6 +85,8 @@ if (!fs.existsSync(DIST_ENTRY)) {
 const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "pi-attach-"));
 const agentDir = path.join(tmp, "agent");
 const sessionsDir = path.join(agentDir, "meta-sessions");
+// #151 b1: a named store names its record-arm lock dir too (one lock-namespace rule).
+const armLocksDir = path.join(agentDir, "meta-record-arm-locks");
 const mailboxDir = path.join(agentDir, "meta-mailbox");
 const receiversDir = path.join(agentDir, "meta-receivers");
 const sendersDir = path.join(agentDir, "meta-senders");
@@ -163,6 +165,7 @@ try {
 		model: "openai-codex/gpt-5.4",
 		transcriptPath,
 		sessionsDir,
+		recordArmLocksDir: armLocksDir,
 		controlSocketDir: socketDir,
 	});
 
@@ -207,6 +210,7 @@ try {
 		// A warm start before pi rewrites the file: `undefined` must KEEP the recorded
 		// transcript, never clear it (the 3-value merge).
 		sessionsDir,
+		recordArmLocksDir: armLocksDir,
 		controlSocketDir: socketDir,
 	});
 	ok("P4: re-opening the same pi session ATTACHES (no second mint)", second.action === "attach");
@@ -222,6 +226,7 @@ try {
 		nativeSessionId: otherNative,
 		cwd,
 		sessionsDir,
+		recordArmLocksDir: armLocksDir,
 		controlSocketDir: socketDir,
 	});
 	ok("P5: a second pi session CREATES its own citizen", other.action === "create" && other.gardenId !== first.gardenId);
@@ -342,6 +347,7 @@ try {
 			cwd,
 			model: "entwurf/claude-sonnet-5",
 			sessionsDir,
+			recordArmLocksDir: armLocksDir,
 			controlSocketDir: socketDir,
 		});
 		const bare: AcpMcpServer[] = [{ name: "entwurf-bridge", command: process.execPath, args: [DIST_ENTRY], env: [] }];
