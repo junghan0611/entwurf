@@ -968,6 +968,57 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
 
+	// #151 /renew ④-a — a HUMAN-typed command (GLG 2026-11-16 14:23): no agent tool and no peer
+	// path reaches it, because control-socket sends arrive as custom messages, which Pi never
+	// dispatches as slash commands. The decisions live in lib/renew-command.ts (behind the same
+	// non-literal import fence as the birth seam); this handler only performs the one effect each
+	// call returns. Nothing here writes a record: until the transition writer lands, a confirm that
+	// matches all the way is refused as transition-not-connected.
+	let renewCommand: RenewCommandLike | null = null;
+	pi.registerCommand("renew", {
+		description:
+			"#151: close this chapter and go on under the same garden id (/renew · /renew confirm [sha8] · /renew outline)",
+		handler: async (args, ctx) => {
+			if (renewCommand === null) {
+				const mod = (await import(RENEW_COMMAND_MODULE)) as unknown as RenewCommandModule;
+				renewCommand = mod.createRenewCommand({ residentGardenId: () => residentGardenId });
+			}
+			const effect = renewCommand.handle(args, {
+				nativeSessionId: ctx.sessionManager.getSessionId(),
+				branch: ctx.sessionManager.getBranch(),
+				isIdle: ctx.isIdle(),
+			});
+			// pi.sendMessage hands the message to Pi and reports its own failures through Pi's error
+			// channel (pi-coding-agent 1.5.2 agent-session.js:2861-2867); its settling is NOT an
+			// acknowledgement that the message was appended or that a turn started.
+			if (effect.kind === "entry") {
+				await pi.sendMessage(effect.message, { triggerTurn: true });
+				return;
+			}
+			if (effect.kind === "outline") {
+				// A lookup, not a turn: the agent reads it on its next turn.
+				await pi.sendMessage(effect.message, { triggerTurn: false });
+				if (ctx.hasUI) ctx.ui.notify(effect.notice, "info");
+				else process.stderr.write(`${effect.notice}\n`);
+				return;
+			}
+			if (effect.kind === "show") {
+				// A show that could not be shown must not leave a binding a later confirm could use.
+				try {
+					if (ctx.hasUI) ctx.ui.notify(effect.notice, "info");
+					else process.stderr.write(`${effect.notice}\n`);
+				} catch (err) {
+					renewCommand.reset();
+					throw err;
+				}
+				return;
+			}
+			if (ctx.hasUI) ctx.ui.notify(effect.notice, "warning");
+			else process.stderr.write(`${effect.notice}\n`);
+			if (effect.note) await pi.sendMessage(effect.note, { triggerTurn: false });
+		},
+	});
+
 	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
 	// GONE with the id grammar they defended (#50 C2). They existed because pi mints a
 	// uuidv7 for an in-process session and the garden guard hard-exited on a non-garden
@@ -1090,6 +1141,8 @@ export default function (pi: ExtensionAPI) {
 		const previousContext = state.context;
 		invalidateControlBinding(state);
 		residentGardenId = null;
+		// #151 C1.3b: a show binding never outlives the session it was made in.
+		renewCommand?.reset();
 		noteCompactionTerminal(state.compaction);
 		updateStatus(previousContext, false, null);
 		updateSessionEnv(previousContext, false, null);
@@ -1151,6 +1204,33 @@ interface PiCitizenBirthModule {
 		sessionsDir?: string;
 		controlSocketDir: string;
 	}): PiCitizenBirth;
+}
+
+// #151 /renew ④-a. Same fence, same reason: lib/renew-command.ts is a lib→lib VALUE importer
+// (readAddressableMetaIdentity, the front-gate functions) with explicit `.ts`-extension imports.
+const RENEW_COMMAND_MODULE = "./lib/renew-command.ts";
+
+/** Mirrors lib/renew-command.ts's custom message and effect — the local contract for the fence. */
+interface RenewCustomMessageLike {
+	customType: string;
+	content: string;
+	display: true;
+	details: Record<string, unknown>;
+}
+type RenewCommandEffectLike =
+	| { kind: "entry"; message: RenewCustomMessageLike }
+	| { kind: "show"; notice: string }
+	| { kind: "outline"; message: RenewCustomMessageLike; notice: string }
+	| { kind: "refused"; reason: string; notice: string; note: RenewCustomMessageLike | null };
+interface RenewCommandLike {
+	handle(
+		args: string,
+		io: { nativeSessionId: string; branch: readonly unknown[]; isIdle: boolean },
+	): RenewCommandEffectLike;
+	reset(): void;
+}
+interface RenewCommandModule {
+	createRenewCommand(deps: { residentGardenId: () => string | null }): RenewCommandLike;
 }
 
 interface EntwurfSelfAddressModule {

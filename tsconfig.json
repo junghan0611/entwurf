@@ -159,6 +159,12 @@
 		// same fence. Typechecked by scripts/tsconfig.json via its gate
 		// (check-resume-launch-identity.ts).
 		"pi-extensions/lib/resume-launch-identity.ts",
+		// renew-command.ts is the #151 /renew command's decision module — a lib→lib VALUE importer
+		// (readAddressableMetaIdentity, the front-gate functions) with explicit `.ts`-extension
+		// imports, same fence. entwurf-control.ts reaches it through a NON-LITERAL dynamic import.
+		// Typechecked by scripts/tsconfig.json (its `../pi-extensions/lib/**/*.ts` include) via its
+		// beside test (pi-extensions/lib/renew-command.test.ts).
+		"pi-extensions/lib/renew-command.ts",
 		// entwurf-v2-mailbox.ts is the 5c-4 ENQUEUE-ONLY meta-mailbox SEND body + production
 		// sendViaMailbox adapter — a lib→lib VALUE importer (formatMetaMailboxBody /
 		// enqueueMetaMessage) with explicit `.ts`-extension imports that pull the excluded

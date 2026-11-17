@@ -29,6 +29,13 @@ import { LIFECYCLE_NOTICE_SIGNATURE } from "./acp/event-mapper.js";
 
 /** customType of the entry marker `/renew` leaves in the current chapter. */
 export const RENEW_ENTRY_CUSTOM_TYPE = "entwurf-renew-entry";
+/**
+ * customType of the current outline handed back to the agent on request (`/renew outline`). A
+ * lookup of the edition the previous chapter wrote and the user confirmed — not the user's new words,
+ * not an approval, not an interview start, consent, submission or confirmation (#151, coordinator
+ * 68bd94 on OpenClaw B's report). It is not an assistant message, so it can never be a candidate.
+ */
+export const RENEW_OUTLINE_CUSTOM_TYPE = "entwurf-renew-outline";
 /** customType of a refusal note left for the agent (no turn is opened by it). */
 export const RENEW_REFUSAL_CUSTOM_TYPE = "entwurf-renew-refusal";
 /** The whole outline body, in UTF-8 bytes (#151 recommendation, issuecomment-6930366018). */
@@ -98,6 +105,11 @@ function isEntryMarkerFor(entry: RenewBranchEntry, chapter: RenewChapterRef): bo
 	if (entry.type !== "custom_message" || entry.customType !== RENEW_ENTRY_CUSTOM_TYPE) return false;
 	const d = entry.details as Partial<RenewEntryDetails> | undefined;
 	return d?.gardenId === chapter.gardenId && d?.nativeSessionId === chapter.nativeSessionId;
+}
+
+/** Whether this chapter has an entry marker on the branch — the interview has begun here. */
+export function hasRenewEntryMarker(branch: readonly RenewBranchEntry[], chapter: RenewChapterRef): boolean {
+	return branch.some((entry) => isEntryMarkerFor(entry, chapter));
 }
 
 /** The text blocks of an assistant message that are not Entwurf lifecycle notices (C1.3b §2). */

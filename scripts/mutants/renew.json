@@ -489,6 +489,186 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RENEW-GATE-GUIDE-LITERAL-AGREED]",
 			"signatureSource": "pi-extensions/lib/renew-front-gate.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-ENTRY-MARKS-CHAPTER",
+			"title": "the entry marker no longer names this native chapter — the front gate can never find it, or a fork's copy would pass for it",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\t\tdetails: { gardenId: chapter.gardenId, nativeSessionId: chapter.nativeSessionId },"],
+			"replace": ["\t\t\t\tdetails: { gardenId: chapter.gardenId, nativeSessionId: \"\" },"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-ENTRY-MARKS-CHAPTER]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-ENTRY-REFUSES-WITHOUT-CHAPTER",
+			"title": "/renew opens an interview on a record already mid-/renew",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\tif (record.renewing !== undefined) return refuse(\"renew-in-progress\", null);"],
+			"replace": ["\t\tif (false) return refuse(\"renew-in-progress\", null);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-ENTRY-REFUSES-WITHOUT-CHAPTER]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-SHOW-THEN-CONFIRM",
+			"title": "show names a sha8 but binds nothing — the confirm GLG types from it can never match",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\tbinding = bindRenewShow(chapter, candidate);"],
+			"replace": ["\t\tbinding = null;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-SHOW-THEN-CONFIRM]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-CONFIRM-NEEDS-FRESH-SHOW",
+			"title": "a confirm keeps the binding — one show confirms twice",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\tconst bound = binding;\n\t\tbinding = null;"],
+			"replace": ["\t\tconst bound = binding;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-CONFIRM-NEEDS-FRESH-SHOW]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-REFUSAL-LEAVES-NOTE",
+			"title": "a refusal inside the interview leaves the agent no note — it never learns why its outline was refused",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\tnote: chapter ? note(chapter, reason, text) : null,"],
+			"replace": ["\t\t\tnote: null,"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-REFUSAL-LEAVES-NOTE]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-RESHOW-AFTER-NEW-REPLY",
+			"title": "the confirm re-binds to whatever is current — a re-emitted outline is confirmed on a show that displayed an earlier reply",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\tconst match = matchRenewConfirm(bound, chapter, candidate, typed);"],
+			"replace": [
+				"\t\tconst match = matchRenewConfirm(candidate.kind === \"candidate\" ? bindRenewShow(chapter, candidate) : bound, chapter, candidate, typed);"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-RESHOW-AFTER-NEW-REPLY]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-USAGE-DROPS-BINDING",
+			"title": "a mistyped /renew keeps the show binding — the old sha8 still confirms after a refusal",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\t\tbinding = null;\n\t\t\t\treturn refuse(\"usage\", noteTo);"],
+			"replace": ["\t\t\t\treturn refuse(\"usage\", noteTo);"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-USAGE-DROPS-BINDING]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-NOTE-ONLY-IN-INTERVIEW",
+			"title": "every refusal leaves a note, interview or not — an idle /renew confirm outside any interview drops a note into the agent's context",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\tconst noteTo = hasRenewEntryMarker(io.branch, chapter) ? chapter : null;"],
+			"replace": ["\t\t\tconst noteTo = chapter;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-NOTE-ONLY-IN-INTERVIEW]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-HANDLER-ENTRY-TRIGGERS-TURN",
+			"title": "the entry message asks for no turn — /renew leaves a marker the agent never answers",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\tawait pi.sendMessage(effect.message, { triggerTurn: true });"],
+			"replace": ["\t\t\t\tawait pi.sendMessage(effect.message, { triggerTurn: false });"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-HANDLER-ENTRY-TRIGGERS-TURN]",
+			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-HANDLER-REFUSAL-NOTE-NO-TURN",
+			"title": "a refusal note asks for a turn — every refusal starts a model reply that replaces the candidate",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tif (effect.note) await pi.sendMessage(effect.note, { triggerTurn: false });"],
+			"replace": ["\t\t\tif (effect.note) await pi.sendMessage(effect.note, { triggerTurn: true });"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-HANDLER-REFUSAL-NOTE-NO-TURN]",
+			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-HANDLER-SHUTDOWN-RESETS",
+			"title": "session_shutdown keeps the show binding — a confirm in the next session uses a show made in the last one",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\trenewCommand?.reset();"],
+			"replace": ["\t\tvoid renewCommand;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-HANDLER-SHUTDOWN-RESETS]",
+			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-HANDLER-FAILED-SHOW-DROPS-BINDING",
+			"title": "a show whose notice failed keeps its binding — a later confirm matches a version the human never saw",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\t\trenewCommand.reset();\n\t\t\t\t\tthrow err;"],
+			"replace": ["\t\t\t\t\tthrow err;"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-HANDLER-FAILED-SHOW-DROPS-BINDING]",
+			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-HANDLER-SHOW-OPENS-NO-TURN",
+			"title": "the show also hands Pi a message that starts a turn — the agent's reply would replace the candidate just shown",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\t\tif (ctx.hasUI) ctx.ui.notify(effect.notice, \"info\");"],
+			"replace": [
+				"\t\t\t\t\tawait pi.sendMessage({ customType: \"x\", content: effect.notice, display: true }, { triggerTurn: true });\n\t\t\t\t\tif (ctx.hasUI) ctx.ui.notify(effect.notice, \"info\");"
+			],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-HANDLER-SHOW-OPENS-NO-TURN]",
+			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-OUTLINE-SELF-ONLY",
+			"title": "the lookup drops the record's body — the agent gets the header and none of its own outline",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\t\t\t`최종 판본 제출이나 확인도 아니다. 아래는 record의 본문 바이트 그대로다.\\n\\n${o.body}`,"],
+			"replace": ["\t\t\t\t\t`최종 판본 제출이나 확인도 아니다. 아래는 record의 본문 바이트 그대로다.`,"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-OUTLINE-SELF-ONLY]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-CMD-OUTLINE-KEEPS-BINDING",
+			"title": "a lookup drops the show binding — reading the old outline between show and confirm silently cancels the confirmation",
+			"subject": "pi-extensions/lib/renew-command.ts",
+			"find": ["\t\t\tif (isOutline) return outline(chapter, record);"],
+			"replace": ["\t\t\tif (isOutline) {\n\t\t\t\tbinding = null;\n\t\t\t\treturn outline(chapter, record);\n\t\t\t}"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-CMD-OUTLINE-KEEPS-BINDING]",
+			"signatureSource": "pi-extensions/lib/renew-command.test.ts"
+		},
+		{
+			"claim": "RENEW-HANDLER-OUTLINE-NO-TURN",
+			"title": "the lookup starts a turn — the agent answers to an old outline as if it were a new prompt, and that reply replaces any candidate",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\tawait pi.sendMessage(effect.message, { triggerTurn: false });"],
+			"replace": ["\t\t\t\tawait pi.sendMessage(effect.message, { triggerTurn: true });"],
+			"gate": ["bash", "run.sh", "check-renew-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RENEW-HANDLER-OUTLINE-NO-TURN]",
+			"signatureSource": "pi-extensions/entwurf-control.renew.test.ts"
 		}
 	]
 }
