@@ -4,6 +4,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.60.0 — 2026-11-20
+
+### What an npm user gets
+
+Three changes since 0.55.1. Checkout only: a Pi citizen can use `/renew` to start a new chapter under the same garden id (#151): the human and the agent agree on one outline, the human confirms it by its SHA-256 prefix, and the record keeps every closed chapter. The conversation skill is only in the source checkout for now, so a packaged install answers `/renew` with `skill-unavailable`; what ships in the package is the record format, the delivery and resume refusals while a transition is open, and `entwurf renew-recover` (source and package-list reading; an installed invocation is not measured). The ACP rails move toward one shared contract with Claude ACP as the reference (#168): Claude ACP 0.107.3, admission by agent version floor, agy hidden turns denied by default, and Pi's summary turn (`/compact`, threshold compaction, `/tree`) running on an agy row instead of refusing. The agy summary path was exercised in the lab; interactive `/compact` on an installed Pi was not measured. A guide in the source repository, not in the package, covers sessions started in Herdr App and `hc` terminals (#169).
+
+Readers without #151 support (including the 0.55.1 release) reject V3 records carrying the new renew keys. Before the first `/renew` on a shared store, upgrade and restart all participating readers and verify their loaded versions. Keep the records if a stale reader suggests a fresh cut (see Reader floor below).
+
 ### `/renew` — new chapters under one garden id (#151, Pi native)
 
 - **Checkout only for now.** The conversation skill lives in this repo (`.claude/skills/entwurf-renew/SKILL.md`) and is not in the npm package, so `/renew` is supported from a source checkout; packaging is undecided. The package is wired to ship a compiled `entwurf renew-recover` and documents it in its CLI help (source and build-list reading; recovery was exercised from a checkout, not from a packaged install).
@@ -18,7 +26,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Herdr App and core guide (#169)
 
-- **A guide, not a plugin.** [plugins/herdr-core/README.md](./plugins/herdr-core/README.md) covers pi and Claude Code sessions started in Herdr App or `hc` terminals; it ships no code. On one laptop (App tab, n=1, GLG's run relayed by the coordinator) an `entwurf pi` started in an App terminal and a Claude Code started by the App's Claude button each exchanged garden-id messages with a sibling outside Herdr. Core-only `hc` attach, `entwurf claude` typed in a terminal, and fresh or resume into the core are unmeasured.
+- **A guide, not a plugin.** [plugins/herdr-core/README.md](https://github.com/junghan0611/entwurf/blob/main/plugins/herdr-core/README.md) (repository only, not in the npm package) covers pi and Claude Code sessions started in Herdr App or `hc` terminals; it ships no code. On one laptop (App tab, n=1, GLG's run relayed by the coordinator) an `entwurf pi` started in an App terminal and a Claude Code started by the App's Claude button each exchanged garden-id messages with a sibling outside Herdr. Core-only `hc` attach, `entwurf claude` typed in a terminal, and fresh or resume into the core are unmeasured.
 
 ### ACP backend parity — Claude ACP as the reference, agy raised toward it (#168)
 
@@ -27,6 +35,35 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **agy hidden turns denied by default.** Every agy child gets one overlay `PreToolUse` hook seat whose command carries the policy as an argument (`v1:hidden-turns`), denying `invoke_subagent`, `schedule` and `run_workflow`. This is a best-effort execution default, not a security or isolation guarantee: the shared seat is read live, the file layer fails open, a child can rewrite its own seat, and workspace hooks still load. The hook ships in the package and runs from the installed tree (`check-pack`, `check-pack-install`).
 - **Pi's summary turn on agy.** Pi's `/compact`, threshold compaction and `/tree` summaries on an agy row now run instead of refusing. The adapter seat `toollessSummaryTurn` becomes `summaryTurnMode: "toolless" | "execution-denied"`; Claude stays `toolless`, agy is `execution-denied` because agy cannot open a child without its tools. Each agy summary turn gets its own `~/.pi/agent/agy-summary/<turn>/` root, whose resolved path must lie outside every git work tree for repository hooks to stay out (not checked, symlinks included), a private `--gemini-dir` whose seat runs the hook under `v1:deny-all`, and an empty cwd; an `AGY_ACP_COMMAND` launch refuses the summary by name (`acp-agy-summary-override-unsupported`). Evidence so far is a lab run that drove Pi's `generateSummary` directly; an interactive `/compact` from an installed Pi on an agy row is not yet measured.
 - **Still not provided on agy:** operator tool narrowing refuses by name (`acp-agy-narrowing-unsupported`); a remote steer waits in Pi's queue, because agy advertises no steering and a second `session/prompt` preempts the running turn rather than steering it. The backend parity table in [the ACP rail](./docs/acp-backend-rail.md) lists every seat and common-loop function per backend with its evidence.
+- **A failed summary-root cleanup cannot change the sealed turn result.** If agy summary cleanup throws, Entwurf keeps the sealed result, logs the cleanup error and root path to stderr, and does not retry. Cleanup may already have removed some entries. Previously the exception could become an unhandled rejection and terminate Pi under Node's default behavior.
+- **Not in this release.** Persisted ACP session continuation (`session/load`) for Claude ACP and agy is deferred to [#171](https://github.com/junghan0611/entwurf/issues/171). The first ACP turn after a Pi resume opens a new backend session; Entwurf sends the Pi context as a new prompt. In one agy hydrogen run on oracle at `afc87762`, reported context occupancy (`usage.totalTokens`) was 83,121 on the last turn before resume and 38,861 on the first turn after. Interactive `/compact` on an installed Pi with agy, and retries inside agy itself, were not measured.
+
+### Herdr
+
+- The runtime lock moves to the closed `herdr-checkout` carrier while 0.60.0 is unpublished, as in the 0.55.0 and 0.55.1 prepares; no npm version or integrity is invented. The last published npm pin is 0.55.1 (snapshot `v2026.11.16-herdr.0.55.1`). A re-pin to 0.60.0 is a separate snapshot after publication, with its own registry integrity.
+
+### Release evidence
+
+The candidate tree is `5839be8a` (main, 8 commits ahead of `origin/main` at prepare time) plus this section's release-prep edits: CHANGELOG, `package.json` (0.60.0), and the Herdr `runtime-lock.json`/README carrier switch. The seal is the sha256 of HEAD + `git diff --binary` + `git diff --cached --binary` + untracked sha256sums, first 16 hex; this evidence block was written after the seal.
+
+- P3: `npm version 0.60.0` changed only `"version"`; `pnpm install --lockfile-only` left the lockfile unchanged; frozen offline install sync (`--ignore-scripts`) rc=0. `pnpm run build-bridge` rc=0; the compiled bridge differs from the pre-build copy in `pi-extensions/lib/acp/overlay.js` only (the overlay comments changed in `5839be8a`).
+- P4 (deterministic floor): a first `check:full` on seal `eaeb9a741076e8b9` failed after 660s at `[QK:HPB-DEFAULT-LOCK-READ]` (`runtime-lock-incoherent`: the lock still named npm 0.55.1 against package 0.60.0). The lock moved to the `herdr-checkout` carrier as in the 0.55.0 and 0.55.1 prepares, the seven Herdr gates passed alone, and the rerun on seal `7f32b505ebf5d8ea` passed: exit 0, 1078s, seal before = after. Log SHA-256 `1adb5a37788a8de239391015dde4eb271138b876bec21e6333fc79aeaf9dd031`.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-20 14:23–14:46 KST: MUST 25 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0, seal before = after. Log SHA-256 `110adee80ac5f899ed76cb1c8fbc00d418f363626ed420bd53a1bdb34aedc070`; scratch `/tmp/entwurf-release-gate-0.60.0.3OHylV`.
+  - `smoke-codex-fresh-live` ran against an app-server started for this cut (`entwurf codex-app-server`, pid 2668865, tmux session `codex-as-060`, separate from the gate's session `rg-060`), stopped after the run. Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`.
+  - `check-openclaw-home-receipt` (MUST, VERIFY criterion 11) read `~/.local/share/entwurf-lab/160/receipt-0.60.0-5839be8a/receipt.json` (sha256 `b7765bf74469…`) for home `oracle/main/agent:main:entwurf#20261115T215046-12438c`, measured 2026-11-20 14:19–14:22 KST after the candidate commit, OpenClaw 2026.11.4: five refusal probes refused by name; the desk made the three asked calls (enqueued / sent / `bad-target`) and sent their results back verbatim; the closed declaration refused on both sides and was restored to its original sha256; no send-path client remained on host or container. `compactReset` is unmeasured (vendor behaviour only). GLG approved this measurement in session; GLG's own web look was not taken this time.
+- P9 after P5: reclaimable roots 0. One reparented `/tmp` process, the Emacs daemon. About 228 roots each of `mux-resume-call-pd`, `herdr-resume-pd-pkg`, `herdr-resume-pd-nolauncher` and `herdr-resume-call` remain from the beside-behaviour `*resume-call.test.ts` files (already known), and 112 `acp-agy-thinking-*` roots from `pi-extensions/lib/acp/agy-adapter.test.ts:320`, a sandbox that test does not remove (new finding, about 10 MB together; not deleted, since neither prefix is in the reclaim list).
+- Kill-power re-measured at this shipped SHA: none (all 1857 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d8fb3e12daeb surface 3e3e39618034 -- ["bash","run.sh","check-renew-beside"] 154/154 receipt cd9e58695003
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 08ee9a82a23f surface 904cb7b0273e -- ["bash","run.sh","check-meta-identity-consumers"] 1/1 receipt 7de8d74113a7
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 08ee9a82a23f surface 904cb7b0273e -- ["bash","run.sh","check-fresh-cut-gate"] 5/5 receipt 58a870d64057
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 563d71abd10e surface 3d040f94c096 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 49d33c76cb10
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 563d71abd10e surface 3d040f94c096 -- ["bash","run.sh","check-entwurf-v2-surface"] 22/22 receipt 66ef6acfdf66
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 563d71abd10e surface 3d040f94c096 -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 94/94 receipt db76c0fca15e
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5839be8a5c72 surface e697797e9762 -- ["bash","run.sh","check-acp-vendor-rejection"] 8/8 receipt 5ec57d1b712e
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5839be8a5c72 surface e697797e9762 -- ["bash","run.sh","check-acp-set-model-readback"] 101/101 receipt e27769631c95
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5839be8a5c72 surface e697797e9762 -- ["bash","run.sh","check-acp-provider-surface"] 2/2 receipt a1b8a254a8f3
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5839be8a5c72 surface e697797e9762 -- ["bash","run.sh","check-acp-session-reuse"] 1/1 receipt cf6550b4c64b
+- Exact prepared-SHA CI and the artifact acceptance belong to make and produce their own receipts.
 
 ## v2026.11.16-herdr.0.55.1 — Herdr npm runtime snapshot
 
