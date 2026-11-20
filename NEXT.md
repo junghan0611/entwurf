@@ -12,7 +12,7 @@
 - [x] **2. prepare 0.55.1.** `2c0e36e5`: P4 FULL 1026s, P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0 on seal `13f72abaf65ded3d`; saved-default 셀 run 2(sandbox) opus 선택, run 1은 사고 기록. 증거는 CHANGELOG 0.55.1 Release evidence.
 - [x] **3. make → publish.** exact-SHA CI run 43834942508, Windows preview run 43836522833, candidate sha256 `8298b99f…71745`(container 수용), tag `v0.55.1`, GitHub release. GLG가 npm publish(2026-11-16); U2 latest=0.55.1/repair 유지, U3 registry 설치 6행 확인.
 - [x] **4. Herdr re-pin.** `29594b9a`(exact-SHA CI run 43845189555): `runtime-lock.json` npm 0.55.1(registry sha512 = integrity, sha256 = 수용 후보), Orca 가이드 범위 문장 정렬. snapshot tag + GitHub release `v2026.11.16-herdr.0.55.1`(Latest는 v0.55.1 유지).
-- [x] **5. 이슈와 브랜치 복귀.** #167·#164 닫음(2026-11-16, 출하 댓글 6913578444·6913579384). main을 `151-renew`에 merge하고 #151 lane(브랜치 `151-renew`의 `NEXT--151-renew.md`, main 착지 전에 삭제됨)으로 돌아간다.
+- [x] **5. 이슈와 브랜치 복귀.** #164 닫음(2026-11-16, 출하 댓글 6913579384). #167은 출하 댓글 6913578444로 닫았다가 같은 날 다시 열렸고, 2026-11-17 #168에 흡수되어 not planned로 닫혔다. main을 `151-renew`에 merge하고 #151 lane(브랜치 `151-renew`의 `NEXT--151-renew.md`, main 착지 전에 삭제됨)으로 돌아간다.
 
 # #164 Orca 증거 (노트북 lane에서 승격, oracle은 Orca를 설치하지 않는다)
 

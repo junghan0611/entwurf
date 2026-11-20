@@ -38,6 +38,7 @@ import {
 	type TranscriptContext,
 	type Usage,
 } from "@earendil-works/pi-ai";
+import { calculateContextTokens, getLastAssistantUsage, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import type { AcpClientHandlers, AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
@@ -673,5 +674,80 @@ describe("agy prompt-phase failure (#167)", () => {
 		expect(message.stopReason).toBe("error");
 		expect(message.errorMessage?.startsWith("Internal error")).toBe(true);
 		expect(message.diagnostics).toBeUndefined();
+	});
+});
+
+// --- #168 comment 7006202786 §2: what pi's meter reads from an agy turn (characterization) -------
+// agy declares no `sealsTurnAccounting` (backend-adapter.ts), so the seal in backend.ts returns
+// early and the mapper's raw observation is what pi gets: each `usage_update.used` overwrites
+// `usage.totalTokens`. These cells pin TODAY's behaviour; they assert no new accounting. The `used`
+// values and the PromptResponse aggregate are synthetic fixture numbers, not agy measurements.
+// The oracle is pi's own reader pair: `calculateContextTokens` (what the post-turn threshold check
+// takes when non-zero) and `getLastAssistantUsage` (the last non-zero usage a zero-usage turn falls
+// back to). Both readings are pi 1.5.2 source reads, not a run of pi's session: compaction.js:65-97,
+// and agent-session.js:2574-2600 (`directContextTokens === 0` → `estimateContextTokens`).
+describe("agy usage_update and pi's context meter (#168)", () => {
+	const agyFlash = (): Model<Api> => {
+		const row = models.curatedAgyModels().find((r) => r.id === "agy-gemini-3.8-flash");
+		if (!row) throw new Error("agy-gemini-3.8-flash is not curated");
+		return { ...row, api: "entwurf", provider: "entwurf", baseUrl: "" } as Model<Api>;
+	};
+	/** Three calls in one turn, occupancy not monotonic: the turn sum (9,700) and the maximum (5,400)
+	 *  both differ from the last call's occupancy (3,100). */
+	const USED = [1_200, 5_400, 3_100] as const;
+	const LAST = USED[USED.length - 1];
+	const AGGREGATE = { inputTokens: 8_000, outputTokens: 1_700, totalTokens: 9_700 };
+	const threeCalls: PromptScript = async ({ handlers, sessionId }) => {
+		for (const used of USED) {
+			await handlers.sessionUpdate({ sessionId, update: { sessionUpdate: "usage_update", used, size: 1_000_000 } });
+		}
+		return { stopReason: "end_turn", usage: AGGREGATE } as AcpPromptResponse;
+	};
+	/** One call: the occupancy cell below then does not depend on how several `used` values combine. */
+	const oneCall: PromptScript = async ({ handlers, sessionId }) => {
+		await handlers.sessionUpdate({ sessionId, update: { sessionUpdate: "usage_update", used: LAST, size: 1_000_000 } });
+		return { stopReason: "end_turn" };
+	};
+	const noUsed: PromptScript = async ({ handlers, sessionId }) => {
+		await handlers.sessionUpdate({
+			sessionId,
+			update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ok" } },
+		});
+		return { stopReason: "end_turn" };
+	};
+	const asEntry = (message: AssistantMessage) => ({ type: "message", message }) as unknown as SessionEntry;
+
+	it("[QK:ACP-AGY-OCCUPANCY-LAST-USED] a turn whose usage_update `used` differs across calls seals the LAST call's value as totalTokens — not the sum, not the maximum, not the PromptResponse aggregate", async () => {
+		const world = makeWorld();
+		world.script(threeCalls);
+		const { event, message } = sealedOf(await runTurn(world, transcript("go"), "occ-last", undefined, agyFlash()));
+		expect(event.type).toBe("done");
+		expect(message.usage.totalTokens).toBe(LAST);
+		expect([message.usage.input, message.usage.output, message.usage.cacheRead, message.usage.cacheWrite]).toEqual([
+			0, 0, 0, 0,
+		]);
+		// No seal on this row: the aggregate is relayed nowhere.
+		expect((message.usage as unknown as { acp?: unknown }).acp).toBeUndefined();
+		// What pi's threshold check reads for this turn.
+		expect(calculateContextTokens(message.usage)).toBe(LAST);
+	});
+
+	it("[QK:ACP-AGY-OCCUPANCY-ABSENT-USED] a following turn that carries no `used` seals totalTokens 0 — nothing is carried — so pi falls back to the previous turn's last `used`", async () => {
+		const world = makeWorld();
+		world.script(oneCall);
+		const first = sealedOf(await runTurn(world, transcript("go"), "occ-absent", undefined, agyFlash())).message;
+		world.script(noUsed);
+		const second = sealedOf(
+			await runTurn(world, transcript("go", "again"), "occ-absent", undefined, agyFlash()),
+		).message;
+		// Same retained child: the reuse path, not a fresh session.
+		expect(world.children).toHaveLength(1);
+		expect(second.stopReason).toBe("stop");
+		expect(second.usage.totalTokens).toBe(0);
+		expect(calculateContextTokens(second.usage)).toBe(0);
+		// pi skips the zero-usage turn and reads the last non-zero one: turn one's last `used`
+		// (plus its own trailing-message estimate, which this cell does not compute).
+		const fallback = getLastAssistantUsage([asEntry(first), asEntry(second)]);
+		expect(fallback && calculateContextTokens(fallback)).toBe(LAST);
 	});
 });

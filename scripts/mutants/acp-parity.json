@@ -375,6 +375,30 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-AGY-SUMMARY-CLEANUP-S3]",
 			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OCCUPANCY-LAST-USED",
+			"title": "the mapper sums usage_update `used` across a turn's calls — an agy turn then seals the turn total as pi's occupancy instead of the last call's",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\t\t\tstate.output.usage.totalTokens = update.used;"],
+			"replace": ["\t\t\t\tstate.output.usage.totalTokens += update.used;"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-AGY-OCCUPANCY-LAST-USED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-OCCUPANCY-ABSENT-USED",
+			"title": "a backend with no turn-accounting seal carries the session's last occupancy into a turn that reported none — an agy turn without `used` then reads as the previous occupancy instead of 0, and pi stops estimating",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (!adapter.sealsTurnAccounting) return;"],
+			"replace": [
+				"\t\tif (!adapter.sealsTurnAccounting) { if (typeof state.observedContextOccupancyTokens === \"number\") session.contextOccupancyTokens = state.observedContextOccupancyTokens; if (typeof session.contextOccupancyTokens === \"number\") state.output.usage.totalTokens = session.contextOccupancyTokens; return; }"
+			],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-AGY-OCCUPANCY-ABSENT-USED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
 		}
 	]
 }
