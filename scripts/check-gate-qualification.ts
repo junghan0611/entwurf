@@ -3441,6 +3441,7 @@ let manifestCount: number;
 		"acp-foreground-only": 2,
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
+		"acp-oracle": 8,
 		"acp-parity": 32,
 		"acp-prompt-lifecycle": 15,
 		"acp-set-model-readback": 71,

@@ -39,7 +39,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
-import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 
@@ -335,7 +335,7 @@ function transcript(...userTurns: string[]): TranscriptContext {
 	return normalizeContext({ tools: PI_TOOLS, messages });
 }
 
-function makeFakeChild(): AcpChildLike {
+function makeFakeChild(events: string[] = []): AcpChildLike {
 	const pipe = () => ({ destroy() {}, unref() {} });
 	return {
 		pid: undefined,
@@ -344,7 +344,10 @@ function makeFakeChild(): AcpChildLike {
 		stdin: pipe(),
 		stdout: pipe(),
 		stderr: { on() {}, destroy() {}, unref() {} },
-		kill: () => true,
+		kill: (signal) => {
+			events.push(`kill:${signal}`);
+			return true;
+		},
 		unref() {},
 		once() {},
 	};
@@ -359,10 +362,13 @@ function makeWorld(
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
 	const children: AcpChildLike[] = [];
 	const log: string[] = [];
+	const wire: string[] = [];
+	const lifecycle: string[] = [];
+	const prompts: Array<{ sessionId: string; text: string }> = [];
 	let pendingPrompt: (() => void) | undefined;
 	// The connection handlers the backend registered — the producer side of session/update.
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
-	const hooks: { onPrompt?: () => void } = {};
+	const hooks: { onPrompt?: () => void | Promise<void> } = {};
 	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
 	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
 		const ambient = process.env[name];
@@ -384,7 +390,7 @@ function makeWorld(
 	const agentOf = new Map<unknown, Readonly<{ name: string; floor: string }>>();
 	const deps: AcpTurnDeps = {
 		spawnChild: (launch) => {
-			const child = makeFakeChild();
+			const child = makeFakeChild(lifecycle);
 			children.push(child);
 			agentOf.set(child, agentFor(launch));
 			return child;
@@ -392,8 +398,14 @@ function makeWorld(
 		createConnection: (child, registered) => {
 			handlers = registered;
 			return {
-				initialize: async () => ({ agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor } }),
-				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
+				initialize: async () => {
+					wire.push("initialize");
+					return { agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor } };
+				},
+				newSession: async () => {
+					wire.push("new");
+					return { sessionId: `ACP-${children.length}` };
+				},
 				setSessionConfigOption: async (p: any) => {
 					log.push(`set:${p.configId}=${p.value}`);
 					// A driver that never answers the effort set — the window an abort can land in.
@@ -408,8 +420,10 @@ function makeWorld(
 						? { configOptions: [{ id: "effort", currentValue: effortAnswer(p.value) }] }
 						: { configOptions: [{ id: "model", currentValue: p.value }] };
 				},
-				prompt: async (): Promise<AcpPromptResponse> => {
+				prompt: async (p): Promise<AcpPromptResponse> => {
+					prompts.push({ sessionId: p.sessionId, text: p.prompt.map((b) => ("text" in b ? b.text : "")).join("\n") });
 					log.push("prompt");
+					wire.push("prompt");
 					if (promptGate?.hold) {
 						// A running turn that the agent ends itself once it receives session/cancel.
 						return new Promise((resolve) => {
@@ -417,7 +431,7 @@ function makeWorld(
 							promptGate.waiting?.();
 						});
 					}
-					hooks.onPrompt?.();
+					await hooks.onPrompt?.();
 					return { stopReason: "end_turn" };
 				},
 				cancel: () => {
@@ -425,7 +439,9 @@ function makeWorld(
 					pendingPrompt?.();
 					pendingPrompt = undefined;
 				},
-				close: () => {},
+				close: () => {
+					lifecycle.push("close");
+				},
 			};
 		},
 		lifecyclePolicy: () => "process-scoped",
@@ -444,7 +460,11 @@ function makeWorld(
 	/** The agent speaks on the live session, whoever the backend currently routes that to. */
 	const agentSays = (update: Record<string, unknown>) =>
 		void handlers?.sessionUpdate({ sessionId: `ACP-${children.length}`, update } as never);
-	return { deps, children, log, agentSays, hooks };
+	const requestPermission = (req: Parameters<NonNullable<typeof handlers>["requestPermission"]>[0]) => {
+		if (!handlers) throw new Error("connection handlers not registered");
+		return handlers.requestPermission(req);
+	};
+	return { deps, children, log, wire, lifecycle, prompts, agentSays, hooks, requestPermission };
 }
 
 async function runTurn(
@@ -551,6 +571,127 @@ describe("streamAcpTurn — disabled Cortex configuration", () => {
 		const accepted = await runTurn(world, transcript("hello"), "config-claude", "low");
 		expect(accepted.type).toBe("done");
 		expect(world.children).toHaveLength(1);
+	});
+});
+
+describe("ACP baseline — implemented wire rows (#171)", () => {
+	it("[QK:ACP-ORACLE-L3-NEW] initializes before one new session and one prompt", async () => {
+		const world = makeWorld();
+		const result = await runTurn(world, transcript("baseline"), "oracle-l3", "high");
+		expect(result.type).toBe("done");
+		expect(world.wire).toEqual(["initialize", "new", "prompt"]);
+	});
+
+	it("[QK:ACP-ORACLE-L4-PROMPT] maps a backend text update and seals its terminal response once", async () => {
+		const world = makeWorld();
+		world.hooks.onPrompt = () =>
+			world.agentSays({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "oracle chunk" } });
+		const events: AssistantMessageEvent[] = [];
+		for await (const event of backend.streamAcpTurn(
+			sonnet(),
+			transcript("go"),
+			{ sessionId: "oracle-l4", reasoning: "high" },
+			world.deps,
+		))
+			events.push(event);
+		expect(
+			events
+				.filter((e) => e.type === "text_delta")
+				.map((e) => (e.type === "text_delta" ? e.delta : ""))
+				.join(""),
+		).toContain("oracle chunk");
+		expect(events.filter((e) => e.type === "done")).toHaveLength(1);
+		expect(world.prompts).toHaveLength(1);
+	});
+
+	it("[QK:ACP-ORACLE-L5-REUSE] keeps the session and sends only the new user delta", async () => {
+		const world = makeWorld();
+		await runTurn(world, transcript("FIRST-ORACLE"), "oracle-l5", "high");
+		await runTurn(world, transcript("FIRST-ORACLE", "SECOND-ORACLE"), "oracle-l5", "high");
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "prompt"]);
+		expect(world.prompts.map((p) => p.sessionId)).toEqual(["ACP-1", "ACP-1"]);
+		expect(world.prompts[1].text).toContain("SECOND-ORACLE");
+		expect(world.prompts[1].text).not.toContain("FIRST-ORACLE");
+	});
+
+	it("[QK:ACP-ORACLE-L6-CANCEL] cancels the running prompt once without replay", async () => {
+		const gate: { hold: boolean; waiting?: () => void } = { hold: false };
+		const world = makeWorld(undefined, undefined, gate);
+		await runTurn(world, transcript("first"), "oracle-l6", "high");
+		const { sealed } = await abortedTurn(world, gate, transcript("first", "second"), "oracle-l6");
+		expect(sealed.type === "error" && sealed.reason).toBe("aborted");
+		expect(world.log.filter((item) => item === "cancel")).toHaveLength(1);
+		expect(world.prompts).toHaveLength(2);
+	});
+
+	it("[QK:ACP-ORACLE-L13-TEARDOWN] closes the connection before TERM and delayed KILL", async () => {
+		const world = makeWorld();
+		await runTurn(world, transcript("go"), "oracle-l13", "high");
+		const dead = makeWorld();
+		await runTurn(dead, transcript("go"), "oracle-l13-dead", "high");
+		Object.assign(dead.children[0], { exitCode: 0 });
+		vi.useFakeTimers();
+		try {
+			expect(backend.closeRetainedAcpSession("oracle-l13")).toBe(true);
+			expect(world.lifecycle).toEqual(["close", "kill:SIGTERM"]);
+			await vi.advanceTimersByTimeAsync(2_000);
+			expect(world.lifecycle).toEqual(["close", "kill:SIGTERM", "kill:SIGKILL"]);
+			expect(backend.closeRetainedAcpSession("oracle-l13-dead")).toBe(true);
+			await vi.advanceTimersByTimeAsync(2_000);
+			expect(dead.lifecycle).toEqual(["close"]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("[QK:ACP-ORACLE-L13-PROCESS-GROUP] signals the negative child pid, not only the direct process", async () => {
+		const world = makeWorld();
+		await runTurn(world, transcript("go"), "oracle-l13-group", "high");
+		Object.assign(world.children[0], { pid: 424242 });
+		const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+		vi.useFakeTimers();
+		try {
+			expect(backend.closeRetainedAcpSession("oracle-l13-group")).toBe(true);
+			expect(kill).toHaveBeenCalledWith(-424242, "SIGTERM");
+			await vi.advanceTimersByTimeAsync(2_000);
+			expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
+		} finally {
+			vi.useRealTimers();
+			kill.mockRestore();
+		}
+	});
+
+	it("[QK:ACP-ORACLE-L12-PERMISSION] chooses the first allow, otherwise first option, and cancels empty options", async () => {
+		const world = makeWorld();
+		const outcomes: unknown[] = [];
+		world.hooks.onPrompt = async () => {
+			for (const options of [
+				[
+					{ optionId: "deny", kind: "reject_once" },
+					{ optionId: "allow", kind: "allow_always" },
+				],
+				[
+					{ optionId: "deny-once", kind: "reject_once" },
+					{ optionId: "allow-once", kind: "allow_once" },
+				],
+				[
+					{ optionId: "first", kind: "reject_once" },
+					{ optionId: "second", kind: "reject_always" },
+				],
+				[{ optionId: "unknown", kind: "vendor_unknown" }],
+				[],
+			])
+				outcomes.push(await world.requestPermission({ options } as never));
+		};
+		const result = await runTurn(world, transcript("permission"), "oracle-l12", "high");
+		expect(result.type).toBe("done");
+		expect(outcomes).toEqual([
+			{ outcome: { outcome: "selected", optionId: "allow" } },
+			{ outcome: { outcome: "selected", optionId: "allow-once" } },
+			{ outcome: { outcome: "selected", optionId: "first" } },
+			{ outcome: { outcome: "selected", optionId: "unknown" } },
+			{ outcome: { outcome: "cancelled" } },
+		]);
 	});
 });
 

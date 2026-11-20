@@ -11,6 +11,7 @@ are not registered and a direct selection refuses before launch, without a Claud
 Existing Cortex settings, credentials and native citizen records are not removed.
 Dated Cortex observations below are historical, not a current support claim.
 Implementation history and audit chronology live in CHANGELOG, issues, and git.
+What a complete ACP client must decide, and the state of each row in Entwurf, is the table in [acp-client-baseline.md](./acp-client-baseline.md) (#171).
 
 ## Boundary
 
