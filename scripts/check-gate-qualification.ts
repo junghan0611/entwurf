@@ -3477,7 +3477,7 @@ let manifestCount: number;
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"pi-launch": 9,
-		"pi-floor": 4,
+		"pi-floor": 7,
 		"pi-bridge-sender": 4,
 		"pi-mcp-bridge": 2,
 		"pi-mcp-register": 3,

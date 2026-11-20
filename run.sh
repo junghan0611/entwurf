@@ -2243,6 +2243,7 @@ check_package_source_routing() {
 
 
 check_dep_versions() {
+  run_ts scripts/version-mentions.ts --check
   # Catches pi version-pin drift across package.json, run.sh, and the baseline
   # docs. Concretely the kind of skew that produced commit 21de0f9's "0.11.1
   # leftover" review comment: package.json bumped to 0.12.0 while README

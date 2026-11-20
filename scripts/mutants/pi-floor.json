@@ -3,6 +3,39 @@
 	"lane": "pi-floor",
 	"mutants": [
 		{
+			"claim": "VERSION-MENTIONS-HERDR-LOCK",
+			"title": "the Herdr runtime lock moves without its README npm pin, leaving the installation description on the previous artifact",
+			"subject": "plugins/herdr/runtime-lock.json",
+			"find": ["\"version\": \"0.60.0\""],
+			"replace": ["\"version\": \"0.55.1\""],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:VERSION-MENTIONS-HERDR-LOCK]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
+			"claim": "VERSION-MENTIONS-CURRENT-LITERAL",
+			"title": "the original stale current-package wording returns to the Pi row of the clean-host guide",
+			"subject": "docs/setup-clean-host.md",
+			"find": ["| pi | optional-by-presence — this package: `>=1.5.2 <1.6`; historical 0.51.0:"],
+			"replace": ["| pi | optional-by-presence — current 0.60.0: `>=1.5.2 <1.6`; historical 0.51.0:"],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:VERSION-MENTIONS-CURRENT-LITERAL]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
+			"claim": "VERSION-MENTIONS-CURRENT",
+			"title": "a versioned install command returns to the current operator guidance and will go stale at the next release",
+			"subject": "README.md",
+			"find": ["# entwurf\n"],
+			"replace": ["# entwurf\n\nnpm install -g @junghanacs/entwurf@0.55.1\n"],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:VERSION-MENTIONS-CURRENT]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
 			"claim": "PI-FLOOR-SINGLE-SOURCE",
 			"title": "one row of the pnpm workspace closure is left on the previous floor while every other surface moved — the shape a version bump actually fails in. Nothing else reads that file, so the stranded row surfaces only at install time, in a different command, far from the change that stranded it",
 			"subject": "pnpm-workspace.yaml",
@@ -44,10 +77,10 @@
 			"title": "a published-scope region in an operator doc names a package the frozen published manifest does not record, so the 1.5.0 instructions inside it would be held to a pairing no artifact ships — the doc can no longer prove which published package its install steps belong to",
 			"subject": "docs/setup-clean-host.md",
 			"find": [
-				"| pi | optional-by-presence — current 0.60.0: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->"
+				"| pi | optional-by-presence — this package: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->"
 			],
 			"replace": [
-				"| pi | optional-by-presence — current 0.60.0: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.5.0 -->"
+				"| pi | optional-by-presence — this package: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.5.0 -->"
 			],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,
