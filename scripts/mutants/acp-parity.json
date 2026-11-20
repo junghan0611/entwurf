@@ -399,6 +399,25 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:ACP-AGY-OCCUPANCY-ABSENT-USED]",
 			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-CLEANUP-THROW-CONTAINED",
+			"title": "the summary-root cleanup runs unguarded in the turn's finally — an EBUSY/EACCES from unlink or rm escapes the un-awaited microtask as an unhandled rejection after the turn was answered, which by Node's default ends the operator's Pi",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\ttry {",
+				"\t\t\t\t\toverlay.cleanup({ childExited, succeeded: summarySucceeded, spawned });",
+				"\t\t\t\t} catch (cleanupErr) {",
+				"\t\t\t\t\tconsole.warn(",
+				"\t\t\t\t\t\t`[acp] summary root cleanup failed; preserved ${overlay.overlayDir ?? \"summary root\"}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,",
+				"\t\t\t\t\t);",
+				"\t\t\t\t}"
+			],
+			"replace": ["\t\t\t\toverlay.cleanup({ childExited, succeeded: summarySucceeded, spawned });"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-CLEANUP-THROW-CONTAINED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
 		}
 	]
 }

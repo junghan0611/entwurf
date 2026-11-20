@@ -756,6 +756,65 @@ describe("the Antigravity ACP backend through the turn driver (#167)", () => {
 			else process.env.AGY_ACP_COMMAND = prevOverride;
 		}
 	});
+
+	it("[QK:ACP-AGY-SUMMARY-CLEANUP-THROW-CONTAINED] a summary-root cleanup that throws after the seal leaves the answered turn as it was, is reported on stderr, and escapes as no unhandled rejection", async () => {
+		const { agyAdapter } = await import("./backend-adapter.ts");
+		const original = agyAdapter.ensureOverlay.bind(agyAdapter);
+		const ensureSpy = vi.spyOn(agyAdapter, "ensureOverlay").mockImplementation((input) => {
+			const real = original(input);
+			if (!real.cleanup) return real;
+			const cleanup = real.cleanup;
+			return {
+				...real,
+				cleanup: (opts) => {
+					cleanup(opts);
+					throw Object.assign(new Error("EBUSY: resource busy or locked, rmdir"), { code: "EBUSY" });
+				},
+			};
+		});
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const unhandled: unknown[] = [];
+		const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+		process.on("unhandledRejection", onUnhandled);
+		try {
+			const world = makeWorld(summarizerSays);
+			const origSpawn = world.deps.spawnChild;
+			world.deps.spawnChild = (launch, launchCwd, extraEnv) => {
+				const c = origSpawn(launch, launchCwd, extraEnv);
+				const origKill = c.kill;
+				c.kill = (sig) => {
+					(c as { exitCode: number | null }).exitCode = 0;
+					return origKill(sig);
+				};
+				return c;
+			};
+			const ctx = normalizeContext({
+				tools: [],
+				messages: [...conversation("first"), { role: "user", content: "summarize", timestamp: 9 }],
+			});
+			const sealed = await agyTurn(world, ctx, {
+				sessionId: "S-agy-cleanup-throw",
+				reasoning: "low",
+				cacheRetention: "none",
+			});
+			expect(sealed.type).toBe("done");
+			if (sealed.type === "done") expect(sealed.reason).toBe("stop");
+			await vi.waitFor(() =>
+				expect(warnSpy).toHaveBeenCalledWith(
+					expect.stringMatching(
+						/^\[acp\] summary root cleanup failed; preserved .+: EBUSY: resource busy or locked, rmdir$/,
+					),
+				),
+			);
+			// One macrotask turn for a rejection of the finished microtask to surface.
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", onUnhandled);
+			warnSpy.mockRestore();
+			ensureSpy.mockRestore();
+		}
+	});
 });
 
 describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11-14)", () => {

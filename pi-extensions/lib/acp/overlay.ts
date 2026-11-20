@@ -484,7 +484,7 @@ export const AGY_REAL_GEMINI_DIR = join(homedir(), ".gemini");
 /** pi-owned overlay dir — the `--gemini-dir` target for agy ACP child spawns. */
 export const AGY_GEMINI_OVERLAY_DIR = join(homedir(), ".pi", "agent", "agy-gemini-overlay");
 
-/** User-owned root outside git (#168) — per-turn agy summary children get `<turn>/{gemini,cwd}` here. */
+/** User-owned root, outside git as long as HOME is not inside a work tree (not checked) (#168) — per-turn agy summary children get `<turn>/{gemini,cwd}` here. */
 export const AGY_SUMMARY_ROOT_DIR = join(homedir(), ".pi", "agent", "agy-summary");
 
 /** agy's own subdirectory under the gemini dir (its `--app-data-dir` default). */
@@ -746,8 +746,8 @@ export interface AgySummaryRoot {
 
 /**
  * Create an isolated per-turn root under `AGY_SUMMARY_ROOT_DIR` (`0700`) with `gemini/` and
- * `cwd/`. Keeping the summary child outside git repositories prevents `.agents/hooks.json`
- * walk-up (#168 Step 0/0b), and isolating `gemini/` keeps `v1:deny-all` off the shared overlay.
+ * `cwd/`. The summary child is outside git as long as HOME is not inside a work tree — nothing
+ * here checks that — and only then is repository `.agents/hooks.json` walk-up kept out (#168 Step 0/0b), and isolating `gemini/` keeps `v1:deny-all` off the shared overlay.
  */
 export function createAgySummaryRoot(baseDir: string = AGY_SUMMARY_ROOT_DIR): AgySummaryRoot {
 	mkdirSync(baseDir, { recursive: true, mode: 0o700 });

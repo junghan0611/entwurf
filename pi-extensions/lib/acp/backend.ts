@@ -2427,7 +2427,16 @@ export function streamAcpTurn(
 			if (overlay?.cleanup) {
 				const spawned = child !== undefined;
 				const childExited = child ? await waitForChildExit(child, deps.childExitTimeoutMs) : true;
-				overlay.cleanup({ childExited, succeeded: summarySucceeded, spawned });
+				// The turn is already sealed: a cleanup that throws (EACCES, EBUSY on unlink/rm) is reported
+				// and the root preserved, never thrown out of this un-awaited microtask, where it would be an
+				// unhandled rejection after the answer. The sealed result stays what it is (as persistRecord).
+				try {
+					overlay.cleanup({ childExited, succeeded: summarySucceeded, spawned });
+				} catch (cleanupErr) {
+					console.warn(
+						`[acp] summary root cleanup failed; preserved ${overlay.overlayDir ?? "summary root"}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
+					);
+				}
 				if (!childExited) {
 					console.warn(`[acp] summary child exit unconfirmed; preserved ${overlay.overlayDir ?? "summary root"}`);
 				}
