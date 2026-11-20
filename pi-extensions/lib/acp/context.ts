@@ -193,9 +193,9 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
  *     prior turns, so send only the latest user delta — the whole transcript
  *     would duplicate remembered history.
  *
- * The delta-only SAFETY for resume/load is owned by the caller's
- * `contextMessageSignatures` prefix-compat gate (mismatch → fall back to
- * `"new"` + full transcript); this pure function only splits the scope.
+ * The caller's prefix-compat gate detects divergence, not a record that is
+ * behind the transcript. Record currency is the not-yet-implemented L16
+ * contract; this pure function only splits the scope.
  */
 export function buildAcpPrompt(context: TranscriptContext, bootstrapPath: AcpBootstrapPath): AcpTextBlock[] {
 	switch (bootstrapPath) {

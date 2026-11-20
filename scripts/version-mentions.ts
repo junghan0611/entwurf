@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { checkReceiptVersions } from "../pi-extensions/lib/acp/receipt-versions.ts";
 import { checkHerdrPin, versionMentions } from "../pi-extensions/lib/version-mentions.ts";
 
 const args = process.argv.slice(2);
@@ -20,6 +21,11 @@ const raw: unknown = JSON.parse(readFileSync("plugins/herdr/runtime-lock.json", 
 const { lock, mismatch: pinMismatch, pinCount } = checkHerdrPin(raw, readFileSync("plugins/herdr/README.md", "utf8"));
 if (lock.source === "herdr-checkout")
 	console.log("Herdr pin check: SKIP — checkout carrier has no npm version or required npm pin row.");
+const receipts = checkReceiptVersions(
+	readFileSync("docs/acp-client-baseline.md", "utf8"),
+	JSON.parse(readFileSync("package.json", "utf8")),
+	readFileSync("pi-extensions/lib/acp/backend-adapter.ts", "utf8"),
+);
 const counts = { A: 0, B: 0, C: 0, L: 0 };
 let currentLiterals = 0;
 for (const file of files) {
@@ -38,4 +44,9 @@ if (pinMismatch)
 if (currentLiterals)
 	console.error(`[QK:VERSION-MENTIONS-CURRENT-LITERAL] ${currentLiterals} current version literal(s)`);
 if (counts.A) console.error(`[QK:VERSION-MENTIONS-CURRENT] ${counts.A} unscoped current package version mention(s)`);
-if (args.includes("--check") && (counts.A || pinMismatch)) process.exitCode = 1;
+if (receipts.claude.length)
+	console.error(`[QK:ACP-RECEIPT-CLAUDE-PIN] docs/acp-client-baseline.md: ${receipts.claude.join("; ")}`);
+if (receipts.agy.length)
+	console.error(`[QK:ACP-RECEIPT-AGY-FLOOR] docs/acp-client-baseline.md: ${receipts.agy.join("; ")}`);
+if (args.includes("--check") && (counts.A || pinMismatch || receipts.claude.length || receipts.agy.length))
+	process.exitCode = 1;

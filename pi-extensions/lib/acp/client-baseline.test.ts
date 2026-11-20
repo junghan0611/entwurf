@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const EXPECTED = [
-	...Array.from({ length: 15 }, (_, i) => `L${i + 1}`),
+	...Array.from({ length: 16 }, (_, i) => `L${i + 1}`),
 	"P1",
 	"P2",
 	...Array.from({ length: 9 }, (_, i) => `Z${i + 1}`),
@@ -13,6 +13,7 @@ const EXPECTED = [
 	"V2",
 	"V3",
 	"V4",
+	...Array.from({ length: 12 }, (_, i) => `U${i + 1}`),
 ];
 const STATES = new Set(["implemented", "declined", "deferred", "not-wired", "unmeasured"]);
 
@@ -78,7 +79,9 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 	expect(document).toContain("| Row | Name | Status | Evidence | QK |");
 	const rows = document
 		.split(/\r?\n/)
-		.flatMap((line, index) => (/^\|\s*(?:L\d+|P\d+|Z\d+|V\d+)\s*\|/.test(line) ? [{ line, number: index + 1 }] : []));
+		.flatMap((line, index) =>
+			/^\|\s*(?:L\d+|P\d+|Z\d+|V\d+|U\d+)\s*\|/.test(line) ? [{ line, number: index + 1 }] : [],
+		);
 	const parsed = rows.map(({ line, number }) => {
 		const cells = line
 			.split("|")
@@ -88,10 +91,11 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 		return { cells, number };
 	});
 	const ids = parsed.map(({ cells }) => cells[0]);
-	expect([...ids].sort()).toEqual([...EXPECTED].sort());
+	expect(ids).toEqual(EXPECTED);
 	const titles = oracleCounts();
 	const scripts = scriptCounts();
 	const rowClaims = new Map<string, string>();
+	const referenced = new Set<string>();
 	for (const {
 		cells: [id, , state, evidence, qk],
 		number,
@@ -111,6 +115,10 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 		for (const token of tokens) {
 			expect(titles.get(token) ?? 0, `${id}:${number}: ${token} must occur in exactly one test title`).toBe(1);
 		}
+		for (const match of evidence.matchAll(/\bU\d+\b/g)) {
+			expect(ids.includes(match[0]), `${id}:${number}: unknown evidence pointer ${match[0]}`).toBe(true);
+			if (!id.startsWith("U")) referenced.add(match[0]);
+		}
 		for (const match of evidence.matchAll(/\[QK:[^\]\r\n]+\]/g)) {
 			const token = match[0];
 			expect(
@@ -118,5 +126,8 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 				`${id}:${number}: evidence ${token} must occur in exactly one test title or script string`,
 			).toBe(1);
 		}
+	}
+	for (const id of EXPECTED.filter((row) => row.startsWith("U"))) {
+		expect(referenced.has(id), `${id}: no non-U row references this unmeasured cell`).toBe(true);
 	}
 });
