@@ -9,6 +9,17 @@
 
 ---
 
+## 보류 방향 — #151 `/renew` 뒤 (2026-11-20)
+
+Pi native `/renew`는 `151-renew`에서 착지했다(설계·결정 원문·남은 경계는 [docs/renew-memory-outline.md](./docs/renew-memory-outline.md)). GLG 원칙대로 한두 달 써 본 뒤 코드와 스킬의 몫을 다시 나눈다. 그때까지 아래는 열지 않는다.
+
+- **pi-durable `/renew`:** 범위 밖으로 남겼다(GLG 2026-11-16 "durable은 일단 다음에 할 일로"). Pi 설계를 그대로 옮긴다고 가정하지 않는다.
+- **ACP 형제의 장 넘김:** Pi+ACP 경로는 측정하지 않았다. 측정 전에는 Pi native와 같은 증거로 세지 않는다. 모델·백엔드 허용 목록은 두지 않는다.
+- **upstream 교체 호출 표지:** Pi SDK가 before 이벤트에 교체를 일으킨 호출의 표지를 싣고 중첩 교체를 거절하면 규약 대신 정확한 식별로 바꿀 수 있다. 제안은 올리지 않았고(GLG: upstream 변경 요구 불필요), 바뀌면 그때 다시 잰다.
+- **P3/P4:** 시작 경로가 확장보다 먼저 원본을 여는 문제는 RED로 남는다. W3(upstream)는 추진하지 않는다.
+- **meta-record 이력:** GLG가 이후 agent-config에 meta-record 폴더의 Git 관리를 요청할 계획이다. Entwurf에 저장·자동 커밋을 넣지 않는다.
+- **패키지 소비자:** 스킬이 npm 패키지에 없어 패키지 설치의 `/renew`는 `skill-unavailable`로 거절한다(소스·`files` 판독, 설치 실측 없음). 지금은 의도된 checkout 한정이고(GLG: 리포 스킬, 당장 필요한 건 entwurf 자신), 배포 방식은 정하지 않았다.
+
 ## 0.55.0 후보 (2026-11-15) — #160 OpenClaw 집 연결 + ACP steer/compaction; 출하 뒤 몫
 
 브랜치 `160-openclaw`의 handoff(NEXT--160-openclaw.md, 이 커밋에서 삭제)에서 옮긴 지속 사실. 진행 기록은 git history와 [#160](https://github.com/junghan0611/entwurf/issues/160) 스레드에 있다.

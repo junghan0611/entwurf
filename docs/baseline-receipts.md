@@ -197,6 +197,34 @@ oracle, run by the coordinator (ff08d4) with GLG's approval. Receiver R = fresh 
 - **`/clear` by message body (P = 20261115T215853-705a89, Pi `entwurf/claude-sonnet-5-5`, at `45961dec`).** Body `/clear` to an idle P → `sent`; Claude Code opened a new conversation file, the old one untouched; the next question "what CODE … else NONE" was answered `NONE` (cacheRead 10947 vs 31195 before). Pi's own transcript, record and socket were unchanged, so Pi is not told; the entwurf first-message augment is gone with the conversation.
 - **Not measured:** Claude's automatic compaction (~970k), an older sender's demotion (A3), Pi's own manual `/compact` on this rail (B4), `steer-unknown`, a busy receiver for `/compact` or `/clear`, slash commands other than these two, and Pi-native or Claude Code targets.
 
+## #151 `/renew` isolated Pi runs and the first real renew, 2026-11-17/20 (n=1)
+
+Not a certification row or release gate. oracle, Pi SDK 1.5.2, Pi native only (no ACP sibling).
+
+**Isolated runs (2026-11-17, run by 6a8b34).** Real `pi` binary with a stub provider, throwaway HOME/agent/XDG/store per run, `env -i`, offline, `--no-mcp`. Code: `d8fb3e12` for T1–T5, the C1.4o work surface later committed as `e41ea565` for T6b/T7b. Original receipt `/tmp/entwurf-151/measure/RECEIPT-b3-2-20261117.md` sha256 `640eab8c204da665…` (host-local; the decisive lines are below).
+
+| Run | Measured |
+|---|---|
+| T1 RPC `/renew` → `confirm` → `confirm <sha8>` → first input | one record, same garden id, current = new chapter, `renewing` absent, `chapters` = the left chapter with its original path and times; `outline` sha prefix `11367516` = the confirmed sha8; left original 644 → 444; new file's first user = body, one copy; at the stub provider the new chapter's first request was [user body, system, user input], body once (the system entry's extracted content text was empty; its sections/tool fields were not logged) |
+| T4 same flow typed in the TUI | same as T1 (sha8 `ccaaa022`); the permit reached the TUI's `ctx.newSession` |
+| T2 outside RPC `new_session` during the transition (a slower `before_switch` handler loaded ahead) | the outside switch `{"cancelled":true}` with `renew-switch-not-admitted`; the renew committed (sha8 `daa13141`), body once |
+| T3 SIGKILL after K1 / after reserve+append | record `renewing {to: null}` / `renewing {to: N1}`, chapters 0, no new garden; reopening either chapter gets no address (`renew-in-progress` / `native-id-reserved-by-renew`) and no record write. Session-file bytes across the reopen were not hashed. |
+| T5 recovery with the writer alone (at `d8fb3e12`) | refused `owner-mismatch` before any write: no hand-over surface existed then |
+| T6b reserve → kill → `entwurf renew-recover --continue` → `pi --session N1` | N1 file hash unchanged across recovery; `get_info` from the reopened Pi: garden `20261117T203554-deb0ec`, native = N1, pid = that run's `pi`, listener incarnation non-empty; first request body once; record 1, chapters 1 |
+| T7b K1 → kill → `--abort --save-outline` → `pi --session N0` | saved file = the stub-submitted body bytes (`60af68b2…`); `get_info`: garden `20261117T203614-c0f205`, native = N0, pid = that run's `pi`; record 1, `renewing` absent |
+
+Not measured: vendor serialization past the stub, an ACP sibling, MCP and the operating extensions loaded together, two recovery processes racing, reopening in the TUI after recovery.
+
+**First real renew (2026-11-19 23:28 UTC = 2026-11-20 08:28 KST, executed by GLG and SOL; audited read-only by 6a8b34; audit output written 2026-11-20 08:35:38 KST, file mtime).** Garden `20261003T164401-a30dda` (SOL, `openai-codex/gpt-6.1-sol`, Pi native). The audit used the owner reader `readAddressableMetaIdentity`, read the left original two-ended only, parsed the current chapter file, and printed no outline or transcript text; no write, no vendor call, no message to SOL. Audit output sha256 `a843b70b7a89a674…` (host-local).
+
+- record: same garden id, `renewing` absent; current native `01a1f623-b9c5-72ff-8727-dfaf3fa9f37c`; `transcriptPath` = the one file found for it.
+- `chapters` = 1: native `01a100b8-4d08-7247-98b3-efb293657eff`, model `openai-codex/gpt-6.1-sol`, `startedAt` `2026-10-03T07:44:00.777Z` = the original's header timestamp, `endedAt` `2026-11-19T23:26:07.970Z` = the original's last entry now (mtime 23:26:07.969Z: nothing appended after close).
+- left original (88.8 MB): header names that chapter; mode 444 while the other 390 session files in its directory are 644, so only write bits were removed.
+- `outline`: sha `66005ffd8d2dbfc1…` = recomputed over the body; 7,775 UTF-8 bytes; `forNativeSessionId` = the current native; `writtenAt` `2026-11-19T23:28:18.382Z`.
+- current chapter file: header names the current native; 19 lines, none torn; 3 user messages, all text blocks; the first (23:28:19.225Z) equals the outline exactly; one exact copy; no other user message contains it.
+- Inherited, not audited: SOL's real vendor model (openai-codex gpt-6.1) ran in the new chapter and answered GLG (SOL's own report via the coordinator); what that request carried on the wire was not audited, and whether this run went through the TUI or RPC is not recorded. The file shows the first user entry, not the wire request.
+- Evidence time: the record's model field read `gpt-6.1` in the audit (output written 08:35:38 KST, file mtime). At 08:40 KST GLG switched the same new chapter's model to gpt-6.2 (SOL's report); the renew itself ran on 6.1, and the chapter and the birthday did not change.
+
 ## Superseded / retired material (not instructions, not a gate)
 
 Moved verbatim out of [BASELINE.md](../BASELINE.md) by the 0.53.1 documentation diet. It is history for a reader of old receipts: nothing here is a question to ask a session, a release gate or a current support verdict. The question IDs below are stable names for old results.
