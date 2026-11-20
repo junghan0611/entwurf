@@ -10,9 +10,11 @@ The App window arranges terminals and the core runs them, so App terminals and `
 
 Do this on the machine that runs the Herdr App or core, as the user that runs it. This guide does not install Herdr.
 
+Replace `VERSION` with a published version, then run:
+
 ```bash
-npm install -g @junghanacs/entwurf@<version>
-entwurf setup <repo path>
+npm install -g @junghanacs/entwurf@VERSION
+entwurf setup /path/to/your-project
 ```
 
 - Requirements: Node 24 or later, Python 3, and an already installed and logged-in pi or Claude Code. For the steps in detail, see [clean-host setup](../../docs/setup-clean-host.md).
@@ -24,12 +26,12 @@ entwurf setup <repo path>
 Start the core **outside** the Herdr TUI, tmux and agent sessions: from a clean shell, or let the App start it. Then, in a terminal the core runs (App tab or `hc`):
 
 ```bash
-env | grep -E '^(HERDR|HC)_'
+env | grep -E '^(HERDR|HC|TMUX|CLAUDE)'
 command -v entwurf
 entwurf check-bridge
 ```
 
-Expected from the first command: `HC_*` lines only (`HC_SCOPE`, `HC_TERMINAL_ID`, `HC_TERMINAL_SOCKET`). On the laptop, an App terminal t3 showed exactly those three and no `HERDR_*`, `TMUX` or `CLAUDE*` (measured n=1, thinkpad, `herdr-desktop` 0.1.13 + `herdr-core` 0.1.18). There `command -v entwurf` found `~/.local/bin/entwurf` and `entwurf check-bridge` was green (measured, same run).
+On the measured App terminal (t3) the first command printed three `HC_*` lines (`HC_SCOPE`, `HC_TERMINAL_ID`, `HC_TERMINAL_SOCKET`) and no `HERDR_*`, `TMUX` or `CLAUDE*` (measured n=1, thinkpad, `herdr-desktop` 0.1.13 + `herdr-core` 0.1.18); other versions and environments are unmeasured. What matters to Entwurf is that no `HERDR_*` line appears. There `command -v entwurf` found `~/.local/bin/entwurf` and `entwurf check-bridge` was green (measured, same run).
 
 Inheritance trap: Entwurf decides it is inside Herdr only from its own environment: fresh call and resume choose the Herdr rail on `HERDR_ENV=1` (`selectFreshCallRail`, `pi-extensions/lib/fresh-call-dispatch.ts`), and `entwurf_peers` reads Herdr placement only when `HERDR_ENV=1` and `HERDR_BIN_PATH` are both set (`pi-extensions/lib/entwurf-peer-observe.ts`). A core keeps the environment of the shell that first started it. A core first started from inside a Herdr TUI pane therefore passes both variables to every later terminal (measured n=1, oracle aarch64, hc 0.1.21, sandbox HOME: a terminal opened with `hc run` from a clean shell still carried both; upstream README says `hc server restart` keeps the starting environment). Then `entwurf_fresh_call` and `entwurf_resume_call` choose the Herdr TUI rail and open the sibling as a tab in that TUI ([Herdr launch rail](../../docs/herdr-launch-rail.md); inferred from source, not run in this setup).
 

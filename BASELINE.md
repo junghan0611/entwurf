@@ -151,7 +151,7 @@ outside the experimental preview (rows below).
 | ACP agy hidden-turn hook, ACP agent admission and agy summary turn (#168, feature branch `168-acp-parity`, not a release) | one lab LIVE run and one operational LIVE run per rail; one lab run of the agy summary turn (n=1 per cell) | 2026-11-17: the lab runs on uncommitted candidates, the operational runs on branch commit `a1438a73`. Full row: receipts, #168 section. |
 | native Windows: other harnesses, `setup` and the `.sh` bins, fresh/resume, mux/Herdr/ACP, ARM64, records over 16 MiB, reparse-backed store folders | UNSUPPORTED | Outside the preview's scope by decision; the preview loader refuses an install without the Windows addon by name. |
 
-Dated n=1 host runs (#147, #157, #168), the full text of the shortened rows above and retired material are in [docs/baseline-receipts.md](./docs/baseline-receipts.md) (read it on GitHub; the file is not in the npm package).
+Dated n=1 host runs (#147, #151, #157, #168), the full text of the shortened rows above and retired material are in [docs/baseline-receipts.md](./docs/baseline-receipts.md) (read it on GitHub; the file is not in the npm package).
 
 Notes on the release-host certification table above:
 

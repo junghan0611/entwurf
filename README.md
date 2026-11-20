@@ -163,6 +163,10 @@ These are MCP tools inside a session, not shell commands; pi reaches them as
 already-loaded bridge listed:
 [applying new source to a running host](./docs/setup-clean-host.md#applying-new-source-to-a-running-host).
 
+### Renew a Pi chapter (source checkout only)
+
+`/renew` moves a Pi citizen to a new native chapter under the same garden id (#151). It needs a Pi that loads a source checkout's control extension, not the npm package: the conversation skill is not in the npm package, so a packaged install answers `/renew` with `skill-unavailable` (source reading). Start in the citizen's own window with `/renew`, agree on one outline with the agent, then, while Pi is idle, type `/renew confirm` and `/renew confirm <sha8>`. The operating window, the completion signal and offline recovery are in the [renew guide](https://github.com/junghan0611/entwurf/blob/main/docs/renew-memory-outline.md). pi-durable, a sibling's message, an agent tool and remote renew cannot start it.
+
 ## How delivery works
 
 ### `entwurf_v2` — canonical dispatch verb

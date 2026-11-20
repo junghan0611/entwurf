@@ -91,19 +91,22 @@ not certify these candidate components.
 
 A `pi` record that carries a `renewing` block marks a /renew transition to a new native
 chapter under the same garden id. Until that transition commits — or the human operator
-recovers it — `entwurf_v2` refuses every intent as `renew-in-progress` before any lock,
-socket inspection, mailbox or adapter probe (`observedLiveness: null`). A mark written after
+recovers it — if the first target read sees the mark, `entwurf_v2` refuses every intent as
+`renew-in-progress` before any lock, socket inspection, mailbox or adapter probe
+(`observedLiveness: null`). A mark written after
 that first read is still caught: the control-socket path re-reads the record under its lock,
 and so does the dead-control fallback, each refusing before any socket inspection or probe of
 its own. `entwurf_resume_call` refuses as `target-renew-in-progress` under its lock before any
 window, because the record still names the outgoing chapter. While the transition itself holds
 the target lock the answers differ by verb: a delivery whose first read already sees the mark
-answers `renew-in-progress` without touching the lock; a delivery whose first read did not yet
-see it answers `target-locked`; a resume takes the lock before it reads the record, so it
-answers `target-locked`. Both read the record only:
-neither claims the chapter is dormant, dead or alive, and a transition left by a failed
-renew keeps refusing until it is recovered. No writer opens this state on an operational
-host yet; the renew writer and its rollout floor are tracked in the #151 branch NEXT.
+answers `renew-in-progress` without touching the lock; a delivery whose first read missed it
+can get `target-locked` if its lock acquisition conflicts; if it acquires the lock it re-reads
+the record before probing and refuses `renew-in-progress` only if the mark is still there; a resume takes the lock before it reads the record, so it
+answers `target-locked`. These renew refusals claim no liveness, and `target-locked` reports the lock conflict, not
+chapter state. A mark left open by a failure keeps refusing until it is settled. See the
+[renew guide](./docs/renew-memory-outline.md) for checkout operation, reader rollout and explicit
+recovery, and the [#151 receipts](./docs/baseline-receipts.md#151-renew-isolated-pi-runs-and-the-first-real-renew-2026-11-1720-n1)
+for the first real renew.
 
 ## Levels (D0–D8)
 

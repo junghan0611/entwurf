@@ -11,7 +11,7 @@
 
 ## 보류 방향 — #151 `/renew` 뒤 (2026-11-20)
 
-Pi native `/renew`는 `151-renew`에서 착지했다(설계·결정 원문·남은 경계는 [docs/renew-memory-outline.md](./docs/renew-memory-outline.md)). GLG 원칙대로 한두 달 써 본 뒤 코드와 스킬의 몫을 다시 나눈다. 그때까지 아래는 열지 않는다.
+Pi native `/renew` 코드는 main에 착지했다(`b4971826`; 설계·결정 원문·남은 경계는 [docs/renew-memory-outline.md](./docs/renew-memory-outline.md)). GLG 원칙대로 한두 달 써 본 뒤 코드와 스킬의 몫을 다시 나눈다. 그때까지 아래는 열지 않는다.
 
 - **pi-durable `/renew`:** 범위 밖으로 남겼다(GLG 2026-11-16 "durable은 일단 다음에 할 일로"). Pi 설계를 그대로 옮긴다고 가정하지 않는다.
 - **ACP 형제의 장 넘김:** Pi+ACP 경로는 측정하지 않았다. 측정 전에는 Pi native와 같은 증거로 세지 않는다. 모델·백엔드 허용 목록은 두지 않는다.

@@ -601,8 +601,9 @@ cell is one of four answers, with its evidence: **provided**, **refused by name*
 **recorded limit** (the backend lacks the surface, or a measured cost stands), **unmeasured**. A
 `[QK:…]` is a deterministic assertion and certifies the contract, not a vendor runtime; LIVE and wire
 observations carry their date and count. agy wire facts are agy 1.5.9, `[측정 2026-11-16]`, from the
-#167 measurement comments, unless a cell says otherwise. Source coordinates were read on
-`168-acp-parity` at `7fa3f17d`. "Common" means the behaviour is the common loop's, so the deterministic
+#167 measurement comments, unless a cell says otherwise. The initial comparison's source coordinates were read on
+`168-acp-parity` at `7fa3f17d`; seats and coordinates added later in #168 refer to their named commits
+or the current source, and earlier line numbers may have moved. "Common" means the behaviour is the common loop's, so the deterministic
 proof is shared and only the wire facts differ per backend.
 
 **Adapter seats.**
@@ -619,7 +620,7 @@ proof is shared and only the wire facts differ per backend.
 | `resolveThinking` / `enforceThinking` | **provided** — pi level → `effort`, set and read back (`[QK:ACP-CLAUDE-EFFORT-READBACK]`, `[QK:ACP-THINKING-NEW-SET]`, `-REUSE-SET`); no level refuses `acp-thinking-level-unsupported` (`[QK:ACP-CLAUDE-THINKING-REFUSE-UNMAPPED]`) | **provided** — pi level → `thought_level`, set after the model and read back, the vendor's silent clamp caught (`[QK:ACP-AGY-THOUGHT-RESOLVE]`, `-READBACK`, `-CLAMP`); the LIVE turn loop (n=1) showed the lifecycle and readback notices. pi's own clamp lands `off`/`minimal` on `low` and an unoffered `xhigh`/`max` on the row's highest level (`[QK:ACP-AGY-THINKING-MENU]`); only a level that bypasses that clamp refuses `acp-agy-thinking-level-unsupported` |
 | `configSignatureFields` | **provided** — `{}` (`backend-adapter.ts:673-678`) | **provided** — `{ agyHookPolicy }`, the hook policy, so a resident child is not reused across a policy change (`agyAdapter.configSignatureFields`, `backend-adapter.ts:964-966`, `[QK:ACP-AGY-POLICY-SIGNATURE]`) |
 | `sealsTurnAccounting` | **provided** (`backend-adapter.ts:686`) — see the accounting rows below | **recorded limit** — not declared (`[QK:ACP-AGY-NO-SEAL]`): `usage_update` carries no cost |
-| `summaryTurnMode` | **provided** (`"toolless"`) — the summary child gets `tools: []`, no MCP, no plugin (`[QK:ACP-SUMMARY-TURN-TOOLLESS]`) | **provided** (`"execution-denied"`) — agy takes no tool list, so tool schemas stay visible; each summary turn runs in an isolated `0700` root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`) with `v1:deny-all` PreToolUse hook verified by byte readback before spawn, empty MCP/skills, and neutral cwd outside git as long as HOME is not inside a work tree (not checked) (`[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]`, `[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]`, `[QK:ACP-AGY-HOOK-DENY-ALL]`). `AGY_ACP_COMMAND` override refuses summary turns by name (`acp-agy-summary-override-unsupported`, `[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]`). After confirmed child exit, only the isolated token symlink is unlinked; success removes `<turn>/`, failure preserves logs, unconfirmed exit touches nothing (`[QK:ACP-AGY-SUMMARY-CLEANUP-S3]`). Guarantee difference vs `"toolless"`: measured `Additional focus` temptation cost ~3× (31,045 vs ~10,300 tokens, n=1); summary text lives in Pi's compaction entry, so agy's turn copy is not Rule 8 memory |
+| `summaryTurnMode` | **provided** (`"toolless"`) — the summary child gets `tools: []`, no MCP, no plugin (`[QK:ACP-SUMMARY-TURN-TOOLLESS]`) | **provided** (`"execution-denied"`) — agy takes no tool list, so tool schemas stay visible; each summary turn runs in an isolated `0700` root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`) with `v1:deny-all` PreToolUse hook verified by byte readback before spawn, empty MCP/skills, and a neutral cwd whose resolved path must lie outside every git work tree for repository hooks to stay out (not checked, symlinks included) (`[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]`, `[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]`, `[QK:ACP-AGY-HOOK-DENY-ALL]`). `AGY_ACP_COMMAND` override refuses summary turns by name (`acp-agy-summary-override-unsupported`, `[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]`). After confirmed child exit, only the isolated token symlink is unlinked; success removes `<turn>/`, failure preserves logs, unconfirmed exit touches nothing (`[QK:ACP-AGY-SUMMARY-CLEANUP-S3]`). Guarantee difference vs `"toolless"`: measured `Additional focus` temptation cost ~3× (31,045 vs ~10,300 tokens, n=1); summary text lives in Pi's compaction entry, so agy's turn copy is not Rule 8 memory |
 | `readPromptRejection` | **provided** for one kind — `-32603` `incomplete_tool_call` seals a fixed verdict (`[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW]`, `-REUSE`, `[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE]`); **recorded limit**: every other failure keeps the verbatim path, whose text or stderr tail can read as transient to pi (§Support contract, 0.79.0 → 0.85.1) | **provided** as one verdict for every failure after the prompt is sent (`[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`); bootstrap keeps the verbatim path (`[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]`). **recorded limit**: overflow, quota and login are not told apart — the raw failure and any overflow hint ride only `diagnostics` (`backend.ts:1754-1767`), so pi neither retries nor compacts. An empty, garbage or fake-expired token file fails at `session/new` with `-32000 Authentication required`, before any prompt — a bootstrap failure (#168, agy 1.5.9, 2026-11-17, n=1 each). **unmeasured**: agy's `session/prompt` wording for an exhausted quota, a login that expires mid-session, or an overflow |
 | `admitAgent` | **provided** — `initialize.agentInfo` must name `@agentclientprotocol/claude-agent-acp` at or above the bundled pin `0.107.3`, an override launch included; otherwise `acp-claude-version-unsupported` (`[QK:ACP-CLAUDE-ADMIT-FLOOR]`, `[QK:ACP-CLAUDE-ADMIT-NAME]`; the floor equals the `package.json` pin, `[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]`) | **provided** — `initialize.agentInfo` must name `Antigravity ACP Server` at or above `1.5.9`, an `AGY_ACP_COMMAND` launch included; otherwise `acp-agy-version-unsupported` (`[QK:ACP-AGY-ADMIT-FLOOR]`, `[QK:ACP-AGY-ADMIT-NAME]`). LIVE n=1, 2026-11-17: the live 0.107.3 and 1.5.9 answers admitted, the live 0.107.3 answer with its version set to 0.107.2 refused (BASELINE). Both: refused after `initialize` and before `session/new` — no session, no set, no prompt, the child not kept — with text pi reads as neither transient nor overflow (`[QK:ACP-AGENT-ADMIT-BEFORE-SESSION]`, `[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]`) |
 
@@ -882,11 +883,11 @@ What the common loop does on agy, seat by seat, is the agy column of §Backend p
   `[측정, 2026-11-17, flash/medium, n=1 each]` agy walks up from `cwd` to the enclosing git root and
   loads every `.agents/hooks.json` it encounters along that chain; it does NOT walk above the git
   root or walk parents/HOME when `cwd` is outside a git repository (Step 0, 0b-1, 0b-2).
-  Because the summary root (`~/.pi/agent/agy-summary/<turn>/`) sits outside git as long as HOME is
-  not inside a work tree (nothing checks this), repository
-  workspace hooks do not enter summary turns; if the operator ever turns `~` into a git work tree,
-  any `.agents/hooks.json` between `~/.pi/agent/agy-summary/…` and that root would load (all
-  operator-owned paths, not untrusted repository code).
+  The summary root (`~/.pi/agent/agy-summary/<turn>/`) keeps repository workspace hooks out of
+  summary turns only while its resolved path lies outside every git work tree. Nothing checks that,
+  and symlinks are not checked either: if `~`, `~/.pi`, `~/.pi/agent` or `agy-summary` resolves into
+  a work tree, every `.agents/hooks.json` on the walk-up to that root may load and run, and their
+  ownership and trust are not established.
 - **Summary turns run in `"execution-denied"` mode, not `"toolless"` (#168).** Tool schemas remain
   visible to the model (`~3×` token cost observed when tempted by `Additional focus`: 31,045 vs
   ~10,300 tokens, n=1); `v1:deny-all` blocks execution before any tool runs. `AGY_ACP_COMMAND`
@@ -905,7 +906,8 @@ What the common loop does on agy, seat by seat, is the agy column of §Backend p
   override could reach them.
 - **A token refresh writes through the credential link.** A lab agy on a linked token refreshed it
   (`token refreshed`, agy log, 2026-11-17, n=1); the operator's token file was written and every
-  linked lab path was still a link afterwards. Whether the token rotated is not measured.
+  linked lab path was still a link afterwards. Whether the token rotated, and what several linked
+  children refreshing at once do, is not measured.
 - **Not measured:** agy's `session/prompt` wording for an exhausted quota, a login that expires
   mid-session, or an overflow (not induced); agy's own automatic compaction near a full
   window; `agent_thought_chunk` above `low`; which skill agy lists when
@@ -1292,7 +1294,9 @@ summary on a Claude ACP model.
   refusal. Pi's prompt text and session id are not read; Pi fills the id with a fresh `uuidv7()`.
 - **The turn.** A new child under the turn-scoped policy, closed after its one prompt whatever the
   process policy says. `tools`, `mcpServers`, skill plugins, the permission allow list and
-  `settingSources` are all empty, so no CLAUDE.md, hook or plugin is read from disk. The operator's engraving carrier stays, rendered with an empty MCP list. No first-message
+  `settingSources` are all empty. For Claude, `settingSources: []` excludes operator and project
+  settings, CLAUDE.md, hooks and plugins. agy reads its private `v1:deny-all` hook (below), and
+  repository hooks remain possible under the cwd caveat in the agy Known limits. The operator's engraving carrier stays, rendered with an empty MCP list. No first-message
   augment. Pi's summarization instructions arrive as a system message, which the transcript
   flattening drops, so their text (`getCurrentSystemPrompt`) is sent as the first prompt block.
   No notice of any kind: the summary Pi stores is exactly the model's text, and the session file
@@ -1302,9 +1306,9 @@ summary on a Claude ACP model.
 - **`agy` (`"execution-denied"`, #168).** Because `agy` takes no `tools` list on `session/new`,
   tool schemas stay visible to the model (measured `Additional focus` temptation cost ~3×:
   31,045 vs ~10,300 tokens, n=1). Instead of Claude's `tools: []` and `settingSources: []`, each
-  summary turn gets a per-turn `0700` root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`), outside git
-  as long as HOME is not inside a work tree (not checked),
-  a neutral empty `cwd` (avoiding repo `.agents/hooks.json` walk-up), empty MCP/skills, and a
+  summary turn gets a per-turn `0700` root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`),
+  a neutral empty `cwd` (which avoids repo `.agents/hooks.json` walk-up only while its resolved path
+  lies outside every git work tree; not checked, symlinks included), empty MCP/skills, and a
   `v1:deny-all` `PreToolUse` hook (`hooks.json` byte readback check in source). `AGY_ACP_COMMAND`
   overrides refuse summary turns by name (`acp-agy-summary-override-unsupported`). Cleanup unlinks
   only the isolated root's passthrough symlinks after confirmed child exit, removing `<turn>/` on
