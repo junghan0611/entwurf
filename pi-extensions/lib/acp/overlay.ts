@@ -33,13 +33,16 @@
 // which is exactly the "mailbox absence by design" the plugin commits to
 // (no meta-bridge hook on this child's settings surface → no mailbox).
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
 	existsSync,
 	lstatSync,
 	mkdirSync,
+	mkdtempSync,
 	readdirSync,
+	readFileSync,
 	readlinkSync,
+	renameSync,
 	rmSync,
 	symlinkSync,
 	unlinkSync,
@@ -481,6 +484,9 @@ export const AGY_REAL_GEMINI_DIR = join(homedir(), ".gemini");
 /** pi-owned overlay dir — the `--gemini-dir` target for agy ACP child spawns. */
 export const AGY_GEMINI_OVERLAY_DIR = join(homedir(), ".pi", "agent", "agy-gemini-overlay");
 
+/** User-owned root outside git (#168) — per-turn agy summary children get `<turn>/{gemini,cwd}` here. */
+export const AGY_SUMMARY_ROOT_DIR = join(homedir(), ".pi", "agent", "agy-summary");
+
 /** agy's own subdirectory under the gemini dir (its `--app-data-dir` default). */
 export const AGY_APP_DATA_DIRNAME = "antigravity-cli";
 
@@ -524,6 +530,76 @@ export function resolveAgySkillLinks(skillPlugins: readonly string[]): Map<strin
 		}
 	}
 	return links;
+}
+
+/** The agy hook seat under the gemini dir: `config/hooks.json` (#168 ①). */
+export const AGY_HOOKS_FILENAME = "hooks.json";
+
+/** The one named hook the overlay writes into that seat. */
+export const AGY_ACP_HOOK_NAME = "entwurf-acp-policy";
+
+/** The named refusal for a hook seat that is a directory, so no file can be written there. */
+export const ACP_AGY_HOOKS_SEAT_NOT_A_FILE = "acp-agy-hooks-seat-not-a-file";
+
+/** The named refusal when the written hook seat bytes do not read back identically. */
+export const ACP_AGY_HOOKS_SEAT_VERIFY_FAILED = "acp-agy-hooks-seat-verify-failed";
+
+/**
+ * The seat's bytes: one named PreToolUse hook on every tool (`matcher: "*"`) running `command`.
+ * The shape is agy's own `hooks.json` (measured, agy 1.5.9, #168): `{name: {PreToolUse: [{matcher,
+ * hooks: [{type: "command", command, timeout}]}]}}`. The bytes are the same for every agy child — the
+ * one ordinary policy is the command's own argument — so siblings and every pi on the host converge on
+ * one file.
+ */
+export function agyHooksJson(command: string): string {
+	return `${JSON.stringify(
+		{ [AGY_ACP_HOOK_NAME]: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command, timeout: 10 }] }] } },
+		null,
+		"\t",
+	)}\n`;
+}
+
+/** A temp path beside the seat that no other writer shares: pid plus random bytes. Two bootstraps
+ *  writing one fixed temp could interleave their bytes before either rename. */
+export function agyHooksSeatTempPath(seatPath: string): string {
+	return `${seatPath}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+}
+
+/**
+ * Write the hook seat. A file already holding these exact bytes is left alone; a regular file with
+ * other bytes is replaced; a symlink is removed, never followed (its target is not ours); a
+ * directory refuses by name. The write is a per-writer temp renamed over the seat, so a reader —
+ * agy re-reads this file on every tool call (measured, #168) — sees either the old bytes or the new.
+ */
+function writeAgyHooksSeat(configDir: string, bytes: string): void {
+	const seat = join(configDir, AGY_HOOKS_FILENAME);
+	let stat: ReturnType<typeof lstatSync> | undefined;
+	try {
+		stat = lstatSync(seat);
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+	}
+	if (stat?.isDirectory()) {
+		throw new Error(
+			`entwurf: ${ACP_AGY_HOOKS_SEAT_NOT_A_FILE} — ${seat} is a directory, so the agy ACP overlay cannot write its tool hook there. ` +
+				`Nothing was started. Remove that directory and start the turn again.`,
+		);
+	}
+	if (stat?.isSymbolicLink()) unlinkSync(seat);
+	else if (stat?.isFile() && readFileSync(seat, "utf8") === bytes) return;
+	const temp = agyHooksSeatTempPath(seat);
+	try {
+		writeFileSync(temp, bytes, { flag: "wx", mode: 0o644 });
+		renameSync(temp, seat);
+	} catch (err) {
+		rmSync(temp, { force: true });
+		throw err;
+	}
+	if (readFileSync(seat, "utf8") !== bytes) {
+		throw new Error(
+			`entwurf: ${ACP_AGY_HOOKS_SEAT_VERIFY_FAILED} — ${seat} did not read back the expected hook bytes. Nothing was started.`,
+		);
+	}
 }
 
 function isSymlink(path: string): boolean {
@@ -570,11 +646,16 @@ function assertAgyOverlayDirectory(path: string): void {
  * emptied setting retracts every link. A real directory in that seat is not ours and is never
  * removed; one standing where a link is owed refuses. The seat's two directories are proven real
  * with the rest, unless `config` is itself a foreign link the sweep below is about to remove.
+ *
+ * Tool hook (#168 ①, `hookCommand`): written at `config/hooks.json` after the sweep — so a foreign
+ * `config` link is already gone and the seat lands in the overlay's own directory — by
+ * `writeAgyHooksSeat`. Absent `hookCommand` leaves the seat untouched (tests of the other seats).
  */
 export function ensureAgyGeminiOverlay(
 	realDir: string = AGY_REAL_GEMINI_DIR,
 	overlayDir: string = AGY_GEMINI_OVERLAY_DIR,
 	skillPlugins: readonly string[] = [],
+	hookCommand?: string,
 ): void {
 	const realAppData = join(realDir, AGY_APP_DATA_DIRNAME);
 	const overlayAppData = join(overlayDir, AGY_APP_DATA_DIRNAME);
@@ -627,6 +708,11 @@ export function ensureAgyGeminiOverlay(
 		}
 	}
 
+	if (hookCommand !== undefined) {
+		mkdirSync(overlayConfig, { recursive: true });
+		writeAgyHooksSeat(overlayConfig, agyHooksJson(hookCommand));
+	}
+
 	if (skillLinks.size > 0) mkdirSync(overlaySkills, { recursive: true });
 	if (!existsSync(overlaySkills)) return;
 	for (const entry of readdirSync(overlaySkills)) {
@@ -650,4 +736,63 @@ export function ensureAgyGeminiOverlay(
 			);
 		}
 	}
+}
+
+export interface AgySummaryRoot {
+	rootDir: string;
+	geminiDir: string;
+	cwd: string;
+}
+
+/**
+ * Create an isolated per-turn root under `AGY_SUMMARY_ROOT_DIR` (`0700`) with `gemini/` and
+ * `cwd/`. Keeping the summary child outside git repositories prevents `.agents/hooks.json`
+ * walk-up (#168 Step 0/0b), and isolating `gemini/` keeps `v1:deny-all` off the shared overlay.
+ */
+export function createAgySummaryRoot(baseDir: string = AGY_SUMMARY_ROOT_DIR): AgySummaryRoot {
+	mkdirSync(baseDir, { recursive: true, mode: 0o700 });
+	const rootDir = mkdtempSync(join(baseDir, "turn-"));
+	const geminiDir = join(rootDir, "gemini");
+	const cwd = join(rootDir, "cwd");
+	mkdirSync(geminiDir, { recursive: true, mode: 0o700 });
+	mkdirSync(cwd, { recursive: true, mode: 0o700 });
+	return { rootDir, geminiDir, cwd };
+}
+
+/**
+ * Clean up one per-turn summary root after the turn settles (#168 S3).
+ *
+ * - If child exit is unconfirmed (`!childExited`), touch NOTHING (preserve evidence + leave the
+ *   running child's state intact).
+ * - Once child exit is confirmed (or `spawned === false`, meaning no child was ever started),
+ *   iterate `AGY_OVERLAY_PASSTHROUGH` and unlink each entry that is a symlink inside this summary
+ *   root's own `gemini/antigravity-cli/` dir (never the operator's state or shared overlay).
+ * - Remove the rest of `rootDir` when `succeeded` or `!spawned`; failed/incomplete spawned turns
+ *   keep logs/transcript for diagnosis.
+ */
+export function cleanupAgySummaryRoot(
+	summaryRoot: AgySummaryRoot,
+	opts: { childExited: boolean; succeeded: boolean; spawned?: boolean },
+): { cleaned: boolean; unlinkedPassthrough: string[] } {
+	if (!opts.childExited) {
+		return { cleaned: false, unlinkedPassthrough: [] };
+	}
+	const unlinkedPassthrough: string[] = [];
+	const appDataDir = join(summaryRoot.geminiDir, AGY_APP_DATA_DIRNAME);
+	for (const entry of AGY_OVERLAY_PASSTHROUGH) {
+		const linkPath = join(appDataDir, entry);
+		try {
+			if (lstatSync(linkPath).isSymbolicLink()) {
+				unlinkSync(linkPath);
+				unlinkedPassthrough.push(entry);
+			}
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+		}
+	}
+	if (opts.succeeded || opts.spawned === false) {
+		rmSync(summaryRoot.rootDir, { recursive: true, force: true });
+		return { cleaned: true, unlinkedPassthrough };
+	}
+	return { cleaned: false, unlinkedPassthrough };
 }

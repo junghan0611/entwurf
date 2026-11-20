@@ -39,7 +39,7 @@ import {
 	type Usage,
 } from "@earendil-works/pi-ai";
 import { obj } from "@earendil-works/pi-schema";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import type { AcpClientHandlers, AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 
@@ -226,18 +226,38 @@ function makeWorld() {
 	const scripts: PromptScript[] = [];
 	const cancels: string[] = [];
 	let onCancel: (() => void) | undefined;
+	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
+	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
+		const ambient = process.env[name];
+		if (ambient === undefined) continue;
+		delete process.env[name];
+		onTestFinished(() => {
+			process.env[name] = ambient;
+		});
+	}
+	// #168: each child answers initialize as the server its launch names; an unknown launch fails the world.
+	const agentFor = (launch: { command: string }) =>
+		launch.command === "agy"
+			? adapters.AGY_ACP_AGENT
+			: launch.command === process.execPath
+				? adapters.CLAUDE_ACP_AGENT
+				: (() => {
+						throw new Error(`test world: unexpected ACP launch ${launch.command}`);
+					})();
+	const agentOf = new Map<unknown, Readonly<{ name: string; floor: string }>>();
 
 	const deps: AcpTurnDeps = {
-		spawnChild: () => {
+		spawnChild: (launch) => {
 			const child = makeFakeChild();
 			children.push(child);
+			agentOf.set(child, agentFor(launch));
 			return child;
 		},
 		createConnection: (spawned, handlers) => {
 			const child = children.find((c) => c === spawned);
 			if (!child) throw new Error("createConnection: unknown child");
 			const connection: AcpConnectionLike = {
-				initialize: async () => ({}),
+				initialize: async () => ({ agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor } }),
 				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
 				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 				prompt: (params) => {

@@ -19,7 +19,16 @@
  * into a temp dir BEFORE the dynamic import.
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -36,7 +45,7 @@ import {
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { generateBranchSummary, generateSummary } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 
@@ -146,8 +155,18 @@ function makeWorld(
 	/** What the next prompt does: its stop reason, and a gate it waits on (with a signal that it got there). */
 	const control: { stopReason: string; hold?: Promise<void>; entered?: () => void } = { stopReason: "end_turn" };
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
+	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
+	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
+		const ambient = process.env[name];
+		if (ambient === undefined) continue;
+		delete process.env[name];
+		onTestFinished(() => {
+			process.env[name] = ambient;
+		});
+	}
+	const launchOf = new Map<AcpChildLike, string>();
 	const deps: AcpTurnDeps = {
-		spawnChild: () => {
+		spawnChild: (launch) => {
 			const pipe = () => ({ destroy() {}, unref() {} });
 			const child: AcpChildLike = {
 				pid: undefined,
@@ -164,13 +183,21 @@ function makeWorld(
 				once() {},
 			};
 			children.push(child);
+			launchOf.set(child, launch.command);
 			return child;
 		},
-		createConnection: (_child, registered) => {
+		createConnection: (child, registered) => {
 			handlers = registered;
 			const acpSessionId = `ACP-${children.length}`;
 			return {
-				initialize: async () => ({}),
+				// #168: answer as the server the launch names; an unknown launch fails the world.
+				initialize: async () => {
+					const { AGY_ACP_AGENT, CLAUDE_ACP_AGENT } = await import("./backend-adapter.ts");
+					const command = launchOf.get(child);
+					const a = command === "agy" ? AGY_ACP_AGENT : command === process.execPath ? CLAUDE_ACP_AGENT : undefined;
+					if (!a) throw new Error(`test world: unexpected ACP launch ${command}`);
+					return { agentInfo: { name: a.name, version: a.floor } };
+				},
 				newSession: async (params: unknown) => {
 					wire.push({ method: "newSession", params });
 					return { sessionId: acpSessionId };
@@ -511,44 +538,223 @@ describe("the Antigravity ACP backend through the turn driver (#167)", () => {
 		expect(world.calls("set:thought_level")[0].value).toBe("low");
 	});
 
-	it("[QK:ACP-AGY-SUMMARY-REFUSED] Pi's summary request to an agy model is refused by name before any child starts — agy has no tool-less child", async () => {
-		// The provider's own answer to a summary-shaped request.
-		const world = makeWorld(summarizerSays);
-		const context = normalizeContext({
+	it("[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED] Pi's summary request to an agy model runs in an isolated per-turn root with v1:deny-all, neutral cwd, and cleans up after child exit", async () => {
+		const { AGY_GEMINI_OVERLAY_DIR, AGY_SUMMARY_ROOT_DIR, AGY_REAL_GEMINI_DIR } = await import("./overlay.ts");
+		// Seed an operator token so the isolated summary overlay creates a token symlink to unlink on cleanup.
+		const opAppData = join(AGY_REAL_GEMINI_DIR, "antigravity-cli");
+		mkdirSync(opAppData, { recursive: true });
+		const opToken = join(opAppData, "antigravity-oauth-token");
+		writeFileSync(opToken, "test-token", { mode: 0o600 });
+
+		// Seed the shared overlay with v1:hidden-turns first to prove summary turns never touch its bytes (C4).
+		const { agyAdapter } = await import("./backend-adapter.ts");
+		agyAdapter.ensureOverlay({
+			cwd: join(SANDBOX, "project"),
+			modelId: "agy-gemini-3.8-flash",
+			nativeModelId: "gemini-3.8-flash",
+			config: { adapterSettings: { skillPlugins: [] } } as never,
+			sessionKey: "shared-pre",
+		});
+		const sharedSeatPath = join(AGY_GEMINI_OVERLAY_DIR, "config", "hooks.json");
+		const sharedSeatBefore = readFileSync(sharedSeatPath, "utf8");
+		expect(sharedSeatBefore).toContain("v1:hidden-turns");
+
+		const piWorld = makeWorld(summarizerSays);
+		const origSpawn = piWorld.deps.spawnChild;
+		const seenLaunches: Array<{ args: string[]; cwd: string }> = [];
+		let capturedHookSeat = "";
+		piWorld.deps.spawnChild = (launch, launchCwd, extraEnv) => {
+			seenLaunches.push({ args: launch.args, cwd: launchCwd });
+			const idx = launch.args.indexOf("--gemini-dir");
+			if (idx >= 0) {
+				capturedHookSeat = readFileSync(join(launch.args[idx + 1], "config", "hooks.json"), "utf8");
+			}
+			const c = origSpawn(launch, launchCwd, extraEnv);
+			const origKill = c.kill;
+			c.kill = (sig) => {
+				(c as { exitCode: number | null }).exitCode = 0;
+				return origKill(sig);
+			};
+			return c;
+		};
+		const seen: { context?: TranscriptContext; options?: any } = {};
+		const summary = await generateSummary(
+			conversation("plan the release", "run the gates"),
+			agyFlash(),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			"low",
+			piStreamFn(piWorld, seen),
+		);
+		expect(summary).toBe(SUMMARY_BODY);
+		expect(seen.options?.cacheRetention).toBe("none");
+		expect(piWorld.children).toHaveLength(1);
+		expect(seenLaunches).toHaveLength(1);
+		const geminiIdx = seenLaunches[0].args.indexOf("--gemini-dir");
+		expect(geminiIdx).toBeGreaterThanOrEqual(0);
+		const usedGeminiDir = seenLaunches[0].args[geminiIdx + 1];
+		expect(usedGeminiDir.startsWith(AGY_SUMMARY_ROOT_DIR)).toBe(true);
+		expect(usedGeminiDir).not.toBe(AGY_GEMINI_OVERLAY_DIR);
+		expect(seenLaunches[0].cwd.startsWith(AGY_SUMMARY_ROOT_DIR)).toBe(true);
+		expect(capturedHookSeat).toContain("v1:deny-all");
+		// newSession receives the neutral isolated cwd and empty MCP list.
+		const nsParams = piWorld.calls("newSession")[0] as { cwd: string; mcpServers: unknown[] };
+		expect(nsParams.cwd).toBe(seenLaunches[0].cwd);
+		expect(nsParams.mcpServers).toEqual([]);
+		// Shared overlay seat bytes stayed untouched, and operator token is still intact.
+		expect(readFileSync(sharedSeatPath, "utf8")).toBe(sharedSeatBefore);
+		expect(existsSync(opToken)).toBe(true);
+		// Confirmed child exit + success cleaned up the per-turn summary root.
+		await vi.waitFor(() => expect(existsSync(usedGeminiDir)).toBe(false));
+	});
+
+	it("[QK:ACP-SUMMARY-MODE-EXPLICIT] backend dispatch accepts only explicitly listed summaryTurnMode values and refuses absent or unknown modes before spawn", async () => {
+		const { agyAdapter } = await import("./backend-adapter.ts");
+		const origMode = agyAdapter.summaryTurnMode;
+		try {
+			(agyAdapter as { summaryTurnMode?: unknown }).summaryTurnMode = "unknown-mode";
+			const world = makeWorld(summarizerSays);
+			const context = normalizeContext({
+				tools: [],
+				messages: [...conversation("first"), { role: "user", content: "summarize", timestamp: 9 }],
+			});
+			const sealed = await agyTurn(world, context, {
+				sessionId: "S-agy-badmode",
+				reasoning: "low",
+				cacheRetention: "none",
+			});
+			expect(sealed.type).toBe("error");
+			const message = sealed.type === "error" ? (sealed.error.errorMessage ?? "") : "";
+			expect(message).toContain("acp-summary-turn-unsupported");
+			expect(isRetryableAssistantError({ stopReason: "error", errorMessage: message } as never)).toBe(false);
+			expect(world.children).toHaveLength(0);
+		} finally {
+			(agyAdapter as { summaryTurnMode?: unknown }).summaryTurnMode = origMode;
+		}
+	});
+
+	it("[QK:ACP-AGY-SUMMARY-CLEANUP-S3] failed summary unlinks only the isolated token symlink after confirmed exit; unconfirmed exit preserves everything", async () => {
+		const { AGY_SUMMARY_ROOT_DIR, AGY_REAL_GEMINI_DIR } = await import("./overlay.ts");
+		const opToken = join(AGY_REAL_GEMINI_DIR, "antigravity-cli", "antigravity-oauth-token");
+		expect(existsSync(opToken)).toBe(true);
+
+		// Case 1: failed summary + confirmed child exit -> token symlink unlinked, rootDir preserved.
+		const beforeDirs = existsSync(AGY_SUMMARY_ROOT_DIR)
+			? new Set(readdirSync(AGY_SUMMARY_ROOT_DIR))
+			: new Set<string>();
+		const failWorld = makeWorld(() => {
+			throw new Error("boom in prompt");
+		});
+		const origSpawnFail = failWorld.deps.spawnChild;
+		let failGeminiDir = "";
+		failWorld.deps.spawnChild = (launch, launchCwd, extraEnv) => {
+			const idx = launch.args.indexOf("--gemini-dir");
+			if (idx >= 0) failGeminiDir = launch.args[idx + 1];
+			const c = origSpawnFail(launch, launchCwd, extraEnv);
+			const origKill = c.kill;
+			c.kill = (sig) => {
+				(c as { exitCode: number | null }).exitCode = 1;
+				return origKill(sig);
+			};
+			return c;
+		};
+		const ctx = normalizeContext({
 			tools: [],
 			messages: [...conversation("first"), { role: "user", content: "summarize", timestamp: 9 }],
 		});
-		const sealed = await agyTurn(world, context, { sessionId: "S-agy-sum", reasoning: "low", cacheRetention: "none" });
-		expect(sealed.type).toBe("error");
-		const message = sealed.type === "error" ? (sealed.error.errorMessage ?? "") : "";
-		expect(message).toContain("acp-summary-turn-unsupported");
-		expect(message).toContain("a Claude row");
-		// Not transient to pi: a replay cannot give the backend a surface it lacks.
-		expect(isRetryableAssistantError({ stopReason: "error", errorMessage: message } as never)).toBe(false);
-		expect(world.children).toHaveLength(0);
-		expect(world.wire).toHaveLength(0);
+		const failSealed = await agyTurn(failWorld, ctx, {
+			sessionId: "S-agy-fail",
+			reasoning: "low",
+			cacheRetention: "none",
+		});
+		expect(failSealed.type).toBe("error");
+		await vi.waitFor(() =>
+			expect(existsSync(join(failGeminiDir, "antigravity-cli", "antigravity-oauth-token"))).toBe(false),
+		);
+		expect(existsSync(failGeminiDir)).toBe(true);
+		expect(existsSync(opToken)).toBe(true);
+		for (const d of readdirSync(AGY_SUMMARY_ROOT_DIR)) {
+			if (!beforeDirs.has(d)) rmSync(join(AGY_SUMMARY_ROOT_DIR, d), { recursive: true, force: true });
+		}
 
-		// Pi's own summarizer — the path /compact, the threshold and overflow recovery all take. It
-		// must end in that named error, never in a stored summary.
-		const piWorld = makeWorld(summarizerSays);
-		const seen: { context?: TranscriptContext; options?: any } = {};
-		await expect(
-			generateSummary(
-				conversation("plan the release", "run the gates"),
-				agyFlash(),
-				undefined,
-				undefined,
-				undefined,
-				undefined,
-				undefined,
-				undefined,
-				"low",
-				piStreamFn(piWorld, seen),
-			),
-		).rejects.toThrow(/acp-summary-turn-unsupported/);
-		expect(seen.options?.cacheRetention).toBe("none");
-		expect(piWorld.children).toHaveLength(0);
-		expect(piWorld.wire).toHaveLength(0);
+		// Case 2: length (max_tokens) summary + confirmed child exit -> token symlink unlinked, rootDir preserved (D2).
+		const lengthWorld = makeWorld(summarizerSays);
+		lengthWorld.control.stopReason = "max_tokens";
+		const origSpawnLen = lengthWorld.deps.spawnChild;
+		let lenGeminiDir = "";
+		lengthWorld.deps.spawnChild = (launch, launchCwd, extraEnv) => {
+			const idx = launch.args.indexOf("--gemini-dir");
+			if (idx >= 0) lenGeminiDir = launch.args[idx + 1];
+			const c = origSpawnLen(launch, launchCwd, extraEnv);
+			const origKill = c.kill;
+			c.kill = (sig) => {
+				(c as { exitCode: number | null }).exitCode = 0;
+				return origKill(sig);
+			};
+			return c;
+		};
+		const lenSealed = await agyTurn(lengthWorld, ctx, {
+			sessionId: "S-agy-len",
+			reasoning: "low",
+			cacheRetention: "none",
+		});
+		expect(lenSealed.type).toBe("done");
+		if (lenSealed.type === "done") expect(lenSealed.reason).toBe("length");
+		await vi.waitFor(() =>
+			expect(existsSync(join(lenGeminiDir, "antigravity-cli", "antigravity-oauth-token"))).toBe(false),
+		);
+		expect(existsSync(lenGeminiDir)).toBe(true);
+		expect(existsSync(opToken)).toBe(true);
+		for (const d of readdirSync(AGY_SUMMARY_ROOT_DIR)) {
+			if (!beforeDirs.has(d)) rmSync(join(AGY_SUMMARY_ROOT_DIR, d), { recursive: true, force: true });
+		}
+
+		// Case 3: unconfirmed child exit (exitCode stays null) -> nothing unlinked or deleted.
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			const hungWorld = makeWorld(summarizerSays);
+			hungWorld.deps.childExitTimeoutMs = 10;
+			const origSpawnHung = hungWorld.deps.spawnChild;
+			let hungGeminiDir = "";
+			hungWorld.deps.spawnChild = (launch, launchCwd, extraEnv) => {
+				const idx = launch.args.indexOf("--gemini-dir");
+				if (idx >= 0) hungGeminiDir = launch.args[idx + 1];
+				return origSpawnHung(launch, launchCwd, extraEnv);
+			};
+			await agyTurn(hungWorld, ctx, { sessionId: "S-agy-hung", reasoning: "low", cacheRetention: "none" });
+			await vi.waitFor(() =>
+				expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("summary child exit unconfirmed")),
+			);
+			expect(existsSync(hungGeminiDir)).toBe(true);
+			expect(lstatSync(join(hungGeminiDir, "antigravity-cli", "antigravity-oauth-token")).isSymbolicLink()).toBe(true);
+			expect(existsSync(opToken)).toBe(true);
+			for (const d of readdirSync(AGY_SUMMARY_ROOT_DIR)) {
+				if (!beforeDirs.has(d)) rmSync(join(AGY_SUMMARY_ROOT_DIR, d), { recursive: true, force: true });
+			}
+		} finally {
+			warnSpy.mockRestore();
+		}
+
+		// Case 4 (D1): AGY_ACP_COMMAND override through the real driver refuses before creating any root or spawning.
+		const ovWorld = makeWorld(summarizerSays);
+		const prevOverride = process.env.AGY_ACP_COMMAND;
+		process.env.AGY_ACP_COMMAND = "/opt/override-agy";
+		try {
+			const ovSealed = await agyTurn(ovWorld, ctx, { sessionId: "S-agy-ov", reasoning: "low", cacheRetention: "none" });
+			expect(ovSealed.type).toBe("error");
+			const ovMsg = ovSealed.type === "error" ? (ovSealed.error.errorMessage ?? "") : "";
+			expect(ovMsg).toContain("acp-agy-summary-override-unsupported");
+			expect(ovWorld.children).toHaveLength(0);
+			const afterOvDirs = existsSync(AGY_SUMMARY_ROOT_DIR) ? readdirSync(AGY_SUMMARY_ROOT_DIR) : [];
+			expect(afterOvDirs.filter((d) => !beforeDirs.has(d))).toEqual([]);
+		} finally {
+			if (prevOverride === undefined) delete process.env.AGY_ACP_COMMAND;
+			else process.env.AGY_ACP_COMMAND = prevOverride;
+		}
 	});
 });
 

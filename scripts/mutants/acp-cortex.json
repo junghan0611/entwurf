@@ -29,10 +29,24 @@
 			"title": "passing a cwd-derived key instead of resolveSessionKey's value merges distinct sessions' overlay scopes",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"\t\t\tconst overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config, sessionKey });"
+				"\t\t\toverlay = adapter.ensureOverlay({",
+				"\t\t\t\tcwd,",
+				"\t\t\t\tmodelId: model.id,",
+				"\t\t\t\tnativeModelId,",
+				"\t\t\t\tconfig,",
+				"\t\t\t\tsessionKey,",
+				"\t\t\t\tsummaryTurn: Boolean(summary),",
+				"\t\t\t});"
 			],
 			"replace": [
-				"\t\t\tconst overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config, sessionKey: `cwd:${cwd}` });"
+				"\t\t\toverlay = adapter.ensureOverlay({",
+				"\t\t\t\tcwd,",
+				"\t\t\t\tmodelId: model.id,",
+				"\t\t\t\tnativeModelId,",
+				"\t\t\t\tconfig,",
+				"\t\t\t\tsessionKey: `cwd:${cwd}`,",
+				"\t\t\t\tsummaryTurn: Boolean(summary),",
+				"\t\t\t});"
 			],
 			"gate": ["bash", "run.sh", "check-acp-session-reuse"],
 			"timeoutSeconds": 300,

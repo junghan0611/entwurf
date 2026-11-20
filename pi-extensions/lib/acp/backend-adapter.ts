@@ -18,6 +18,7 @@
 // Fence: imported by the root program with `.js` suffixes, same as the sibling
 // lib/acp modules — no new strip-types fence.
 
+import { rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -41,6 +42,8 @@ import {
 import {
 	AGY_GEMINI_OVERLAY_DIR,
 	claudeLaunchEnvDefaults,
+	cleanupAgySummaryRoot,
+	createAgySummaryRoot,
 	ensureAgyGeminiOverlay,
 	ensureClaudeConfigOverlay,
 	ensureCortexDualHomeOverlay,
@@ -84,6 +87,9 @@ export interface AcpLaunchParams {
 	modelId: string;
 	nativeModelId: string;
 	config: ResolvedAcpConfig;
+	/** Set for Pi summary turns (#168): lets an adapter pass a per-turn isolated overlayDir. */
+	summaryTurn?: boolean;
+	overlayDir?: string;
 }
 
 /** loadCarrier input — the mcp server names plus the resolved config (so a backend
@@ -109,6 +115,8 @@ export interface AcpOverlayParams {
 	 *  re-derived form drops `opts.sessionId`, so two sessions in one process/cwd
 	 *  would alias one overlay (GPT review 2026-07-29, cortex P0-1). */
 	sessionKey: string;
+	/** Set for Pi summary turns (#168) so adapters can isolate per-turn state from the shared overlay. */
+	summaryTurn?: boolean;
 }
 
 /** buildSessionMeta input — mirrors the newSession `_meta` inputs. */
@@ -146,6 +154,15 @@ export interface AcpEnforceThinkingParams {
 /** ensureOverlay result — env overrides backend.ts merges into the spawn env. */
 export interface AcpOverlayResult {
 	envOverrides: Record<string, string>;
+	/** Optional per-turn cwd override (e.g. an isolated empty cwd outside git for agy summary turns). */
+	effectiveCwd?: string;
+	/** Optional per-turn overlay directory passed to `resolveLaunch`. */
+	overlayDir?: string;
+	/** Optional per-turn cleanup run after child exit is settled (#168 S3). */
+	cleanup?: (opts: { childExited: boolean; succeeded: boolean; spawned?: boolean }) => {
+		cleaned: boolean;
+		unlinkedPassthrough: string[];
+	};
 }
 
 /** resolveAdapterSettings input — the RAW (untyped) `entwurfProvider` blocks plus
@@ -277,15 +294,12 @@ export interface AcpBackendAdapter {
 	 *  shape it never inspects. */
 	sealsTurnAccounting?: true;
 
-	/** Declares that THIS backend's summary child is tool-less in fact (#163, #167). Pi's summary
-	 *  request declares no tools, and the common loop honours it only because the child it opens
-	 *  can call none: a summarizer that could still run a command would act where Pi cannot see it.
-	 *  Claude's child is narrowed by the session meta the common loop hands it (`tools: []`, no MCP,
-	 *  nothing pre-approved).
-	 *
-	 *  ABSENT means no such surface was measured for this backend, so backend.ts refuses the
-	 *  summary turn by name before any child starts rather than run it with tools. */
-	toollessSummaryTurn?: true;
+	/** Summary-turn capability (#163, #168).
+	 *  - `"toolless"`: the child has no tool surface in fact (`tools: []`, no MCP, no plugin).
+	 *  - `"execution-denied"`: the model still sees tool schemas, and a per-turn isolated
+	 *    `PreToolUse` `v1:deny-all` hook blocks every tool execution before it runs.
+	 *  ABSENT means no summary mode is declared, so backend.ts refuses the summary turn by name. */
+	summaryTurnMode?: AcpSummaryTurnMode;
 
 	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
 	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
@@ -299,9 +313,18 @@ export interface AcpBackendAdapter {
 	 *  ABSENT means every failure of this backend keeps the verbatim-first `errorMessage`.
 	 *  The vocabulary is the vendor's, so only the adapter that speaks it may declare it. */
 	readPromptRejection?(err: unknown): AcpPromptRejection | undefined;
+
+	/** OPTIONAL capability (#168): admit the ACP server that answered `initialize`, before any
+	 *  session exists. The answer's `agentInfo` (ACP `Implementation`, optional in protocol v1) is the
+	 *  launched server's own name and version — an operator override included — so a floor needs no
+	 *  PATH probe. Throws a named refusal. ABSENT admits every server. */
+	admitAgent?(initializeAnswer: unknown): void;
 }
 
-/** The named refusal for a summary turn on a backend with no tool-less child. Fixed text,
+/** Explicit summary-turn modes a backend adapter may declare (#168 S1). */
+export type AcpSummaryTurnMode = "toolless" | "execution-denied";
+
+/** The named refusal for a summary turn on a backend with no declared summary mode. Fixed text,
  *  non-transient to pi: replaying the request cannot give the backend a surface it lacks. */
 export const ACP_SUMMARY_TURN_UNSUPPORTED = "acp-summary-turn-unsupported";
 
@@ -314,6 +337,58 @@ export interface AcpPromptRejection {
 	verdict: string;
 	/** The JSON-RPC `data`, re-serialized as evidence (it arrived as parsed JSON). */
 	dataJson: string;
+}
+
+/** The named refusals for an ACP server that does not name itself as the adapter's vendor at or
+ *  above its floor (#168, GLG 2026-11-17: both ACP backends hold a floor). */
+export const ACP_CLAUDE_VERSION_UNSUPPORTED = "acp-claude-version-unsupported";
+export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
+
+/** `initialize.agentInfo` as each server answers it. Claude: the bundled pin, which a test binds to
+ *  package.json (`[측정 2026-11-17]` 0.107.0 and 0.107.3 answered this name and their own version).
+ *  agy: the one measured version (#167, 2026-11-16). */
+export const CLAUDE_ACP_AGENT = Object.freeze({ name: "@agentclientprotocol/claude-agent-acp", floor: "0.107.3" });
+export const AGY_ACP_AGENT = Object.freeze({ name: "Antigravity ACP Server", floor: "1.5.9" });
+
+function parseReleaseVersion(value: unknown): [number, number, number] | undefined {
+	if (typeof value !== "string") return undefined;
+	const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
+	return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
+}
+
+function versionAtLeast(have: [number, number, number], floor: [number, number, number]): boolean {
+	for (let i = 0; i < 3; i++) if (have[i] !== floor[i]) return have[i] > floor[i];
+	return true;
+}
+
+/** Refuse unless `initialize.agentInfo` names `expected.name` at `expected.floor` or newer. The
+ *  version must be strict X.Y.Z: a pre-release, build metadata, a malformed or a missing version
+ *  refuses, since nothing measured stands behind it. When the adapter's operator override
+ *  (`overrideEnv`) is set, the refusal names that variable — never its value — as what launched the
+ *  server. The text is non-transient to pi's retry and overflow classifiers
+ *  ([QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]). */
+export function admitAcpAgent(
+	answer: unknown,
+	backend: string,
+	refusal: string,
+	expected: Readonly<{ name: string; floor: string }>,
+	overrideEnv?: string,
+): void {
+	const info = (answer as { agentInfo?: { name?: unknown; version?: unknown } | null } | null | undefined)?.agentInfo;
+	const have = parseReleaseVersion(info?.version);
+	const floor = parseReleaseVersion(expected.floor);
+	if (!floor) throw new Error(`entwurf: ${refusal} — the declared floor ${jsonText(expected.floor)} is not X.Y.Z`);
+	if (info?.name === expected.name && have && versionAtLeast(have, floor)) return;
+	const observed =
+		info == null ? "no agentInfo" : `${jsonText(info.name ?? null)} version ${jsonText(info.version ?? null)}`;
+	throw new Error(
+		`entwurf: ${refusal} — the ${backend} ACP backend answered initialize with ${observed}; entwurf requires ` +
+			`${expected.name} ${expected.floor} or newer. No session was created. Install a supported version; ` +
+			`repeating this request cannot change that.` +
+			(overrideEnv && process.env[overrideEnv]?.trim()
+				? ` (The server was launched by ${overrideEnv}, which owns its whole command line.)`
+				: ""),
+	);
 }
 
 /** The pi diagnostic type under which backend.ts preserves a recognised rejection verbatim. */
@@ -428,7 +503,7 @@ export const CLAUDE_FOREGROUND_ONLY_ENV = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
  * The set-model answer is read back before the prompt (#128). claude-agent-acp resolves the
  * requested id onto one of the rows it offers and answers with that row's `value` as the model
  * option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). `[측정 2026-10-12]` 0.85.1, no
- * prompt: `claude-fable-5-1` answers its own row (and, at 0.106.0 #142, so does `claude-fable-5-2`), while `claude-sonnet-5-5` and `claude-opus-5-5`
+ * prompt: `claude-fable-5-1` answers its own row (and, at 0.106.0 #142, so does `claude-fable-5-2`; 2026-11-17: only on a session created with that model), while `claude-sonnet-5-5` and `claude-opus-5-5`
  * answer the alias rows `sonnet` and `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row
  * resolves to (`ModelInfo.resolvedModel`) is not on the ACP wire, so an alias answer is accepted
  * only as the exact measured row, value AND name, declared here for the requested id. No other
@@ -629,11 +704,15 @@ export const claudeAdapter: AcpBackendAdapter = {
 
 	// #163: the summary child gets `tools: []`, no MCP, no plugin and nothing pre-approved through
 	// buildSessionMeta ([QK:ACP-SUMMARY-TURN-TOOLLESS]).
-	toollessSummaryTurn: true,
+	summaryTurnMode: "toolless",
 
 	// #127: claude-agent-acp 0.85.0+ rejects an `end_turn` with unanswered foreground tools as
 	// -32603 `incomplete_tool_call` (upstream #1212). Its raw text reads as transient to pi.
 	readPromptRejection: readClaudePromptRejection,
+
+	// #168: the server that answered initialize must be claude-agent-acp at the bundled pin or newer.
+	admitAgent: (answer) =>
+		admitAcpAgent(answer, "claude", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, "CLAUDE_AGENT_ACP_COMMAND"),
 };
 
 // ---------------------------------------------------------------------------
@@ -657,6 +736,53 @@ export interface AgyAdapterSettings {
 }
 
 export const AGY_UNSUPPORTED_NARROWING_KEYS = ["tools", "disallowedTools", "permissionAllow"] as const;
+
+/** The one policy phase 1 ships (#168 ①): deny the three tools measured to call the model with no ACP
+ *  frame (`invoke_subagent`, `schedule`, `run_workflow`), allow every other tool. Versioned — the hook
+ *  denies every tool on a value it does not know. It is the hook's argument in the seat's command, not
+ *  child env: the overlay is shared by every pi on the host, and a pi that predates the seat sets no
+ *  env for its children, which re-read the seat on every call. */
+export const AGY_HOOK_POLICY_HIDDEN_TURNS = "v1:hidden-turns";
+
+/** Summary-turn hook policy (#168): denies every tool call in an isolated per-turn gemini-dir. */
+export const AGY_HOOK_POLICY_DENY_ALL = "v1:deny-all";
+
+/** Named refusal when AGY_ACP_COMMAND override is active on a summary turn (#168 C1). */
+export const ACP_AGY_SUMMARY_OVERRIDE_UNSUPPORTED = "acp-agy-summary-override-unsupported";
+
+function refuseAgySummaryOverride(): never {
+	throw new Error(
+		`entwurf: ${ACP_AGY_SUMMARY_OVERRIDE_UNSUPPORTED} — AGY_ACP_COMMAND owns the whole command line, ` +
+			`so entwurf cannot isolate --gemini-dir or enforce ${AGY_HOOK_POLICY_DENY_ALL} on a summary turn. ` +
+			`Nothing was started. Unset AGY_ACP_COMMAND or switch to a Claude row to summarize.`,
+	);
+}
+
+/** Where the hook ships: beside this module, as source (`pi-extensions/` is in the package). Resolved
+ *  when an overlay is written, never at import — the bridge's compiled tree carries this module but
+ *  not the hook, and never writes an overlay. */
+export function agyAcpHookPath(): string {
+	return fileURLToPath(new URL("./agy-acp-hook.mjs", import.meta.url));
+}
+
+function shellSingleQuote(value: string): string {
+	return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+/**
+ * The command the seat names. agy runs it through `sh -c` (measured), so both paths and the policy are
+ * single-quoted and nothing in them is expanded. It is this process's own Node binary and the hook
+ * by absolute path — the precedent is `resolveClaudeLaunch`, which runs `claude-acp-launch.js` with
+ * `process.execPath`. A bare command name, as the native-push imprint hook uses, would be resolved
+ * through the child's PATH, where another install or a shadowing script could answer for the policy.
+ */
+export function agyAcpHookCommand(
+	execPath: string = process.execPath,
+	hookPath: string = agyAcpHookPath(),
+	policy: string = AGY_HOOK_POLICY_HIDDEN_TURNS,
+): string {
+	return [execPath, hookPath, policy].map(shellSingleQuote).join(" ");
+}
 
 /** The named refusal for a thinking level agy ACP cannot carry. Fixed text, non-transient to pi. */
 export const ACP_AGY_THINKING_LEVEL_UNSUPPORTED = "acp-agy-thinking-level-unsupported";
@@ -799,20 +925,55 @@ export const agyAdapter: AcpBackendAdapter = {
 
 	// `agy` from PATH — the CLI is the ACP server. `AGY_ACP_COMMAND` is the explicit operator
 	// override and, like Claude's, owns its whole command line: the overlay and permission
-	// arguments are not appended to it.
-	resolveLaunch() {
+	// arguments are not appended to it. Because an override owns the command line, a summary turn
+	// cannot force `--gemini-dir` isolation or `v1:deny-all` and is refused by name (#168 C1).
+	resolveLaunch({ summaryTurn, overlayDir } = {} as AcpLaunchParams) {
 		const override = process.env.AGY_ACP_COMMAND?.trim();
-		if (override) return { command: "bash", args: ["-lc", override] };
-		return { command: "agy", args: agyLaunchArgs() };
+		if (override) {
+			if (summaryTurn) refuseAgySummaryOverride();
+			return { command: "bash", args: ["-lc", override] };
+		}
+		return { command: "agy", args: agyLaunchArgs(overlayDir) };
 	},
 
-	// Nothing rides the environment: the overlay is an argument (agyLaunchArgs).
+	// Nothing rides the environment: the overlay is an argument (agyLaunchArgs), and the hook policy is
+	// an argument of the seat's command (agyAcpHookCommand).
 	launchEnvDefaults() {
 		return {};
 	},
 
-	ensureOverlay({ config }) {
-		ensureAgyGeminiOverlay(undefined, undefined, (config.adapterSettings as AgyAdapterSettings).skillPlugins);
+	// Ordinary turns use the shared overlay with `v1:hidden-turns`. Summary turns (#168) get an
+	// isolated per-turn root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`) with `v1:deny-all`
+	// so the shared overlay is never mutated. Under AGY_ACP_COMMAND, refuse BEFORE creating a root (D1).
+	ensureOverlay({ config, summaryTurn }) {
+		if (summaryTurn) {
+			if (process.env.AGY_ACP_COMMAND?.trim()) refuseAgySummaryOverride();
+			const summaryRoot = createAgySummaryRoot();
+			try {
+				ensureAgyGeminiOverlay(
+					undefined,
+					summaryRoot.geminiDir,
+					[],
+					agyAcpHookCommand(process.execPath, agyAcpHookPath(), AGY_HOOK_POLICY_DENY_ALL),
+				);
+			} catch (err) {
+				// No child was spawned; remove the summary root (and any partial token symlink) before rethrowing (O5).
+				rmSync(summaryRoot.rootDir, { recursive: true, force: true });
+				throw err;
+			}
+			return {
+				envOverrides: {},
+				effectiveCwd: summaryRoot.cwd,
+				overlayDir: summaryRoot.geminiDir,
+				cleanup: (opts) => cleanupAgySummaryRoot(summaryRoot, opts),
+			};
+		}
+		ensureAgyGeminiOverlay(
+			undefined,
+			undefined,
+			(config.adapterSettings as AgyAdapterSettings).skillPlugins,
+			agyAcpHookCommand(),
+		);
 		return { envOverrides: {} };
 	},
 
@@ -858,8 +1019,9 @@ export const agyAdapter: AcpBackendAdapter = {
 		confirmAgyThoughtLevelAnswer(answer, modelId, value);
 	},
 
+	// A resident child spawned under another hook policy is not reused.
 	configSignatureFields(_adapterSettings) {
-		return {};
+		return { agyHookPolicy: AGY_HOOK_POLICY_HIDDEN_TURNS };
 	},
 
 	// NO sealsTurnAccounting — a deliberate absence. agy's `usage_update` carries `used` and `size`
@@ -871,10 +1033,12 @@ export const agyAdapter: AcpBackendAdapter = {
 	// vocabulary is unmeasured, and its tools run with permission prompts bypassed.
 	readPromptRejection: readAgyPromptRejection,
 
-	// NO toollessSummaryTurn — measured absent, not unmeasured. agy takes no tool list on
-	// session/new; `plan` mode still ran a shell command; and a denied permission stops only the
-	// tools that ask. With no way to open a child that can call nothing, Pi's summary request is
-	// refused by name instead of being run by a summarizer that holds a shell.
+	// #168: the server that answered initialize must be agy's own ACP server at the measured floor or newer.
+	admitAgent: (answer) => admitAcpAgent(answer, "agy", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, "AGY_ACP_COMMAND"),
+
+	// #168: agy takes no tool list on session/new, so the model still sees tool schemas; summary
+	// turns run in an isolated per-turn root with a `v1:deny-all` PreToolUse hook and neutral cwd.
+	summaryTurnMode: "execution-denied",
 };
 
 // ---------------------------------------------------------------------------

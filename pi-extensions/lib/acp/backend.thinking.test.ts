@@ -39,7 +39,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 
@@ -363,16 +363,36 @@ function makeWorld(
 	// The connection handlers the backend registered — the producer side of session/update.
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
 	const hooks: { onPrompt?: () => void } = {};
+	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
+	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
+		const ambient = process.env[name];
+		if (ambient === undefined) continue;
+		delete process.env[name];
+		onTestFinished(() => {
+			process.env[name] = ambient;
+		});
+	}
+	// #168: each child answers initialize as the server its launch names; an unknown launch fails the world.
+	const agentFor = (launch: { command: string }) =>
+		launch.command === "agy"
+			? adapters.AGY_ACP_AGENT
+			: launch.command === process.execPath
+				? adapters.CLAUDE_ACP_AGENT
+				: (() => {
+						throw new Error(`test world: unexpected ACP launch ${launch.command}`);
+					})();
+	const agentOf = new Map<unknown, Readonly<{ name: string; floor: string }>>();
 	const deps: AcpTurnDeps = {
-		spawnChild: () => {
+		spawnChild: (launch) => {
 			const child = makeFakeChild();
 			children.push(child);
+			agentOf.set(child, agentFor(launch));
 			return child;
 		},
-		createConnection: (_child, registered) => {
+		createConnection: (child, registered) => {
 			handlers = registered;
 			return {
-				initialize: async () => ({}),
+				initialize: async () => ({ agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor } }),
 				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
 				setSessionConfigOption: async (p: any) => {
 					log.push(`set:${p.configId}=${p.value}`);
@@ -746,5 +766,46 @@ describe("ACP rows declare only the input the rail delivers (#142 landing review
 		const rows = adapters.allCuratedModels();
 		expect(rows.length).toBeGreaterThan(0);
 		for (const row of rows) expect(row.input, row.id).toEqual(["text"]);
+	});
+});
+
+describe("server admission before any session (#168)", () => {
+	/** A world whose server answers initialize as claude-agent-acp one patch below the floor. */
+	function belowFloorWorld() {
+		const world = makeWorld();
+		const wire: string[] = [];
+		const inner = world.deps.createConnection;
+		world.deps.createConnection = (child, handlers) => {
+			const connection = inner(child, handlers);
+			return {
+				...connection,
+				initialize: async () => ({ agentInfo: { name: "@agentclientprotocol/claude-agent-acp", version: "0.107.2" } }),
+				newSession: async (p: never) => {
+					wire.push("newSession");
+					return connection.newSession(p);
+				},
+			};
+		};
+		return { world, wire, restore: () => (world.deps.createConnection = inner) };
+	}
+
+	it("[QK:ACP-AGENT-ADMIT-BEFORE-SESSION] a server below its floor is refused after initialize: no session, no set, no prompt, and the child is not kept", async () => {
+		const { world, wire, restore } = belowFloorWorld();
+		const sealed = await runTurn(world, transcript("go"), "admit-below", "high");
+		expect(errorText(sealed)).toContain("acp-claude-version-unsupported");
+		expect(errorText(sealed)).toContain('"0.107.2"');
+		expect(wire).toEqual([]);
+		expect(world.log).toEqual([]);
+		// The refused child is not retained: the next turn of the same Pi session spawns a new one.
+		restore();
+		const admitted = await runTurn(world, transcript("go"), "admit-below", "high");
+		expect(admitted.type).toBe("done");
+		expect(world.children).toHaveLength(2);
+	});
+
+	it("[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT] the refusal reads as neither transient nor overflow to pi, so pi does not replay it", async () => {
+		const { world } = belowFloorWorld();
+		const sealed = await runTurn(world, transcript("go"), "admit-not-transient", "high");
+		assertNoReplay(errorText(sealed));
 	});
 });

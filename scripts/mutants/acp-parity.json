@@ -1,0 +1,380 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-parity",
+	"mutants": [
+		{
+			"claim": "ACP-AGY-THINKING-MENU",
+			"title": "an agy row maps every pi level onto itself — pi's menu then offers xhigh and max on Flash and Argon, its clamp keeps them, and the first turn at that level refuses as acp-agy-thinking-level-unsupported instead of running at the nearest level the row carries (the same edit also kills ACP-AGY-ROWS, which pins the map literal; this claim's own role is the tripwire on pi's clamp and menu semantics across an SDK bump)",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": ["\t\tmap[level] = offered.has(level) ? level : null;"],
+			"replace": ["\t\tmap[level] = level;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-THINKING-MENU]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-ADMIT-FLOOR",
+			"title": "agy's floor drops one patch — a 1.5.8 server, never measured, is admitted",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["export const AGY_ACP_AGENT = Object.freeze({ name: \"Antigravity ACP Server\", floor: \"1.5.9\" });"],
+			"replace": [
+				"export const AGY_ACP_AGENT = Object.freeze({ name: \"Antigravity ACP Server\", floor: \"1.5.8\" });"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-ADMIT-FLOOR]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-ADMIT-NAME",
+			"title": "the agy adapter admits under Claude's server name — another vendor's server passes as agy's",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tadmitAgent: (answer) => admitAcpAgent(answer, \"agy\", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, \"AGY_ACP_COMMAND\"),"
+			],
+			"replace": [
+				"\tadmitAgent: (answer) => admitAcpAgent(answer, \"agy\", ACP_AGY_VERSION_UNSUPPORTED, { ...AGY_ACP_AGENT, name: \"@agentclientprotocol/claude-agent-acp\" }, \"AGY_ACP_COMMAND\"),"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-ADMIT-NAME]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-ADMIT-FLOOR",
+			"title": "the Claude adapter admits against floor 0.0.0 — a pre-pin claude-agent-acp is admitted",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\t\tadmitAcpAgent(answer, \"claude\", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, \"CLAUDE_AGENT_ACP_COMMAND\"),"
+			],
+			"replace": [
+				"\t\tadmitAcpAgent(answer, \"claude\", ACP_CLAUDE_VERSION_UNSUPPORTED, { ...CLAUDE_ACP_AGENT, floor: \"0.0.0\" }, \"CLAUDE_AGENT_ACP_COMMAND\"),"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-ADMIT-FLOOR]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-ADMIT-NAME",
+			"title": "the Claude adapter admits under agy's server name — another vendor's server passes as Claude's",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\t\tadmitAcpAgent(answer, \"claude\", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, \"CLAUDE_AGENT_ACP_COMMAND\"),"
+			],
+			"replace": [
+				"\t\tadmitAcpAgent(answer, \"claude\", ACP_CLAUDE_VERSION_UNSUPPORTED, { ...CLAUDE_ACP_AGENT, name: \"Antigravity ACP Server\" }, \"CLAUDE_AGENT_ACP_COMMAND\"),"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-ADMIT-NAME]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-FLOOR-MATCHES-PIN",
+			"title": "the Claude floor drifts below the bundled pin",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"export const CLAUDE_ACP_AGENT = Object.freeze({ name: \"@agentclientprotocol/claude-agent-acp\", floor: \"0.107.3\" });"
+			],
+			"replace": [
+				"export const CLAUDE_ACP_AGENT = Object.freeze({ name: \"@agentclientprotocol/claude-agent-acp\", floor: \"0.107.0\" });"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGENT-ADMIT-BEFORE-SESSION",
+			"title": "the turn driver never admits the server — a below-floor server gets a session and the prompt",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tadapter.admitAgent?.(initialized);"],
+			"replace": ["\t\t\tvoid initialized;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGENT-ADMIT-BEFORE-SESSION]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-AGENT-ADMIT-NOT-TRANSIENT",
+			"title": "the refusal says the backend timed out — pi reads it as transient and replays the request",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\t\t`entwurf: ${refusal} — the ${backend} ACP backend answered initialize with ${observed}; entwurf requires ` +"
+			],
+			"replace": [
+				"\t\t`entwurf: ${refusal} — the ${backend} ACP backend timed out at initialize with ${observed}; entwurf requires ` +"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-AGENT-ADMIT-COMPARE",
+			"title": "the shared comparison admits one below the floor at the first differing part",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tfor (let i = 0; i < 3; i++) if (have[i] !== floor[i]) return have[i] > floor[i];"],
+			"replace": ["\tfor (let i = 0; i < 3; i++) if (have[i] !== floor[i]) return have[i] >= floor[i] - 1;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGENT-ADMIT-COMPARE]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGENT-ADMIT-STRICT-VERSION",
+			"title": "the version parse loses its end anchor — a pre-release or build-metadata version above the floor is admitted",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tconst m = /^(\\d+)\\.(\\d+)\\.(\\d+)$/.exec(value);"],
+			"replace": ["\tconst m = /^(\\d+)\\.(\\d+)\\.(\\d+)/.exec(value);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGENT-ADMIT-STRICT-VERSION]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGENT-ADMIT-OVERRIDE-NAMED",
+			"title": "a refusal stops naming the operator override that launched the server",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\t\t\t? ` (The server was launched by ${overrideEnv}, which owns its whole command line.)`"],
+			"replace": ["\t\t\t\t? \"\""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGENT-ADMIT-OVERRIDE-NAMED]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-DECISION",
+			"title": "invoke_subagent drops off the hidden-turn list — an agy child starts sub-agent turns with no ACP frame under v1:hidden-turns",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": ["const HIDDEN_TURN_TOOLS = Object.freeze([\"invoke_subagent\", \"schedule\", \"run_workflow\"]);"],
+			"replace": ["const HIDDEN_TURN_TOOLS = Object.freeze([\"schedule\", \"run_workflow\"]);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-DECISION]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-NO-POLICY-DENIES",
+			"title": "a seat command with no policy argument allows every tool — a child reading a seat written without the policy runs its hidden turns",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": [
+				"\tif (!policy) return deny(\"entwurf ACP policy: the hook command names no policy; every tool is denied\");"
+			],
+			"replace": ["\tif (!policy) return { decision: \"allow\" };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-NO-POLICY-DENIES]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-BAD-INPUT-DENIES",
+			"title": "hook input that is not JSON allows the call — a malformed or truncated stdin opens every tool",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": ["\t\treturn deny(\"entwurf ACP policy: the hook input is not JSON; every tool is denied\");"],
+			"replace": ["\t\treturn { decision: \"allow\" };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-BAD-INPUT-DENIES]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-FAILS-CLOSED",
+			"title": "both defences go — no decision line and no exit 1 — so the hook exits 0 with an empty stdout, which agy reads as allow",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": [
+				"\t\t\tprocess.stdout.write(`${JSON.stringify(decision)}\\n`);",
+				"\t\t\tprinted = true;",
+				"\t\t},",
+				"\t\t() => {",
+				"\t\t\tprocess.exitCode = 1;",
+				"\t\t},",
+				"\t)",
+				"\t.finally(() => {",
+				"\t\tif (!printed) process.exitCode = 1;",
+				"\t});"
+			],
+			"replace": [
+				"\t\t\tprinted = true;",
+				"\t\t},",
+				"\t\t() => {",
+				"\t\t\tprocess.exitCode = 1;",
+				"\t\t},",
+				"\t)",
+				"\t.finally(() => {",
+				"\t});"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-FAILS-CLOSED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOKS-SEAT-WRITTEN",
+			"title": "the seat's matcher narrows to run_command — every other tool, the hidden-turn ones among them, runs unhooked",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": [
+				"\t\t{ [AGY_ACP_HOOK_NAME]: { PreToolUse: [{ matcher: \"*\", hooks: [{ type: \"command\", command, timeout: 10 }] }] } },"
+			],
+			"replace": [
+				"\t\t{ [AGY_ACP_HOOK_NAME]: { PreToolUse: [{ matcher: \"run_command\", hooks: [{ type: \"command\", command, timeout: 10 }] }] } },"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOKS-SEAT-WRITTEN]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOKS-SEAT-REPLACES-FOREIGN",
+			"title": "any regular file at the seat is kept — an emptied or foreign hooks.json survives bootstrap and every tool runs unhooked",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\telse if (stat?.isFile() && readFileSync(seat, \"utf8\") === bytes) return;"],
+			"replace": ["\telse if (stat?.isFile()) return;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOKS-SEAT-REPLACES-FOREIGN]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOKS-SEAT-DIR-REFUSED",
+			"title": "a directory at the seat is not refused by name — the bootstrap fails on a rename error that names nothing",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tif (stat?.isDirectory()) {"],
+			"replace": ["\tif (stat?.isDirectory() && stat.isSymbolicLink()) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOKS-SEAT-DIR-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOKS-SEAT-UNIQUE-TEMP",
+			"title": "every writer uses one fixed temp name — two concurrent bootstraps can interleave bytes before either rename",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\treturn `${seatPath}.${process.pid}.${randomBytes(8).toString(\"hex\")}.tmp`;"],
+			"replace": ["\treturn `${seatPath}.tmp`;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOKS-SEAT-UNIQUE-TEMP]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-COMMAND-QUOTED",
+			"title": "a quote in the path is not escaped — sh -c splits or expands the hook command and agy runs something else",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\treturn `'${value.replaceAll(\"'\", \"'\\\\''\")}'`;"],
+			"replace": ["\treturn `'${value}'`;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-COMMAND-QUOTED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-PATH-RESOLVES",
+			"title": "the hook is resolved where it is not shipped — the seat names a file that does not exist, and agy denies every tool",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\treturn fileURLToPath(new URL(\"./agy-acp-hook.mjs\", import.meta.url));"],
+			"replace": ["\treturn fileURLToPath(new URL(\"../../../scripts/agy-acp-hook.mjs\", import.meta.url));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-PATH-RESOLVES]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-POLICY-SIGNATURE",
+			"title": "the hook policy leaves the reuse signature — a resident child spawned under another policy is reused",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\treturn { agyHookPolicy: AGY_HOOK_POLICY_HIDDEN_TURNS };"],
+			"replace": ["\t\treturn {};"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-POLICY-SIGNATURE]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-WIRED",
+			"title": "the adapter's ensureOverlay stops passing the hook command — the overlay carries no tool hook and every agy tool, the hidden-turn ones among them, runs unhooked",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\t\t(config.adapterSettings as AgyAdapterSettings).skillPlugins,", "\t\t\tagyAcpHookCommand(),"],
+			"replace": ["\t\t\t(config.adapterSettings as AgyAdapterSettings).skillPlugins,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-WIRED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-MIXED-READER",
+			"title": "the hook reads its policy from the child's env instead of its argument — a child spawned by a pi that predates the seat sets no such env, and is denied every tool the moment a newer pi writes the shared seat",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": ["\t.then((raw) => decide(process.argv[2], raw))"],
+			"replace": ["\t.then((raw) => decide(process.env.ENTWURF_ACP_AGY_HOOK_POLICY, raw))"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-MIXED-READER]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-HOOK-DENY-ALL",
+			"title": "v1:deny-all allows tools instead of denying them — a summary child can run shell commands",
+			"subject": "pi-extensions/lib/acp/agy-acp-hook.mjs",
+			"find": [
+				"\t\"v1:deny-all\": () =>",
+				"\t\tdeny(\"entwurf ACP policy v1:deny-all: this summary turn runs no tool; answer from the conversation text\"),"
+			],
+			"replace": ["\t\"v1:deny-all\": () => ({ decision: \"allow\" }),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-HOOK-DENY-ALL]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-OVERRIDE-REFUSED",
+			"title": "AGY_ACP_COMMAND override is not refused on summary turns — the summary child runs under the operator override without v1:deny-all isolation",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\t\tif (process.env.AGY_ACP_COMMAND?.trim()) refuseAgySummaryOverride();"],
+			"replace": ["\t\t\tif (false && process.env.AGY_ACP_COMMAND?.trim()) refuseAgySummaryOverride();"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-ISOLATED-DIR",
+			"title": "agy summary turns skip per-turn root isolation and reuse the shared overlay — risking shared-seat contamination",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tensureOverlay({ config, summaryTurn }) {", "\t\tif (summaryTurn) {"],
+			"replace": ["\tensureOverlay({ config, summaryTurn }) {", "\t\tif (false && summaryTurn) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]",
+			"signatureSource": "pi-extensions/lib/acp/agy-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-EXECUTION-DENIED",
+			"title": "agyAdapter drops summaryTurnMode — Pi summary turns on agy are refused again",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tsummaryTurnMode: \"execution-denied\","],
+			"replace": ["\t// summaryTurnMode removed"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-AGY-SUMMARY-CLEANUP-S3",
+			"title": "cleanupAgySummaryRoot deletes the isolated summary dir even when child exit is unconfirmed",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tif (!opts.childExited) {", "\t\treturn { cleaned: false, unlinkedPassthrough: [] };", "\t}"],
+			"replace": [
+				"\tif (false && !opts.childExited) {",
+				"\t\treturn { cleaned: false, unlinkedPassthrough: [] };",
+				"\t}"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGY-SUMMARY-CLEANUP-S3]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		}
+	]
+}

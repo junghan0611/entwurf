@@ -2,6 +2,8 @@
 
 **현재 레일 (2026-11-20):** #151 `/renew`(Pi native)는 브랜치 `151-renew`에서 끝났다. 설계·GLG 결정 원문·남은 경계는 [docs/renew-memory-outline.md](docs/renew-memory-outline.md), 증거(격리 실제 Pi 측정과 2026-11-19 첫 실제 renew 감사)는 [docs/baseline-receipts.md](docs/baseline-receipts.md)의 #151 절에 있다. 다음 순서(GLG, 2026-11-20 KST): #151 main 착지 → `168-acp-parity`를 main에 머지하고 #168의 추가 댓글 작업 → #169를 main에 문서로 넣기 → 0.60.0 릴리즈 준비(npm publish 전까지, publish는 GLG). 이후 작업은 이 기간 한정으로 main에서 진행한다(새 branch·worktree·clone 없음). **주체(GLG 원문): "응 main에 얼리고 168 169 실무코디는 클로드코드 오푸스가 담당한다 acp 레일 형제들은 이작업 못해"** — #168·#169의 실무와 공유 checkout writer는 native Claude Code Opus `20261113T043350-ff08d4`이고, 라우팅은 운영코디 `20261014T212756-68bd94`다. #151을 맡았던 `6a8b34`(Pi+ACP 레일)는 main 착지 뒤 writer 창을 운영코디에 돌려주고, 168·169 구현·검증·조율을 맡지 않는다. 아래는 main의 0.55.1 출하 기록이다.
 
+**#168 병합 (2026-11-20, ff08d4):** `168-acp-parity`(`f1345df7`)를 main에 병합했다(로컬, push 전). 남은 작업·결정·노트북 lane 영수증은 [NEXT--168-acp-parity.md](NEXT--168-acp-parity.md)의 HANDOFF와 #168 댓글 7006202786이 기준이다. 이 브랜치 NEXT는 #168 작업이 끝나면 지속 사실을 옮기고 지운다.
+
 0.55.0은 npm에 나갔다(GLG publish, 2026-11-16, dist-tags latest=0.55.0; 기록은 CHANGELOG 0.55.0). 0.55.1(2026-11-16 npm `latest`, GitHub release `v0.55.1`)은 세 묶음을 출하했다: #167 agy ACP backend 첫 출하(`5504cbd8` 어댑터와 `entwurf/agy-gemini-*` 3행, 설치 oracle `fc7d3d83`)와 그 prompt 단계 실패 재전송 차단(`39cadf51`), #164 Orca 안내(`plugins/orca/README.md`, 루트 README Orca 절), pi 기본 모델을 `claude-opus-5-5`로 고정하는 첫 행 등록(`6d7adf84`, QK ACP-ROWS-ANCHOR-FIRST). retired `claude-fable-5-1` 제거(`8f61e895`)도 0.55.0 뒤라 여기서 처음 나간다. #151 계획 문서는 브랜치 `151-renew`에만 있고 이 cut에 들어가지 않는다.
 
 # RAIL — 현재 좌표

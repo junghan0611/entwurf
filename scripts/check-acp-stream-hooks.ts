@@ -106,7 +106,13 @@ function makeHarness(recordDir: string) {
 	const promptCalls: Array<{ sessionId: string; prompt: Array<{ type: string; text: string }> }> = [];
 
 	const makeConnection = (_handlers: any) => ({
-		initialize: async () => ({ agentCapabilities: {} }),
+		initialize: async () => {
+			// #168: the pinned claude-agent-acp, read from the adapter's own floor so a bump moves it too.
+			const { CLAUDE_ACP_AGENT: a } = await import(
+				pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend-adapter.js")).href
+			);
+			return { agentCapabilities: {}, agentInfo: { name: a.name, version: a.floor } };
+		},
 		newSession: async () => ({ sessionId: "ACP-1" }),
 		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 		prompt: async (params: any) => {

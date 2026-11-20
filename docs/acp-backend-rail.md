@@ -50,8 +50,12 @@ Source of truth: `pi-extensions/lib/acp/backend-adapter.ts`.
 | `loadCarrier` | Return a short operator carrier or `null` when the backend has no carrier. |
 | `buildSessionMeta` | Build optional `newSession._meta` from the already-loaded carrier. |
 | `enforceModel` | Make the requested native model authoritative before the prompt. |
+| `resolveThinking?` / `enforceThinking?` | Both or neither (#142): map pi's thinking level to the backend value or refuse by name before any spawn, then set it on the live session and read it back. Absent means the level is not carried. |
 | `configSignatureFields` | Return a stable primitive map whose changes invalidate reuse. |
+| `sealsTurnAccounting?` | Declare measured `usage_update` cost semantics so the common loop seals occupancy, per-turn cost and the turn aggregate (#93). Absent means nothing is sealed. |
+| `summaryTurnMode?` | Declare how Pi's summary request runs (`"toolless"` — no tool surface in fact; `"execution-denied"` — tool schemas remain visible, isolated per-turn `v1:deny-all` hook blocks execution). Only modes in `ALLOWED_SUMMARY_TURN_MODES` are dispatched; absent or unknown refuses (`acp-summary-turn-unsupported`). |
 | `readPromptRejection?` | Name a backend-owned typed prompt rejection and its fixed app-policy verdict; absent means the existing verbatim-first failure path. |
+| `admitAgent?` | Admit the server that answered `initialize`, before any session (#168): its `agentInfo` must name the adapter's vendor at or above the adapter's floor; anything else — an absent `agentInfo` included — is a named refusal. Absent admits every server. |
 
 `backend.ts` resolves the adapter once at turn entry. Common config never branches on
 backend-specific keys; `adapterSettings` remains opaque until handed back to its owner.
@@ -193,7 +197,8 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
 and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK, Claude adapter and transitive Claude
-Agent SDK rows equal the published 0.53.1 (`[측정 2026-11-14]` `git show v0.53.1:package.json` and
+Agent SDK rows are the #168 candidate `0.107.3` / `2.7.0` / `0.3.325`, not yet published. The published
+0.53.1 ships `0.107.0` / `2.6.0` / `0.3.323` (`[측정 2026-11-14]` `git show v0.53.1:package.json` and
 its lockfile): #142 landed `0.106.0` / `2.6.0` / `0.3.322` and #163 moved the adapter to `0.107.0`
 and the transitive SDK to `0.3.323` (wire SDK unchanged). 0.53.0 carried the #142 set but was tagged
 and never published to npm. Before that, 0.36.1–0.52.0 shipped `claude-agent-acp 0.90.0` /
@@ -206,9 +211,9 @@ entry; its bumps are recorded in the ROADMAP Dep bump ledger.
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
 | pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 and 0.53.1 ship (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
-| ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry) |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.107.0` | **exact**, bundled | #163 bump over #142's 0.106.0, first published in 0.53.1 (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
-| Claude Agent SDK | `0.3.323` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| ACP wire SDK | `@agentclientprotocol/sdk 2.7.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry) |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.107.3` | **exact**, bundled | #168 candidate over 0.107.0 (#163, published in 0.53.1; 0.90.0 shipped 0.36.1–0.52.0); a missing package fails at launch resolution, with no PATH fallback; the server that answers `initialize` is admitted only at or above this pin (`acp-claude-version-unsupported`, §Backend parity); declaration is not compatibility evidence |
+| Claude Agent SDK | `0.3.325` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -304,7 +309,7 @@ different reasons, and collapsing them would hide a real risk**:
   nowhere, so `undefined !== false` holds and `allowBypass === ALLOW_BYPASS`;
   `ALLOW_BYPASS = !IS_ROOT || !!process.env.IS_SANDBOX` is **byte-identical** between the two
   versions (`dist/permissions/modes.js` 직독). Our overlay pins
-  `permissions.defaultMode: "bypassPermissions"` (`overlay.ts:122`), which resolves the same
+  `permissions.defaultMode: "bypassPermissions"` (`overlay.ts:124`), which resolves the same
   under both. The lever now EXISTS for a host that wants a non-bypass sibling; declaring it is a
   separate axis, not a one-line flip, and nothing in this bump takes it. That is the 0.79.0
   measurement; at 0.85.1 project or managed settings can drop bypass (the 0.79.0 → 0.85.1 entry
@@ -515,6 +520,34 @@ different reasons, and collapsing them would hide a real risk**:
     (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` on stderr), so the permission callback is not a gate for
     ordinary tool calls; the declared `tools`/`disallowedTools` surface is.
 
+- **0.107.0 → 0.107.3 (#168) moves the wire SDK a minor and changes one model-selection path.**
+  `[측정 2026-11-17, laptop, isolated lab installs outside the checkout, raw JSON-RPC; receipts are
+  host-local under ~/.local/share/entwurf-lab/168/claude-baseline/]`
+  - **Wire.** `@agentclientprotocol/sdk` 2.6.0 → 2.7.0: `PROTOCOL_VERSION` 1, the exports map, the
+    value exports, `./unstable` value exports and the method tables are unchanged; `Usage`,
+    `UsageUpdate` and `PromptResponse` types are byte-identical. Transitive Claude Agent SDK
+    0.3.323 → 0.3.325 (Claude Code 2.1.323 → 2.1.325).
+  - **Unlisted model ids (#1630).** A set-model id that matches no offered row, exactly or fuzzily,
+    now goes to Claude Code. An id it refuses is still `-32602`, with its reason appended
+    (`… claude-opus-9-9. Model 'claude-opus-9-9' not found`); an id it accepts becomes the current
+    value under its own id (`claude-fable-5-1` and `claude-opus-4-6` on a 5-row picker, refused at
+    0.107.0), so our readback accepts it. Our router admits curated ids only, so this path is not
+    reached by an Entwurf turn; the readback now certifies Claude Code's acceptance, not picker listing.
+  - **Unchanged on the wire (both versions, same procedure):** opus/sonnet alias readback, effort
+    `high`/`low` readback and `minimal` `-32602`, `_meta.steering.supported`, a mid-turn steer
+    `injected` and an idle steer `promptRequired`, the `usage_update` / `PromptResponse.usage` /
+    `_meta.quota` shapes and the `compaction_update` sequence. `v1/steering.js`,
+    `context-compaction.js`, `idle-compaction.js` and `result-end.js` are byte-identical, and the
+    `incomplete_tool_call` rejection block is unchanged. #1618 and #1632 are v2-only; a protocol-1
+    client gets the v1 agent.
+  - **Which Fable 5.2 row is offered depends on the session's own model.** A session created with
+    `_meta.claudeCode.options.model = claude-fable-5-2` offers `claude-fable-5-2` and reads it back as
+    its own row; a session created on another model offers the alias `fable` instead, and a set-model
+    to `claude-fable-5-2` there is answered `fable` and refused. Production always creates the session
+    on the requested id (`buildSessionMeta` sends it as `model`, and `nativeModelId` is in the reuse
+    signature, `backend.ts:1917-1921`), so it takes the first path. `[측정 2026-11-17 laptop, 0.107.0
+    and 0.107.3, no prompt, n=1 per cell, a fresh overlay per cell]`
+
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title
   `Compact conversation`, and `_meta.contextCompaction` schema v1 — where it used to arrive as
@@ -561,6 +594,73 @@ its JSON invocation). The probe waits for a valid MCP `initialize` response befo
 entwurf never repairs a launcher it does not own — a foreign one is reported fail-loud with the
 operator's repair named.
 
+## Backend parity — what each adapter provides (#168)
+
+Claude is the reference column (GLG, 2026-11-17). A new backend enters by filling one column. Each
+cell is one of four answers, with its evidence: **provided**, **refused by name** (the refusal token),
+**recorded limit** (the backend lacks the surface, or a measured cost stands), **unmeasured**. A
+`[QK:…]` is a deterministic assertion and certifies the contract, not a vendor runtime; LIVE and wire
+observations carry their date and count. agy wire facts are agy 1.5.9, `[측정 2026-11-16]`, from the
+#167 measurement comments, unless a cell says otherwise. Source coordinates were read on
+`168-acp-parity` at `7fa3f17d`. "Common" means the behaviour is the common loop's, so the deterministic
+proof is shared and only the wire facts differ per backend.
+
+**Adapter seats.**
+
+| Seat | Claude (reference) | agy |
+|---|---|---|
+| `routeModel` / `curatedModels` | **provided** — three unprefixed ids, anchor row first (`[QK:ACP-ROWS-ANCHOR-FIRST]`); the registered set `[QK:ACP-PROVIDER-CLAUDE-ONLY]` | **provided** — three `agy-` rows, prefix stripped, nothing else routes (`[QK:ACP-AGY-ROUTE-EXACT]`, `[QK:ACP-AGY-ROWS]`); cost 0 and window 1,048,576 from `usage_update.size` (`models.ts:190`, `:221`) |
+| `resolveLaunch` | **provided** — bundled `claude-agent-acp` exact `0.107.3`; a missing package fails at launch resolution, with no PATH fallback; `CLAUDE_AGENT_ACP_COMMAND` override (`backend-adapter.ts:462-471`) | **provided** — `agy` from PATH (`agyAdapter.resolveLaunch`, `backend-adapter.ts:898-902`); the version is admitted at `initialize`, not at launch (`admitAgent`, floor `1.5.9`); `AGY_ACP_COMMAND` override owns the whole line (`[QK:ACP-AGY-LAUNCH-ARGV]`). **recorded limit**: PATH-resolved, no pinned path |
+| `launchEnvDefaults` | **provided** — `CLAUDE_CONFIG_DIR` plus foreground-only work (`[QK:ACP-CLAUDE-FOREGROUND-ONLY]`) | **provided** — none; the overlay rides argv (`backend-adapter.ts:904-908`) |
+| `resolveAdapterSettings` | **provided** — no own settings; `tools`, `disallowedTools`, `permissionAllow`, `settingSources` are common config (`backend-adapter.ts:597-602`) | **refused by name** for the three narrowing keys (`acp-agy-narrowing-unsupported`, `[QK:ACP-AGY-NARROWING-REFUSED]`); only the GLOBAL `skillPlugins` is read (`[QK:ACP-AGY-SKILLS-GLOBAL-ONLY]`) |
+| `ensureOverlay` | **provided** — constant `CLAUDE_CONFIG_DIR` whitelist (`overlay.ts:146`); **recorded limit**: an overlay path that is itself a symlink is not refused (§Antigravity, Known limits) | **provided** — `--gemini-dir` state root with one linked token file (`[QK:ACP-AGY-OVERLAY-ONE-LINK]`, `-RELINK`, `-SWEEP`, `-REAL-DIRECTORY`); **recorded limit**: one overlay for every agy child, and a rule file a child writes there is loaded by later children |
+| `loadCarrier` / `buildSessionMeta` | **provided** — engraving replaces the preset in `_meta.systemPrompt` (`[QK:CARRIER-META-SENDS-CARRIER-VERBATIM]`); tools, plugins, inline settings and the strict MCP config ride `_meta.claudeCode.options` (`tool-surface.ts:165-225`; the server list rides wire `mcpServers`) | **provided** — engraving APPENDED in `_meta.antigravity.systemPrompt.append` (`[QK:ACP-AGY-CARRIER-APPEND]`; an appended rule shaped the reply, n=1); nothing else rides `_meta` |
+| `enforceModel` | **provided** — set-model answer read back against measured alias rows (`[QK:ACP-CLAUDE-SET-MODEL-READBACK]`, `[QK:ACP-CLAUDE-SET-MODEL-ALIAS-EXACT]`; authenticated no-prompt readback 0.106.0, 2026-11-13). Fable 5.2 reads back as its own row only on a session created with that model, which is the session production creates (0.107.0 and 0.107.3, 2026-11-17) | **provided** — answer read back, no alias rows (`[QK:ACP-AGY-SET-MODEL-READBACK]`); unoffered id `-32602 Unknown model ID` |
+| `resolveThinking` / `enforceThinking` | **provided** — pi level → `effort`, set and read back (`[QK:ACP-CLAUDE-EFFORT-READBACK]`, `[QK:ACP-THINKING-NEW-SET]`, `-REUSE-SET`); no level refuses `acp-thinking-level-unsupported` (`[QK:ACP-CLAUDE-THINKING-REFUSE-UNMAPPED]`) | **provided** — pi level → `thought_level`, set after the model and read back, the vendor's silent clamp caught (`[QK:ACP-AGY-THOUGHT-RESOLVE]`, `-READBACK`, `-CLAMP`); the LIVE turn loop (n=1) showed the lifecycle and readback notices. pi's own clamp lands `off`/`minimal` on `low` and an unoffered `xhigh`/`max` on the row's highest level (`[QK:ACP-AGY-THINKING-MENU]`); only a level that bypasses that clamp refuses `acp-agy-thinking-level-unsupported` |
+| `configSignatureFields` | **provided** — `{}` (`backend-adapter.ts:673-678`) | **provided** — `{ agyHookPolicy }`, the hook policy, so a resident child is not reused across a policy change (`agyAdapter.configSignatureFields`, `backend-adapter.ts:964-966`, `[QK:ACP-AGY-POLICY-SIGNATURE]`) |
+| `sealsTurnAccounting` | **provided** (`backend-adapter.ts:686`) — see the accounting rows below | **recorded limit** — not declared (`[QK:ACP-AGY-NO-SEAL]`): `usage_update` carries no cost |
+| `summaryTurnMode` | **provided** (`"toolless"`) — the summary child gets `tools: []`, no MCP, no plugin (`[QK:ACP-SUMMARY-TURN-TOOLLESS]`) | **provided** (`"execution-denied"`) — agy takes no tool list, so tool schemas stay visible; each summary turn runs in an isolated `0700` root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`) with `v1:deny-all` PreToolUse hook verified by byte readback before spawn, empty MCP/skills, and neutral cwd outside git (`[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]`, `[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]`, `[QK:ACP-AGY-HOOK-DENY-ALL]`). `AGY_ACP_COMMAND` override refuses summary turns by name (`acp-agy-summary-override-unsupported`, `[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]`). After confirmed child exit, only the isolated token symlink is unlinked; success removes `<turn>/`, failure preserves logs, unconfirmed exit touches nothing (`[QK:ACP-AGY-SUMMARY-CLEANUP-S3]`). Guarantee difference vs `"toolless"`: measured `Additional focus` temptation cost ~3× (31,045 vs ~10,300 tokens, n=1); summary text lives in Pi's compaction entry, so agy's turn copy is not Rule 8 memory |
+| `readPromptRejection` | **provided** for one kind — `-32603` `incomplete_tool_call` seals a fixed verdict (`[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW]`, `-REUSE`, `[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE]`); **recorded limit**: every other failure keeps the verbatim path, whose text or stderr tail can read as transient to pi (§Support contract, 0.79.0 → 0.85.1) | **provided** as one verdict for every failure after the prompt is sent (`[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`); bootstrap keeps the verbatim path (`[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]`). **recorded limit**: overflow, quota and login are not told apart — the raw failure and any overflow hint ride only `diagnostics` (`backend.ts:1754-1767`), so pi neither retries nor compacts. An empty, garbage or fake-expired token file fails at `session/new` with `-32000 Authentication required`, before any prompt — a bootstrap failure (#168, agy 1.5.9, 2026-11-17, n=1 each). **unmeasured**: agy's `session/prompt` wording for an exhausted quota, a login that expires mid-session, or an overflow |
+| `admitAgent` | **provided** — `initialize.agentInfo` must name `@agentclientprotocol/claude-agent-acp` at or above the bundled pin `0.107.3`, an override launch included; otherwise `acp-claude-version-unsupported` (`[QK:ACP-CLAUDE-ADMIT-FLOOR]`, `[QK:ACP-CLAUDE-ADMIT-NAME]`; the floor equals the `package.json` pin, `[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]`) | **provided** — `initialize.agentInfo` must name `Antigravity ACP Server` at or above `1.5.9`, an `AGY_ACP_COMMAND` launch included; otherwise `acp-agy-version-unsupported` (`[QK:ACP-AGY-ADMIT-FLOOR]`, `[QK:ACP-AGY-ADMIT-NAME]`). LIVE n=1, 2026-11-17: the live 0.107.3 and 1.5.9 answers admitted, the live 0.107.3 answer with its version set to 0.107.2 refused (BASELINE). Both: refused after `initialize` and before `session/new` — no session, no set, no prompt, the child not kept — with text pi reads as neither transient nor overflow (`[QK:ACP-AGENT-ADMIT-BEFORE-SESSION]`, `[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]`) |
+
+In the thinking row: `medium` is offered on every Claude and agy row (`claudeAcpThinkingLevelMap` and
+`agyThinkingLevelMap` in `models.ts`; `[QK:ACP-CLAUDE-THINKING-MENU]`, `[QK:ACP-AGY-THINKING-MENU]`), and agy's own
+`thought_level` default is `medium` (#167). It is the cross-backend default (GLG, 2026-11-17) and the
+level LIVE runs and measurements use.
+
+**Common loop.**
+
+| Function | Claude (reference) | agy |
+|---|---|---|
+| Session reuse (delta-only turns in a resident pi) | **provided** — common (`check-acp-session-reuse`) | **provided** — LIVE n=1 through the real turn loop (emitted build, sandbox HOME): turn 2 took `[acp: reusing live session]` and recalled turn 1 |
+| Stop-reason mapping | **provided** — common (`[QK:STOP-ABSENT-NOT-SUCCESS]`, `[QK:STOP-REFUSAL-NOT-SUCCESS]`, `[QK:STOP-TURNBUDGET-NOT-SUCCESS]`, `[QK:STOP-UNKNOWN-NOT-SUCCESS]`, `[QK:STOP-RAW-PRESERVED]`) | **provided** — common; `end_turn` and `cancelled` observed on the wire, other reasons unmeasured |
+| Abort, child death | **provided** — common (`[QK:ABORT-SENDS-PROTOCOL-CANCEL]`, `[QK:ABORT-ESCALATION-BOUNDED]`, `[QK:CHILD-EXIT-DIAGNOSED]`); ESC LIVE n=1 each (#142) | **provided** — common; raw driver n=1: `session/cancel` during a command answered `cancelled` in 6 ms, the tool settled `failed`. An abort through the turn loop is **unmeasured** |
+| Tool narrowing (`tools`, `disallowedTools`, `permissionAllow`) | **provided** — `tools` and `disallowedTools` in the session meta are the gate; `bypassPermissions` shadows the permission callback (§Support contract, 0.90.0 → 0.106.0) | **refused by name** — `acp-agy-narrowing-unsupported` (`[QK:ACP-AGY-NARROWING-REFUSED]`). A vendor seat exists — a `PreToolUse` hook matcher selects by agy's exact tool name (`invoke_subagent\|schedule` fired for those two tools only; #168, agy 1.5.9, 2026-11-17, n=1) — but a child with a shell rewrote its own seat and reopened a denied tool (#168 C2b, n=1), so a narrowing built on it could be undone by the child. The refusal stays, and narrowing is not implemented until agy offers a tool restriction the child cannot rewrite (SOL, 2026-11-17) |
+| Permission posture | **provided** — overlay `bypassPermissions` (`overlay.ts:124`) over the declared surface; a request that still arrives is approved by kind (`backend.ts:1052`); project or managed settings can drop bypass (§Support contract, 0.79.0 → 0.85.1) | **recorded limit** — `--dangerously-skip-permissions` (`agyLaunchArgs`): no `session/request_permission` is sent, and every native tool runs unasked, sub-agent, workflow and web-search tools included (GLG deferred reducing it, 2026-11-16). Without the flag agy asks `allow_once` / `reject_once`, and that does not bound the surface: a write under the system temp dir and `search_web` ran unasked, `invoke_subagent` and `schedule` started unasked, and settings `permissions.deny` had no effect in three seats (agy logged `Unknown field "permissions"`) (#168, agy 1.5.9, 2026-11-17, n=1 per tool). A `PreToolUse` hook answering `deny` stopped all seven probed tools, with or without the flag. A hook denied when it was missing, exited non-zero, printed non-JSON or timed out (on `run_command`; missing, non-zero and timeout also on `invoke_subagent` and `schedule`, with no hidden model call); one that exits 0 with nothing on stdout **allows**, and a broken or empty `hooks.json` loads no hook (n=1 each). A best-effort default, not a guarantee: the overlay's PreToolUse hook denies the three tools measured to start model turns with no ACP frame — `invoke_subagent`, `schedule`, `run_workflow` — and allows the rest (`v1:hidden-turns`, `[QK:ACP-AGY-HOOK-DECISION]`; §Antigravity, Known limits) |
+| Hooks | **provided** — configured-empty `hooks` in the overlay settings (`overlay.ts:121`), and project hooks excluded (`settingSources: []`, `config.ts:510`) | **provided** — one overlay PreToolUse hook (`<overlay>/config/hooks.json`, `[QK:ACP-AGY-HOOKS-SEAT-WRITTEN]`); **recorded limit** — agy loads `<cwd>/.agents/hooks.json` regardless (#168 O3), and no measured surface stops it (#168 W: `--include-default-customizations=false`, `--sandbox`, `trustedWorkspaces`, the repository only in `additionalDirectories`) |
+| Exclude-tools preflight | **provided** — common; the configured `tools` decide which built-ins the child still has (`tool-surface.ts:100-118`, `[QK:ACP-PREFLIGHT-REPLAYS-TRANSCRIPT-TOOLS]`) | **provided** — common; agy is assumed to expose the full native set, so excluding a pi built-in refuses |
+| Explicit MCP wiring | **provided** — wire `mcpServers` | **provided** — wire `mcpServers`, tools spelled `mcp_<server>_<tool>`; fresh-call LIVE n=1 called `…_entwurf_callback` and `…_entwurf_v2` |
+| Skills | **provided** — `skillPlugins` (global and project) become `plugins` (`tool-surface.ts:207-209`) | **provided** for the global list (`[QK:ACP-AGY-SKILLS-PROJECTED]`, `-RETRACTED`, `-COLLISION`); **recorded limit**: a project-only list reaches no agy child, with no notice |
+| Rule files and `settingSources` | **provided** — `settingSources: []`, so no CLAUDE.md is read; the first-user augment carries cwd `AGENTS.md` and `~/AGENTS.md` | **recorded limit** — `settingSources` is a Claude-only seat and is ignored; agy loads cwd and repository-root `AGENTS.md`/`GEMINI.md` itself, so the augment drops the cwd copy (`[QK:ACP-AGY-AUGMENT-CWD-AGENTS-DROPPED]`); with the cwd at home `~/AGENTS.md` arrives twice |
+| Tool start/done lines | **provided** — common `renderToolUpdate` | **provided** — one `tool_call` and one terminal `tool_call_update` per call; LIVE pane n=1 showed both lines |
+| Running tool: title line and elapsed beat (#162, #163 M1) | **provided** — title-only update (`[QK:ACP-TOOL-TITLE-SHOWN]`) and `_meta.claudeCode.toolResponse.elapsedTimeSeconds` beats (`event-mapper.test.ts:93`, measured 0.106.0) | **recorded limit** — no mid-flight frame: a 10 s command sent two frames, start and end, and nothing in between, so there is no frame to show. A 70 s command sent `tool_call in_progress` and nothing more for that tool: at the `WaitMsBeforeAsync` cap (10000 ms) it moved to a background task and the turn ended `end_turn` with the tool still `in_progress` (#168, agy 1.5.9, 2026-11-17, n=1); the beat reader is also `_meta.claudeCode`-only (`event-mapper.ts:299-303`), which changes nothing while agy sends no mid-flight frame |
+| Finished-tool output preview (#163 M2) | **provided** — `[QK:ACP-TOOL-OUTPUT-PREVIEW]`, `-FAILURE-TAIL`, `-BOUNDED` | **unmeasured** end to end. The wire shape is measured (#168, agy 1.5.9, 2026-11-17, n=1): a completed `run_command` `tool_call_update` carries `rawOutput: {output, exit_code}` and `content: [{type: "content", content: {type: "text", text}}]` with the same text, and no `_meta`; a hook-denied call carries `rawOutput: {output: ""}` and empty text. By reading, the preview takes no text from that `rawOutput` and falls back to `content` (`event-mapper.ts:368`, the `type: "content"` branch of `firstTextItem`), so its first line is agy's `Created At:` header rather than the command's output — not run through the mapper. A hook's deny `reason` is not in the frame; it reaches the model, whose next reply quoted `tool call denied by pre-tool hook: <reason>` (n=1) |
+| Thinking stream | **provided** — `agent_thought_chunk` → a thinking block (`event-mapper.ts:557-566`) | **unmeasured** — the common mapper would render it (`event-mapper.ts:557-566`); no #167 receipt shows agy sending `agent_thought_chunk` at any level (measurements ran at `low`) |
+| Context occupancy (`usage.totalTokens` ← `usage_update.used`) | **provided** — sealed (`[QK:ACP-CONTEXT-OCCUPANCY-PRESERVED]`) | **provided** — the common mapper writes `used` (`event-mapper.ts:583-585`); `used` is occupancy (8887 → 8993 in a one-tool turn whose `PromptResponse.usage.totalTokens` was 17880) |
+| Occupancy carried across a turn with no `used` | **provided** — `[QK:ACP-CONTEXT-OCCUPANCY-CARRIED]` (`backend.ts:1538-1542`) | **recorded limit** — not carried: the seal returns first (`backend.ts:1466`), so such a turn seals `totalTokens` 0. Pi 1.5.2 skips a zero-usage message and estimates from the last valid usage plus the trailing messages (`compaction.js:72-83`, `:110-135`; `agent-session.js:2577-2595`); measured with that function, a turn after `used` 8993 reads 8993 plus Pi's estimate of the trailing messages (9044 in one probe), where a carry would read 8993. agy sends `used` on every model round trip; `used: 0` arrives only after `session/new` (and a model or thinking change), not at the start of a reuse turn. A `session/cancel` 150 ms into a reuse prompt answered `cancelled` 3 ms later with no `usage_update` (#168, agy 1.5.9, 2026-11-17, n=1) — a turn with no `used`, observed: it seals `totalTokens` 0 on this row, and Pi's estimate above skips that zero-usage message, so the cancelled turn does not reset Pi's occupancy reading. A turn left with only a turn-start `used: 0` seals 0 on Claude too (`backend.ts:1538-1539`), so that case is not agy's |
+| Turn aggregate on `usage.acp` | **provided** — `[QK:ACP-TURN-ACCOUNTING-ATTACHED]`, wide rows preferred (`[QK:ACP-ACCOUNTING-PREFERS-WIDEST]`) | **recorded limit** — not relayed (`backend.ts:1466` precedes `:1484-1488`), although `PromptResponse.usage` arrives and was a round-trip sum (n=1). No reader in this repository consumes `usage.acp` |
+| Per-turn cost | **provided** — adjacent diff of the session estimate (`[QK:ACP-TURN-COST-SUM-MATCHES-SDK]`, `[QK:ACP-COST-BASELINE-HELD-WHEN-MISSING]`) | **recorded limit** — the wire carries no cost; the row price is 0 |
+| Cache-miss notice | **provided** — `[QK:ACP-CACHE-REBILL-REPORTED]`; the bound rests on a recurrence observed for Claude Code alone | **recorded limit** — no cost and no measured recurrence |
+| Remote steer inside a turn (#163 S7) | **provided** — `_session/steering` behind `_meta.steering.supported` (`[QK:ACP-STEER-CAPABILITY-GATED]`; adapter direct n=24) | **recorded limit** — initialize advertises no steering and `_session/steering` is `-32601`, so a steer waits in Pi's queue. A second `session/prompt` during a running tool turn is not a steer: it preempts. The first prompt resolved `end_turn` 10 ms after the second arrived, with no text; its running `run_command` never settled and its effect never happened within the observed window; the second began at the tool's `WaitMsBeforeAsync` boundary and answered normally (#168, agy 1.5.9, 2026-11-17, n=1). That `end_turn` cannot be told apart from a completed turn, so nothing uses it. This reverses the #167 reading (2026-11-16) that agy answers a second prompt inside the turn: that observation saw two `end_turn`s, the first of them a dropped turn |
+| Child compaction records (#163 S8) | **provided** — `compaction_update` behind the declared `session.compaction` (`[QK:ACP-COMPACT-CAPABILITY-DECLARED]`, `-DEPOSIT-ONCE`, `-SCOPE`) | **recorded limit** — no compaction capability advertised. `/compact` (advertised as a command) after three short turns sent no text and no compaction frame, only one `usage_update` and `end_turn`; that `used` (10,289) equals the compaction call's `totalTokens`, and the next turn read `used` 9,380 against 9,081 before it and recalled the first turn's facts (#168, agy 1.5.9, 2026-11-17, n=1; a system prompt of about 8.9k dominates a short session, so the reduction itself is not measured). agy's automatic compaction near a full window is **unmeasured** (not driven: quota) |
+| Child closed after a Pi compaction | **provided** — `[QK:ACP-COMPACT-CLOSES-CHILD]`, `[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT]` | **provided** (`[측정, LIVE n=1, 2026-11-17, flash/medium, sandbox HOME]`): `closeRetainedAcpSession` closed the retained agy child (`true`) and the next turn opened a new agy child that recalled the compacted token |
+| Adapter-initiated idle compaction | **provided** as a `_meta` shape (`idleCompaction: false`, `[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]`); its runtime effect is **unmeasured** | **unmeasured** — whether agy compacts or prompts on an idle session |
+| Background work | **provided** — `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` (`[QK:ACP-CLAUDE-FOREGROUND-ONLY]`); a command that detaches itself is outside it | **recorded limit** — `run_command` hands a command to a background task that outlives agy; accepted by GLG 2026-11-16 (Known limits). Reproduced on x86_64: a 70 s loop backgrounded at the 10000 ms cap stood at ppid 1 after agy exited (#168, agy 1.5.9, 2026-11-17, n=1) |
+| Other `session/update` kinds | **recorded limit** — ignored by the common `default:` (`event-mapper.ts:613-614`) | **recorded limit** — ignored by the common `default:` (`event-mapper.ts:613-614`); `/compact` is advertised among agy's available commands. Observed kinds: `user_message_chunk`, `agent_message_chunk`, `tool_call`, `tool_call_update`, `usage_update`, `session_info_update`, `available_commands_update`, `config_option_update` (#168, agy 1.5.9, 2026-11-17, every lab run); any other kind is **unmeasured** |
+| Image input | **recorded limit** — text only (`[QK:ACP-ROWS-TEXT-ONLY-INPUT]`, #161) | **recorded limit** — text only (`models.ts:220`), though agy advertises `promptCapabilities.image: true` |
+| Fresh call / resume | **provided** — exact curated admission; anything else `acp-model-not-curated` | **provided** for fresh call (LIVE n=1, 2026-11-16; `[QK:FRESHCOMP-ACP-AGY-TOOL-DIALECT]`); resume admission is deterministic only (`[QK:RESUME-ID-ACP-AGY-ADMITTED]`), a LIVE resume is **unmeasured** |
+| Version pin, doctor, LIVE gate | **provided** — exact adapter and wire SDK pins (`package.json:105-106`), the same pin enforced at `initialize` (`admitAgent`), `check-acp-sdk-surface`, `check-dep-versions`, the `release-gate` Claude axis | **provided** — floor `1.5.9` at `initialize` (`admitAgent`, `acp-agy-version-unsupported`); **recorded limit** — no ACP doctor, no LIVE gate; the `doctor-agy-*` gates cover the paused native-push install, not `agy acp` |
+
 ## Shipped adapters
 
 Claude and Antigravity (`agy acp`) are registered; Antigravity's seams and limits are in
@@ -597,7 +697,7 @@ requested id onto one of the rows it offers and answers with that row's `value` 
 model option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). Measured on
 2026-10-12 against 0.85.1, and again unchanged on 2026-10-14 against 0.90.0 (the second
 time also with the production session meta), and on 2026-11-13 against 0.106.0 authenticated
-(#142), with no prompt sent: `claude-fable-5-1` and `claude-fable-5-2` each answer their own row,
+(#142), with no prompt sent: `claude-fable-5-1` and `claude-fable-5-2` each answer their own row (2026-11-17: only on a session created with that model),
 while `claude-sonnet-5-5` and `claude-opus-5-5` answer the alias rows `sonnet` and
 `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row resolves to is not on the
 ACP wire, so `CLAUDE_SET_MODEL_ALIAS_ROWS` (`backend-adapter.ts`) declares, for each
@@ -640,7 +740,7 @@ Readback is the adapter's acceptance of the value, not evidence of the
 reasoning depth applied or of turn speed. `check-acp-set-model-readback` holds the contract
 offline (`backend.thinking.test.ts`, five effort mutants).
 
-The bundled adapter resolves before any PATH fallback. Its overlay retains only the
+The bundled adapter is the only launch without the operator override: a missing package fails at launch resolution, with no PATH fallback (`backend-adapter.ts:462-471`, `claude-acp-launch.js:88-94`). Its overlay retains only the
 auth/runtime state required by the Claude Agent SDK and hides operator memory, hooks,
 agents, history, and local settings. Rich project/operator context rides the first-user
 augment; the system carrier stays short to avoid changing billing semantics.
@@ -674,10 +774,11 @@ and the receipts are in the measurement comments on #167.
 | Carrier | engraving in `_meta.antigravity.systemPrompt.append` (advertised at initialize; an appended rule shaped the reply). It is APPENDED to agy's own system prompt, where Claude's replaces a preset; the first-user augment tells an agy child so. In the LIVE sibling on the operator HOME the model reported an `# Engraving Here` slot at the end of its system prompt (self-report, weak). agy loads the session cwd's `AGENTS.md` itself, so the augment omits its cwd `AGENTS.md` section for an agy child and keeps the `~/AGENTS.md` one |
 | Overlay | `--gemini-dir` moves the whole state root, so the overlay is a state root of its own with ONE file of the operator's agy state linked in — `antigravity-cli/antigravity-oauth-token` — plus the skill links the operator's global `skillPlugins` names (Skills row). An empty root answered `-32000 Authentication required`; with that one link `session/new` succeeded, also under a HOME holding nothing else. The link is re-established every bootstrap, a regular file found in its place is replaced, any other symlink directly under the overlay is removed, and an overlay path that is itself a symlink or not a directory refuses before anything is touched. One overlay is shared by every agy child of this operator |
 | MCP | explicit wire `mcpServers`; tools appear as `mcp_<server>_<tool>` (`mcp_entwurf-bridge_…`, hyphen kept) |
-| Permissions | the launch flag: no `session/request_permission` is sent. Without it agy asks with `allow_once` / `reject_once` |
+| Permissions | the launch flag: no `session/request_permission` is sent. Without it agy asks with `allow_once` / `reject_once` for `run_command`, a `write_file` inside the workspace and `run_workflow`; it does not ask for a write under the system temp dir, for `search_web`, or before starting `invoke_subagent` or `schedule`. Mode was `default`, both initial and read back (#168, agy 1.5.9, 2026-11-17, n=1 per tool) |
+| Tool hook (#168 ①) | `<overlay>/config/hooks.json` names one PreToolUse hook on every tool: `'<node>' '<package>/pi-extensions/lib/acp/agy-acp-hook.mjs' 'v1:hidden-turns'`, single-quoted because agy runs it through `sh -c`, and this process's own Node, as `resolveClaudeLaunch` runs `claude-acp-launch.js`, rather than a bare name the child's PATH would resolve. The policy is the hook's argument, not child env: the overlay is shared by every pi on the host, a pi that predates the seat sets no env for its children, and they re-read the seat on every call — so a policy in env would deny them every tool (`[QK:ACP-AGY-HOOK-MIXED-READER]`). The argument carries the one ordinary default only; per-child policy differences are not to be carried in the shared seat's command. The policy is also in the reuse signature. `v1:hidden-turns` denies `invoke_subagent`, `schedule` and `run_workflow` with a reason and allows every other tool; an unset or unknown policy and unreadable input deny, and the hook never exits 0 without a line, because agy reads an empty exit 0 as allow (`[QK:ACP-AGY-HOOK-FAILS-CLOSED]`). Measured (#168, agy 1.5.9, n=1 per cell): a hook deny stops a tool with or without the permission flag; under the deny no sub-agent or scheduled model call was made; a sub-agent's own tool calls pass through the same hook; the hook's reason reaches the model but not the ACP frame. The seat is rewritten every bootstrap — a foreign file replaced, a link removed (its target untouched), a directory refused `acp-agy-hooks-seat-not-a-file` — through a per-writer temp renamed over it. The adapter's own `ensureOverlay` call is proven against a sandbox HOME with the module graph re-imported (`[QK:ACP-AGY-HOOK-WIRED]`); the hook's path is proven beside the adapter (`[QK:ACP-AGY-HOOK-PATH-RESOLVES]`); the packed install carries it beside the adapter and runs it from the installed tree (`check-pack-install`: `v1:hidden-turns` denies `invoke_subagent` and allows `run_command`, a seat naming no policy denies) |
 | Session reuse | consecutive prompts on one session keep context. LIVE n=1 through the real turn loop (emitted build, sandbox HOME): turn 2 took `[acp: reusing live session]` and recalled turn 1 |
 | Cancel | n=1: `session/cancel` during a running command answered `stopReason: cancelled` 6 ms later, the tool settled `failed`, and the command was gone |
-| Backend setting | none. An operator `tools`, `disallowedTools` or `permissionAllow` setting REFUSES an agy turn (`acp-agy-narrowing-unsupported`): agy has no seat for them, and ignoring a narrowing on a child whose prompts are bypassed would hand back what the operator took away |
+| Backend setting | none. An operator `tools`, `disallowedTools` or `permissionAllow` setting REFUSES an agy turn (`acp-agy-narrowing-unsupported`): agy has no seat for them, and ignoring a narrowing on a child whose prompts are bypassed would hand back what the operator took away (a hook seat exists, but a child can rewrite it — §Backend parity, Tool narrowing) |
 | Skills | the operator's GLOBAL `entwurfProvider.skillPlugins`: each `<plugin>/skills/<name>` holding a `SKILL.md` is linked at `<overlay>/config/skills/<name>`, the seat agy discovers global skills in (measured n=1: a directory and a symlink there were both listed, under these launch flags; operator-HOME LIVE n=1, 2026-11-16: a fresh agy sibling listed 51 skills — the 46 projected links plus 5 built-in, self-report — and all 46 seat entries were symlinks). A link the setting no longer names is removed at the next bootstrap; a real directory in the seat is never removed; one skill name from two plugins refuses (`acp-agy-skill-name-collision`). Nothing is scanned: the operator's own `~/.gemini` skills are not followed |
 | Fresh call / resume | `entwurf_fresh_call` and `entwurf_resume_call` admit the three ids; the first-turn framing names the bridge tools in agy's spelling (`mcp_entwurf-bridge_entwurf_callback` / `_entwurf_v2` / `_entwurf_peers`), with no tool-load hint. Fresh call: LIVE n=1 (2026-11-16) — a Claude Code caller opened `entwurf/agy-gemini-3.8-flash`, the sibling called back about 10 s later with the matching nonce and sent one `entwurf_v2`, its pane showing both tool calls under the first two names; a reverse `entwurf_v2` was acknowledged `control-socket → queued-follow-up` and answered correctly. `_entwurf_peers` was called by a second LIVE sibling (n=1, sibling's report). Resume: deterministic only |
 
@@ -685,24 +786,17 @@ What stays out of the child is a structural claim, not an observed one: the stat
 and one file is linked. The only direct observation is weak — asked to list what it had, the model
 named no MCP server and five built-in skills.
 
-**What the common loop's Claude-shaped logic does on agy.**
-
-| Common logic | On agy | Evidence |
-|---|---|---|
-| Lifecycle, model lock, thought-level readback notices | works | LIVE turn loop, n=1 |
-| Tool visibility (#162) | works at start/finish granularity: one `tool_call` and one terminal `tool_call_update` with the whole output; nothing arrives while a command runs (a 10 s loop sent two frames) | frames |
-| Context occupancy | works: `usage_update` carries `used`/`size` (`size` 1,048,576 on all three rows) and pi reads `used` | frames, LIVE |
-| Turn accounting seal (#93) | inactive by declaration: `usage_update` has no cost, and the cache-miss bound is a Claude-only recurrence. Cost is reported as 0 | `sealsTurnAccounting` absent |
-| Remote steer inside a turn (#163 S7) | inactive: initialize advertises no `_meta.steering`, and `_session/steering` is `-32601 Method not found`; a steer waits in Pi's queue. (agy does accept a second `session/prompt` during a running turn and answers it inside that turn; nothing here uses that) | frames |
-| Child compaction records (#163 S8) | inactive: no compaction capability is advertised and `/compact` (advertised as a command) sent no `compaction_update`; nothing is recorded | frames |
-| Pi's summary turn (#163) | **refused by name** (`acp-summary-turn-unsupported`) before any child starts: agy takes no tool list, `plan` mode with the permission flag still ran a shell command, and a denied permission stops only tools that ask, so there is no tool-less child to summarize with. Pi's `/compact`, its threshold compaction, overflow recovery and `/tree` summaries therefore end in that error on an agy row; the message says to switch to a Claude row | `toollessSummaryTurn` absent; `[QK:ACP-AGY-SUMMARY-REFUSED]` |
-| Typed prompt rejection (#127) | not typed by kind: a prompt-phase exception the adapter catches after the prompt is sent seals the fixed `AGY_PROMPT_FAILURE_VERDICT` (not matched by pi's retry or overflow classifiers) with the raw failure kept as a diagnostic; a bootstrap failure keeps the verbatim-first message (Known limits below) | `[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`, `[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]` |
-| Exclude-tools preflight | works as for any non-Claude backend: agy is assumed to expose its full native set | `tool-surface.ts` |
-| `settingSources` | ignored: a Claude-only seat that narrows nothing | — |
-| `skillPlugins` | the global list is projected into the overlay's skill seat; a project-only list is not | Skills row above |
+What the common loop does on agy, seat by seat, is the agy column of §Backend parity above.
 
 **Known limits.**
 
+- **The floor is the only measured version, not a proven lower bound.** `agy acp` is admitted at
+  `1.5.9` or newer because 1.5.9 is the one version measured (#167); no older version was shown to
+  fail, and none newer was shown to work. The floor parse is strict X.Y.Z; any other shape
+  (a pre-release, build metadata, a malformed version) refuses, as does an absent `agentInfo`, since
+  nothing measured stands behind it (`[QK:ACP-AGENT-ADMIT-STRICT-VERSION]`). A refusal names the
+  operator override that launched the server — the variable, never its value
+  (`[QK:ACP-AGENT-ADMIT-OVERRIDE-NAMED]`).
 - **Background commands outlive the child.** agy's `run_command` hands a command to a background
   task after a model-chosen wait (`WaitMsBeforeAsync`, 500–10000 ms observed). Such a command is a
   direct child of `agy` in its own session and process group; when `agy` exits it is re-parented to
@@ -722,9 +816,13 @@ named no MCP server and five built-in skills.
   cured is reported instead, and so is a real overflow pi would have compacted and replayed. The
   operator inspects the preserved failure and any effects already completed before deciding how to
   continue; the whole prompt is not to be re-sent blindly.
-- **A level a row does not offer refuses the first turn.** A sibling opened on Argon or Flash with
-  pi's level at `off`, `minimal`, `xhigh` or `max` fails its first turn (`acp-agy-thinking-level-unsupported`)
-  rather than running at a level nobody chose; Hydrogen takes `xhigh`.
+- **A level a row does not offer is clamped by pi, not carried.** pi clamps every level it sets —
+  at session creation, on a model switch, on a level change and on a branch's recorded level
+  (pi-coding-agent 1.5.2 `sdk.js` `clampThinkingLevel`, `agent-session.js` `_clampThinkingLevel`) —
+  so on Argon or Flash `off`/`minimal` run at `low` and `xhigh`/`max` at `high`, and on Hydrogen
+  `max` runs at `xhigh` (`[QK:ACP-AGY-THINKING-MENU]`, pi's own clamp as the oracle). The turn then
+  runs at a level the operator did not type, as on a Claude row. Only a caller that bypasses pi's
+  clamp reaches the refusal `acp-agy-thinking-level-unsupported`.
 - **agy reads more rule files than a Claude child is given.** Marker files, n=4 cwd shapes: agy
   loaded `<cwd>/AGENTS.md` every time, the repository root's `AGENTS.md` and `GEMINI.md` when the
   cwd was inside a repository, and `<overlay>/config/AGENTS.md`/`GEMINI.md` as global rules; it did
@@ -734,7 +832,20 @@ named no MCP server and five built-in skills.
 - **The native tool surface is wide and cannot be narrowed.** The LIVE sibling listed sub-agent,
   schedule, workflow and web-search tools beside file and shell tools (self-report); with
   permissions bypassed none of them asks, and a narrowing setting refuses rather than applies.
-  GLG deferred reducing it (2026-11-16).
+  GLG deferred reducing it (2026-11-16). Without the flag, `reject_once` and settings deny rules do
+  not bound it either (Permission posture); a `PreToolUse` hook does stop a tool, but the child can
+  rewrite it, so it is used only for the hidden-turn default (Tool hook).
+- **Sub-agents, scheduled prompts and workflows run hidden turns.** `invoke_subagent` and `schedule`
+  complete or stay `in_progress` at once; the sub-agent's work, and the turn a fired `schedule` timer
+  starts, call the model and run tools with no ACP frame and no `session/request_permission` — agy's
+  log showed `streamGenerateContent` 20 s after a 20 s timer while the client received nothing, and
+  under the permission flag those turns executed commands. `run_workflow`'s `agent()` makes a model
+  call with no frame inside the calling turn (4 model calls against 3 for a one-tool turn). A
+  sub-agent's own tool calls pass through the same `PreToolUse` hook, and under a deny they were
+  denied with no marker written. Pi cannot see these turns, and they spend quota (#168, agy 1.5.9,
+  2026-11-17, n=1 per cell). The hidden-turn default (Tool hook) denies all three tools; with it, no
+  hidden model call was seen in a 35–40 s window, other tools unaffected (n=1; LIVE on production code,
+  lab sandbox HOME, 2026-11-17; BASELINE).
 - **The shared overlay persists what a child writes.** `<overlay>/config/AGENTS.md` and
   `GEMINI.md` are agy's global-rule seat and regular files are not swept: one an agy child wrote
   there is loaded by every later agy child.
@@ -743,12 +854,59 @@ named no MCP server and five built-in skills.
   only in a project's `.pi/settings.json` reaches a Claude child there and no agy child, with no
   notice. The skills were written for Claude sessions; whether their instructions fit agy's tools
   is not measured, and every linked skill's name and description is listed in agy's own prompt.
+- **The hidden-turn hook is a best-effort execution default, not a security or isolation
+  guarantee** (#168 ①). agy re-reads `config/hooks.json` on every tool call (measured n=1: a seat
+  written mid-session applied to that session's next call, and removing it reopened tools for the
+  next session), and the seat is a file every agy child can reach. A child with a shell rewrote its own seat to `{}` and its next `invoke_subagent` ran
+  (#168 C2b, n=1; that one path, through a shell — other write or execution tools were not tried);
+  asked to overwrite the seat directly, the model made no call (n=1), which is not a
+  barrier. A child that rewrites the shared seat disables ① for every sibling on that overlay until
+  the next child bootstrap rewrites the seat (composed from the re-read and the self-rewrite above,
+  not measured as one cell). With
+  a lab driver rewriting the shared seat while a second agy process ran, the first child's next call
+  in the same session followed the new bytes (#168 P, n=1). A broken or empty `hooks.json` loads no
+  hook and every tool runs (#168 B1); nothing beyond the bootstrap repairs it.
+- **The seat names the writing pi's Node and hook by absolute path.** If either disappears (a
+  garbage-collected or upgraded node store path, a moved checkout), every agy tool is denied until the
+  next bootstrap rewrites the seat. A pi started before this change does not remove the seat, so its
+  agy children also receive the default.
+- **A repository's own hooks run in an agy child.** agy loads `<cwd>/.agents/hooks.json` with
+  default customizations off, merges it with the overlay's hook, and a deny from either wins (#168
+  O3, n=1 per combination); a repository named only in `additionalDirectories` is loaded too, and
+  `--sandbox` and the `trustedWorkspaces` setting did not stop it (#168 W, n=1 each; W0 n=3). That
+  hook's command runs with the child's environment. A workspace hook that answers `force_ask`
+  reaches this client as `session/request_permission`, which entwurf approves by kind
+  (`resolvePermissionResponse`, `backend.ts:1047-1054`, picks `allow_once`/`allow_always`); `ask`
+  is approved by agy itself under the permission flag (n=1). Whether entwurf should warn about or
+  refuse a cwd holding `.agents/hooks.json` is GLG's decision.
+  `[측정, 2026-11-17, flash/medium, n=1 each]` agy walks up from `cwd` to the enclosing git root and
+  loads every `.agents/hooks.json` it encounters along that chain; it does NOT walk above the git
+  root or walk parents/HOME when `cwd` is outside a git repository (Step 0, 0b-1, 0b-2).
+  Because the summary root (`~/.pi/agent/agy-summary/<turn>/`) sits outside git, repository
+  workspace hooks do not enter summary turns; if the operator ever turns `~` into a git work tree,
+  any `.agents/hooks.json` between `~/.pi/agent/agy-summary/…` and that root would load (all
+  operator-owned paths, not untrusted repository code).
+- **Summary turns run in `"execution-denied"` mode, not `"toolless"` (#168).** Tool schemas remain
+  visible to the model (`~3×` token cost observed when tempted by `Additional focus`: 31,045 vs
+  ~10,300 tokens, n=1); `v1:deny-all` blocks execution before any tool runs. `AGY_ACP_COMMAND`
+  overrides refuse summary turns by name (`acp-agy-summary-override-unsupported`) because an
+  override owns the command line and bypasses `--gemini-dir` isolation. Summary results are saved
+  in Pi's compaction entry, so agy's per-turn copy is not Rule 8 memory; cleanup unlinks only the
+  summary root's token symlink after confirmed child exit and deletes the root on success
+  (`[측정, LIVE n=1, 2026-11-17, flash/medium]`: root and token symlink removed in `1,119 ms` after
+  `generateSummary` returned, 0 lingering PIDs, 0 warnings; an immediate host-process exit before
+  `waitForChildExit` settles can leave an uncleaned root).
+  Overflow-recovery compaction remains blocked on agy because `readAgyPromptRejection` seals all
+  prompt-phase errors as non-replayable (overflow error wording unmeasured).
 - **`--sandbox` and mode `auto` are not usable on the measured host.** With either, every
   `run_command` failed (`connecting to sandbox server: … connection reset by peer`, n=1, cause not
   identified). The adapter sets neither and keeps mode `default`; only an `AGY_ACP_COMMAND`
   override could reach them.
-- **Not measured:** whether a token refresh writes through the credential link or renames over it
-  (the link policy above is what repairs a rename at the next bootstrap); agy's own automatic compaction near a full
+- **A token refresh writes through the credential link.** A lab agy on a linked token refreshed it
+  (`token refreshed`, agy log, 2026-11-17, n=1); the operator's token file was written and every
+  linked lab path was still a link afterwards. Whether the token rotated is not measured.
+- **Not measured:** agy's `session/prompt` wording for an exhausted quota, a login that expires
+  mid-session, or an overflow (not induced); agy's own automatic compaction near a full
   window; `agent_thought_chunk` above `low`; which skill agy lists when
   a projected skill carries a built-in skill's name.
 - The row's `maxTokens` is an entwurf-declared number pi requires; nothing sends it to agy.
@@ -757,9 +915,15 @@ named no MCP server and five built-in skills.
 
 Gates: `agy-adapter.test.ts` (routing, rows, launch admission, launch argv, carrier, set-model and
 thought-level readback, the clamp, operator narrowing, the overlay link, sweep and real-directory
-rules, the skill projection, retraction, collision and global-only rules), `augment.test.ts` (what
+rules, the skill projection, retraction, collision and global-only rules, the rows through pi's
+own clamp, `[QK:ACP-AGY-THINKING-MENU]`, and the tool hook: the seat `[QK:ACP-AGY-HOOKS-SEAT-WRITTEN]`,
+`-REPLACES-FOREIGN`, `-DIR-REFUSED`, `-UNIQUE-TEMP`; the real hook spawned through `sh -c`
+`[QK:ACP-AGY-HOOK-PATH-RESOLVES]`, `-COMMAND-QUOTED`, `-DECISION`, `-NO-POLICY-DENIES`,
+`-BAD-INPUT-DENIES`, `-FAILS-CLOSED`; `[QK:ACP-AGY-POLICY-SIGNATURE]`; the adapter's `ensureOverlay`
+under a sandbox HOME `[QK:ACP-AGY-HOOK-WIRED]`, and the seat read by a pre-seat pi's child and a newer
+one's `[QK:ACP-AGY-HOOK-MIXED-READER]`), `augment.test.ts` (what
 an agy child is told, and the cwd `AGENTS.md` it is not handed twice), `backend.summary-turn.test.ts`
-(`[QK:ACP-AGY-SUMMARY-REFUSED]`, and an untagged agy turn through the real driver),
+(`[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]`, `[QK:ACP-SUMMARY-MODE-EXPLICIT]`, `[QK:ACP-AGY-SUMMARY-CLEANUP-S3]`, and an untagged agy turn through the real driver), `agy-adapter.test.ts` (`[QK:ACP-AGY-HOOK-DENY-ALL]`, `[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]`, `[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]`),
 `test/fresh-call-composition.contract.test.ts` (`[QK:FRESHCOMP-ACP-AGY-TOOL-DIALECT]`),
 `check-resume-launch-identity` (`[QK:RESUME-ID-ACP-AGY-ADMITTED]`), `check-acp-provider-surface`
 (the exact registered set).
@@ -1134,6 +1298,15 @@ summary on a Claude ACP model.
   is the embedding source. Pi keeps an `aborted` summary (it refuses only `error` and `length`,
   pi-coding-agent 1.5.2 `compaction.js:454-462`), so a `cancelled` stop that Pi did not abort is
   sealed as a non-transient error instead.
+- **`agy` (`"execution-denied"`, #168).** Because `agy` takes no `tools` list on `session/new`,
+  tool schemas stay visible to the model (measured `Additional focus` temptation cost ~3×:
+  31,045 vs ~10,300 tokens, n=1). Instead of Claude's `tools: []` and `settingSources: []`, each
+  summary turn gets a per-turn `0700` root outside git (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`),
+  a neutral empty `cwd` (avoiding repo `.agents/hooks.json` walk-up), empty MCP/skills, and a
+  `v1:deny-all` `PreToolUse` hook (`hooks.json` byte readback check in source). `AGY_ACP_COMMAND`
+  overrides refuse summary turns by name (`acp-agy-summary-override-unsupported`). Cleanup unlinks
+  only the isolated root's passthrough symlinks after confirmed child exit, removing `<turn>/` on
+  `stop` and preserving it on `length`/error/unconfirmed exit.
 - **After compaction.** `acp-provider.ts` subscribes to `session_compact` and closes that Pi
   session's retained child at once (GLG 2026-11-14), unless a turn is in flight. A session is busy
   only inside its key's in-flight claim, so the in-flight check covers both. The next turn opens a
