@@ -121,6 +121,10 @@ Herdr launch rail.
 
 On an Orca server, install Entwurf with `npm install -g @junghanacs/entwurf@<version>` and run `entwurf setup`; Claude Code started by Orca and `entwurf pi` in a terminal then become citizens (measured on one host, Orca v1.4.259). See the [Orca guide](./plugins/orca/README.md).
 
+### Herdr App and core terminals
+
+On a host whose Herdr App or `hc` terminals run on herdr-core, start the core outside the Herdr TUI, install Entwurf with `npm install -g @junghanacs/entwurf@<version>` and run `entwurf setup`; `entwurf pi` and the App's Claude button then become citizens (measured on one laptop, App tab only). See the [Herdr core guide](./plugins/herdr-core/README.md).
+
 ## First steps
 
 Start a citizen in your project:
