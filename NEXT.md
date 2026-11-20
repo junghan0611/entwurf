@@ -7,8 +7,9 @@
 - [x] **1. 문서 검토.** `5839be8a`: Sol(b3c436)·Terra(4677a7) 두 차례 리뷰, #151 거짓 성공 Blocker 해소. PARTIAL acp-vendor-rejection 8/8, readback 101/101, provider-surface 2/2, session-reuse 1/1.
 - [x] **2. prepare 0.60.0.** `c2f15ced`: P4 FULL 1078s(seal `7f32b505ebf5d8ea`; 첫 FULL은 Herdr lock 미전환으로 red), P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0, OpenClaw home receipt 새 실측(GLG 승인, `~/.local/share/entwurf-lab/160/receipt-0.60.0-5839be8a/`). 증거는 CHANGELOG 0.60.0 Release evidence.
 - [x] **3. make → publish.** exact-SHA CI run 44685553830, Windows preview run 44687247725, candidate sha256 `85b4d7fc…1427`(container 수용), tag `v0.60.0`, GitHub release. GLG npm publish; U2 latest=0.60.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패, GLG 결정으로 생략.
-- [ ] **4. Herdr re-pin.** ← CURRENT: `runtime-lock.json` npm 0.60.0(registry sha512 = integrity, sha256 = 수용 후보)과 setup/durable 문서의 현재 버전 0.60.0 정렬(배포된 0.60.0 tarball 문서는 0.55.1 표기 그대로). 남은 것: push → exact-SHA CI → snapshot tag `v2026.11.20-herdr.0.60.0` + GitHub release.
-- [ ] **5. 이슈 닫기.** #151·#168·#169에 출하 댓글 후 닫는다. #171은 열어 둔다.
+- [x] **4. Herdr re-pin.** `3d4d5f55`(exact-SHA CI run 44691169782): `runtime-lock.json` npm 0.60.0(registry sha512 = integrity, sha256 = 수용 후보), setup/durable 문서 현재 버전 0.60.0(배포된 tarball 문서는 0.55.1 표기 그대로), `PI-FLOOR-PUBLISHED-SCOPE` 앵커 이동(PARTIAL dep-versions 5/5). snapshot tag + GitHub release `v2026.11.20-herdr.0.60.0`(Latest는 v0.60.0 유지).
+- [x] **5. 이슈.** #151(이미 닫힘)·#168·#169에 출하 댓글, #168·#169 닫음(2026-11-20). #171은 열림.
+- [ ] **6. 다음.** ← CURRENT: GLG가 다음 레일을 정한다. 후보: #171, `agy-adapter.test.ts:320` sandbox 회수, prepare 체크리스트에 Herdr lock 전환·문서 버전 문구 넣기.
 
 **0.60.0 cut 관찰:** `pi-extensions/lib/acp/agy-adapter.test.ts:320`이 `/tmp/acp-agy-thinking-*` sandbox를 지우지 않는다(P9에서 112개). prepare 체크리스트에서 Herdr lock 전환과 `docs/setup-clean-host.md`·`docs/durable-native-support.md` 버전 문구가 빠지기 쉽다(이번에 둘 다 놓침; 후자는 `PI-FLOOR-PUBLISHED-SCOPE` mutant 앵커와 묶여 있다).
 
