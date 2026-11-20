@@ -4,6 +4,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.20-herdr.0.60.0 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.60.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.55.1 (`v2026.11.16-herdr.0.55.1`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `85b4d7fc5ae93556c0a9b3f6073b8f5ae317b76f2e53b4bf0b394a3189291427` matches the accepted core artifact byte for byte; independently computed sha512 matches the npm integrity and this lock. The publication moved `latest` to 0.60.0 and left `repair` at the value recorded before publication (`0.12.8-repair.1`, U0 receipt `publish-u0.g2aNTi` beside the candidate). Core `v0.60.0`, its accepted artifact and npm bytes are unchanged.
+- In a private sandbox (private HOME, XDG roots and agent directory), `pi install npm:@junghanacs/entwurf@0.60.0` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the three Claude rows and the three agy rows with no provider error; the install printed the same peerDependencies warning as 0.55.1.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.60.0, a source swap, a real Herdr registration, public-ref installation, a vendor model turn, an operating-host upgrade, or 0.60.0 inside Orca.
+- Documentation drift fixed here, not in the published bytes: the setup guide and the durable support page shipped in 0.60.0 still name 0.55.1 as the current package and in their `npm install` examples. This commit names 0.60.0 in `docs/setup-clean-host.md` and `docs/durable-native-support.md`; the npm 0.60.0 tarball keeps the older text.
+- That doc edit moved the anchor of mutant `PI-FLOOR-PUBLISHED-SCOPE` (`scripts/mutants/pi-floor.json`), so its find/replace strings now name 0.60.0. PARTIAL `["bash","run.sh","check-dep-versions"]` 5/5 killed, control ok (head c2f15cedf45e surface 9f04bc841a78 receipt f19524805b9a). On the same uncommitted tree the seven Herdr gates, `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` and lint were green. Exact pushed-SHA CI requires its own receipt.
+
 ## 0.60.0 — 2026-11-20
 
 ### What an npm user gets

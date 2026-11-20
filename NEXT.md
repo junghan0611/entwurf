@@ -1,18 +1,16 @@
-# NEXT — 0.55.1 shipped: #167 agy ACP backend + #164 Orca guide + opus-first entwurf row
+# NEXT — 0.60.0 shipped: #151 /renew + #168 ACP parity + #169 Herdr App guide
 
-**현재 레일 (2026-11-20):** #151 `/renew`(Pi native)는 main `b4971826`에 착지했다. [설계·운영 규약](docs/renew-memory-outline.md)과 [#151 영수증](docs/baseline-receipts.md)(격리 실제 Pi 측정과 2026-11-19 첫 실제 renew 감사)이 후속 기준이다. #168 병합(`23fe4215`)과 #169 문서 착지(`927aba1f`·`9585ccaf`) 뒤, 지금은 0.60.0 준비 전 문서 검토다(npm publish는 GLG). 이후 작업은 이 기간 한정으로 main에서 진행한다(새 branch·worktree·clone 없음). **주체(GLG 원문): "응 main에 얼리고 168 169 실무코디는 클로드코드 오푸스가 담당한다 acp 레일 형제들은 이작업 못해"** — #168·#169의 실무와 공유 checkout writer는 native Claude Code Opus `20261113T043350-ff08d4`이고, 라우팅은 운영코디 `20261014T212756-68bd94`다. #151을 맡았던 `6a8b34`(Pi+ACP 레일)는 main 착지 뒤 writer 창을 운영코디에 돌려주고, 168·169 구현·검증·조율을 맡지 않는다. 아래는 main의 0.55.1 출하 기록이다.
-
-**#168 병합 (2026-11-20, ff08d4):** `168-acp-parity`(`f1345df7`)를 main에 병합했다(로컬, push 전). 브랜치 NEXT(`NEXT--168-acp-parity.md`)는 0.60.0 문서 검토에서 지속 사실을 [ACP rail](docs/acp-backend-rail.md)·[baseline 영수증](docs/baseline-receipts.md)에 남은 사실을 확인한 뒤 지웠고, 그 NEXT에만 있던 2단계 후보 PARTIAL/FULL 영수증은 [#168 댓글 7028224332](https://github.com/junghan0611/entwurf/issues/168#issuecomment-7028224332)로 옮겼다. 남은 측정은 #168 댓글 7006202786과 rail의 agy Known limits가 기준이다.
-
-0.55.0은 npm에 나갔다(GLG publish, 2026-11-16, dist-tags latest=0.55.0; 기록은 CHANGELOG 0.55.0). 0.55.1(2026-11-16 npm `latest`, GitHub release `v0.55.1`)은 세 묶음을 출하했다: #167 agy ACP backend 첫 출하(`5504cbd8` 어댑터와 `entwurf/agy-gemini-*` 3행, 설치 oracle `fc7d3d83`)와 그 prompt 단계 실패 재전송 차단(`39cadf51`), #164 Orca 안내(`plugins/orca/README.md`, 루트 README Orca 절), pi 기본 모델을 `claude-opus-5-5`로 고정하는 첫 행 등록(`6d7adf84`, QK ACP-ROWS-ANCHOR-FIRST). retired `claude-fable-5-1` 제거(`8f61e895`)도 0.55.0 뒤라 여기서 처음 나간다. 0.55.1에는 #151이 들어가지 않았다.
+**현재 (2026-11-20):** 0.60.0을 npm `latest`로 출하했다(GLG publish). 내용은 #151 `/renew`(Pi native, checkout 전용 스킬), #168 ACP parity(Claude ACP 0.107.3, agent floor 수용, agy hidden turn 기본 거부, agy summary turn), #169 Herdr App·core 안내다. 이월은 #171(ACP persisted `session/load`, Claude·agy 공통)이다. 역할: 운영코디 `20261014T212756-68bd94`, main writer·릴리스 실무 `20261113T043350-ff08d4`.
 
 # RAIL — 현재 좌표
 
-- [x] **1. main 후보.** main `8fabe6ac`(frozen FULL 1011s green, check-pack-install green, exact-SHA CI run 43821793109) → terra 73d3a8 문서 정리 `bcf906ab`(68bd94 리뷰 B0/D0, focused gates + PARTIAL dep-versions 5/5, exact-SHA CI run 43822526404; FULL 미승계). OpenClaw landlord-home receipt `bcf906ab` green(`~/.local/share/entwurf-lab/160/receipt-0.55.1-bcf906ab/receipt.json`, GLG 웹 관측 포함).
-- [x] **2. prepare 0.55.1.** `2c0e36e5`: P4 FULL 1026s, P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0 on seal `13f72abaf65ded3d`; saved-default 셀 run 2(sandbox) opus 선택, run 1은 사고 기록. 증거는 CHANGELOG 0.55.1 Release evidence.
-- [x] **3. make → publish.** exact-SHA CI run 43834942508, Windows preview run 43836522833, candidate sha256 `8298b99f…71745`(container 수용), tag `v0.55.1`, GitHub release. GLG가 npm publish(2026-11-16); U2 latest=0.55.1/repair 유지, U3 registry 설치 6행 확인.
-- [x] **4. Herdr re-pin.** `29594b9a`(exact-SHA CI run 43845189555): `runtime-lock.json` npm 0.55.1(registry sha512 = integrity, sha256 = 수용 후보), Orca 가이드 범위 문장 정렬. snapshot tag + GitHub release `v2026.11.16-herdr.0.55.1`(Latest는 v0.55.1 유지).
-- [x] **5. 이슈와 브랜치 복귀.** #164 닫음(2026-11-16, 출하 댓글 6913579384). #167은 출하 댓글 6913578444로 닫았다가 같은 날 다시 열렸고, 2026-11-17 #168에 흡수되어 not planned로 닫혔다. 이후 main을 당시 #151 작업 브랜치 `151-renew`에 병합했다(이력; 그 브랜치 NEXT는 main 착지 전에 삭제됨).
+- [x] **1. 문서 검토.** `5839be8a`: Sol(b3c436)·Terra(4677a7) 두 차례 리뷰, #151 거짓 성공 Blocker 해소. PARTIAL acp-vendor-rejection 8/8, readback 101/101, provider-surface 2/2, session-reuse 1/1.
+- [x] **2. prepare 0.60.0.** `c2f15ced`: P4 FULL 1078s(seal `7f32b505ebf5d8ea`; 첫 FULL은 Herdr lock 미전환으로 red), P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0, OpenClaw home receipt 새 실측(GLG 승인, `~/.local/share/entwurf-lab/160/receipt-0.60.0-5839be8a/`). 증거는 CHANGELOG 0.60.0 Release evidence.
+- [x] **3. make → publish.** exact-SHA CI run 44685553830, Windows preview run 44687247725, candidate sha256 `85b4d7fc…1427`(container 수용), tag `v0.60.0`, GitHub release. GLG npm publish; U2 latest=0.60.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패, GLG 결정으로 생략.
+- [ ] **4. Herdr re-pin.** ← CURRENT: `runtime-lock.json` npm 0.60.0(registry sha512 = integrity, sha256 = 수용 후보)과 setup/durable 문서의 현재 버전 0.60.0 정렬(배포된 0.60.0 tarball 문서는 0.55.1 표기 그대로). 남은 것: push → exact-SHA CI → snapshot tag `v2026.11.20-herdr.0.60.0` + GitHub release.
+- [ ] **5. 이슈 닫기.** #151·#168·#169에 출하 댓글 후 닫는다. #171은 열어 둔다.
+
+**0.60.0 cut 관찰:** `pi-extensions/lib/acp/agy-adapter.test.ts:320`이 `/tmp/acp-agy-thinking-*` sandbox를 지우지 않는다(P9에서 112개). prepare 체크리스트에서 Herdr lock 전환과 `docs/setup-clean-host.md`·`docs/durable-native-support.md` 버전 문구가 빠지기 쉽다(이번에 둘 다 놓침; 후자는 `PI-FLOOR-PUBLISHED-SCOPE` mutant 앵커와 묶여 있다).
 
 # #164 Orca 증거 (노트북 lane에서 승격, oracle은 Orca를 설치하지 않는다)
 
@@ -24,7 +22,7 @@
 
 # NOW
 
-- **역할 (2026-11-16):** 운영코디 68bd94, ff08d4 main 수용·prepare. #151 팀(6a8b34 구현, a30dda)은 이 cut 동안 공유 checkout 쓰기를 멈춘다.
+- **역할 (2026-11-20):** 운영코디 68bd94, ff08d4 main writer·릴리스 실무.
 - **운영 관찰:**
   - oracle의 pi는 이 checkout을 package로 로드한다(`pi.extensions`가 `.ts` 소스). 새로 뜨는 pi는 미커밋 작업트리를 그대로 쓰고, 편집 중간 상태에서 뜨면 entwurf provider 전체가 등록에 실패할 수 있다. MCP bridge는 dist라 `build-bridge` 전까지 src/dist가 어긋난다(#167 리뷰 895788 관찰, #165 맥락).
   - 새 backend를 store에 처음 쓰기 전에는 installed writer 전부(`doctor-codex-birth`는 helper bytes staleness를 보지 않으므로 `install-state.json`의 unit 버전도), omp·copilot doctor를 확인한다. 0.55.0 cut에서 Codex birth helper(0.41.1)·OMP·Copilot receive가 `openclaw` record를 보고 store 쓰기를 거절했다.

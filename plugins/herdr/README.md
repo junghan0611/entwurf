@@ -137,17 +137,15 @@ directory that harness owns, and it will not invent one: `herdr integration inst
 commands are ordinary invocations — no model turn, no login, no account.
 
 **Which runtime these steps install.** The `runtime-lock.json` at the ref Herdr resolves names
-what step 5 acquires. This checkout's unpublished 0.60.0 preparation uses the closed
-`herdr-checkout` verification carrier: the exact commit Herdr checked out, with SDK 1.5.2 and host
-Pi `>=1.5.2 <1.6`. It is not an npm 0.60.0 pin or evidence of acquisition, activation or LIVE. The
-last published npm pin is `@junghanacs/entwurf@0.55.1` (SDK 1.5.2, snapshot
-`v2026.11.16-herdr.0.55.1`). The plugin manifest version is independent and is unchanged. An
-unversioned install reaches this candidate only when the commit carrying it reaches the ref Herdr
-resolves; inspect that ref and its lock.
+what step 5 acquires. The npm pin is `@junghanacs/entwurf@0.60.0` (SDK 1.5.2, host Pi
+`>=1.5.2 <1.6`, snapshot `v2026.11.20-herdr.0.60.0`), with the registry tarball's measured sha512.
+The plugin manifest version is independent and is unchanged. An unversioned install reaches this
+pin only when the commit carrying it reaches the ref Herdr resolves; inspect that ref and its lock.
 Moving a checkout-source host to npm, or an npm host to checkout, requires explicit deactivate first.
 
-The previous npm pin, `@junghanacs/entwurf@0.53.1`, is snapshot `v2026.11.14-herdr.0.53.1` on the
-same Pi 1.5.2 SDK set. Core 0.55.0 was published to npm but never pinned here. Before that,
+The previous npm pin, `@junghanacs/entwurf@0.55.1`, is snapshot `v2026.11.16-herdr.0.55.1` on the
+same Pi 1.5.2 SDK set. Before it, `@junghanacs/entwurf@0.53.1` is snapshot `v2026.11.14-herdr.0.53.1`;
+core 0.55.0 was published to npm but never pinned here. Before that,
 `@junghanacs/entwurf@0.52.0` is snapshot `v2026.11.12-herdr.0.52.0`; core 0.53.0 was tagged but
 never published to npm, so no Herdr pin names it.
 
@@ -164,8 +162,8 @@ shutdown is automatic. A settled npm-source
 host follows the same-source rebind conditions
 ([the two sources](#the-runtime-and-the-two-sources-it-may-come-from)).
 
-The following nine steps were recorded for the published 0.53.1 / Pi 1.5.2 pairing; the 0.55.1 pin
-and the 0.60.0 checkout candidate use the same host Pi range and SDK set. The unversioned
+The following nine steps were recorded for the published 0.53.1 / Pi 1.5.2 pairing; the 0.55.1 and
+0.60.0 pins use the same host Pi range and SDK set. The unversioned
 plugin command follows the resolved ref's lock; inspect it rather than assuming a version.
 
 ```bash
@@ -200,7 +198,7 @@ herdr plugin install junghan0611/entwurf/plugins/herdr --yes
 ```
 
 The pi range in step 1 is not a number this file chooses. It is the host range derived from the exact
-`dependencies` pin of the selected runtime, SDK 1.5.2 for 0.55.1. The activation door enforces it too: `run.sh install-user-scope`
+`dependencies` pin of the selected runtime, SDK 1.5.2 for 0.60.0. The activation door enforces it too: `run.sh install-user-scope`
 refuses an out-of-range pi by name and writes nothing — the same verdict `entwurf setup` gives — so
 an unpinned `npm install -g` here would only move the failure to step 5.
 
@@ -525,7 +523,7 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.5.2 <1.6`** for the published npm 0.55.1 pin, the previous 0.53.1 and 0.52.0 pins and the unpublished 0.60.0 checkout candidate, all on SDK 1.5.2. The historical
+- **Pi `>=1.5.2 <1.6`** for the published npm 0.60.0 pin and the previous 0.55.1, 0.53.1 and 0.52.0 pins, all on SDK 1.5.2. The historical
   0.51.0 pairing required <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published --> on the Pi 1.5.0
   SDK set. The older npm pin, 0.50.0, and the `v2026.10.27-herdr.0.45.0` snapshot carry the
   Pi 1.4.0 SDK set and its Pi 1.4 requirement.
@@ -607,7 +605,7 @@ a clean `node:24` container — no host config, cache, socket or repo mounted, n
 remote spelled exactly as written here (`junghan0611/entwurf/plugins/herdr`). pi, Herdr and Claude
 Code are installed in the image build as scaffolding; the product face under test begins at
 `herdr integration install pi`. Each receipt belongs to the exact ref, runtime and host it names;
-the historical results below are not 0.55.1 evidence.
+the historical results below are not 0.60.0 evidence.
 
 It does not stop at the install. It then runs what those bytes became — the compiled bridge entry,
 three executable bins, a real `entwurf check-bridge` listing the exact verb set the installed
