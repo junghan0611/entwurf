@@ -5,10 +5,11 @@
  * transcript (pi-extensions/lib/acp/event-mapper.ts:20-25), which are display carriers.
  *
  * Where that transcript is (source-read, measured by the take, never searched for):
- *   - the pi sibling's ACP session record is `~/.pi/agent/cache/entwurf/sessions/<sha256(sessionKey)>.json`
- *     (session-store.ts:150,387) with sessionKey `pi:<options.sessionId | PI_SESSION_ID>` (backend.ts:997-1001);
- *     it carries `acpSessionId`. Read raw here — `readSessionRecord` deletes a record it finds invalid
- *     (session-store.ts:395), so it is never called for evidence.
+ *   - this demo defaults to `~/.pi/agent/cache/entwurf/sessions/<sha256(sessionKey)>.json`;
+ *     the ACP store resolves its default from Pi's agent directory (session-store.ts:150,389).
+ *     The key is `pi:<options.sessionId | PI_SESSION_ID>` (backend.ts resolveSessionKey); the record
+ *     carries `acpSessionId`. The demo reads and validates raw bytes as evidence; the store reader
+ *     names invalid and unreadable outcomes without deleting them (session-store.ts:402).
  *   - claude-agent-acp 0.85.1 gives a new session a random UUID and hands it to the SDK as
  *     `options.sessionId` (dist/acp-agent.js:6625-6643, 6977-6979); the SDK persists it under the ACP
  *     overlay's private config dir (overlay.ts:57) as `projects/<cwd slug>/<acpSessionId>.jsonl`.

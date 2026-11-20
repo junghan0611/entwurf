@@ -1356,7 +1356,7 @@ check_acp_set_model_readback() {
   # #171 ACP baseline table's row/QK integrity contract.
   # ACP oracle mutant execution coordinate as well.
   section "claude ACP set-model + effort readback (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/client-baseline.test.ts pi-extensions/lib/acp/receipt-versions.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts pi-extensions/lib/acp/event-mapper.test.ts pi-extensions/lib/acp/agy-adapter.test.ts pi-extensions/lib/acp/augment.test.ts
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/client-baseline.test.ts pi-extensions/lib/acp/receipt-versions.test.ts pi-extensions/lib/acp/session-store.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts pi-extensions/lib/acp/event-mapper.test.ts pi-extensions/lib/acp/agy-adapter.test.ts pi-extensions/lib/acp/augment.test.ts
 }
 
 check_acp_vendor_rejection() {

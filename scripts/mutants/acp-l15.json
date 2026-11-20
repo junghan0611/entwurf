@@ -1,0 +1,76 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-l15",
+	"mutants": [
+		{
+			"claim": "ACP-ORACLE-L15-INVALID",
+			"title": "a corrupt record is deleted instead of being preserved as evidence",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["raw = JSON.parse(text);\n\t} catch {\n\t\treturn { status: \"invalid\" };"],
+			"replace": [
+				"raw = JSON.parse(text);\n\t} catch {\n\t\tdeleteSessionRecord(sessionKey, dir);\n\t\treturn { status: \"invalid\" };"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L15-INVALID]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L15-UNREADABLE",
+			"title": "a read error is presented as a missing record",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["{ status: \"unreadable\", code };"],
+			"replace": ["{ status: \"missing\" };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L15-UNREADABLE]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L15-ATOMIC",
+			"title": "the new record is written through the existing target instead of being renamed over it",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["renameSync(temp, target);"],
+			"replace": ["writeFileSync(target, readFileSync(temp));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L15-ATOMIC]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L15-AGENT-DIR",
+			"title": "the record path ignores the configured Pi agent directory",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["return join(getAgentDir(), \"cache\", \"entwurf\", \"sessions\");"],
+			"replace": ["return join(process.env.HOME ?? '', '.pi', 'agent', 'cache', 'entwurf', 'sessions');"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L15-AGENT-DIR]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L15-DEGRADED-REUSE",
+			"title": "failed persistence on a reused turn is swallowed without the visible notice",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"if (!persistRecord(session, deps)) {\n\t\t\t\tpushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);"
+			],
+			"replace": ["if (!persistRecord(session, deps)) {\n\t\t\t\tvoid state;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L15-DEGRADED-REUSE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L15-DEGRADED-NEW",
+			"title": "failed persistence on a new retained turn is swallowed without the visible notice",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (retain && !persistRecord(session, deps)) {"],
+			"replace": ["if (retain && (persistRecord(session, deps), false)) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L15-DEGRADED-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		}
+	]
+}

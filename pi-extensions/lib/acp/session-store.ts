@@ -23,11 +23,11 @@
 // a delta while new sends the full transcript. The prefix-compat gate here is
 // what makes delta-only SAFE — a mismatch falls back to `new` + full transcript.
 
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Message, ToolResultMessage, TranscriptContext } from "@earendil-works/pi-ai";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { AcpBootstrapPath } from "./context.js";
 
 // MUST equal event-mapper.ts `LIFECYCLE_NOTICE_SIGNATURE` (the SSOT/producer).
@@ -147,7 +147,9 @@ export class SessionModelLockedError extends Error {
 	}
 }
 
-const SESSION_CACHE_DIR = join(homedir(), ".pi", "agent", "cache", "entwurf", "sessions");
+function sessionCacheDir(): string {
+	return join(getAgentDir(), "cache", "entwurf", "sessions");
+}
 
 // ---------------------------------------------------------------------------
 // 1) signatures
@@ -384,35 +386,55 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 	};
 }
 
-export function sessionRecordPath(sessionKey: string, dir: string = SESSION_CACHE_DIR): string {
+export function sessionRecordPath(sessionKey: string, dir: string = sessionCacheDir()): string {
 	// sessionKey is a pi-supplied id; sha256 it so the filename is fixed-length
 	// and safe regardless of cwd length / path chars (GPT `c617cb` hardening —
 	// the old encodeURIComponent was safe but unbounded in length).
 	return join(dir, `${sha256(sessionKey)}.json`);
 }
 
-/** Read + validate a persisted record. A corrupt/incompatible file is deleted. */
-export function readSessionRecord(sessionKey: string, dir: string = SESSION_CACHE_DIR): SessionRecord | undefined {
-	const filePath = sessionRecordPath(sessionKey, dir);
-	if (!existsSync(filePath)) return undefined;
+export type SessionRecordRead =
+	| { status: "found"; record: SessionRecord }
+	| { status: "missing" }
+	| { status: "invalid" }
+	| { status: "unreadable"; code?: string };
+
+/** Classify without deleting or changing evidence, including unreadable files. */
+export function readSessionRecord(sessionKey: string, dir: string = sessionCacheDir()): SessionRecordRead {
+	let text: string;
 	try {
-		const record = parseSessionRecord(JSON.parse(readFileSync(filePath, "utf8")), sessionKey);
-		if (!record) {
-			deleteSessionRecord(sessionKey, dir);
-			return undefined;
-		}
-		return record;
+		text = readFileSync(sessionRecordPath(sessionKey, dir), "utf8");
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		return code === "ENOENT" ? { status: "missing" } : { status: "unreadable", code };
+	}
+	let raw: unknown;
+	try {
+		raw = JSON.parse(text);
 	} catch {
-		deleteSessionRecord(sessionKey, dir);
-		return undefined;
+		return { status: "invalid" };
+	}
+	const record = parseSessionRecord(raw, sessionKey);
+	return record ? { status: "found", record } : { status: "invalid" };
+}
+
+export function writeSessionRecord(record: SessionRecord, dir: string = sessionCacheDir()): void {
+	mkdirSync(dir, { recursive: true });
+	const target = sessionRecordPath(record.sessionKey, dir);
+	const temp = `${target}.${randomBytes(16).toString("hex")}.tmp`;
+	const fd = openSync(temp, "wx", 0o600);
+	try {
+		try {
+			writeFileSync(fd, `${JSON.stringify(record, null, 2)}\n`);
+		} finally {
+			closeSync(fd);
+		}
+		renameSync(temp, target);
+	} finally {
+		rmSync(temp, { force: true });
 	}
 }
 
-export function writeSessionRecord(record: SessionRecord, dir: string = SESSION_CACHE_DIR): void {
-	mkdirSync(dir, { recursive: true });
-	writeFileSync(sessionRecordPath(record.sessionKey, dir), `${JSON.stringify(record, null, 2)}\n`);
-}
-
-export function deleteSessionRecord(sessionKey: string, dir: string = SESSION_CACHE_DIR): void {
+export function deleteSessionRecord(sessionKey: string, dir: string = sessionCacheDir()): void {
 	rmSync(sessionRecordPath(sessionKey, dir), { force: true });
 }

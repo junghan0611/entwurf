@@ -575,6 +575,45 @@ describe("streamAcpTurn — disabled Cortex configuration", () => {
 });
 
 describe("ACP baseline — implemented wire rows (#171)", () => {
+	async function assertDegraded(reuse: boolean): Promise<void> {
+		const world = makeWorld();
+		const badDir = join(SANDBOX, `l15-not-directory-${reuse}`);
+		writeFileSync(badDir, "keep");
+		const sessionId = `oracle-l15-${reuse}`;
+		if (reuse) await runTurn(world, transcript("first"), sessionId, "high");
+		world.deps.sessionDir = badDir;
+		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		try {
+			const events: AssistantMessageEvent[] = [];
+			for await (const event of backend.streamAcpTurn(
+				sonnet(),
+				reuse ? transcript("first", "second") : transcript("first"),
+				{ sessionId, reasoning: "high" },
+				world.deps,
+			))
+				events.push(event);
+			expect(events.filter((e) => e.type === "done")).toHaveLength(1);
+			expect(events.filter((e) => e.type === "error")).toHaveLength(0);
+			expect(
+				events
+					.filter((e) => e.type === "text_delta")
+					.map((e) => (e.type === "text_delta" ? e.delta : ""))
+					.join(""),
+			).toContain("session record not saved");
+			expect(stderr).toHaveBeenCalledWith(expect.stringContaining("code=EEXIST"));
+			expect(world.children).toHaveLength(1);
+		} finally {
+			stderr.mockRestore();
+		}
+	}
+
+	it("[QK:ACP-ORACLE-L15-DEGRADED-NEW] a new turn visibly reports failed persistence and completes", async () => {
+		await assertDegraded(false);
+	});
+	it("[QK:ACP-ORACLE-L15-DEGRADED-REUSE] a reuse turn visibly reports failed persistence and completes", async () => {
+		await assertDegraded(true);
+	});
+
 	it("[QK:ACP-ORACLE-L3-NEW] initializes before one new session and one prompt", async () => {
 		const world = makeWorld();
 		const result = await runTurn(world, transcript("baseline"), "oracle-l3", "high");

@@ -341,19 +341,19 @@ const baseInput = (): BridgeConfigInput => ({
 	try {
 		writeSessionRecord(rec, dir);
 		const read = readSessionRecord("sess/key 1", dir);
-		assert.deepEqual(read, rec, "write→read roundtrip preserves the record");
+		assert.deepEqual(read, { status: "found", record: rec }, "write→read roundtrip preserves the record");
 		// sessionKey with a slash/space is encoded into a single safe filename.
 		assert.ok(sessionRecordPath("sess/key 1", dir).endsWith(".json"), "record path is a .json file");
 		assert.ok(!sessionRecordPath("sess/key 1", dir).includes("/key 1"), "sessionKey is encoded, not a path segment");
 
 		// Unknown key → undefined.
-		assert.equal(readSessionRecord("missing", dir), undefined, "missing record → undefined");
+		assert.deepEqual(readSessionRecord("missing", dir), { status: "missing" }, "missing record is named");
 
-		// Corrupt file → undefined AND deleted.
+		// Corrupt file is named and preserved.
 		const corruptPath = sessionRecordPath("corrupt", dir);
 		writeFileSync(corruptPath, "{ not json");
-		assert.equal(readSessionRecord("corrupt", dir), undefined, "corrupt JSON → undefined");
-		assert.ok(!existsSync(corruptPath), "corrupt record is DELETED on read, not left on disk");
+		assert.deepEqual(readSessionRecord("corrupt", dir), { status: "invalid" }, "corrupt JSON is invalid");
+		assert.ok(existsSync(corruptPath), "corrupt record is preserved");
 
 		// Wrong version/provider/sessionKey → parse rejects.
 		assert.equal(parseSessionRecord({ ...rec, version: 999 }, rec.sessionKey), undefined, "wrong version rejected");
@@ -371,7 +371,7 @@ const baseInput = (): BridgeConfigInput => ({
 
 		// delete removes the file.
 		deleteSessionRecord("sess/key 1", dir);
-		assert.equal(readSessionRecord("sess/key 1", dir), undefined, "deleted record → undefined");
+		assert.deepEqual(readSessionRecord("sess/key 1", dir), { status: "missing" }, "deleted record is missing");
 		// On-disk JSON is pretty + has a provider field (sanity that it really wrote).
 		writeSessionRecord(rec, dir);
 		assert.match(readFileSync(sessionRecordPath("sess/key 1", dir), "utf8"), /"provider": "entwurf"/, "json written");

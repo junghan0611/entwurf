@@ -51,8 +51,12 @@
 			"claim": "ACP-REUSE-COOPERATIVE-CANCEL",
 			"title": "a reused session's cooperatively cancelled turn is sealed and retained but no longer persisted — the record lags the live session",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\t\tfinishSuccess(adapter, session, promptResult);", "\t\t\tpersistRecord(session, deps);"],
-			"replace": ["\t\t\tfinishSuccess(adapter, session, promptResult);"],
+			"find": [
+				"\t\t\tif (!persistRecord(session, deps)) {\n\t\t\t\tpushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);\n\t\t\t}\n\t\t\tfinishSuccess(adapter, session, promptResult);"
+			],
+			"replace": [
+				"\t\t\tif (!true) {\n\t\t\t\tpushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);\n\t\t\t}\n\t\t\tfinishSuccess(adapter, session, promptResult);"
+			],
 			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:ACP-REUSE-COOPERATIVE-CANCEL]",

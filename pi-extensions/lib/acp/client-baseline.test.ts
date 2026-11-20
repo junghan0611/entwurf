@@ -13,6 +13,7 @@ const EXPECTED = [
 	"V2",
 	"V3",
 	"V4",
+	"V5",
 	...Array.from({ length: 12 }, (_, i) => `U${i + 1}`),
 ];
 const STATES = new Set(["implemented", "declined", "deferred", "not-wired", "unmeasured"]);

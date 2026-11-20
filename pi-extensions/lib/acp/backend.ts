@@ -957,6 +957,7 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promis
 // settled, and only about the live session — not about any private transcript.
 export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
 export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
+export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — future continuation may require a new session";
 /** #163: Pi's summary turn ended as `cancelled` with no abort from Pi. Kept non-transient for pi's retry classifier. */
 export const ACP_SUMMARY_CANCELLED_MESSAGE =
 	"ACP backend ended the summary turn as cancelled although Pi did not abort it; the summary is incomplete and is not kept";
@@ -1241,8 +1242,8 @@ function resolveSessionKey(opts: { sessionId?: string } | undefined, cwd: string
 	return sid ? `pi:${sid}` : `cwd:${cwd}`;
 }
 
-/** Best-effort persist of the session record (1b-2c reads it; this cut only writes). */
-function persistRecord(session: BridgeSession, deps: AcpTurnDeps): void {
+/** Best-effort persistence; a false result must be surfaced before the turn is sealed. */
+function persistRecord(session: BridgeSession, deps: AcpTurnDeps): boolean {
 	try {
 		const record = buildSessionRecord(
 			{
@@ -1256,8 +1257,18 @@ function persistRecord(session: BridgeSession, deps: AcpTurnDeps): void {
 			deps.now(),
 		);
 		writeSessionRecord(record, deps.sessionDir);
-	} catch {
-		// record is a 1b-2c convenience — a write failure must not fail the turn.
+		return true;
+	} catch (error) {
+		const code =
+			error &&
+			typeof error === "object" &&
+			"code" in error &&
+			typeof error.code === "string" &&
+			/^E[A-Z0-9_]+$/.test(error.code)
+				? error.code
+				: "UNKNOWN";
+		process.stderr.write(`[acp] session record persist failed: code=${code}\n`);
+		return false;
 	}
 }
 
@@ -2378,16 +2389,12 @@ export function streamAcpTurn(
 			if (summary && !signal?.aborted && mapPromptStopReason(promptResult?.stopReason).stopReason === "stop") {
 				summarySucceeded = true;
 			}
+			if (retain && !persistRecord(session, deps)) {
+				pushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);
+			}
 			finishSuccess(adapter, session, promptResult);
 
-			if (retain) {
-				// AFTER the seal, deliberately: persisting is bookkeeping about a turn
-				// that already answered, so a failed record write must not convert an
-				// answered turn into an error turn. If it throws, the catch below still
-				// un-registers this session and tears its child down — the same cleanup
-				// a sealing exception gets.
-				persistRecord(session, deps);
-			} else {
+			if (!retain) {
 				session.retiring = true;
 				connection.close?.();
 				teardownChild(spawned);
@@ -2517,8 +2524,10 @@ export function streamAcpTurn(
 			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
 				pushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);
 			}
+			if (!persistRecord(session, deps)) {
+				pushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);
+			}
 			finishSuccess(adapter, session, promptResult);
-			persistRecord(session, deps);
 		} catch (err) {
 			const aborted = Boolean(signal?.aborted);
 			session.activePromptHandler = undefined;
