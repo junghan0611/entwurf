@@ -1,6 +1,8 @@
 # Herdr Core Entwurf
 
-A guide to using pi and Claude Code sessions started in Herdr App terminals or `hc` terminals as Entwurf citizens. It is not a plugin to install and ships no code or check script; the real plugin is [`plugins/herdr/`](../herdr/README.md).
+A guide to using pi and Claude Code sessions started in Herdr App terminals or `hc` terminals as Entwurf citizens. It is not a plugin to install and ships no code or check script.
+
+Herdr App and herdr-core (`hc`) are a separate product line from the Herdr terminal multiplexer (`herdr`, the TUI). The TUI has its own Entwurf plugin and launch rail in [`plugins/herdr/`](../herdr/README.md); nothing there applies here, and nothing here installs it.
 
 The App window arranges terminals and the core runs them, so App terminals and `hc` terminals are the same terminals on the same core (upstream README reading). One guide covers both. Path walked: App tab, measured on one laptop. Core-only `hc` attach: not measured.
 
