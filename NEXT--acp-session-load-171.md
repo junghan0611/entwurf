@@ -1,6 +1,6 @@
 # NEXT--acp-session-load-171 — #171 ACP 코어 레일
 
-**현재 (2026-11-21):** 브랜치 `acp-session-load-171` @ `44e0e5fd`(푸시됨). 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
+**현재 (2026-11-21):** 브랜치 `acp-session-load-171` @ `ece98cf5`(로컬, 푸시는 `44e0e5fd`까지). 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
 
 역할:
 - 조율과 게이트: `20261113T043350-ff08d4`
@@ -15,18 +15,8 @@
 - [x] **1. 표와 오라클.** `e330d472`, `b87340a1`.
 - [x] **2. L15 저장소 수선과 V5 결정.** `5fa8c225`.
 - [x] **3. L5 reuse delta 유실 수정.** `44e0e5fd`.
-- [ ] **4. L1/V5와 문서.** ← CURRENT
-  - 4a. 표를 정정했다(`79157a17`). B 검토(issuecomment-7055533122) 반영분은 미커밋이다.
-  - 4b. 코드는 Opus가 끝냈고 Sonnet이 리뷰하고 있다.
-    - initialize facts를 저장하고, `measured` 상수(Claude 0.107.3, agy 1.5.12)를 영수증과 게이트로 묶었다.
-    - `attachAllowed` 판정을 만들었다. 아직 부르는 곳은 없다.
-    - 남은 순서: PARTIAL(`check-acp-set-model-readback`, `check-dep-versions`) → FULL → 커밋.
-  - 4c. 문서를 쪼갠다(GLG 2026-11-21).
-    - `docs/acp-client-baseline.md`는 GLG가 이맥스에서 개념을 비교할 수 있을 만큼 짧게 만든다: 한 행에 한 줄, 짧은 셀.
-    - 원래의 전체 문서는 `.agent-reports/171-acp-client-baseline-full.md`(gitignore, 호스트 로컬)로 옮긴다.
-    - 표 게이트(`client-baseline.test.ts`)와 영수증 버전 게이트는 짧아진 문서를 기준으로 고친다.
-    - 결정적인 영수증 줄은 마감 때 #171에 붙인다. 리포 밖 파일은 다른 형제가 읽을 수 없기 때문이다.
-- [ ] **5. L16 pendingDispatch.**
+- [x] **4. L1/V5와 문서.** `79157a17`(표 정정), `75415873`(initialize facts와 measured 가드), `ece98cf5`(짧은 개념 표, 전체본은 `.agent-reports/171-acp-client-baseline-full.md`). PARTIAL 127/127, 12/12. FULL exit 0.
+- [ ] **5. L16 pendingDispatch.** ← CURRENT
   - 표식을 쓰고 지우는 일, 그리고 재접속 판정을 구현한다.
   - 정지 네 경우 모두 record를 버린다(G2).
   - fake agent 시나리오는 넷이다: 안 보낸 입력 여럿은 순서대로 보낸다 / 표식이 있으면 두 id 모두 전송 0회 / 표식 저장에 실패하면 전송 0회 / 정지 한 번 뒤 new.
@@ -49,6 +39,14 @@
   - 0.61.0에서 Entwurf ACP의 방향을 이야기한다.
 - 이 레일 밖, 그다음: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
 
+# GLG 결정 대기
+
+- **G5. 실행됐을지 모르는 턴이 실패했을 때, Pi의 자동 재시도를 막을지** (Opus #O21 관찰, R12 `U12-timeout-retries-exhausted`).
+  - 지금 동작: 같은 프로세스 안에서 prompt가 실패하고, 벤더 오류 문구가 Pi의 재시도 패턴(429/5xx 숫자)에 걸리면 Pi가 스스로 재시도한다. L16은 record를 버리므로, 그 재시도는 new 세션으로 가서 실행됐을지 모르는 입력을 사람 없이 다시 보낸다.
+  - 오늘도 같은 동작이고 L16이 더 나쁘게 만들지 않는다. 다만 결정 8의 "자동 전송 0회"는 지금 재접속 경우만 막는다.
+  - 권고: 표식을 쓴 뒤(입력이 이미 나간 뒤) 실패한 턴은 고정 문구로 끝낸다. 그러면 Pi가 재시도하지 않는다. 벤더의 원래 오류는 알림에 남긴다. 보내기 전의 실패는 지금처럼 재시도를 허용한다.
+  - 비용: 벤더의 일시적 오류가 프롬프트를 보낸 뒤에 나면, 자동 재시도 대신 사람이 다시 입력해야 한다.
+
 # 결정 (GLG)
 
 2026-11-20 결정 1–5와 2026-11-21 결정 6(V5)은 표 문서의 Decisions 절에 있다. 2026-11-21에 더한 것:
@@ -59,10 +57,10 @@
    - 봉인할 때, record를 전진시키는 같은 쓰기에서 지운다.
    - 재접속 때 표식이 있으면 assistant가 보이더라도 정지한다. 기존 id와 새 id 모두 자동 전송은 0회다.
    - 표식 필드가 없는 구버전 record는 resume에 쓰지 않고 new로 간다.
-   - 새 버전 record에 표식이 없을 때: 꼬리에 assistant가 없으면 순서대로 보내고, 있으면 new로 간다.
+   - 새 버전 record에 표식이 없을 때: 꼬리(record 이후)에서 user 메시지 뒤에 assistant가 오면 record가 뒤처진 것이므로 new로 간다. 그렇지 않으면 user들을 순서대로 보낸다. record의 prefix에는 봉인된 턴의 답이 들어가지 않으므로, 정상 연속은 늘 [A U…]이다(Opus #O20, R12에서 측정된 B의 판정식). 원래의 '꼬리에 assistant가 있으면 new'는 정상 연속까지 new로 보내므로 고쳤다.
    - **(a) 정지는 한 번이다.** 이유와 범위(위치와 개수)를 보이고 record를 버린다. 다음 턴은 new다.
    - **G2:** 이 규칙은 이름 붙은 정지 전부에 적용된다: 재시작 뒤 표식 발견, 살아 있는 프로세스의 prompt 실패, attach 성공 뒤 첫 prompt 실패, attach timeout이나 child 사망.
-9. **표식 저장 실패 → 전송 0회.** 결정 3이 바뀐다: 저장소가 계속 실패하면 다음 턴은 이유를 보이며 거절된다.
+9. **표식 저장 실패 → 전송 0회.** 결정 3이 바뀐다: 저장소가 계속 실패하면 다음 턴은 이유를 보이며 거절된다. 같은 부류(전송 전 저장소 문제 → 거절): 읽을 수 없는 record(unreadable)도 거절하고, record 삭제(drop)에 실패하면 삭제될 때까지 전송 0회다(조율자, #O20). 봉인 뒤 지우기 실패는 결정 3대로 degraded 알림을 내고, 다음 재접속에서 한 번 정지한다.
 10. **Claude에도 measured 가드.** resume과 load는 "보고된 버전 = 측정한 버전"일 때만 연다.
 11. **G1:** Z5와 V4는 declined로 확정한다(R10).
 12. **G3:** 재측정을 L8/L9 앞으로 옮기고, 명령 하나로 영수증과 자동 대조하게 만든다. 6단계에서 Claude 0.109.x와 agy 1.5.13을 함께 다룬다.

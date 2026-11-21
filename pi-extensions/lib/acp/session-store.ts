@@ -42,7 +42,10 @@ function sha256(value: string): string {
 	return createHash("sha256").update(value).digest("hex");
 }
 
-export const SESSION_RECORD_VERSION = 1;
+/** 2 since #171 L16: the record carries `pendingDispatch`. A version-1 record reads as `outdated` and is never attached. */
+export const SESSION_RECORD_VERSION = 2;
+/** The version written before the dispatch marker existed (#171 L16 rule 5). */
+const SESSION_RECORD_VERSION_BEFORE_MARKER = 1;
 export const SESSION_RECORD_PROVIDER = "entwurf" as const;
 
 /** Where the child survives relative to a turn — ORTHOGONAL to bootstrapPath. */
@@ -96,6 +99,19 @@ export interface BridgeConfigInput {
 	disallowedTools: string[];
 }
 
+/**
+ * #171 L16 — what may have run since the record was sealed. Written into the record atomically immediately
+ * before `session/prompt`; the write that seals the turn clears it to `null`. Positions index the dispatch
+ * context's messages, the same index space as its `contextMessageSignatures`; the range is the messages
+ * after its last assistant (`userDeltaRange`), so `start + count` is always the signature count. It never
+ * holds prompt text: whoever reads the range reads the text from Pi's transcript.
+ */
+export interface PendingDispatch {
+	start: number;
+	count: number;
+	contextMessageSignatures: string[];
+}
+
 /** A persisted ACP session record (one file per sessionKey). */
 export interface SessionRecord {
 	version: number;
@@ -106,8 +122,13 @@ export interface SessionRecord {
 	modelId: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
+	/** `null` once the last dispatch was sealed; a marker while one may have run unanswered (#171 L16). */
+	pendingDispatch: PendingDispatch | null;
 	updatedAt: string;
 }
+
+/** A record whose last dispatch was sealed — the only shape a bootstrap decision may read (#171 L16). */
+export type SealedSessionRecord = SessionRecord & { pendingDispatch: null };
 
 /** The compat-relevant facts of a candidate session (in-memory or persisted). */
 export interface SessionCompatFacts {
@@ -124,6 +145,8 @@ export interface ExistingSession extends SessionCompatFacts {
 
 export interface BootstrapParams extends SessionCompatFacts {
 	lifecyclePolicy: LifecyclePolicy;
+	/** One role per message, from the same context as `contextMessageSignatures` (#171 L16 rule 6). */
+	messageRoles: readonly string[];
 }
 
 export interface BootstrapDecision {
@@ -266,6 +289,21 @@ export function isCompatible(candidate: SessionCompatFacts, params: SessionCompa
 	);
 }
 
+/**
+ * #171 L16 rule 6, in the form R12 measured: the record is behind the transcript when, after its prefix, a
+ * user message is followed by an assistant message — a turn ran that the record never sealed. The prefix is
+ * taken at the start of a call, so the sealed turn's own answer is the first message after it: an assistant
+ * before any user is no sign, and neither is a tail of users only (the unsent inputs, sent in order).
+ */
+export function recordIsBehind(prefixLength: number, messageRoles: readonly string[]): boolean {
+	let sawUser = false;
+	for (let i = prefixLength; i < messageRoles.length; i++) {
+		if (messageRoles[i] === "user") sawUser = true;
+		else if (messageRoles[i] === "assistant" && sawUser) return true;
+	}
+	return false;
+}
+
 // ---------------------------------------------------------------------------
 // 2) bootstrap decision (bootstrapPath ⟂ lifecyclePolicy)
 // ---------------------------------------------------------------------------
@@ -286,7 +324,7 @@ export function decideBootstrap(
 	params: BootstrapParams,
 	sources: {
 		existing?: ExistingSession;
-		persisted?: SessionRecord;
+		persisted?: SealedSessionRecord;
 		capabilities?: { resumeSession: boolean; loadSession: boolean };
 	} = {},
 ): BootstrapDecision {
@@ -312,6 +350,9 @@ export function decideBootstrap(
 	const existingIncompatible = !!existing && !isCompatible(existing, params);
 
 	if (!existingIncompatible && persisted && isCompatible(persisted, params)) {
+		if (recordIsBehind(persisted.contextMessageSignatures.length, params.messageRoles)) {
+			return { path: "new", invalidatePersisted: true, reason: "persisted_behind" };
+		}
 		if (capabilities?.resumeSession) {
 			return { path: "resume", acpSessionId: persisted.acpSessionId, reason: "persisted_compatible_resume" };
 		}
@@ -338,7 +379,7 @@ export function decideBootstrap(
 
 /** Build a record from compat facts. `now` is injected so the build is pure. */
 export function buildSessionRecord(
-	input: { sessionKey: string; acpSessionId: string } & SessionCompatFacts,
+	input: { sessionKey: string; acpSessionId: string; pendingDispatch?: PendingDispatch | null } & SessionCompatFacts,
 	now: string,
 ): SessionRecord {
 	return {
@@ -350,12 +391,37 @@ export function buildSessionRecord(
 		modelId: input.modelId,
 		bridgeConfigSignature: input.bridgeConfigSignature,
 		contextMessageSignatures: [...input.contextMessageSignatures],
+		pendingDispatch: input.pendingDispatch
+			? {
+					start: input.pendingDispatch.start,
+					count: input.pendingDispatch.count,
+					contextMessageSignatures: [...input.pendingDispatch.contextMessageSignatures],
+				}
+			: null,
 		updatedAt: now,
 	};
 }
 
 function isNonEmptyString(v: unknown): v is string {
 	return typeof v === "string" && v.length > 0;
+}
+
+function isStringArray(v: unknown): v is string[] {
+	return Array.isArray(v) && v.every((s) => typeof s === "string");
+}
+
+function isCount(v: unknown): v is number {
+	return Number.isSafeInteger(v) && (v as number) >= 0;
+}
+
+/** `null`, a self-consistent marker, or `undefined` for anything else (the record is then invalid). */
+function parsePendingDispatch(raw: unknown): PendingDispatch | null | undefined {
+	if (raw === null) return null;
+	if (!raw || typeof raw !== "object") return undefined;
+	const m = raw as Record<string, unknown>;
+	if (!isCount(m.start) || !isCount(m.count) || !isStringArray(m.contextMessageSignatures)) return undefined;
+	if (m.start + m.count !== m.contextMessageSignatures.length) return undefined;
+	return { start: m.start, count: m.count, contextMessageSignatures: [...m.contextMessageSignatures] };
 }
 
 /** Validate a parsed JSON object into a SessionRecord, or undefined if invalid. */
@@ -369,9 +435,11 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 	if (!isNonEmptyString(r.cwd)) return undefined;
 	if (!isNonEmptyString(r.modelId)) return undefined;
 	if (!isNonEmptyString(r.bridgeConfigSignature)) return undefined;
-	if (!Array.isArray(r.contextMessageSignatures) || !r.contextMessageSignatures.every((s) => typeof s === "string")) {
-		return undefined;
-	}
+	if (!isStringArray(r.contextMessageSignatures)) return undefined;
+	// Required key: a current record states its dispatch either way (#171 L16).
+	if (!("pendingDispatch" in r)) return undefined;
+	const pendingDispatch = parsePendingDispatch(r.pendingDispatch);
+	if (pendingDispatch === undefined) return undefined;
 	if (!isNonEmptyString(r.updatedAt)) return undefined;
 	return {
 		version: SESSION_RECORD_VERSION,
@@ -381,7 +449,8 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 		cwd: r.cwd,
 		modelId: r.modelId,
 		bridgeConfigSignature: r.bridgeConfigSignature,
-		contextMessageSignatures: [...(r.contextMessageSignatures as string[])],
+		contextMessageSignatures: [...r.contextMessageSignatures],
+		pendingDispatch,
 		updatedAt: r.updatedAt,
 	};
 }
@@ -397,6 +466,8 @@ export type SessionRecordRead =
 	| { status: "found"; record: SessionRecord }
 	| { status: "missing" }
 	| { status: "invalid" }
+	/** Written before `pendingDispatch` existed: not evidence that nothing is pending, never attached (#171 L16). */
+	| { status: "outdated" }
 	| { status: "unreadable"; code?: string };
 
 /** Classify without deleting or changing evidence, including unreadable files. */
@@ -414,6 +485,8 @@ export function readSessionRecord(sessionKey: string, dir: string = sessionCache
 	} catch {
 		return { status: "invalid" };
 	}
+	if ((raw as { version?: unknown } | null)?.version === SESSION_RECORD_VERSION_BEFORE_MARKER)
+		return { status: "outdated" };
 	const record = parseSessionRecord(raw, sessionKey);
 	return record ? { status: "found", record } : { status: "invalid" };
 }
@@ -437,4 +510,23 @@ export function writeSessionRecord(record: SessionRecord, dir: string = sessionC
 
 export function deleteSessionRecord(sessionKey: string, dir: string = sessionCacheDir()): void {
 	rmSync(sessionRecordPath(sessionKey, dir), { force: true });
+}
+
+/**
+ * #171 L16 — what a turn with no live session does with the record it finds, before anything is sent.
+ * A standing marker stops the turn; a record that cannot be read refuses it, because a marker in it
+ * could not be seen (decision 9's class: a store problem before sending sends nothing). Everything
+ * else continues: a sealed, outdated, invalid or missing record says nothing ran unanswered.
+ */
+export type StandingRecordVerdict =
+	| { kind: "continue" }
+	| { kind: "stop"; acpSessionId: string; marker: PendingDispatch }
+	| { kind: "refuse"; code?: string };
+
+export function standingRecordVerdict(read: SessionRecordRead): StandingRecordVerdict {
+	if (read.status === "unreadable") return { kind: "refuse", code: read.code };
+	if (read.status === "found" && read.record.pendingDispatch) {
+		return { kind: "stop", acpSessionId: read.record.acpSessionId, marker: read.record.pendingDispatch };
+	}
+	return { kind: "continue" };
 }

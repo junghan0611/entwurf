@@ -3443,6 +3443,7 @@ let manifestCount: number;
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
 		"acp-l15": 6,
+		"acp-l16": 12,
 		"acp-oracle": 8,
 		"acp-parity": 39,
 		"acp-prompt-lifecycle": 15,

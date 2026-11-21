@@ -14,6 +14,7 @@ const EXPECTED = [
 	"V3",
 	"V4",
 	"V5",
+	"V6",
 	...Array.from({ length: 10 }, (_, i) => `U${i + 1}`),
 	...Array.from({ length: 5 }, (_, i) => `U${i + 12}`),
 ];

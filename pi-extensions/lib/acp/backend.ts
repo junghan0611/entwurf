@@ -84,7 +84,7 @@ import {
 	type ResolvedAcpConfig,
 	resolveProviderConfig,
 } from "./config.js";
-import { type AcpTextBlock, buildAcpPrompt, latestUserDelta } from "./context.js";
+import { type AcpTextBlock, buildAcpPrompt, latestUserDelta, userDeltaRange } from "./context.js";
 import {
 	type AcpPiStreamState,
 	applyAcpSessionUpdate,
@@ -100,9 +100,14 @@ import {
 	buildSessionRecord,
 	contextMessageSignatures,
 	decideBootstrap,
+	deleteSessionRecord,
 	type ExistingSession,
 	type LifecyclePolicy,
+	type PendingDispatch,
+	readSessionRecord,
 	resolveLifecyclePolicy,
+	sessionRecordPath,
+	standingRecordVerdict,
 	writeSessionRecord,
 } from "./session-store.js";
 import { assertExcludeToolsHonored, isPiSummaryRequest } from "./tool-surface.js";
@@ -968,6 +973,17 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promis
 export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
 export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
 export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — future continuation may require a new session";
+// #171 L16 — the dispatch marker. Pi's retry classifier reads `errorMessage` alone, and a retried turn after a
+// stop would be an automatic send, so these error texts are fixed and carry no number, id or path (a bare
+// 500 or 503 there reads as transient). The range and the store's code ride the notices and stderr instead.
+export const ACP_DISPATCH_STOP_MESSAGE =
+	"entwurf: the last prompt to this ACP session has no sealed answer, so nothing was sent this turn";
+export const ACP_RECORD_UNREADABLE_MESSAGE =
+	"entwurf: the ACP session record cannot be read, so nothing was sent this turn; make it readable or remove it";
+export const ACP_DISPATCH_MARKER_NOT_SAVED =
+	"entwurf: the dispatch marker was not saved, so nothing was sent this turn";
+export const ACP_RECORD_DROPPED_NOTICE = "session record dropped — the next turn starts a new session";
+export const ACP_RECORD_NOT_DROPPED_NOTICE = "session record not dropped — the next turn stops again";
 /** #163: Pi's summary turn ended as `cancelled` with no abort from Pi. Kept non-transient for pi's retry classifier. */
 export const ACP_SUMMARY_CANCELLED_MESSAGE =
 	"ACP backend ended the summary turn as cancelled although Pi did not abort it; the summary is incomplete and is not kept";
@@ -1252,34 +1268,74 @@ function resolveSessionKey(opts: { sessionId?: string } | undefined, cwd: string
 	return sid ? `pi:${sid}` : `cwd:${cwd}`;
 }
 
-/** Best-effort persistence; a false result must be surfaced before the turn is sealed. */
+/** The errno code of a store failure, or UNKNOWN — never a message, which could carry a path or text. */
+function storeErrorCode(error: unknown): string {
+	return error &&
+		typeof error === "object" &&
+		"code" in error &&
+		typeof error.code === "string" &&
+		/^E[A-Z0-9_]+$/.test(error.code)
+		? error.code
+		: "UNKNOWN";
+}
+
+/** Write this session's record atomically: sealed (`pendingDispatch: null`) or carrying a marker. Throws. */
+function writeRecordFor(session: BridgeSession, deps: AcpTurnDeps, pendingDispatch: PendingDispatch | null): void {
+	const record = buildSessionRecord(
+		{
+			sessionKey: session.key,
+			acpSessionId: session.acpSessionId,
+			cwd: session.cwd,
+			modelId: session.modelId,
+			bridgeConfigSignature: session.bridgeConfigSignature,
+			contextMessageSignatures: session.contextMessageSignatures,
+			pendingDispatch,
+		},
+		deps.now(),
+	);
+	writeSessionRecord(record, deps.sessionDir);
+}
+
+/**
+ * Best-effort persistence; a false result must be surfaced before the turn is sealed. This is the
+ * sealing write, so it also clears the dispatch marker (#171 L16 rule 2). It must stay before the
+ * seal: a clear that ran after the caller was released could erase the next turn's marker.
+ */
 function persistRecord(session: BridgeSession, deps: AcpTurnDeps): boolean {
 	try {
-		const record = buildSessionRecord(
-			{
-				sessionKey: session.key,
-				acpSessionId: session.acpSessionId,
-				cwd: session.cwd,
-				modelId: session.modelId,
-				bridgeConfigSignature: session.bridgeConfigSignature,
-				contextMessageSignatures: session.contextMessageSignatures,
-			},
-			deps.now(),
-		);
-		writeSessionRecord(record, deps.sessionDir);
+		writeRecordFor(session, deps, null);
 		return true;
 	} catch (error) {
-		const code =
-			error &&
-			typeof error === "object" &&
-			"code" in error &&
-			typeof error.code === "string" &&
-			/^E[A-Z0-9_]+$/.test(error.code)
-				? error.code
-				: "UNKNOWN";
-		process.stderr.write(`[acp] session record persist failed: code=${code}\n`);
+		process.stderr.write(`[acp] session record persist failed: code=${storeErrorCode(error)}\n`);
 		return false;
 	}
+}
+
+/**
+ * #171 L16: a store failure before anything is sent, as the turn seals it and as the operator reads it.
+ * Pi's retry classifier reads `errorMessage` alone, and an errno code can read as transient there
+ * (EAI_AGAIN, ENOTFOUND), so the sealed text is the fixed `message` whatever the code; the code rides
+ * the notice, and stderr.
+ */
+export function acpStoreRefusal(message: string, what: string, code: string): { errorMessage: string; notice: string } {
+	return { errorMessage: message, notice: `${what} (code=${code})` };
+}
+
+/** #171 L16: drop the record after a stop. Returns the failure code, or undefined once it is gone. */
+function dropRecord(sessionKey: string, deps: AcpTurnDeps): string | undefined {
+	try {
+		deleteSessionRecord(sessionKey, deps.sessionDir);
+		return undefined;
+	} catch (error) {
+		const code = storeErrorCode(error);
+		process.stderr.write(`[acp] session record drop failed: code=${code}\n`);
+		return code;
+	}
+}
+
+/** The range a marker names, as positions and a count over its own context — never the text (#171 L16). */
+export function describeDispatchRange(marker: PendingDispatch): string {
+	return `messages [${marker.start},${marker.start + marker.count}) of ${marker.contextMessageSignatures.length}`;
 }
 
 // Detour A (A-c) — actionable rendering of a context-window overflow.
@@ -1762,6 +1818,44 @@ export function streamAcpTurn(
 		stream.end();
 	}
 
+	/**
+	 * #171 L16 rule 1 and decision 9: the marker goes into the record immediately before `session/prompt`.
+	 * It names the messages after the last assistant of this call's context; if it cannot be written, this
+	 * throws before the prompt, so nothing is sent and the turn is refused with the reason.
+	 */
+	function markDispatch(session: BridgeSession, ctxSigs: string[]): PendingDispatch {
+		const marker: PendingDispatch = { ...userDeltaRange(context), contextMessageSignatures: [...ctxSigs] };
+		try {
+			writeRecordFor(session, deps, marker);
+		} catch (error) {
+			const code = storeErrorCode(error);
+			process.stderr.write(`[acp] dispatch marker write failed: code=${code}\n`);
+			const refusal = acpStoreRefusal(ACP_DISPATCH_MARKER_NOT_SAVED, "dispatch marker not saved", code);
+			pushAcpLifecycleNotice(state, refusal.notice);
+			throw new Error(refusal.errorMessage);
+		}
+		return marker;
+	}
+
+	/** #171 L16: say what a drop did. A failed drop keeps the marker, so the next turn stops on it again. */
+	function reportRecordDrop(failureCode: string | undefined): void {
+		pushAcpLifecycleNotice(
+			state,
+			failureCode ? `${ACP_RECORD_NOT_DROPPED_NOTICE} (code=${failureCode})` : ACP_RECORD_DROPPED_NOTICE,
+		);
+	}
+
+	/** #171 L16 stop (decision 8a, G2): name the range the marker held, then drop the record. */
+	function dropAfterStop(sessionKey: string, marker: PendingDispatch): void {
+		pushAcpLifecycleNotice(state, `${describeDispatchRange(marker)} may have run`);
+		reportRecordDrop(dropRecord(sessionKey, deps));
+	}
+
+	/** #171 L16 G2: a turn that failed after its marker was written is a named stop; one before it ran nothing. */
+	function stopAfterFailure(sessionKey: string, marker: PendingDispatch | undefined): void {
+		if (marker) dropAfterStop(sessionKey, marker);
+	}
+
 	function finishError(
 		err: unknown,
 		aborted: boolean,
@@ -1984,6 +2078,7 @@ export function streamAcpTurn(
 			bridgeConfigSignature: configSig,
 			contextMessageSignatures: ctxSigs,
 			lifecyclePolicy: policy,
+			messageRoles: context.messages.map((message) => message.role),
 		};
 
 		const existing = bridgeSessions.get(sessionKey);
@@ -1995,6 +2090,32 @@ export function streamAcpTurn(
 		if (existing?.busy || inFlightKeys.has(sessionKey)) {
 			finishError(new Error(`entwurf session ${sessionKey} is busy with another prompt`), false);
 			return;
+		}
+
+		// #171 L16 — reconnect. With no live session for this key, a record left by an earlier process, or by
+		// an earlier turn of this one, is read for its dispatch marker only, before anything is spawned or sent.
+		// Attach stays off: the record never reaches decideBootstrap below (L8 wires that). Read and drop are
+		// synchronous, so nothing can claim the key in between.
+		if (policy === "process-scoped" && !existing?.alive) {
+			const verdict = standingRecordVerdict(readSessionRecord(sessionKey, deps.sessionDir));
+			if (verdict.kind === "refuse") {
+				const code = verdict.code ?? "UNKNOWN";
+				process.stderr.write(
+					`[acp] session record unreadable: code=${code} path=${sessionRecordPath(sessionKey, deps.sessionDir)}\n`,
+				);
+				const refusal = acpStoreRefusal(ACP_RECORD_UNREADABLE_MESSAGE, "session record unreadable", code);
+				pushAcpLifecycleNotice(state, refusal.notice);
+				finishError(new Error(refusal.errorMessage), false);
+				return;
+			}
+			if (verdict.kind === "stop") {
+				// Stop once (decision 8a): say what may have run, drop the record, send nothing — neither to the
+				// recorded session nor to a new one. The next turn finds no record and starts a new session.
+				process.stderr.write(`[acp] dispatch stop: acpSessionId=${verdict.acpSessionId}\n`);
+				dropAfterStop(sessionKey, verdict.marker);
+				finishError(new Error(ACP_DISPATCH_STOP_MESSAGE), false);
+				return;
+			}
 		}
 
 		const existingFacts: ExistingSession | undefined = existing
@@ -2009,9 +2130,9 @@ export function streamAcpTurn(
 
 		let decision: BootstrapDecision;
 		try {
-			// 1b-2b: persisted resume/load is OFF — no persisted record and no
-			// resume/load capability passed, so decideBootstrap returns only
-			// "new" or "reuse". (Persisted resume/load is the 1b-2c lane.)
+			// Attach is OFF until L8: no persisted record and no resume/load
+			// capability passed, so decideBootstrap returns only "new" or "reuse".
+			// The record was read above for its dispatch marker only (#171 L16).
 			decision = decideBootstrap(params, { existing: existingFacts });
 		} catch (err) {
 			// Model lock (live alive child, different model): surface as a stream
@@ -2098,6 +2219,7 @@ export function streamAcpTurn(
 			bridgeConfigSignature: "",
 			contextMessageSignatures: [],
 			lifecyclePolicy: "turn-scoped",
+			messageRoles: [],
 		};
 		await runNewTurn(params, [], engraving, summaryConfig, adapter, nativeModelId, thinkingValue, {
 			instructions,
@@ -2121,6 +2243,8 @@ export function streamAcpTurn(
 		let onAbort: (() => void) | undefined;
 		let overlay: AcpOverlayResult | undefined;
 		let summarySucceeded = false;
+		/** #171 L16: set once this turn's dispatch marker is in the record. */
+		let marker: PendingDispatch | undefined;
 		/** Which phase a failure belongs to — flipped once the prompt is on the wire. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		const stderrTail: string[] = [];
@@ -2350,6 +2474,10 @@ export function streamAcpTurn(
 			// raised during a slow handler ahead of the wire write.
 			const wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
+			// #171 L16: the marker, immediately before the prompt, for a process-scoped session only — a
+			// turn-scoped Pi (and a summary turn) never writes a record. A failed write throws here, before
+			// the prompt, so nothing is sent (decision 9).
+			if (params.lifecyclePolicy === "process-scoped") marker = markDispatch(session, ctxSigs);
 			// Hand the abort window over to the prompt driver: from here on an abort
 			// is a protocol `session/cancel` first, teardown only after the grace.
 			if (signal && onAbort) {
@@ -2404,6 +2532,15 @@ export function streamAcpTurn(
 			if (retain && !persistRecord(session, deps)) {
 				pushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);
 			}
+			// #171 L16: a marked turn that sealed but is not kept (an abort, a child gone after its answer) leaves
+			// no session to continue. Its record is dropped, or the next turn would stop on a marker for a turn
+			// whose end was already shown.
+			if (!retain && marker) {
+				const dropFailure = dropRecord(sessionKey, deps);
+				if (dropFailure) reportRecordDrop(dropFailure);
+				// Handled: a teardown that throws below must not reach the catch as a second, later stop.
+				marker = undefined;
+			}
 			finishSuccess(adapter, session, promptResult);
 
 			if (!retain) {
@@ -2425,6 +2562,7 @@ export function streamAcpTurn(
 			// touches the stderr pipe.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
 			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
+			stopAfterFailure(sessionKey, marker);
 			finishError(
 				err,
 				aborted,
@@ -2472,6 +2610,8 @@ export function streamAcpTurn(
 	): Promise<void> {
 		/** Same phase discipline as a new turn — reuse just has no bootstrap to lose. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
+		/** #171 L16: set once this turn's dispatch marker is in the record. */
+		let marker: PendingDispatch | undefined;
 		try {
 			if (signal?.aborted) throw new Error("aborted before prompt");
 
@@ -2513,6 +2653,9 @@ export function streamAcpTurn(
 			// ahead of the wire write; the prompt driver then owns the abort surface.
 			const wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
+			// #171 L16: the marker, immediately before the prompt. A reused session is always process-scoped.
+			// A failed write throws here: nothing is sent, and this session is dropped like any pre-prompt failure.
+			marker = markDispatch(session, ctxSigs);
 			// #142: this turn's stream receives updates only from the moment its own prompt goes out.
 			// Before that, nothing on this live session can be this turn's output — a late update of
 			// the previous (cancelled) turn arriving during the effort set would otherwise be shown as
@@ -2552,6 +2695,7 @@ export function streamAcpTurn(
 			// child's own exit status with our SIGTERM.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
 			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
+			stopAfterFailure(session.key, marker);
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.

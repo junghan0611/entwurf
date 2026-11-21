@@ -12,7 +12,7 @@
  */
 import { type AssistantMessage, type Message, normalizeContext, type Usage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { ABORTED_TURN_STATUS, buildAcpPrompt } from "./context.ts";
+import { ABORTED_TURN_STATUS, buildAcpPrompt, latestUserDelta, userDeltaRange } from "./context.ts";
 
 const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
 
@@ -100,5 +100,23 @@ describe("aborted assistant turns in a rebuilt transcript (#142)", () => {
 		const text = buildAcpPrompt(context, "new")[0].text;
 		expect(text).not.toContain("SYSTEM-SECRET");
 		expect(text).toContain(ABORTED_TURN_STATUS);
+	});
+});
+
+describe("the range a dispatch marker names (#171 L16)", () => {
+	it("[QK:ACP-L16-RANGE] is the messages after the last assistant, as positions over the whole context", () => {
+		const steered = normalizeContext({
+			tools: [],
+			messages: [userRun, assistant("stop", [said("done")]), userNext, { ...userNext, content: "and this" }],
+		});
+		expect(steered.messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "user"]);
+		expect(userDeltaRange(steered)).toEqual({ start: 2, count: 2 });
+		// The delta the prompt carries is exactly the user messages of that range.
+		expect(latestUserDelta(steered).map((block) => block.text)).toEqual(["change of plan", "and this"]);
+		// A first turn: no assistant yet, so the range starts at the first message.
+		expect(userDeltaRange(normalizeContext({ tools: [], messages: [userRun] }))).toEqual({ start: 0, count: 1 });
+		// Nothing after the last assistant: an empty range at the end.
+		const answered = normalizeContext({ tools: [], messages: [userRun, assistant("stop", [said("done")])] });
+		expect(userDeltaRange(answered)).toEqual({ start: 2, count: 0 });
 	});
 });

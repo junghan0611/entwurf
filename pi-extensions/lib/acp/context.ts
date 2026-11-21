@@ -155,6 +155,22 @@ export function contextToAcpPrompt(context: TranscriptContext): AcpTextBlock[] {
 export type AcpBootstrapPath = "new" | "reuse" | "resume" | "load";
 
 /**
+ * Where the delta sits: the messages after the last assistant, as positions in `context.messages` (the same
+ * index space as `contextMessageSignatures`). It is the range a dispatch marker names (#171 L16): the input
+ * the prompt answers, on a new session as on a live one.
+ */
+export function userDeltaRange(context: TranscriptContext): { start: number; count: number } {
+	let start = 0;
+	for (let i = context.messages.length - 1; i >= 0; i--) {
+		if (context.messages[i].role === "assistant") {
+			start = i + 1;
+			break;
+		}
+	}
+	return { start, count: context.messages.length - start };
+}
+
+/**
  * Every nonempty user-role message after the last assistant, in order, as separate
  * blocks. Pi's projection can turn custom messages and bash output into user-role
  * messages without retaining their origin; no message is silently discarded here.
@@ -165,14 +181,8 @@ export type AcpBootstrapPath = "new" | "reuse" | "resume" | "load";
  * history the backend already remembers.
  */
 export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
-	let lastAssistantIdx = -1;
-	for (let i = context.messages.length - 1; i >= 0; i--) {
-		if (context.messages[i].role === "assistant") {
-			lastAssistantIdx = i;
-			break;
-		}
-	}
-	return context.messages.slice(lastAssistantIdx + 1).flatMap((message): AcpTextBlock[] => {
+	const { start } = userDeltaRange(context);
+	return context.messages.slice(start).flatMap((message): AcpTextBlock[] => {
 		if (message.role !== "user") return [];
 		const raw = textFromUserOrToolContent(message.content);
 		return raw.trim() ? [{ type: "text", text: raw }] : [];
@@ -190,8 +200,8 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
  *     (`latestUserDelta`) — the whole transcript would duplicate remembered history.
  *
  * The caller's prefix-compat gate detects divergence, not a record that is
- * behind the transcript. Record currency is the not-yet-implemented L16
- * contract; this pure function only splits the scope.
+ * behind the transcript. Record currency is L16 (`recordIsBehind` and the dispatch
+ * marker in session-store.ts); this pure function only splits the scope.
  */
 export function buildAcpPrompt(context: TranscriptContext, bootstrapPath: AcpBootstrapPath): AcpTextBlock[] {
 	switch (bootstrapPath) {

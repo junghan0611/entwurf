@@ -35,9 +35,9 @@ import {
 	resolveLifecyclePolicy,
 	SESSION_RECORD_PROVIDER,
 	SESSION_RECORD_VERSION,
+	type SealedSessionRecord,
 	type SessionCompatFacts,
 	SessionModelLockedError,
-	type SessionRecord,
 	sessionRecordPath,
 	writeSessionRecord,
 } from "../pi-extensions/lib/acp/session-store.ts";
@@ -232,12 +232,14 @@ const baseInput = (): BridgeConfigInput => ({
 		...compatFacts,
 		contextMessageSignatures: ["user:text:a", "assistant:text:b", "user:text:c"],
 		lifecyclePolicy: policy,
+		// #171 L16 rule 6: after the record's prefix, the sealed answer then one unsent user — current.
+		messageRoles: ["user", "assistant", "user"],
 	});
 	const aliveCompat: ExistingSession = { ...compatFacts, alive: true };
-	const persistedCompat: SessionRecord = buildSessionRecord(
-		{ sessionKey: "k", acpSessionId: "acp-123", ...compatFacts },
-		"2026-06-18T00:00:00Z",
-	);
+	const persistedCompat: SealedSessionRecord = {
+		...buildSessionRecord({ sessionKey: "k", acpSessionId: "acp-123", ...compatFacts }, "2026-06-18T00:00:00Z"),
+		pendingDispatch: null,
+	};
 
 	// turn-scoped: ALWAYS new, even with a compatible existing AND persisted (④).
 	assert.deepEqual(
@@ -302,7 +304,7 @@ const baseInput = (): BridgeConfigInput => ({
 
 	// process-scoped + persisted incompatible (no existing) → new + invalidate.
 	{
-		const incompatPersisted: SessionRecord = { ...persistedCompat, bridgeConfigSignature: "drifted" };
+		const incompatPersisted: SealedSessionRecord = { ...persistedCompat, bridgeConfigSignature: "drifted" };
 		const d = decideBootstrap(params("process-scoped"), { persisted: incompatPersisted });
 		assert.equal(d.path, "new", "incompatible persisted → new");
 		assert.equal(d.invalidatePersisted, true, "incompatible persisted is invalidated");

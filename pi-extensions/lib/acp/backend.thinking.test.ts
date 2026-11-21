@@ -19,7 +19,7 @@
  * point into a temp dir BEFORE the dynamic import.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RequestError } from "@agentclientprotocol/sdk";
@@ -63,6 +63,7 @@ let backend: typeof import("./backend.ts");
 let adapters: typeof import("./backend-adapter.ts");
 let models: typeof import("./models.ts");
 let config: typeof import("./config.ts");
+let store: typeof import("./session-store.ts");
 
 beforeAll(async () => {
 	for (const key of SANDBOXED_ENV) savedEnv.set(key, process.env[key]);
@@ -82,6 +83,7 @@ beforeAll(async () => {
 	adapters = await import("./backend-adapter.ts");
 	models = await import("./models.ts");
 	config = await import("./config.ts");
+	store = await import("./session-store.ts");
 });
 
 afterAll(() => {
@@ -673,7 +675,12 @@ describe("ACP baseline — implemented wire rows (#171)", () => {
 		writeFileSync(badDir, "keep");
 		const sessionId = `oracle-l15-${reuse}`;
 		if (reuse) await runTurn(world, transcript("first"), sessionId, "high");
-		world.deps.sessionDir = badDir;
+		// #171 L16: only the sealing write fails. The marker before the prompt must land, or the turn is
+		// refused with nothing sent (decision 9); decision 3 governs the write after the answer.
+		const recordDir = world.deps.sessionDir;
+		world.hooks.onPrompt = () => {
+			world.deps.sessionDir = badDir;
+		};
 		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 		try {
 			const events: AssistantMessageEvent[] = [];
@@ -694,6 +701,9 @@ describe("ACP baseline — implemented wire rows (#171)", () => {
 			).toContain("session record not saved");
 			expect(stderr).toHaveBeenCalledWith(expect.stringContaining("code=EEXIST"));
 			expect(world.children).toHaveLength(1);
+			// The clear failed, so this turn's marker still stands: a reconnect would stop once on it.
+			const left = store.readSessionRecord(`pi:${sessionId}`, recordDir);
+			expect(left.status === "found" && left.record.pendingDispatch).toMatchObject({ count: reuse ? 1 : 2 });
 		} finally {
 			stderr.mockRestore();
 		}
@@ -824,6 +834,297 @@ describe("ACP baseline — implemented wire rows (#171)", () => {
 			{ outcome: { outcome: "cancelled" } },
 		]);
 	});
+});
+
+describe("the dispatch marker in the record (#171 L16)", () => {
+	const keyOf = (sessionId: string) => `pi:${sessionId}`;
+	const recordOf = (world: ReturnType<typeof makeWorld>, sessionId: string) =>
+		store.readSessionRecord(keyOf(sessionId), world.deps.sessionDir);
+	/** A record an earlier process left behind, at a session id no fake child mints. */
+	function leaveRecord(
+		world: ReturnType<typeof makeWorld>,
+		sessionId: string,
+		context: TranscriptContext,
+		pendingDispatch: { start: number; count: number } | null,
+	): void {
+		const contextMessageSignatures = store.contextMessageSignatures(context);
+		store.writeSessionRecord(
+			store.buildSessionRecord(
+				{
+					sessionKey: keyOf(sessionId),
+					acpSessionId: "OLD-ACP",
+					cwd: process.cwd(),
+					modelId: "claude-sonnet-5-5",
+					bridgeConfigSignature: "earlier-process",
+					contextMessageSignatures,
+					pendingDispatch: pendingDispatch && { ...pendingDispatch, contextMessageSignatures },
+				},
+				"2026-11-21T00:00:00Z",
+			),
+			world.deps.sessionDir,
+		);
+	}
+	/** One turn's seal and the notices it showed. */
+	async function shownTurn(
+		world: ReturnType<typeof makeWorld>,
+		context: TranscriptContext,
+		sessionId: string,
+	): Promise<{ sealed: AssistantMessageEvent; shown: string }> {
+		let shown = "";
+		const sealed: AssistantMessageEvent[] = [];
+		const opts = { sessionId, reasoning: "high" } as Parameters<typeof backend.streamAcpTurn>[2];
+		for await (const event of backend.streamAcpTurn(sonnet(), context, opts, world.deps)) {
+			if (event.type === "text_delta") shown += event.delta;
+			if (event.type === "done" || event.type === "error") sealed.push(event);
+		}
+		expect(sealed).toHaveLength(1);
+		return { sealed: sealed[0], shown };
+	}
+	function quietStderr() {
+		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		onTestFinished(() => stderr.mockRestore());
+		return stderr;
+	}
+
+	it("[QK:ACP-L16-MARKER-WRITTEN] when the prompt reaches the agent, the record names its range and holds no prompt text", async () => {
+		const world = makeWorld();
+		const atPrompt: Array<{ read: unknown; bytes: string }> = [];
+		world.hooks.onPrompt = () => {
+			const path = store.sessionRecordPath(keyOf("l16-mark"), world.deps.sessionDir);
+			atPrompt.push({ read: recordOf(world, "l16-mark"), bytes: readFileSync(path, "utf8") });
+		};
+		const first = transcript("MARK-FIRST");
+		const second = transcript("MARK-FIRST", "MARK-SECOND");
+		await runTurn(world, first, "l16-mark", "high");
+		await runTurn(world, second, "l16-mark", "high");
+		expect(second.messages.map((message) => message.role)).toEqual(["system", "user", "assistant", "user"]);
+		expect(atPrompt.map((seen) => seen.read)).toMatchObject([
+			{
+				status: "found",
+				record: {
+					acpSessionId: "ACP-1",
+					pendingDispatch: { start: 0, count: 2, contextMessageSignatures: store.contextMessageSignatures(first) },
+				},
+			},
+			{
+				status: "found",
+				record: {
+					acpSessionId: "ACP-1",
+					pendingDispatch: { start: 3, count: 1, contextMessageSignatures: store.contextMessageSignatures(second) },
+				},
+			},
+		]);
+		for (const { bytes } of atPrompt) expect(bytes).not.toContain("MARK-");
+	});
+
+	it("[QK:ACP-L16-MARKER-CLEARED] the write that seals a turn clears its marker and advances the record", async () => {
+		const world = makeWorld();
+		const first = transcript("CLEAR-FIRST");
+		const second = transcript("CLEAR-FIRST", "CLEAR-SECOND");
+		await runTurn(world, first, "l16-clear", "high");
+		expect(recordOf(world, "l16-clear")).toMatchObject({
+			status: "found",
+			record: { contextMessageSignatures: store.contextMessageSignatures(first), pendingDispatch: null },
+		});
+		await runTurn(world, second, "l16-clear", "high");
+		expect(recordOf(world, "l16-clear")).toMatchObject({
+			status: "found",
+			record: { contextMessageSignatures: store.contextMessageSignatures(second), pendingDispatch: null },
+		});
+	});
+
+	it("[QK:ACP-L16-WRITE-FAIL-ZERO-SENDS] a marker that cannot be written sends nothing and refuses the turn by name", async () => {
+		const stderr = quietStderr();
+		const badDir = join(SANDBOX, "l16-not-directory");
+		writeFileSync(badDir, "keep");
+		// A new session: spawned and opened, never prompted. The store fails after the reconnect read
+		// (which found nothing) and before the marker — from the spawn on.
+		const fresh = makeWorld();
+		const spawn = fresh.deps.spawnChild;
+		fresh.deps.spawnChild = (launch, cwd, extraEnv) => {
+			fresh.deps.sessionDir = badDir;
+			return spawn(launch, cwd, extraEnv);
+		};
+		const { sealed: refused, shown } = await shownTurn(fresh, transcript("NEVER-SENT"), "l16-writefail-new");
+		// The sealed text is fixed; the store's code rides the notice (Pi's classifier reads errorMessage alone).
+		expect(errorText(refused)).toBe(backend.ACP_DISPATCH_MARKER_NOT_SAVED);
+		expect(shown).toContain("[acp: dispatch marker not saved (code=EEXIST)]");
+		assertNoReplay(errorText(refused));
+		expect(fresh.wire).toEqual(["initialize", "new"]);
+		// A live session: the store fails between turns; the delta is not sent.
+		const live = makeWorld();
+		await runTurn(live, transcript("LIVE-FIRST"), "l16-writefail-reuse", "high");
+		live.deps.sessionDir = badDir;
+		const refusedLive = await runTurn(live, transcript("LIVE-FIRST", "NEVER-SENT"), "l16-writefail-reuse", "high");
+		expect(errorText(refusedLive)).toBe(backend.ACP_DISPATCH_MARKER_NOT_SAVED);
+		assertNoReplay(errorText(refusedLive));
+		expect(live.prompts.map((prompt) => prompt.text).join("\n")).not.toContain("NEVER-SENT");
+		expect(live.prompts).toHaveLength(1);
+		expect(stderr).not.toHaveBeenCalledWith(expect.stringContaining("NEVER-SENT"));
+		// An errno code can read as transient to Pi's classifier (EAI_AGAIN, ENOTFOUND, measured in #S26), so
+		// neither authored refusal ever carries one in its sealed text, whatever the store said.
+		const refusals = [
+			[backend.ACP_DISPATCH_MARKER_NOT_SAVED, "dispatch marker not saved"],
+			[backend.ACP_RECORD_UNREADABLE_MESSAGE, "session record unreadable"],
+		] as const;
+		for (const code of ["EEXIST", "EAI_AGAIN", "ENOTFOUND"]) {
+			for (const [message, what] of refusals) {
+				const refusal = backend.acpStoreRefusal(message, what, code);
+				expect(refusal.errorMessage).toBe(message);
+				assertNoReplay(refusal.errorMessage);
+				expect(refusal.notice).toBe(`${what} (code=${code})`);
+			}
+		}
+		for (const code of ["EAI_AGAIN", "ENOTFOUND"]) {
+			expect(isRetryableAssistantError(errorProbe(`${backend.ACP_DISPATCH_MARKER_NOT_SAVED} (code=${code})`))).toBe(
+				true,
+			);
+		}
+	});
+
+	it("[QK:ACP-L16-STANDING-ZERO-SENDS] a marker found on reconnect sends nothing, to the recorded session or a new one", async () => {
+		const stderr = quietStderr();
+		const world = makeWorld();
+		const before = transcript("RAN-MAYBE", "ALSO-MAYBE");
+		leaveRecord(world, "l16-standing", before, { start: 3, count: 1 });
+		const { sealed, shown } = await shownTurn(
+			world,
+			transcript("RAN-MAYBE", "ALSO-MAYBE", "TYPED-NOW"),
+			"l16-standing",
+		);
+		expect(errorText(sealed)).toBe(backend.ACP_DISPATCH_STOP_MESSAGE);
+		assertNoReplay(errorText(sealed));
+		expect(shown).toContain("[acp: messages [3,4) of 4 may have run]");
+		expect(world.children).toHaveLength(0);
+		expect(world.wire).toEqual([]);
+		expect(world.prompts).toEqual([]);
+		// The recorded id is told to the operator's log, never to the model or the classifier.
+		expect(stderr).toHaveBeenCalledWith(expect.stringContaining("acpSessionId=OLD-ACP"));
+		expect(errorText(sealed)).not.toContain("OLD-ACP");
+	});
+
+	it("[QK:ACP-L16-STOP-ONCE-THEN-NEW] the stop drops the record, and the next turn starts a new session", async () => {
+		quietStderr();
+		const world = makeWorld();
+		leaveRecord(world, "l16-once", transcript("RAN-MAYBE"), { start: 0, count: 2 });
+		const stopped = await shownTurn(world, transcript("RAN-MAYBE", "TYPED-NOW"), "l16-once");
+		expect(stopped.sealed.type).toBe("error");
+		expect(stopped.shown).toContain(`[acp: ${backend.ACP_RECORD_DROPPED_NOTICE}]`);
+		expect(recordOf(world, "l16-once")).toEqual({ status: "missing" });
+		const next = await shownTurn(world, transcript("RAN-MAYBE", "TYPED-NOW", "AFTER-STOP"), "l16-once");
+		expect(next.sealed.type).toBe("done");
+		expect(world.wire).toEqual(["initialize", "new", "prompt"]);
+		expect(world.prompts.map((prompt) => prompt.sessionId)).toEqual(["ACP-1"]);
+	});
+
+	it("[QK:ACP-L16-PROMPT-FAIL-DROPS] a prompt that fails after its marker drops the record, so the next turn is new with no second stop", async () => {
+		quietStderr();
+		const fail = () => {
+			throw new Error("fake agent: the prompt failed");
+		};
+		// The first prompt of a new session fails.
+		const fresh = makeWorld();
+		fresh.hooks.onPrompt = fail;
+		const cutNew = await shownTurn(fresh, transcript("CUT-NEW"), "l16-fail-new");
+		expect(cutNew.sealed.type).toBe("error");
+		expect(cutNew.shown).toContain("[acp: messages [0,2) of 2 may have run]");
+		expect(cutNew.shown).toContain(`[acp: ${backend.ACP_RECORD_DROPPED_NOTICE}]`);
+		expect(recordOf(fresh, "l16-fail-new")).toEqual({ status: "missing" });
+		fresh.hooks.onPrompt = undefined;
+		expect((await runTurn(fresh, transcript("CUT-NEW", "NEXT"), "l16-fail-new", "high")).type).toBe("done");
+		expect(fresh.wire).toEqual(["initialize", "new", "prompt", "initialize", "new", "prompt"]);
+		// The prompt on a live session fails.
+		const live = makeWorld();
+		await runTurn(live, transcript("LIVE"), "l16-fail-reuse", "high");
+		live.hooks.onPrompt = fail;
+		const cutLive = await shownTurn(live, transcript("LIVE", "CUT-REUSE"), "l16-fail-reuse");
+		expect(cutLive.sealed.type).toBe("error");
+		expect(cutLive.shown).toContain("[acp: messages [3,4) of 4 may have run]");
+		expect(recordOf(live, "l16-fail-reuse")).toEqual({ status: "missing" });
+		live.hooks.onPrompt = undefined;
+		expect((await runTurn(live, transcript("LIVE", "CUT-REUSE", "NEXT"), "l16-fail-reuse", "high")).type).toBe("done");
+		expect(live.wire).toEqual(["initialize", "new", "prompt", "prompt", "initialize", "new", "prompt"]);
+	});
+
+	it("[QK:ACP-L16-UNRETAINED-DROPS] a marked turn that seals without keeping its session drops the record", async () => {
+		const gate: { hold: boolean; waiting?: () => void } = { hold: false };
+		const world = makeWorld(undefined, undefined, gate);
+		const { sealed } = await abortedTurn(world, gate, transcript("CANCELLED-FIRST"), "l16-unretained");
+		expect(sealed.type === "error" && sealed.reason).toBe("aborted");
+		expect(recordOf(world, "l16-unretained")).toEqual({ status: "missing" });
+		const next = await shownTurn(world, transcript("CANCELLED-FIRST", "AFTER"), "l16-unretained");
+		expect(next.sealed.type).toBe("done");
+		expect(next.shown).not.toContain("may have run");
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "initialize", "new", "prompt"]);
+		// A teardown that throws after that drop is no second stop: no range is shown for a turn already sealed.
+		const closeGate: { hold: boolean; waiting?: () => void } = { hold: false };
+		const broken = makeWorld(undefined, undefined, closeGate);
+		const create = broken.deps.createConnection;
+		let closes = 0;
+		broken.deps.createConnection = (child, handlers) => ({
+			...create(child, handlers),
+			// The teardown after the seal throws once; the catch's own close then succeeds.
+			close: () => {
+				if (closes++ === 0) throw new Error("fake agent: close failed after the seal");
+			},
+		});
+		const closedBadly = await abortedTurn(broken, closeGate, transcript("CANCELLED-FIRST"), "l16-unretained-close");
+		expect(closedBadly.sealed.type === "error" && closedBadly.sealed.reason).toBe("aborted");
+		// The sealed message is the object Pi keeps; a late stop would append its notices to it after the seal.
+		expect(JSON.stringify(closedBadly.sealed)).not.toContain("may have run");
+		expect(recordOf(broken, "l16-unretained-close")).toEqual({ status: "missing" });
+	});
+
+	it("[QK:ACP-L16-UNREADABLE-REFUSES] a record that cannot be read refuses the turn before any spawn, and stays as evidence", async () => {
+		const stderr = quietStderr();
+		const world = makeWorld();
+		const path = store.sessionRecordPath(keyOf("l16-unreadable"), world.deps.sessionDir);
+		mkdirSync(path);
+		writeFileSync(join(path, "keep"), "evidence");
+		const refused = await runTurn(world, transcript("NEVER-SENT"), "l16-unreadable", "high");
+		expect(errorText(refused)).toBe(backend.ACP_RECORD_UNREADABLE_MESSAGE);
+		expect(stderr).toHaveBeenCalledWith(expect.stringContaining("code=EISDIR"));
+		assertNoReplay(errorText(refused));
+		expect(world.children).toHaveLength(0);
+		expect(readFileSync(join(path, "keep"), "utf8")).toBe("evidence");
+		expect(stderr).toHaveBeenCalledWith(expect.stringContaining(`path=${path}`));
+	});
+
+	it("[QK:ACP-L16-TURN-SCOPED-NONE] a turn-scoped turn writes no record, neither a marker nor a seal", async () => {
+		const world = makeWorld();
+		world.deps.lifecyclePolicy = () => "turn-scoped";
+		const atPrompt: unknown[] = [];
+		world.hooks.onPrompt = () => {
+			atPrompt.push(recordOf(world, "l16-turn-scoped"));
+		};
+		expect((await runTurn(world, transcript("ONE-SHOT"), "l16-turn-scoped", "high")).type).toBe("done");
+		expect(atPrompt).toEqual([{ status: "missing" }]);
+		expect(recordOf(world, "l16-turn-scoped")).toEqual({ status: "missing" });
+	});
+
+	// A read-only directory refuses the unlink; root ignores the mode, so this one does not run as root.
+	it.skipIf(process.getuid?.() === 0)(
+		"a drop that fails is said, keeps the marker, and the next turn stops on it again",
+		async () => {
+			const stderr = quietStderr();
+			const world = makeWorld();
+			leaveRecord(world, "l16-undroppable", transcript("RAN-MAYBE"), { start: 0, count: 2 });
+			const recordDir = world.deps.sessionDir as string;
+			chmodSync(recordDir, 0o500);
+			onTestFinished(() => chmodSync(recordDir, 0o700));
+			for (const attempt of [1, 2]) {
+				const { sealed, shown } = await shownTurn(
+					world,
+					transcript("RAN-MAYBE", `TYPED-${attempt}`),
+					"l16-undroppable",
+				);
+				expect(errorText(sealed)).toBe(backend.ACP_DISPATCH_STOP_MESSAGE);
+				expect(shown).toContain(`[acp: ${backend.ACP_RECORD_NOT_DROPPED_NOTICE} (code=EACCES)]`);
+			}
+			expect(world.children).toHaveLength(0);
+			expect(stderr).toHaveBeenCalledWith(expect.stringContaining("drop failed: code=EACCES"));
+		},
+	);
 });
 
 describe("streamAcpTurn — effort on the live session (#142)", () => {

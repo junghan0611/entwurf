@@ -1,0 +1,140 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-l16",
+	"mutants": [
+		{
+			"claim": "ACP-L16-RANGE",
+			"title": "the marker range starts at the last assistant instead of after it",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": ["\t\t\tstart = i + 1;"],
+			"replace": ["\t\t\tstart = i;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-RANGE]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-L16-OUTDATED",
+			"title": "a record written before the marker existed is read as a sealed record",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["SESSION_RECORD_VERSION_BEFORE_MARKER)\n\t\treturn { status: \"outdated\" };"],
+			"replace": [
+				"SESSION_RECORD_VERSION_BEFORE_MARKER)\n\t\treturn { status: \"found\", record: { ...(raw as SessionRecord), pendingDispatch: null } };"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-OUTDATED]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-L16-RECORD-BEHIND",
+			"title": "a record behind the transcript is never noticed, so it would attach and lose the turns after it",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["else if (messageRoles[i] === \"assistant\" && sawUser) return true;"],
+			"replace": ["else if (messageRoles[i] === \"assistant\" && sawUser) return false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-RECORD-BEHIND]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-L16-MARKER-WRITTEN",
+			"title": "no marker is written before the prompt",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\twriteRecordFor(session, deps, marker);"],
+			"replace": ["\t\t\tvoid writeRecordFor;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-MARKER-WRITTEN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-MARKER-CLEARED",
+			"title": "the sealing write leaves a marker standing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\twriteRecordFor(session, deps, null);"],
+			"replace": ["\t\twriteRecordFor(session, deps, { start: 0, count: 0, contextMessageSignatures: [] });"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-MARKER-CLEARED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-WRITE-FAIL-ZERO-SENDS",
+			"title": "a marker that cannot be written is swallowed and the prompt is sent anyway",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tthrow new Error(refusal.errorMessage);"],
+			"replace": ["\t\t\tvoid refusal;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-WRITE-FAIL-ZERO-SENDS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-STANDING-ZERO-SENDS",
+			"title": "a marker found on reconnect is ignored and the turn is sent",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (verdict.kind === \"stop\") {"],
+			"replace": ["if (verdict.kind === \"stop\" && Date.now() < 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-STANDING-ZERO-SENDS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-STOP-ONCE-THEN-NEW",
+			"title": "the reconnect stop names the range but keeps the record, so every later turn stops again",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tdropAfterStop(sessionKey, verdict.marker);"],
+			"replace": ["\t\t\t\tpushAcpLifecycleNotice(state, `${describeDispatchRange(verdict.marker)} may have run`);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-STOP-ONCE-THEN-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-PROMPT-FAIL-DROPS",
+			"title": "a prompt that fails after its marker keeps the record, so the next turn stops a second time",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (marker) dropAfterStop(sessionKey, marker);"],
+			"replace": ["\t\tvoid marker;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-PROMPT-FAIL-DROPS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-UNRETAINED-DROPS",
+			"title": "a marked turn that seals without keeping its session leaves its marker for the next turn",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (!retain && marker) {"],
+			"replace": ["if (!retain && marker && Date.now() < 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-UNRETAINED-DROPS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-UNREADABLE-REFUSES",
+			"title": "an unreadable record is treated as no record, and a marker in it goes unseen",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\tif (read.status === \"unreadable\") return { kind: \"refuse\", code: read.code };\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-UNREADABLE-REFUSES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-TURN-SCOPED-NONE",
+			"title": "a turn-scoped turn writes a dispatch marker",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (params.lifecyclePolicy === \"process-scoped\") marker = markDispatch(session, ctxSigs);"],
+			"replace": ["marker = markDispatch(session, ctxSigs);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-TURN-SCOPED-NONE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		}
+	]
+}
