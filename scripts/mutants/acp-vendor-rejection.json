@@ -34,6 +34,8 @@
 				"\t\t\t\tcreateAssistantMessageDiagnostic(ACP_PROMPT_REJECTION_DIAGNOSTIC, err, {",
 				"\t\t\t\t\terrorKind: rejection.errorKind,",
 				"\t\t\t\t\tdataJson: rejection.dataJson,",
+				"\t\t\t\t\t// #171 step 8: the marker stands, so this answer is the stop the operator saw for that dispatch.",
+				"\t\t\t\t\t...(unknown ? { outcomeUnknown: true } : {}),",
 				"\t\t\t\t\t...(lifecycle ? { lifecycle } : {}),",
 				"\t\t\t\t\t...(observed ? { launchSignal: observed } : {}),",
 				"\t\t\t\t\t...(tail ? { stderrTail: tail } : {}),",

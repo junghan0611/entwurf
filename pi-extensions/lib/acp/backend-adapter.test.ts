@@ -23,12 +23,12 @@ import {
 	admitAcpAgent,
 	agyAdapter,
 	attachAllowed,
-	bootstrapCapabilities,
 	CLAUDE_ACP_AGENT,
 	claudeAdapter,
 	cortexAdapter,
 	INCOMPLETE_TOOL_CALL_VERDICT,
 	readAgentFacts,
+	resumeAllowed,
 } from "./backend-adapter.ts";
 import { CLAUDE_CONFIG_OVERLAY_DIR } from "./overlay.ts";
 
@@ -441,17 +441,40 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 			expect(attachAllowed(facts, agent, "load")).toEqual({ allowed: false, reason: "agent-unnamed" });
 	});
 
-	it("[QK:ACP-L1-BOOTSTRAP-CAPABILITIES] the bootstrap input counts each capability only as the judgement admits it", () => {
-		const resumeOnly = readAgentFacts({
-			...CLAUDE_R1,
-			agentCapabilities: { ...CLAUDE_R1.agentCapabilities, loadSession: false },
+	it("[QK:ACP-L1-RESUME-ALLOWED] a stored session is resumed only by the measured reader, and only when its writer is one that reader was measured on", () => {
+		const claude = claudeAdapter.resume;
+		const agy = agyAdapter.resume;
+		if (!claude || !agy) throw new Error("both adapters carry measured resume data");
+		// What is done with an unanswered prompt's inputs is the vendor's measured behaviour.
+		expect(claude.unknownDispatch).toBe("skip");
+		expect(agy.unknownDispatch).toBe("resend");
+		const own = (pin: { name: string; measured: string }) => ({ name: pin.name, version: pin.measured });
+		expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, own(CLAUDE_ACP_AGENT))).toEqual({ allowed: true });
+		expect(resumeAllowed(readAgentFacts(AGY_R1), agy, own(AGY_ACP_AGENT))).toEqual({ allowed: true });
+		// The one cross-version pair a receipt measured, and no other writer.
+		expect(resumeAllowed(readAgentFacts(AGY_R1), agy, { name: AGY_ACP_AGENT.name, version: "1.5.12" })).toEqual({
+			allowed: true,
 		});
-		expect(bootstrapCapabilities(resumeOnly, CLAUDE_ACP_AGENT)).toEqual({ resumeSession: true, loadSession: false });
-		const loadOnly = readAgentFacts({ ...AGY_R1, agentCapabilities: { loadSession: true } });
-		expect(bootstrapCapabilities(loadOnly, AGY_ACP_AGENT)).toEqual({ resumeSession: false, loadSession: true });
-		expect(bootstrapCapabilities(at(AGY_R1, "1.5.12"), AGY_ACP_AGENT)).toEqual({
-			resumeSession: false,
-			loadSession: false,
+		for (const writer of [
+			{ name: CLAUDE_ACP_AGENT.name, version: "0.107.3" },
+			{ name: CLAUDE_ACP_AGENT.name, version: "0.110.0" },
+			{ name: AGY_ACP_AGENT.name, version: CLAUDE_ACP_AGENT.measured },
+			{ name: "claude", version: "unknown" },
+		]) {
+			expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, writer), JSON.stringify(writer)).toEqual({
+				allowed: false,
+				reason: "writer-unmeasured",
+			});
+		}
+		// The reader's own refusals come first and keep their names.
+		expect(resumeAllowed(at(AGY_R1, "1.5.12"), agy, own(AGY_ACP_AGENT))).toEqual({
+			allowed: false,
+			reason: "version-unmeasured",
+		});
+		const noResume = readAgentFacts({ ...CLAUDE_R1, agentCapabilities: { loadSession: true } });
+		expect(resumeAllowed(noResume, claude, own(CLAUDE_ACP_AGENT))).toEqual({
+			allowed: false,
+			reason: "capability-absent",
 		});
 	});
 

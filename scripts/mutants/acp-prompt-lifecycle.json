@@ -91,9 +91,17 @@
 			"title": "a backend session that died between turns is cleared but never announced — the next turn stops and reads as if no session had ever been there",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"\t\t\t\tconst priorEnd = existing?.alive ? undefined : takeUnreportedChildEnd(sessionKey);\n\t\t\t\tif (priorEnd) {\n\t\t\t\t\tpushAcpLifecycleNotice(\n\t\t\t\t\t\tstate,\n\t\t\t\t\t\t`previous ${adapter.backend} session ended between turns (${describeChildEnd(priorEnd)})`,\n\t\t\t\t\t);\n\t\t\t\t}"
+				"\t\t\tif (priorEnd) {",
+				"\t\t\t\tpushAcpLifecycleNotice(",
+				"\t\t\t\t\tstate,",
+				"\t\t\t\t\t// Short enough to survive the notice clip: what follows (a resume, or its stop) says the rest."
 			],
-			"replace": ["\t\t\t\tif (!existing?.alive) takeUnreportedChildEnd(sessionKey);"],
+			"replace": [
+				"\t\t\tif (priorEnd && !attach) {",
+				"\t\t\t\tpushAcpLifecycleNotice(",
+				"\t\t\t\t\tstate,",
+				"\t\t\t\t\t// Short enough to survive the notice clip: what follows (a resume, or its stop) says the rest."
+			],
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:IDLE-DEATH-ANNOUNCED]",
@@ -136,8 +144,15 @@
 			"claim": "LAUNCH-SIGNAL-EVIDENCE-STRUCTURED",
 			"title": "the caught-signal observation is dropped from the report — an externally killed child again reads as a clean vendor exit, the exact ambiguity #72 cost three diagnosis passes",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\tconst diagnosed = observed ? `${withLifecycle}\\n${observed}` : withLifecycle;"],
-			"replace": ["\t\tconst diagnosed = withLifecycle;"],
+			"find": [
+				"\t\t\t\tcreateAssistantMessageDiagnostic(ACP_PROMPT_UNKNOWN_DIAGNOSTIC, err, {",
+				"\t\t\t\t\t...(lifecycle ? { lifecycle } : {}),",
+				"\t\t\t\t\t...(observed ? { launchSignal: observed } : {}),"
+			],
+			"replace": [
+				"\t\t\t\tcreateAssistantMessageDiagnostic(ACP_PROMPT_UNKNOWN_DIAGNOSTIC, err, {",
+				"\t\t\t\t\t...(lifecycle ? { lifecycle } : {}),"
+			],
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:LAUNCH-SIGNAL-EVIDENCE-STRUCTURED]",

@@ -436,14 +436,14 @@
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		},
 		{
-			"claim": "ACP-L1-BOOTSTRAP-CAPABILITIES",
-			"title": "the load capability is read from the resume judgement",
+			"claim": "ACP-L1-RESUME-ALLOWED",
+			"title": "a stored session is resumed whatever version of the agent wrote it",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": ["\t\tloadSession: attachAllowed(facts, agent, \"load\").allowed,"],
-			"replace": ["\t\tloadSession: attachAllowed(facts, agent, \"resume\").allowed,"],
+			"find": ["\tif (writer.name !== resume.agent.name || !resume.writers.includes(writer.version)) {"],
+			"replace": ["\tif (writer.name !== resume.agent.name) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:ACP-L1-BOOTSTRAP-CAPABILITIES]",
+			"signature": "[QK:ACP-L1-RESUME-ALLOWED]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		},
 		{

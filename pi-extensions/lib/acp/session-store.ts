@@ -1,27 +1,20 @@
-// ACP plugin — session store / signature / bootstrap decision (S2d-1b-1).
+// ACP plugin — session store, configuration signature and the resident guard.
 //
-// This is the DETERMINISTIC half of session reuse. It owns three pure concerns
-// and the record persistence around them, with NO child/connection lifecycle
-// (that is S2d-1b-2 live wiring):
+// The deterministic half of session continuity: pure decisions and the record persistence around
+// them, with no child or connection lifecycle (backend.ts owns that).
 //
-//   1. bridgeConfigSignature      — a stable hash of the config that, if it
-//      drifts, must invalidate a reused session (NEXT oracle C / 핀1). During
-//      S2d-1b the carrier (appendSystemPrompt) is ABSENT, so the signature is a
-//      per-model constant; engraving fills it in S2d-1c.
-//   2. contextMessageSignatures   — one signature per pi message (role + content
-//      shape), ported from 0.11.0 index.ts:432. Reuse is only safe when the
-//      existing session's signatures are a PREFIX of the new turn's — i.e. the
-//      new context continues the old one rather than diverging.
-//   3. decideBootstrap            — maps (params, in-memory existing, persisted
-//      record) to an AcpBootstrapPath, with bootstrapPath (history source) and
-//      lifecyclePolicy (whether the child survives the turn) kept ORTHOGONAL
-//      (GPT 73b44d). `turn-scoped` (pi -p one-shot) is always `new` — never an
-//      in-memory child reuse, because a surviving child's stdio handle pins pi's
-//      exit (the S2c hang). Only a long-lived `process-scoped` session reuses.
+//   1. bridgeConfigSignature / bridgeConfigParts — a stable hash of the configuration a session was
+//      opened with, and the three parts it is taken from, so a difference can be named: a changed
+//      MCP server set, a changed setup text, or anything else (`configDrift`).
+//   2. contextMessageSignatures — one signature per Pi message (role + content shape). A live session
+//      is reused only while its signatures are a prefix of the new turn's.
+//   3. the session record — the vendor session a Pi session id owns, where its first prompt stands,
+//      the last answer it sealed, and every dispatch since whose outcome is unknown.
+//   4. decideResident — what a resident's turn may do: reuse the live session, resume the recorded
+//      one, give birth, or stop by name. A recorded session is never replaced by a new one.
 //
-// 핀4 tie-in: the chosen path feeds buildAcpPrompt(context, path) so reuse sends
-// a delta while new sends the full transcript. The prefix-compat gate here is
-// what makes delta-only SAFE — a mismatch falls back to `new` + full transcript.
+// What a turn for an existing session sends is not decided here: branch-gate.ts proves it from the
+// Pi session's branch.
 
 import { createHash, randomBytes } from "node:crypto";
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -29,7 +22,6 @@ import { dirname, join } from "node:path";
 import type { Message, ToolResultMessage, TranscriptContext } from "@earendil-works/pi-ai";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { AcpHostFacts } from "../acp-host-facts.js";
-import type { AcpBootstrapPath } from "./context.js";
 
 // MUST equal event-mapper.ts `LIFECYCLE_NOTICE_SIGNATURE` (the SSOT/producer).
 // Mirrored, not imported — the strip-types gates load this file by its `.ts`
@@ -122,7 +114,31 @@ export interface PendingDispatch {
 	start: number;
 	count: number;
 	contextMessageSignatures: string[];
+	/** The turn this marker belongs to (#171 step 8): the `responseId` its final message carries. */
+	turnId?: string;
+	/** The Pi session entry ids of the inputs this prompt carries, in order (#171 step 8). */
+	inputEntryIds?: string[];
 }
+
+/** A dispatch whose outcome is unknown: its turn and exactly the inputs it carried (#171 step 8). */
+export interface UnsealedDispatch {
+	turnId: string;
+	inputEntryIds: string[];
+}
+
+/**
+ * #171 step 8 — the configuration a session was opened with, as three digests beside the one
+ * signature, so a difference can be named: the MCP server set, the carrier text, and everything
+ * else (tools, permissions, setting sources, plugins, backend extras).
+ */
+export interface ConfigParts {
+	mcpServers: string;
+	text: string;
+	tools: string;
+}
+
+/** What differs between a session's configuration and this turn's. */
+export type ConfigDrift = "same" | "mcpServers" | "text" | "other";
 
 /**
  * #171 step 8 — where the session's first prompt stands. `pending`: the session was created and
@@ -153,11 +169,15 @@ export interface SessionRecord {
 	contextMessageSignatures: string[];
 	/** `null` once the last dispatch was sealed; a marker while one may have run unanswered (#171 L16). */
 	pendingDispatch: PendingDispatch | null;
+	/** #171 step 8: the turn the session last sealed. A stored session is attached only against it. */
+	sealedTurnId?: string;
+	/** #171 step 8: every dispatch since that seal whose outcome is unknown, oldest first. With the
+	 *  marker it is the whole set of inputs that may have reached the session since the seal. */
+	unsealed?: UnsealedDispatch[];
+	/** #171 step 8: the parts `bridgeConfigSignature` was taken from. */
+	config?: ConfigParts;
 	updatedAt: string;
 }
-
-/** A record whose last dispatch was sealed — the only shape a bootstrap decision may read (#171 L16). */
-export type SealedSessionRecord = SessionRecord & { pendingDispatch: null };
 
 /** The compat-relevant facts of a candidate session (in-memory or persisted). */
 export interface SessionCompatFacts {
@@ -170,33 +190,12 @@ export interface SessionCompatFacts {
 /** An in-memory live session candidate (reuse path). */
 export interface ExistingSession extends SessionCompatFacts {
 	alive: boolean;
+	config?: ConfigParts;
 }
 
-export interface BootstrapParams extends SessionCompatFacts {
-	lifecyclePolicy: LifecyclePolicy;
-	/** One role per message, from the same context as `contextMessageSignatures` (#171 L16 rule 6). */
-	messageRoles: readonly string[];
-}
-
-export interface BootstrapDecision {
-	path: AcpBootstrapPath;
-	/** The ACP session id to resume/load (persisted paths only). */
-	acpSessionId?: string;
-	/** The persisted record must be deleted (it is stale/incompatible). */
-	invalidatePersisted?: boolean;
-	reason: string;
-}
-
-/** Thrown when a live session is asked to switch the model it is locked to. */
-export class SessionModelLockedError extends Error {
-	readonly fromModel: string;
-	readonly toModel: string;
-	constructor(fromModel: string, toModel: string) {
-		super(`entwurf session is locked to model ${fromModel}; refusing switch to ${toModel}`);
-		this.name = "SessionModelLockedError";
-		this.fromModel = fromModel;
-		this.toModel = toModel;
-	}
+/** What this turn asks of a session: the compat facts and the parts its signature was taken from. */
+export interface ResidentParams extends SessionCompatFacts {
+	config: ConfigParts;
 }
 
 function sessionCacheDir(): string {
@@ -231,6 +230,45 @@ export function bridgeConfigSignature(input: BridgeConfigInput): string {
 			extra: input.extra ?? {},
 		}),
 	);
+}
+
+/** The three digests of `ConfigParts`, from the same input as `bridgeConfigSignature`. Pure. */
+export function bridgeConfigParts(input: BridgeConfigInput): ConfigParts {
+	return {
+		mcpServers: input.mcpServersHash,
+		// The carrier as sent. It names the MCP servers, so a server added or removed changes this part too
+		// and is no longer a difference of one part: only a change inside a named server is `mcpServers` alone.
+		text: sha256(input.appendSystemPrompt),
+		tools: sha256(
+			JSON.stringify({
+				backend: input.backend,
+				modelId: input.modelId,
+				nativeModelId: input.nativeModelId,
+				settingSources: [...input.settingSources],
+				strictMcpConfig: input.strictMcpConfig,
+				tools: [...input.tools],
+				skillPlugins: [...input.skillPlugins],
+				permissionAllow: [...input.permissionAllow],
+				disallowedTools: [...input.disallowedTools],
+				extra: input.extra ?? {},
+			}),
+		),
+	};
+}
+
+/**
+ * Name what differs. Equal signatures are `same` whatever the parts say. With no recorded parts a
+ * difference cannot be named and is `other`; so is a difference in more than one part.
+ */
+export function configDrift(
+	was: { bridgeConfigSignature: string; config?: ConfigParts },
+	now: { bridgeConfigSignature: string; config: ConfigParts },
+): ConfigDrift {
+	if (was.bridgeConfigSignature === now.bridgeConfigSignature) return "same";
+	if (!was.config) return "other";
+	const differs = (["mcpServers", "text", "tools"] as const).filter((part) => was.config?.[part] !== now.config[part]);
+	if (differs.length !== 1 || differs[0] === "tools") return "other";
+	return differs[0];
 }
 
 /** One signature per content block — role-agnostic shape fingerprint. */
@@ -303,105 +341,6 @@ export function hasPrefix(existing: string[], params: string[]): boolean {
 	return true;
 }
 
-/**
- * Compatible = same cwd + same model + same config signature + the candidate's
- * message signatures are a prefix of the new turn's. A carrier drift changes the
- * signature → incompatible. An edited/compacted/reordered history breaks the
- * prefix → incompatible (so delta-only is never sent against divergent history).
- */
-export function isCompatible(candidate: SessionCompatFacts, params: SessionCompatFacts): boolean {
-	return (
-		candidate.cwd === params.cwd &&
-		candidate.modelId === params.modelId &&
-		candidate.bridgeConfigSignature === params.bridgeConfigSignature &&
-		hasPrefix(candidate.contextMessageSignatures, params.contextMessageSignatures)
-	);
-}
-
-/**
- * #171 L16 rule 6, in the form R12 measured: the record is behind the transcript when, after its prefix, a
- * user message is followed by an assistant message — a turn ran that the record never sealed. The prefix is
- * taken at the start of a call, so the sealed turn's own answer is the first message after it: an assistant
- * before any user is no sign, and neither is a tail of users only (the unsent inputs, sent in order).
- */
-export function recordIsBehind(prefixLength: number, messageRoles: readonly string[]): boolean {
-	let sawUser = false;
-	for (let i = prefixLength; i < messageRoles.length; i++) {
-		if (messageRoles[i] === "user") sawUser = true;
-		else if (messageRoles[i] === "assistant" && sawUser) return true;
-	}
-	return false;
-}
-
-// ---------------------------------------------------------------------------
-// 2) bootstrap decision (bootstrapPath ⟂ lifecyclePolicy)
-// ---------------------------------------------------------------------------
-
-/**
- * Decide the bootstrap path. Pure except for the fail-loud model-lock throw.
- *
- * - `turn-scoped` (pi -p one-shot): ALWAYS `new`. Never an in-memory reuse (a
- *   surviving child would pin pi's exit), and — for the first cut — never a
- *   persisted resume/load either (a turn-scoped persisted path is a later lane).
- * - `process-scoped` (long-lived): in-memory reuse if compatible+alive; else a
- *   compatible persisted record resumes/loads (by capability); else `new`. A
- *   live model mismatch is a fail-loud throw at the bridge boundary (a second
- *   guard beyond v2 model-lock). An incompatible existing also invalidates the
- *   persisted record (it can no longer be trusted to continue this session).
- */
-export function decideBootstrap(
-	params: BootstrapParams,
-	sources: {
-		existing?: ExistingSession;
-		persisted?: SealedSessionRecord;
-		capabilities?: { resumeSession: boolean; loadSession: boolean };
-	} = {},
-): BootstrapDecision {
-	const { existing, persisted, capabilities } = sources;
-
-	// Fail-loud model lock: a LIVE session never silently re-targets its model.
-	if (existing?.alive && existing.modelId !== params.modelId) {
-		throw new SessionModelLockedError(existing.modelId, params.modelId);
-	}
-
-	if (params.lifecyclePolicy === "turn-scoped") {
-		return { path: "new", reason: "turn_scoped_one_shot" };
-	}
-
-	// process-scoped
-	if (existing?.alive && isCompatible(existing, params)) {
-		return { path: "reuse", reason: "in_memory_compatible" };
-	}
-
-	// An incompatible existing (alive but drifted) can no longer anchor this
-	// session — drop its persisted record too. A dead-but-compatible existing
-	// leaves the persisted record intact so it can still resume.
-	const existingIncompatible = !!existing && !isCompatible(existing, params);
-
-	if (!existingIncompatible && persisted && isCompatible(persisted, params)) {
-		if (recordIsBehind(persisted.contextMessageSignatures.length, params.messageRoles)) {
-			return { path: "new", invalidatePersisted: true, reason: "persisted_behind" };
-		}
-		if (capabilities?.resumeSession) {
-			return { path: "resume", acpSessionId: persisted.acpSessionId, reason: "persisted_compatible_resume" };
-		}
-		if (capabilities?.loadSession) {
-			return { path: "load", acpSessionId: persisted.acpSessionId, reason: "persisted_compatible_load" };
-		}
-		return { path: "new", reason: "persisted_compatible_no_capability" };
-	}
-
-	return {
-		path: "new",
-		invalidatePersisted: existingIncompatible || (!!persisted && !isCompatible(persisted, params)),
-		reason: existingIncompatible
-			? "existing_incompatible"
-			: persisted
-				? "persisted_incompatible"
-				: "no_compatible_source",
-	};
-}
-
 // ---------------------------------------------------------------------------
 // 3) record build + persistence (clock injected — pure build, fs I/O thin)
 // ---------------------------------------------------------------------------
@@ -414,6 +353,9 @@ export function buildSessionRecord(
 		writer: RecordWriter;
 		firstPrompt: FirstPromptState;
 		pendingDispatch?: PendingDispatch | null;
+		sealedTurnId?: string;
+		unsealed?: readonly UnsealedDispatch[];
+		config?: ConfigParts;
 	} & SessionCompatFacts,
 	now: string,
 ): SessionRecord {
@@ -433,8 +375,17 @@ export function buildSessionRecord(
 					start: input.pendingDispatch.start,
 					count: input.pendingDispatch.count,
 					contextMessageSignatures: [...input.pendingDispatch.contextMessageSignatures],
+					...(input.pendingDispatch.turnId === undefined ? {} : { turnId: input.pendingDispatch.turnId }),
+					...(input.pendingDispatch.inputEntryIds === undefined
+						? {}
+						: { inputEntryIds: [...input.pendingDispatch.inputEntryIds] }),
 				}
 			: null,
+		...(input.sealedTurnId === undefined ? {} : { sealedTurnId: input.sealedTurnId }),
+		...(input.unsealed && input.unsealed.length > 0
+			? { unsealed: input.unsealed.map((u) => ({ turnId: u.turnId, inputEntryIds: [...u.inputEntryIds] })) }
+			: {}),
+		...(input.config ? { config: { ...input.config } } : {}),
 		updatedAt: now,
 	};
 }
@@ -445,6 +396,10 @@ function isNonEmptyString(v: unknown): v is string {
 
 function isStringArray(v: unknown): v is string[] {
 	return Array.isArray(v) && v.every((s) => typeof s === "string");
+}
+
+function isIdArray(v: unknown): v is string[] {
+	return Array.isArray(v) && v.every(isNonEmptyString);
 }
 
 function isCount(v: unknown): v is number {
@@ -458,7 +413,45 @@ function parsePendingDispatch(raw: unknown): PendingDispatch | null | undefined 
 	const m = raw as Record<string, unknown>;
 	if (!isCount(m.start) || !isCount(m.count) || !isStringArray(m.contextMessageSignatures)) return undefined;
 	if (m.start + m.count !== m.contextMessageSignatures.length) return undefined;
-	return { start: m.start, count: m.count, contextMessageSignatures: [...m.contextMessageSignatures] };
+	if (m.turnId !== undefined && !isNonEmptyString(m.turnId)) return undefined;
+	if (m.inputEntryIds !== undefined && !isIdArray(m.inputEntryIds)) return undefined;
+	return {
+		start: m.start,
+		count: m.count,
+		contextMessageSignatures: [...m.contextMessageSignatures],
+		...(m.turnId === undefined ? {} : { turnId: m.turnId }),
+		...(m.inputEntryIds === undefined ? {} : { inputEntryIds: [...m.inputEntryIds] }),
+	};
+}
+
+/** The optional step-8 fields: absent, or well formed. `undefined` means the record is invalid. */
+function parseContinuity(
+	r: Record<string, unknown>,
+): Pick<SessionRecord, "sealedTurnId" | "unsealed" | "config"> | undefined {
+	if (r.sealedTurnId !== undefined && !isNonEmptyString(r.sealedTurnId)) return undefined;
+	let unsealed: UnsealedDispatch[] | undefined;
+	if (r.unsealed !== undefined) {
+		if (!Array.isArray(r.unsealed)) return undefined;
+		unsealed = [];
+		for (const item of r.unsealed as unknown[]) {
+			const u = item as { turnId?: unknown; inputEntryIds?: unknown } | null;
+			if (typeof u !== "object" || u === null) return undefined;
+			if (!isNonEmptyString(u.turnId) || !isIdArray(u.inputEntryIds)) return undefined;
+			unsealed.push({ turnId: u.turnId, inputEntryIds: [...u.inputEntryIds] });
+		}
+	}
+	let config: ConfigParts | undefined;
+	if (r.config !== undefined) {
+		const c = r.config as Record<string, unknown> | null;
+		if (typeof c !== "object" || c === null) return undefined;
+		if (!isNonEmptyString(c.mcpServers) || !isNonEmptyString(c.text) || !isNonEmptyString(c.tools)) return undefined;
+		config = { mcpServers: c.mcpServers, text: c.text, tools: c.tools };
+	}
+	return {
+		...(r.sealedTurnId === undefined ? {} : { sealedTurnId: r.sealedTurnId as string }),
+		...(unsealed && unsealed.length > 0 ? { unsealed } : {}),
+		...(config ? { config } : {}),
+	};
 }
 
 /** Validate a parsed JSON object into a SessionRecord, or undefined if invalid. */
@@ -481,6 +474,8 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 	if (!("pendingDispatch" in r)) return undefined;
 	const pendingDispatch = parsePendingDispatch(r.pendingDispatch);
 	if (pendingDispatch === undefined) return undefined;
+	const continuity = parseContinuity(r);
+	if (continuity === undefined) return undefined;
 	if (!isNonEmptyString(r.updatedAt)) return undefined;
 	return {
 		version: SESSION_RECORD_VERSION,
@@ -494,6 +489,7 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 		bridgeConfigSignature: r.bridgeConfigSignature,
 		contextMessageSignatures: [...r.contextMessageSignatures],
 		pendingDispatch,
+		...continuity,
 		updatedAt: r.updatedAt,
 	};
 }
@@ -600,36 +596,66 @@ export function writeSessionRecord(
 /**
  * What a resident's turn may do. `birth` is the only verdict that reaches `session/new`, and it
  * needs every sign of an earlier ACP session to be absent: no live session, no record, no birth
- * reservation, and no completed Entwurf answer or ACP entry anywhere in the Pi session file.
+ * reservation, and no Entwurf answer or ACP entry anywhere in the Pi session file. `attach` resumes
+ * the stored session under the same id; it never creates one.
  */
 export type ResidentVerdict =
-	| { kind: "reuse" }
+	/** `textDrift`: the carrier text changed and the session keeps the one it was opened with. */
+	| { kind: "reuse"; textDrift: boolean }
+	/**
+	 * Resume the recorded session. `closeLive`: a live session whose MCP server set changed is closed
+	 * first. `mcpServersChanged`: the attach carries this turn's server set, under the same carrier.
+	 */
+	| { kind: "attach"; record: SessionRecord; closeLive: boolean; mcpServersChanged: boolean }
 	| { kind: "birth" }
 	| {
 			kind: "stop";
-			stop: "model" | "cwd" | "config" | "changed" | "unreadable" | "invalid" | "interim" | "intent" | "noRecord";
+			stop:
+				| "model"
+				| "cwd"
+				| "config"
+				| "changed"
+				| "unreadable"
+				| "invalid"
+				| "version"
+				| "resume"
+				| "firstUnknown"
+				| "intent"
+				| "noRecord";
 			why: string;
 			code?: string;
 	  };
+
+type ResidentStop = Extract<ResidentVerdict, { kind: "stop" }>;
+
+/** Model, directory and configuration: what a session cannot change, and what it can. */
+function compatibility(
+	was: { cwd: string; modelId: string; bridgeConfigSignature: string; config?: ConfigParts },
+	params: ResidentParams,
+	which: string,
+): ResidentStop | { drift: Exclude<ConfigDrift, "other"> } {
+	if (was.modelId !== params.modelId)
+		return { kind: "stop", stop: "model", why: `the ${which} session has another model` };
+	if (was.cwd !== params.cwd) return { kind: "stop", stop: "cwd", why: `the ${which} session has another directory` };
+	const drift = configDrift(was, params);
+	if (drift === "other") return { kind: "stop", stop: "config", why: "the session configuration changed" };
+	return { drift };
+}
 
 /**
  * Pure. `reserved` and `hasTrace` are read only when there is neither a live session nor a record,
  * so they are thunks: a store error in one of them is the caller's to turn into a stop.
  */
 export function decideResident(
-	params: SessionCompatFacts,
+	params: ResidentParams,
 	sources: { existing?: ExistingSession; record: SessionRecordRead; reserved: () => boolean; hasTrace: () => boolean },
 ): ResidentVerdict {
 	const { existing, record } = sources;
+	let closeLive = false;
 	if (existing?.alive) {
 		// A live session is never abandoned for another: what it cannot take stops the turn, and it stays.
-		if (existing.modelId !== params.modelId)
-			return { kind: "stop", stop: "model", why: "the live session has another model" };
-		if (existing.cwd !== params.cwd)
-			return { kind: "stop", stop: "cwd", why: "the live session has another directory" };
-		if (existing.bridgeConfigSignature !== params.bridgeConfigSignature) {
-			return { kind: "stop", stop: "config", why: "the session configuration changed" };
-		}
+		const live = compatibility(existing, params, "live");
+		if ("kind" in live) return live;
 		if (!hasPrefix(existing.contextMessageSignatures, params.contextMessageSignatures)) {
 			return {
 				kind: "stop",
@@ -637,16 +663,45 @@ export function decideResident(
 				why: "the conversation no longer starts with what this session answered",
 			};
 		}
-		return { kind: "reuse" };
+		if (live.drift !== "mcpServers") return { kind: "reuse", textDrift: live.drift === "text" };
+		// A changed MCP server set is given to the same session by resuming it: the live child is closed
+		// and the record below decides the attach.
+		closeLive = true;
 	}
 	if (record.status === "unreadable") {
 		return { kind: "stop", stop: "unreadable", why: "session record unreadable", code: record.code };
 	}
 	if (record.status === "invalid") return { kind: "stop", stop: "invalid", why: "session record not valid" };
-	// Attach is not enabled yet: a stored session is neither resumed nor replaced.
-	if (record.status === "found" || record.status === "outdated") {
-		return { kind: "stop", stop: "interim", why: "a stored ACP session exists for this conversation" };
+	// GLG 2026-11-22: a record written before the dispatch marker existed is never attached.
+	if (record.status === "outdated") {
+		return { kind: "stop", stop: "version", why: "the session record is from before resume was supported" };
 	}
+	if (record.status === "found") {
+		const stored = compatibility(record.record, params, "stored");
+		if ("kind" in stored) return stored;
+		if (record.record.firstPrompt === "pending") {
+			return { kind: "stop", stop: "resume", why: "the stored session was never given a prompt" };
+		}
+		if (record.record.firstPrompt === "dispatched") {
+			return { kind: "stop", stop: "firstUnknown", why: "the stored session's first prompt has no confirmed answer" };
+		}
+		// A resume request carries this turn's carrier. Whether a vendor applies it to a session opened with
+		// another is not measured, so a stored session is resumed only with the text it was opened with.
+		if (stored.drift === "text") {
+			return { kind: "stop", stop: "config", why: "the setup text changed since this session was opened" };
+		}
+		// A sealed record of a build that kept no anchor cannot say which answer the session gave last.
+		if (!record.record.sealedTurnId) {
+			return { kind: "stop", stop: "version", why: "the session record names no last answer" };
+		}
+		return {
+			kind: "attach",
+			record: record.record,
+			closeLive,
+			mcpServersChanged: stored.drift === "mcpServers",
+		};
+	}
+	if (closeLive) return { kind: "stop", stop: "noRecord", why: "the live session has no record to resume from" };
 	if (sources.reserved()) return { kind: "stop", stop: "intent", why: "a birth was attempted and left no record" };
 	if (sources.hasTrace()) return { kind: "stop", stop: "noRecord", why: "the Pi session holds ACP history" };
 	return { kind: "birth" };

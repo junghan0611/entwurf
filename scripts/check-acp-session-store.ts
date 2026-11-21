@@ -24,18 +24,13 @@ import {
 	bridgeConfigSignature,
 	buildSessionRecord,
 	contextMessageSignatures,
-	decideBootstrap,
-	type ExistingSession,
 	hasPrefix,
-	isCompatible,
 	parseSessionRecord,
 	readSessionRecord,
 	resolveLifecyclePolicy,
 	SESSION_RECORD_PROVIDER,
 	SESSION_RECORD_VERSION,
-	type SealedSessionRecord,
 	type SessionCompatFacts,
-	SessionModelLockedError,
 	sessionRecordPath,
 	writeSessionRecord,
 } from "../pi-extensions/lib/acp/session-store.ts";
@@ -188,148 +183,13 @@ const baseInput = (): BridgeConfigInput => ({
 }
 
 // ---------------------------------------------------------------------------
-// 3) hasPrefix / isCompatible
+// 3) hasPrefix
 // ---------------------------------------------------------------------------
-{
-	assert.ok(hasPrefix(["a", "b"], ["a", "b", "c"]), "shorter prefix matches");
-	assert.ok(hasPrefix(["a", "b"], ["a", "b"]), "equal is a prefix");
-	assert.ok(hasPrefix([], ["a"]), "empty is a prefix");
-	assert.ok(!hasPrefix(["a", "b", "c"], ["a", "b"]), "longer existing is NOT a prefix");
-	assert.ok(!hasPrefix(["a", "x"], ["a", "b", "c"]), "divergent history breaks the prefix");
-
-	const facts = (over: Partial<SessionCompatFacts> = {}): SessionCompatFacts => ({
-		cwd: "/w",
-		modelId: "claude-sonnet-5",
-		bridgeConfigSignature: bridgeConfigSignature(baseInput()),
-		contextMessageSignatures: ["user:text:a"],
-		...over,
-	});
-	const params = facts({ contextMessageSignatures: ["user:text:a", "assistant:text:b"] });
-	assert.ok(isCompatible(facts(), params), "prefix history + same cfg → compatible");
-	assert.ok(!isCompatible(facts({ cwd: "/other" }), params), "cwd drift → incompatible");
-	assert.ok(!isCompatible(facts({ modelId: "claude-opus-5" }), params), "model drift → incompatible");
-	assert.ok(!isCompatible(facts({ bridgeConfigSignature: "different" }), params), "signature drift → incompatible");
-	assert.ok(
-		!isCompatible(facts({ contextMessageSignatures: ["user:text:EDITED"] }), params),
-		"edited history → prefix break → incompatible",
-	);
-}
-
-// ---------------------------------------------------------------------------
-// 4) decideBootstrap matrix
-// ---------------------------------------------------------------------------
-{
-	const sig = bridgeConfigSignature(baseInput());
-	const compatFacts: SessionCompatFacts = {
-		cwd: "/w",
-		modelId: "claude-sonnet-5",
-		bridgeConfigSignature: sig,
-		contextMessageSignatures: ["user:text:a"],
-	};
-	const params = (policy: "process-scoped" | "turn-scoped") => ({
-		...compatFacts,
-		contextMessageSignatures: ["user:text:a", "assistant:text:b", "user:text:c"],
-		lifecyclePolicy: policy,
-		// #171 L16 rule 6: after the record's prefix, the sealed answer then one unsent user — current.
-		messageRoles: ["user", "assistant", "user"],
-	});
-	const aliveCompat: ExistingSession = { ...compatFacts, alive: true };
-	const persistedCompat: SealedSessionRecord = {
-		...buildSessionRecord(
-			{
-				sessionKey: "k",
-				acpSessionId: "acp-123",
-				writer: { name: "fixture-agent", version: "1.2.3" },
-				firstPrompt: "sealed",
-				...compatFacts,
-			},
-			"2026-06-18T00:00:00Z",
-		),
-		pendingDispatch: null,
-	};
-
-	// turn-scoped: ALWAYS new, even with a compatible existing AND persisted (④).
-	assert.deepEqual(
-		decideBootstrap(params("turn-scoped"), {
-			existing: aliveCompat,
-			persisted: persistedCompat,
-			capabilities: { resumeSession: true, loadSession: true },
-		}).path,
-		"new",
-		"turn-scoped one-shot is always new",
-	);
-
-	// process-scoped + alive compatible existing → reuse.
-	assert.equal(
-		decideBootstrap(params("process-scoped"), { existing: aliveCompat }).path,
-		"reuse",
-		"compatible alive → reuse",
-	);
-
-	// process-scoped + persisted compatible + resume capability → resume.
-	{
-		const d = decideBootstrap(params("process-scoped"), {
-			persisted: persistedCompat,
-			capabilities: { resumeSession: true, loadSession: false },
-		});
-		assert.equal(d.path, "resume", "persisted compatible + resume cap → resume");
-		assert.equal(d.acpSessionId, "acp-123", "resume carries the persisted acpSessionId");
-	}
-
-	// process-scoped + persisted compatible + only load capability → load.
-	assert.equal(
-		decideBootstrap(params("process-scoped"), {
-			persisted: persistedCompat,
-			capabilities: { resumeSession: false, loadSession: true },
-		}).path,
-		"load",
-		"persisted compatible + load cap → load",
-	);
-
-	// process-scoped + persisted compatible + NO capability → new.
-	assert.equal(
-		decideBootstrap(params("process-scoped"), {
-			persisted: persistedCompat,
-			capabilities: { resumeSession: false, loadSession: false },
-		}).path,
-		"new",
-		"persisted compatible but no resume/load capability → new",
-	);
-
-	// process-scoped + alive INCOMPATIBLE existing → new + invalidatePersisted,
-	// and the persisted record is NOT trusted even if itself compatible.
-	{
-		const incompatAlive: ExistingSession = {
-			...compatFacts,
-			bridgeConfigSignature: "drifted",
-			alive: true,
-		};
-		const d = decideBootstrap(params("process-scoped"), { existing: incompatAlive, persisted: persistedCompat });
-		assert.equal(d.path, "new", "incompatible existing → new");
-		assert.equal(d.invalidatePersisted, true, "incompatible existing also invalidates persisted");
-	}
-
-	// process-scoped + persisted incompatible (no existing) → new + invalidate.
-	{
-		const incompatPersisted: SealedSessionRecord = { ...persistedCompat, bridgeConfigSignature: "drifted" };
-		const d = decideBootstrap(params("process-scoped"), { persisted: incompatPersisted });
-		assert.equal(d.path, "new", "incompatible persisted → new");
-		assert.equal(d.invalidatePersisted, true, "incompatible persisted is invalidated");
-	}
-
-	// process-scoped + nothing → new.
-	assert.equal(decideBootstrap(params("process-scoped"), {}).path, "new", "no source → new");
-
-	// model-lock: live existing with a different model → fail-loud throw (①).
-	assert.throws(
-		() =>
-			decideBootstrap(params("process-scoped"), {
-				existing: { ...aliveCompat, modelId: "claude-opus-5" },
-			}),
-		SessionModelLockedError,
-		"live model mismatch throws SessionModelLockedError",
-	);
-}
+assert.ok(hasPrefix(["a", "b"], ["a", "b", "c"]), "shorter prefix matches");
+assert.ok(hasPrefix(["a", "b"], ["a", "b"]), "equal is a prefix");
+assert.ok(hasPrefix([], ["a"]), "empty is a prefix");
+assert.ok(!hasPrefix(["a", "b", "c"], ["a", "b"]), "longer existing is NOT a prefix");
+assert.ok(!hasPrefix(["a", "x"], ["a", "b", "c"]), "divergent history breaks the prefix");
 
 // ---------------------------------------------------------------------------
 // 5) record build (pure) + parse validate + roundtrip in a temp dir
@@ -418,9 +278,7 @@ assert.equal(resolveLifecyclePolicy({ controlEnabled: undefined, mode: undefined
 console.log(
 	"[check-acp-session-store] ok — signature (pure sha256 digest, carrier/model drift detected, no raw on disk), " +
 		"contextMessageSignatures (sha256(role:content), no raw text, toolResult folds toolName/isError), " +
-		"hasPrefix/isCompatible (prefix-only, cwd/model/sig/edited drift → incompatible), " +
-		"decideBootstrap matrix (turn-scoped→always new, process reuse/resume/load/new, incompatible→invalidate, " +
-		"live model mismatch→throw), record build (injected clock) + parse validate + temp-dir roundtrip, " +
+		"hasPrefix (prefix-only), record build (injected clock) + parse validate + temp-dir roundtrip, " +
 		"resolveLifecyclePolicy (reported control flag → process-scoped incl. print mode; print/json → turn-scoped; " +
 		"tui/rpc/unreported → unhosted)",
 );

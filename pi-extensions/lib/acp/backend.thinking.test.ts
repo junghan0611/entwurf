@@ -19,7 +19,16 @@
  * point into a temp dir BEFORE the dynamic import.
  */
 
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RequestError } from "@agentclientprotocol/sdk";
@@ -44,6 +53,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "v
 import { entriesOf, fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+import { acquireHolderLease, holderLeasePath, type LeaseProbe } from "./holder-lease.ts";
 import { ACP_STOPS } from "./stop-texts.ts";
 
 // #171 step 8: the Pi session a resident turn reads, kept in step with each call.
@@ -346,33 +356,36 @@ function transcript(...userTurns: string[]): TranscriptContext {
 }
 
 /** The fake child, with the one thing a test may do to it: end it as its own exit would. */
-type FakeChild = AcpChildLike & { exit(code: number): void };
+type FakeChild = AcpChildLike & { exit(code: number | null, signal?: NodeJS.Signals): void };
 
 function makeFakeChild(events: string[] = []): FakeChild {
 	const pipe = () => ({ destroy() {}, unref() {} });
-	const listeners = new Map<string, (...args: unknown[]) => void>();
-	return {
-		exit(code) {
-			this.exitCode = code;
-			const listener = listeners.get("exit");
-			listeners.delete("exit");
-			listener?.(code, null);
-		},
+	const listeners: Array<(...args: unknown[]) => void> = [];
+	const child: FakeChild = {
 		pid: undefined,
 		exitCode: null,
 		signalCode: null,
+		exit(code, signal) {
+			if (child.exitCode !== null || child.signalCode !== null) return;
+			child.exitCode = code;
+			child.signalCode = signal ?? null;
+			for (const listener of listeners.splice(0)) listener(code, signal ?? null);
+		},
 		stdin: pipe(),
 		stdout: pipe(),
 		stderr: { on() {}, destroy() {}, unref() {} },
+		// A signalled process ends: not at once, and not before the caller has finished what it was doing.
 		kill: (signal) => {
 			events.push(`kill:${signal}`);
+			setImmediate(() => child.exit(null, typeof signal === "string" ? signal : "SIGTERM"));
 			return true;
 		},
 		unref() {},
 		once(event: string, listener: (...args: unknown[]) => void) {
-			listeners.set(event, listener);
+			if (event === "exit") listeners.push(listener);
 		},
 	};
+	return child;
 }
 
 /** One backend world. `log` records every wire call in order: `set:<configId>=<value>` and `prompt`. */
@@ -387,6 +400,8 @@ function makeWorld(
 	const wire: string[] = [];
 	const lifecycle: string[] = [];
 	const prompts: Array<{ sessionId: string; text: string; blocks: string[] }> = [];
+	/** The params of every `session/resume`, in order. */
+	const resumes: Array<Record<string, unknown>> = [];
 	let pendingPrompt: (() => void) | undefined;
 	// The connection handlers the backend registered — the producer side of session/update.
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
@@ -398,6 +413,10 @@ function makeWorld(
 		refuseSend?: Error;
 		/** The child ends in the same tick as its answer, after it. */
 		exitAfterAnswer?: number;
+		/** Runs when `session/resume` arrives; what it throws is the agent's refusal. */
+		onResume?: (params: Record<string, unknown>) => void | Promise<void>;
+		/** The answer to `session/resume`; an empty object when unset. */
+		resumeAnswer?: { sessionId?: string } | null;
 		/** Extra fields of each child's initialize answer, beside its agentInfo. */
 		initialize?: Record<string, unknown>;
 	} = {};
@@ -433,6 +452,8 @@ function makeWorld(
 				initialize: async () => {
 					wire.push("initialize");
 					return {
+						// What the measured agents answer: sessions can be resumed.
+						agentCapabilities: { sessionCapabilities: { resume: {} } },
 						...hooks.initialize,
 						agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor },
 					};
@@ -440,6 +461,12 @@ function makeWorld(
 				newSession: async () => {
 					wire.push("new");
 					return { sessionId: `ACP-${children.length}` };
+				},
+				resumeSession: async (p) => {
+					wire.push("resume");
+					resumes.push(p as Record<string, unknown>);
+					await hooks.onResume?.(p as Record<string, unknown>);
+					return hooks.resumeAnswer === undefined ? {} : hooks.resumeAnswer;
 				},
 				setSessionConfigOption: async (p: any) => {
 					log.push(`set:${p.configId}=${p.value}`);
@@ -508,6 +535,7 @@ function makeWorld(
 		now: () => "2026-11-13T00:00:00Z",
 		sessionDir,
 		birthDir: `${sessionDir}-births`,
+		holderDir: `${sessionDir}-holders`,
 		abortGraceMs: 40,
 	};
 	/** The agent speaks on the live session, whoever the backend currently routes that to. */
@@ -517,7 +545,7 @@ function makeWorld(
 		if (!handlers) throw new Error("connection handlers not registered");
 		return handlers.requestPermission(req);
 	};
-	return { deps, children, log, wire, lifecycle, prompts, agentSays, hooks, requestPermission, sessionDir };
+	return { deps, children, log, wire, lifecycle, prompts, resumes, agentSays, hooks, requestPermission, sessionDir };
 }
 
 async function runTurn(
@@ -589,12 +617,12 @@ async function reuseAbortDuringEffort(sessionId: string, deferAbort: boolean): P
 	// Bounded by the abort, not by the 30s bootstrap timeout.
 	expect(settledMs).toBeLessThan(2_000);
 	expect(world.log).toEqual(["set:model=claude-sonnet-5-5", "set:effort=high", "prompt", "set:effort=low"]);
-	// Nothing was sent, so the live session is kept; the unsent input stops the next turn (#171 step 8).
+	// Nothing was sent, so the live session is kept; the next turn sends the unsent input with its own (#171 step 8).
 	gate.hold = false;
 	const next = await runTurn(world, transcript("first", "second", "third"), sessionId, "low");
-	expect(errorText(next)).toBe(ACP_STOPS.changed.text);
+	expect(next.type).toBe("done");
 	expect(world.children).toHaveLength(1);
-	expect(world.log.slice(4)).toEqual([]);
+	expect(world.prompts.at(-1)?.blocks).toEqual(["second", "third"]);
 }
 
 describe("streamAcpTurn — disabled Cortex configuration", () => {
@@ -686,7 +714,7 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 	it("[QK:ACP-DELTA-BASH-NEXT] forwards bash output and the following human prompt", async () => {
 		await trailingUsers("delta-bash", "Ran `echo BASH-OUTPUT`", "NEXT-U11-bash");
 	});
-	it("[QK:ACP-DELTA-MAX-TOKENS] after Pi omits a length-cut answer, the next prompt reaches the vendor and the cut prompt is sent again", async () => {
+	it("[QK:ACP-DELTA-MAX-TOKENS] after Pi hides a length-cut answer the next turn stops: the session is kept and nothing is sent twice", async () => {
 		const world = makeWorld();
 		await runTurn(world, transcript("seed"), "delta-length", "high");
 		world.hooks.stopReason = "max_tokens";
@@ -711,10 +739,14 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 		session.appendMessage({ role: "user", content: "NEXT-U12-max-tokens", timestamp: 4 });
 		const context = project();
 		expect(context.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "user", "user"]);
-		await runTurn(world, context, "delta-length", "high");
+		// The branch holds the cut answer and the edit that hides it; the context shows neither. What the
+		// session holds of the cut prompt cannot be told from here, so the turn stops and the session stays.
+		piHost.setBranch("delta-length", session.getBranch());
+		const stopped = await runTurn(world, context, "delta-length", "high");
+		expect(errorText(stopped)).toBe(ACP_STOPS.changed.text);
 		expect(world.children).toHaveLength(1);
-		expect(world.prompts[2].sessionId).toBe(world.prompts[0].sessionId);
-		expect(world.prompts[2].blocks).toEqual(["BRAVO-q72", "NEXT-U12-max-tokens"]);
+		expect(world.prompts).toHaveLength(2);
+		expect(world.lifecycle).toEqual([]);
 	});
 });
 
@@ -916,6 +948,29 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			world.deps.sessionDir,
 		);
 	}
+	/**
+	 * What follows a prompt whose outcome is unknown and whose answer said so. A first prompt: every
+	 * later turn stops. A later one: the session is resumed and is sent the new input alone.
+	 */
+	function afterUnknown(
+		world: ReturnType<typeof makeWorld>,
+		next: AssistantMessageEvent,
+		sessionId: string,
+		reuse: boolean,
+	): void {
+		if (!reuse) {
+			expect(errorText(next), sessionId).toBe(ACP_STOPS.firstUnknown.text);
+			expect(world.children, sessionId).toHaveLength(1);
+			return;
+		}
+		expect(next.type, sessionId).toBe("done");
+		expect(world.children, sessionId).toHaveLength(2);
+		expect(
+			world.wire.filter((w) => w === "new"),
+			sessionId,
+		).toHaveLength(1);
+		expect(world.prompts.at(-1), sessionId).toMatchObject({ sessionId: "ACP-1", blocks: ["NEXT"] });
+	}
 	/** One turn's seal and the notices it showed. */
 	async function shownTurn(
 		world: ReturnType<typeof makeWorld>,
@@ -1035,7 +1090,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		}
 	});
 
-	it("[QK:ACP-STORED-SESSION-NO-SECOND-NEW] a stored session is neither resumed yet nor replaced: every turn stops, nothing is spawned, and the record stays byte for byte", async () => {
+	it("[QK:ACP-STORED-SESSION-NO-SECOND-NEW] a stored session that cannot be resumed is not replaced: every turn stops, nothing is spawned, and the record stays byte for byte", async () => {
 		const stderr = quietStderr();
 		for (const [name, marker] of [
 			["sealed", null],
@@ -1048,7 +1103,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			const before = readFileSync(path, "utf8");
 			for (const typed of ["TYPED-NOW", "TYPED-AGAIN"]) {
 				const { sealed } = await shownTurn(world, transcript("RAN-MAYBE", "ALSO-MAYBE", typed), id);
-				expect(errorText(sealed), name).toBe(ACP_STOPS.interim.text);
+				expect(errorText(sealed), name).toBe(ACP_STOPS.config.text);
 				assertNoReplay(errorText(sealed));
 				expect(errorText(sealed)).not.toContain("OLD-ACP");
 			}
@@ -1065,7 +1120,8 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(readFileSync(invalid, "utf8")).toBe("{not json");
 		const v1 = store.sessionRecordPath(keyOf("stored-v1"), world.deps.sessionDir);
 		writeFileSync(v1, JSON.stringify({ version: 1, acpSessionId: "V1-ACP" }));
-		expect(errorText(await runTurn(world, transcript("X"), "stored-v1", "high"))).toBe(ACP_STOPS.interim.text);
+		expect(errorText(await runTurn(world, transcript("X"), "stored-v1", "high"))).toBe(ACP_STOPS.version.text);
+		expect(readFileSync(v1, "utf8")).toBe(JSON.stringify({ version: 1, acpSessionId: "V1-ACP" }));
 		expect(world.children).toHaveLength(0);
 		expect(stderr).not.toHaveBeenCalledWith(expect.stringContaining("TYPED-NOW"));
 	});
@@ -1229,7 +1285,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			false,
 		);
 		// An error text proves nothing, a fixed stop text included: a vendor's raw late error can read the same.
-		for (const id of ["mode", "host", "unreadable", "reserve", "interim", "intent", "changed", "unknown"] as const) {
+		for (const id of ["mode", "host", "unreadable", "reserve", "version", "intent", "changed", "unknown"] as const) {
 			const raw = {
 				stopReason: "error",
 				errorMessage: ACP_STOPS[id].text,
@@ -1339,7 +1395,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(marked).toMatchObject({ start: 0, count: 2 });
 	});
 
-	it("[QK:ACP-PROMPT-FAIL-KEEPS-RECORD] a prompt that fails after its marker keeps the record, marker and all, and no later turn opens another session", async () => {
+	it("[QK:ACP-PROMPT-FAIL-KEEPS-RECORD] a prompt that fails after its marker keeps the record, marker and all; a first prompt stops every later turn, a later one is resumed without its input", async () => {
 		quietStderr();
 		const fail = () => {
 			throw new Error("fake agent: the prompt failed");
@@ -1357,7 +1413,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		});
 		fresh.hooks.onPrompt = undefined;
 		expect(errorText(await runTurn(fresh, transcript("CUT-NEW", "NEXT"), "fail-new", "high"))).toBe(
-			ACP_STOPS.interim.text,
+			ACP_STOPS.firstUnknown.text,
 		);
 		expect(fresh.wire).toEqual(["initialize", "new", "prompt"]);
 		// The prompt on a live session fails.
@@ -1372,10 +1428,18 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			record: { acpSessionId: "ACP-1", firstPrompt: "sealed", pendingDispatch: { start: 3, count: 1 } },
 		});
 		live.hooks.onPrompt = undefined;
-		expect(errorText(await runTurn(live, transcript("LIVE", "CUT-REUSE", "NEXT"), "fail-reuse", "high"))).toBe(
-			ACP_STOPS.interim.text,
-		);
-		expect(live.wire).toEqual(["initialize", "new", "prompt", "prompt"]);
+		// The session is resumed under the same id and is sent the new input only: the one whose outcome is
+		// unknown is not sent twice, and the turn says so.
+		const resumed = await shownTurn(live, transcript("LIVE", "CUT-REUSE", "NEXT"), "fail-reuse");
+		expect(resumed.sealed.type).toBe("done");
+		expect(resumed.shown).toContain(`[acp: ${backend.heldInputsNotice(1, 0)}]`);
+		expect(live.wire).toEqual(["initialize", "new", "prompt", "prompt", "initialize", "resume", "prompt"]);
+		expect(live.resumes[0]).toMatchObject({ sessionId: "ACP-1" });
+		expect(live.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["NEXT"] });
+		expect(recordOf(live, "fail-reuse")).toMatchObject({
+			status: "found",
+			record: { acpSessionId: "ACP-1", pendingDispatch: null },
+		});
 	});
 
 	it("[QK:ACP-UNKNOWN-FIXED-TEXT] a prompt that may have been dispatched and got no classified answer seals the fixed text; what was said is kept in a diagnostic, not in errorMessage", async () => {
@@ -1429,8 +1493,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 				world.hooks.onPrompt = undefined;
 				world.hooks.refuseSend = undefined;
 				const next = await runTurn(world, transcript(...(reuse ? ["FIRST"] : []), "CUT", "NEXT"), sessionId, "high");
-				expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
-				expect(world.children, sessionId).toHaveLength(1);
+				afterUnknown(world, next, sessionId, reuse);
 			}
 		}
 	});
@@ -1461,8 +1524,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 				expect(world.lifecycle, sessionId).toContain("close");
 				world.hooks.stopReason = undefined;
 				const next = await runTurn(world, transcript(...(reuse ? ["FIRST"] : []), "CUT", "NEXT"), sessionId, "high");
-				expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
-				expect(world.prompts, sessionId).toHaveLength(reuse ? 2 : 1);
+				afterUnknown(world, next, sessionId, reuse);
 			}
 		}
 	});
@@ -1532,7 +1594,7 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		}
 	});
 
-	it("[QK:ACP-ANSWER-THEN-GONE-SEALS] a child gone right after its answer still seals: the marker is cleared, the record stays, and no other session is opened", async () => {
+	it("[QK:ACP-ANSWER-THEN-GONE-SEALS] a child gone right after its answer still seals: the marker is cleared, the record stays, and the next turn resumes that session", async () => {
 		quietStderr();
 		for (const reuse of [false, true]) {
 			const sessionId = `gone-after-answer-${reuse}`;
@@ -1546,19 +1608,28 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 				record: { acpSessionId: "ACP-1", firstPrompt: "sealed", pendingDispatch: null },
 			});
 			world.hooks.exitAfterAnswer = undefined;
+			// The agent is gone and its session is not: the next turn resumes it and sends only the new input.
 			const next = await runTurn(world, transcript(...asked, "NEXT"), sessionId, "high");
-			expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
-			expect(world.children, sessionId).toHaveLength(1);
+			expect(next.type, sessionId).toBe("done");
+			expect(world.children, sessionId).toHaveLength(2);
+			expect(
+				world.wire.filter((w) => w === "new"),
+				sessionId,
+			).toHaveLength(1);
+			expect(world.resumes, sessionId).toHaveLength(1);
+			expect(world.prompts.at(-1), sessionId).toMatchObject({ sessionId: "ACP-1", blocks: ["NEXT"] });
 		}
 		// The same end a moment later, once the turn has sealed and kept its session.
 		const world = makeWorld();
 		await runTurn(world, transcript("LAST"), "gone-after-seal", "high");
 		world.children[0].exit(0);
 		const { sealed, shown } = await shownTurn(world, transcript("LAST", "NEXT"), "gone-after-seal");
-		expect(errorText(sealed)).toBe(ACP_STOPS.interim.text);
-		expect(shown).toContain("[acp: previous claude session ended between turns (exit code 0)]");
+		expect(sealed.type).toBe("done");
+		expect(shown).toContain("[acp: previous claude agent ended between turns (exit code 0)]");
+		expect(shown).toContain("[acp: resuming claude session]");
 		expect(recordOf(world, "gone-after-seal")).toMatchObject({ status: "found", record: { pendingDispatch: null } });
-		expect(world.children).toHaveLength(1);
+		expect(world.children).toHaveLength(2);
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "initialize", "resume", "prompt"]);
 	});
 
 	it("[QK:ACP-DISPATCH-THROW-SEALS] an exception nothing caught still ends the turn, with a fixed text and nothing sent", async () => {
@@ -1666,9 +1737,364 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			expect(world.lifecycle, sessionId).toContain("close");
 			world.hooks.onPrompt = undefined;
 			const next = await runTurn(world, transcript(...(reuse ? ["FIRST"] : []), "CUT", "NEXT"), sessionId, "high");
-			expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
+			// An abort tells nothing about the dispatch: the next turn is the stop that does, and it names it.
+			expect(errorText(next), sessionId).toBe(reuse ? ACP_STOPS.claudeSkip.text : ACP_STOPS.firstUnknown.text);
 			expect(world.children, sessionId).toHaveLength(1);
+			if (!reuse) continue;
+			if (next.type !== "error") throw new Error("expected an error seal");
+			expect(next.error.diagnostics?.[0], sessionId).toMatchObject({
+				type: backend.ACP_SKIP_NOTICE_DIAGNOSTIC,
+				details: { turnIds: [sealed.error.responseId] },
+			});
+			// Told: the turn after it resumes the session with the inputs that were never sent.
+			const after = await runTurn(world, transcript("FIRST", "CUT", "NEXT", "THEN"), sessionId, "high");
+			expect(after.type, sessionId).toBe("done");
+			expect(world.prompts.at(-1), sessionId).toMatchObject({ sessionId: "ACP-1", blocks: ["NEXT", "THEN"] });
 		}
+	});
+
+	// --- #171 step 8: a stored session is resumed under the same id ---------------------------------
+
+	const leaseOf = (world: ReturnType<typeof makeWorld>) =>
+		holderLeasePath("claude", "ACP-1", world.deps.holderDir as string);
+	const recordBytes = (world: ReturnType<typeof makeWorld>, id: string) =>
+		readFileSync(store.sessionRecordPath(keyOf(id), world.deps.sessionDir), "utf8");
+
+	it("[QK:ACP-ATTACH-SAME-ID-DELTA] a session this Pi left is resumed under its id and sent only the new input; its marker names the turn and the inputs", async () => {
+		const world = makeWorld();
+		const id = "attach-delta";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		expect(existsSync(leaseOf(world))).toBe(true);
+		// Leaving the session (/new, quit): the agent is closed, proven gone, and the hold is given up.
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		expect(existsSync(leaseOf(world))).toBe(false);
+		const during: unknown[] = [];
+		world.hooks.onPrompt = () => void during.push(recordOf(world, id));
+		const { sealed, shown } = await shownTurn(world, transcript("FIRST", "SECOND"), id);
+		world.hooks.onPrompt = undefined;
+		if (sealed.type !== "done") throw new Error(`expected done, got ${errorText(sealed)}`);
+		expect(shown).toContain("[acp: resuming claude session]");
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "initialize", "resume", "prompt"]);
+		expect(world.resumes[0]).toMatchObject({ sessionId: "ACP-1", cwd: process.cwd() });
+		// No transcript and no first-prompt augment: the session holds both.
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+		expect(during[0]).toMatchObject({
+			status: "found",
+			record: {
+				acpSessionId: "ACP-1",
+				firstPrompt: "sealed",
+				pendingDispatch: { turnId: sealed.message.responseId, inputEntryIds: [expect.any(String)] },
+			},
+		});
+		expect(recordOf(world, id)).toMatchObject({
+			status: "found",
+			record: { acpSessionId: "ACP-1", pendingDispatch: null, sealedTurnId: sealed.message.responseId },
+		});
+		expect(existsSync(leaseOf(world))).toBe(true);
+		// The resumed agent is this Pi's live session from here on.
+		expect((await runTurn(world, transcript("FIRST", "SECOND", "THIRD"), id, "high")).type).toBe("done");
+		expect(world.wire.slice(6)).toEqual(["prompt"]);
+		expect(world.children).toHaveLength(2);
+	});
+
+	it("[QK:ACP-ATTACH-REFUSAL-KEEPS-RECORD] a resume that is not allowed, refused or answered for another session stops: nothing is sent, no session is opened, the record stays", async () => {
+		quietStderr();
+		const rows: Array<[string, keyof typeof ACP_STOPS, (world: ReturnType<typeof makeWorld>, id: string) => void]> = [
+			[
+				"no resume capability",
+				"load",
+				(world) => {
+					world.hooks.initialize = { agentCapabilities: {} };
+				},
+			],
+			[
+				"refused",
+				"resume",
+				(world) => {
+					world.hooks.onResume = () => {
+						throw new Error("VENDOR-SAYS-NO");
+					};
+				},
+			],
+			[
+				"another id",
+				"resume",
+				(world) => {
+					world.hooks.resumeAnswer = { sessionId: "ACP-OTHER" };
+				},
+			],
+			[
+				"an id that is not one",
+				"resume",
+				(world) => {
+					world.hooks.resumeAnswer = { sessionId: 42 } as never;
+				},
+			],
+			[
+				"an id key with nothing in it",
+				"resume",
+				(world) => {
+					world.hooks.resumeAnswer = { sessionId: undefined };
+				},
+			],
+			[
+				"a writer no receipt measured",
+				"version",
+				(world, id) => {
+					const path = store.sessionRecordPath(keyOf(id), world.deps.sessionDir);
+					const record = JSON.parse(readFileSync(path, "utf8"));
+					writeFileSync(path, JSON.stringify({ ...record, writer: { ...record.writer, version: "0.107.0" } }));
+				},
+			],
+		];
+		for (const [name, stop, arrange] of rows) {
+			const world = makeWorld();
+			const id = `attach-refused-${name.replaceAll(" ", "-")}`;
+			await runTurn(world, transcript("FIRST"), id, "high");
+			expect(await backend.releaseAcpSessions(id), name).toBe(1);
+			arrange(world, id);
+			const before = recordBytes(world, id);
+			const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+			expect(errorText(stopped), name).toBe(ACP_STOPS[stop].text);
+			expect(errorText(stopped), name).not.toContain("VENDOR-SAYS-NO");
+			expect(world.prompts, name).toHaveLength(1);
+			expect(
+				world.wire.filter((w) => w === "new"),
+				name,
+			).toHaveLength(1);
+			expect(recordBytes(world, id), name).toBe(before);
+			if (stop === "version") continue;
+			// Control: with the cause gone the same input goes to the same session. It was never sent.
+			world.hooks.initialize = {};
+			world.hooks.onResume = undefined;
+			world.hooks.resumeAnswer = undefined;
+			expect((await runTurn(world, transcript("FIRST", "SECOND"), id, "high")).type, name).toBe("done");
+			expect(world.prompts.at(-1), name).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+			expect(
+				world.wire.filter((w) => w === "new"),
+				name,
+			).toHaveLength(1);
+		}
+	});
+
+	it("[QK:ACP-ATTACH-HOLDER-STOPS] a session another holder's lease stands on is not resumed: nothing is spawned and the lease stays as found", async () => {
+		const others: Record<number, "live" | "dead" | "uncertain"> = {};
+		const probe = (pid: number, nonce = "module-1"): LeaseProbe => ({
+			self: { pid, startKey: `start-${pid}` },
+			nonce,
+			scope: null,
+			classify: (identity) => others[identity.pid] ?? "uncertain",
+		});
+		const rows: Array<[string, keyof typeof ACP_STOPS, LeaseProbe, "live" | "dead" | "uncertain"]> = [
+			["another live process", "holder", probe(2), "live"],
+			["a holder that died without releasing", "holderStale", probe(2), "dead"],
+			["a holder that cannot be judged", "holderStale", probe(2), "uncertain"],
+			["this process before a reload", "reload", probe(1, "module-0"), "live"],
+		];
+		for (const [name, stop, holder, verdict] of rows) {
+			const world = makeWorld();
+			world.deps.leaseProbe = probe(1);
+			const id = `attach-held-${stop}-${verdict}`;
+			await runTurn(world, transcript("FIRST"), id, "high");
+			expect(await backend.releaseAcpSessions(id, world.deps.leaseProbe), name).toBe(1);
+			const planted = acquireHolderLease(
+				{ backend: "claude", acpSessionId: "ACP-1", at: "2026-11-22T00:00:00Z" },
+				holder,
+				world.deps.holderDir,
+			);
+			expect(planted.ok, name).toBe(true);
+			others[2] = verdict;
+			const lease = readFileSync(leaseOf(world), "utf8");
+			const record = recordBytes(world, id);
+			const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+			expect(errorText(stopped), name).toBe(ACP_STOPS[stop].text);
+			expect(world.children, name).toHaveLength(1);
+			expect(world.wire, name).toEqual(["initialize", "new", "prompt"]);
+			expect(readFileSync(leaseOf(world), "utf8"), name).toBe(lease);
+			expect(recordBytes(world, id), name).toBe(record);
+		}
+	});
+
+	it("[QK:ACP-SKIP-STOP-NAMES-DISPATCH] an input held back with no stored answer that told the operator stops the turn once, naming the dispatch; the next turn goes on without it", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "skip-untold";
+		const first = await runTurn(world, transcript("FIRST"), id, "high");
+		if (first.type !== "done") throw new Error("expected done");
+		world.hooks.onPrompt = () => {
+			throw new Error("fake agent: the prompt failed");
+		};
+		await runTurn(world, transcript("FIRST", "CUT"), id, "high");
+		world.hooks.onPrompt = undefined;
+		const marked = recordOf(world, id);
+		if (marked.status !== "found" || !marked.record.pendingDispatch?.turnId) throw new Error("no marker");
+		const marker = marked.record.pendingDispatch;
+		// Pi went down before it stored that turn's answer: the branch shows the input and nothing that told anyone.
+		const context = transcript("FIRST", "CUT");
+		context.messages.push({ role: "user", content: "NEXT", timestamp: 9 });
+		// The first answer as this context shows it, under the turn id it was sealed with.
+		const answered = {
+			...context.messages.find((message) => message.role === "assistant"),
+			provider: "entwurf",
+			responseId: first.message.responseId,
+		};
+		piHost.setBranch(id, [
+			{ type: "message", id: "u0", message: { role: "user", content: "FIRST" } },
+			{ type: "message", id: "a0", message: answered },
+			{ type: "message", id: marker.inputEntryIds?.[0], message: { role: "user", content: "CUT" } },
+			{ type: "message", id: "u2", message: { role: "user", content: "NEXT" } },
+		]);
+		const before = recordBytes(world, id);
+		const told = await runTurn(world, context, id, "high");
+		if (told.type !== "error") throw new Error("expected the stop");
+		expect(told.error.errorMessage).toBe(ACP_STOPS.claudeSkip.text);
+		expect(sealedNotices(told)).toContain(`[acp: ${backend.heldInputsNotice(1, 0)}]`);
+		expect(told.error.diagnostics?.[0]).toMatchObject({
+			type: backend.ACP_SKIP_NOTICE_DIAGNOSTIC,
+			details: { turnIds: [marker.turnId] },
+		});
+		// Nothing was started for it, and the record is as it was.
+		expect(world.children).toHaveLength(1);
+		expect(recordBytes(world, id)).toBe(before);
+		// That stop is stored with its notice: the turn after it resumes the session without the held input.
+		context.messages.push({ role: "user", content: "THEN", timestamp: 10 });
+		const after = await runTurn(world, context, id, "high");
+		expect(after.type).toBe("done");
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["NEXT", "THEN"] });
+		expect(world.prompts.flatMap((prompt) => prompt.blocks)).toEqual(expect.arrayContaining(["CUT", "NEXT", "THEN"]));
+		expect(world.prompts.filter((prompt) => prompt.blocks.includes("CUT"))).toHaveLength(1);
+	});
+
+	it("[QK:ACP-LEASE-RELEASE-NEEDS-PROOF] the hold on a session is given up only once its agent is seen gone, and until then no second agent resumes it", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "lease-proof";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		// An agent that takes the signal and stays.
+		world.children[0].kill = () => true;
+		expect(await backend.releaseAcpSessions(id, undefined, 20)).toBe(0);
+		expect(existsSync(leaseOf(world))).toBe(true);
+		const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high", {
+			deps: { childExitTimeoutMs: 20 },
+		});
+		expect(errorText(stopped)).toBe(ACP_STOPS.resume.text);
+		expect(world.children).toHaveLength(1);
+		expect(world.wire).toEqual(["initialize", "new", "prompt"]);
+		// Its exit is observed: now the hold goes, and the session can be resumed.
+		world.children[0].exit(null, "SIGKILL");
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		expect(existsSync(leaseOf(world))).toBe(false);
+		expect((await runTurn(world, transcript("FIRST", "SECOND"), id, "high")).type).toBe("done");
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+	});
+
+	it("[QK:ACP-ATTACH-MCP-CHANGE] a changed MCP server set is given to the same session by resuming it; a changed permission stops and keeps it", async () => {
+		const world = makeWorld();
+		const id = "attach-mcp";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		const base = world.deps.loadConfig;
+		const extra = { name: "extra", command: "/bin/true", args: [], env: [] };
+		world.deps.loadConfig = (cwd, modelId, adapter) => {
+			const resolved = base(cwd, modelId, adapter);
+			return { ...resolved, mcpServers: [...resolved.mcpServers, extra as never], mcpServersHash: "set-two" };
+		};
+		const { sealed, shown } = await shownTurn(world, transcript("FIRST", "SECOND"), id);
+		expect(sealed.type).toBe("done");
+		// The live agent was closed, by us: that is no death to announce.
+		expect(shown).not.toContain("ended between turns");
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "initialize", "resume", "prompt"]);
+		expect(world.resumes[0]).toMatchObject({ sessionId: "ACP-1" });
+		expect((world.resumes[0].mcpServers as Array<{ name: string }>).map((server) => server.name)).toContain("extra");
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+		expect(recordOf(world, id)).toMatchObject({ status: "found", record: { config: { mcpServers: "set-two" } } });
+		// Anything else that changed is not something a session can be given: the turn stops, the session stays.
+		const changed = world.deps.loadConfig;
+		world.deps.loadConfig = (cwd, modelId, adapter) => ({
+			...changed(cwd, modelId, adapter),
+			permissionAllow: ["Bash(rm:*)"],
+		});
+		const stopped = await runTurn(world, transcript("FIRST", "SECOND", "THIRD"), id, "high");
+		expect(errorText(stopped)).toBe(ACP_STOPS.config.text);
+		expect(world.children).toHaveLength(2);
+		world.deps.loadConfig = changed;
+		expect((await runTurn(world, transcript("FIRST", "SECOND", "THIRD"), id, "high")).type).toBe("done");
+		expect(world.wire.slice(6)).toEqual(["prompt"]);
+	});
+
+	it("[QK:ACP-ATTACH-RECORD-RECHECKED] the record a resume was planned on is read again under the lease: one that moved meanwhile stops the turn before any agent starts", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "attach-recheck";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		// Another Pi with the same session id seals a turn and releases, after this turn planned its delta
+		// and before it holds the lease: the probe is first read inside the lease acquisition.
+		const path = store.sessionRecordPath(keyOf(id), world.deps.sessionDir);
+		const real = backend.acpLeaseProbe();
+		let moved = "";
+		world.deps.leaseProbe = {
+			...real,
+			get self() {
+				if (moved === "") {
+					const record = JSON.parse(readFileSync(path, "utf8"));
+					moved = JSON.stringify({ ...record, sealedTurnId: "entwurf-turn:another-pi" });
+					writeFileSync(path, moved);
+				}
+				return real.self;
+			},
+		};
+		const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+		expect(errorText(stopped)).toBe(ACP_STOPS.resume.text);
+		expect(world.children).toHaveLength(1);
+		expect(world.wire).toEqual(["initialize", "new", "prompt"]);
+		expect(readFileSync(path, "utf8")).toBe(moved);
+		// No agent was started under the lease this turn took, so it does not stand in anyone's way.
+		expect(existsSync(leaseOf(world))).toBe(false);
+	});
+
+	it("[QK:ACP-AGENT-TRACKED-PAST-EXIT] an agent that ended between turns is still tracked: while its process group is not empty the session is not resumed and its lease is not released", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "agent-group";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		// The agent ends by itself; something it started is still running in its group.
+		let groupEmpty = false;
+		world.deps.childGroupGone = () => groupEmpty;
+		world.children[0].exit(0);
+		const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high", {
+			deps: { childExitTimeoutMs: 20 },
+		});
+		expect(errorText(stopped)).toBe(ACP_STOPS.resume.text);
+		expect(world.children).toHaveLength(1);
+		expect(await backend.releaseAcpSessions(id, undefined, 20, () => groupEmpty)).toBe(0);
+		expect(existsSync(leaseOf(world))).toBe(true);
+		// An `error` event is not an exit: an agent that raised one and has a pid is not proven gone by it.
+		// The group empties: now the session is resumed, by this process, on a second agent.
+		groupEmpty = true;
+		const resumed = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+		expect(resumed.type).toBe("done");
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+		expect(world.children).toHaveLength(2);
+	});
+
+	it("[QK:ACP-ATTACH-TEXT-CHANGE-STOPS] a stored session is not resumed under a setup text other than the one it was opened with", async () => {
+		const world = makeWorld();
+		const id = "attach-text";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		const path = store.sessionRecordPath(keyOf(id), world.deps.sessionDir);
+		const record = JSON.parse(readFileSync(path, "utf8"));
+		// As if the carrier had read otherwise when the session was opened: only the text part differs.
+		const before = JSON.stringify({
+			...record,
+			bridgeConfigSignature: "opened-with-another-text",
+			config: { ...record.config, text: "another-text" },
+		});
+		writeFileSync(path, before);
+		const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+		expect(errorText(stopped)).toBe(ACP_STOPS.config.text);
+		expect(world.children).toHaveLength(1);
+		expect(readFileSync(path, "utf8")).toBe(before);
 	});
 
 	it("[QK:ACP-D18-UNHOSTED-STOPS] a Pi that is neither a resident nor an explicit one-shot stops an ACP turn before any spawn", async () => {
@@ -1773,7 +2199,7 @@ describe("streamAcpTurn — effort on the live session (#142)", () => {
 		assertNoReplay(errorText(sealed));
 	});
 
-	it("[QK:ACP-REUSE-REFUSAL-KEEPS-SESSION] a mismatched answer on reuse fails before the prompt, keeps the live session, and the next turn stops instead of opening another", async () => {
+	it("[QK:ACP-REUSE-REFUSAL-KEEPS-SESSION] a mismatched answer on reuse fails before the prompt, keeps the live session, and the next turn sends the unsent input with its own", async () => {
 		let answer = (value: string) => value;
 		const world = makeWorld((value) => answer(value));
 		await runTurn(world, transcript("first"), "th-reuse-mismatch", "high");
@@ -1784,12 +2210,12 @@ describe("streamAcpTurn — effort on the live session (#142)", () => {
 		expect(world.children).toHaveLength(1);
 		answer = (value) => value;
 		// The refused turn's answer is on the branch and "second" never reached the vendor: the next turn
-		// neither sends "third" alone nor opens a second session.
-		const prompts = world.log.filter((line) => line === "prompt").length;
+		// sends it with "third", on the same session.
 		const next = await runTurn(world, transcript("first", "second", "third"), "th-reuse-mismatch", "low");
-		expect(errorText(next)).toBe(ACP_STOPS.changed.text);
+		expect(next.type).toBe("done");
 		expect(world.children).toHaveLength(1);
-		expect(world.log.filter((line) => line === "prompt")).toHaveLength(prompts);
+		expect(world.prompts.at(-1)?.blocks).toEqual(["second", "third"]);
+		expect(world.prompts).toHaveLength(2);
 	});
 
 	it("[QK:ACP-THINKING-REUSE-ABORT] an abort already raised when a reuse turn starts waiting for a changed effort settles at once, sends no prompt and keeps the session", async () => {
@@ -2177,7 +2603,9 @@ describe("streamAcpTurn — a resident's branch gate and payload hook (#171 step
 			await runTurn(world, transcript("first"), id, "high");
 			const record = () => readFileSync(join(world.sessionDir, readdirSync(world.sessionDir)[0]), "utf8");
 			const before = record();
-			const stopped = await runTurn(world, transcript("first", "second", "also"), id, "high", {
+			const two = transcript("first", "second");
+			two.messages.push({ role: "user", content: "also", timestamp: 9 });
+			const stopped = await runTurn(world, two, id, "high", {
 				options: { onPayload },
 			});
 			expect(errorText(stopped), name).toBe(ACP_STOPS.hook.text);

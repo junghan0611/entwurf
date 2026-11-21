@@ -101,6 +101,38 @@ const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 	parameters: obj({}, { open: true }),
 }));
 
+/** Each earlier turn of a Pi session as its context shows it: the input and a completed answer. */
+const earlierTurns = new Map<string, number>();
+function withEarlierTurns<M>(sessionId: string | undefined, input: string, now: M[]): M[] {
+	if (sessionId === undefined) return now;
+	const earlier = earlierTurns.get(sessionId) ?? 0;
+	earlierTurns.set(sessionId, earlier + 1);
+	const before: unknown[] = [];
+	for (let i = 0; i < earlier; i++) {
+		before.push(
+			{ role: "user", content: input, timestamp: 0 },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "ok" }],
+				api: "entwurf",
+				provider: "entwurf",
+				model: "claude-sonnet-5-5",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				timestamp: 0,
+			},
+		);
+	}
+	return [...(before as M[]), ...now];
+}
+
 /** A world whose connection speaks `script.bootstrap` during newSession and `script.prompt` with the prompt on the wire. */
 function makeWorld(
 	script: { bootstrap?: unknown[]; prompt?: unknown[] },
@@ -175,13 +207,15 @@ function makeWorld(
 	};
 	/** Run one whole turn; returns what it showed and how it sealed. */
 	const turn = async (opts: { sessionId?: string; summary?: boolean; text?: string; texts?: string[] }) => {
+		const now = (opts.texts ?? [opts.text ?? "hello"]).map((text) => ({
+			role: "user" as const,
+			content: text,
+			timestamp: 0,
+		}));
 		const ctx = normalizeContext({
 			tools: opts.summary ? [] : PI_TOOLS,
-			messages: (opts.texts ?? [opts.text ?? "hello"]).map((text) => ({
-				role: "user" as const,
-				content: text,
-				timestamp: 0,
-			})),
+			// A resident's later turn carries its earlier ones, as Pi's context does.
+			messages: opts.summary ? now : withEarlierTurns(opts.sessionId, "hello", now),
 		});
 		const options = {
 			sessionId: opts.sessionId,

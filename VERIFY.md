@@ -374,7 +374,7 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 |---|---|
 | Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live` (a bare-vendor shape by design: no overlay and no session meta, so it is not the production session shape), `check-acp-prompt-builder` |
 | Multi-turn continuity + recall (process-scoped reuse) | `smoke-acp-session-reuse-live`, `check-acp-session-reuse` |
-| Cross-process continuity / cache before-after | `check-acp-session-store` (signature, decideBootstrap, persist/parse) |
+| Cross-process continuity / cache before-after | `check-acp-session-store` (signature, persist/parse); resident guard beside `session-store.ts` |
 | Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
 | Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
 | Prompt lifecycle — no wall-clock cutoff on a running turn; abort ends it by ACP `session/cancel` with bounded cleanup; a child death is reported with exit status + stderr on new AND reuse turns; our prompt-phase error text is not classified transient by pi | `check-acp-prompt-lifecycle`, `check-probe-ordering` |

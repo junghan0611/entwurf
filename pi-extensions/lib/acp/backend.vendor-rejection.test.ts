@@ -325,13 +325,14 @@ async function runTurn(
 	sessionId: string,
 	signal?: AbortSignal,
 	model: Model<Api> = SONNET,
+	deps: Partial<AcpTurnDeps> = {},
 ): Promise<AssistantMessageEvent[]> {
 	const events: AssistantMessageEvent[] = [];
 	for await (const event of backend.streamAcpTurn(
 		model,
 		context,
 		{ sessionId, signal, reasoning: "medium" },
-		world.deps,
+		{ ...world.deps, ...deps },
 	)) {
 		events.push(event);
 	}
@@ -412,10 +413,10 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		);
 		expect(failedNotice).toBeGreaterThanOrEqual(0);
 		expect(failedNotice).toBeLessThan(events.indexOf(event));
-		// The record keeps its marker; no later turn opens a second session for this conversation.
+		// The record keeps its marker; a first prompt with no confirmed answer stops every later turn.
 		world.script(endTurn);
 		const after = sealedOf(await runTurn(world, transcript("run the build", "again"), "cell-new"));
-		expect(after.message.errorMessage).toBe(ACP_STOPS.interim.text);
+		expect(after.message.errorMessage).toBe(ACP_STOPS.firstUnknown.text);
 		expect(world.children).toHaveLength(1);
 	});
 
@@ -450,8 +451,14 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		if (event.type === "error") expect(event.reason).toBe("error");
 		assertNoReplay(message);
 		world.script(endTurn);
-		const after = sealedOf(await runTurn(world, transcript("first", "second", "third"), "cell-reuse"));
-		expect(after.message.errorMessage).toBe(ACP_STOPS.interim.text);
+		// The closed agent of this world never exits. A session is not resumed on a second agent while the
+		// first is not proven gone, so the turn stops: no second session, and no second agent either.
+		const after = sealedOf(
+			await runTurn(world, transcript("first", "second", "third"), "cell-reuse", undefined, SONNET, {
+				childExitTimeoutMs: 20,
+			}),
+		);
+		expect(after.message.errorMessage).toBe(ACP_STOPS.resume.text);
 		expect(world.children).toHaveLength(1);
 	});
 
@@ -527,7 +534,7 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 			expect(diagnostic?.error?.message, form.label).toBe(VENDOR_TEXT);
 			world.script(endTurn);
 			const after = sealedOf(await runTurn(world, transcript("go", "again"), sessionId));
-			expect(after.message.errorMessage, form.label).toBe(ACP_STOPS.interim.text);
+			expect(after.message.errorMessage, form.label).toBe(ACP_STOPS.firstUnknown.text);
 			expect(world.children, form.label).toHaveLength(1);
 		}
 	});
@@ -662,7 +669,7 @@ describe("agy prompt-phase failure (#167)", () => {
 			assertAgyNoReplay(message, raw, row.label);
 			world.script(endTurn);
 			const after = sealedOf(await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash()));
-			expect(after.message.errorMessage, row.label).toBe(ACP_STOPS.interim.text);
+			expect(after.message.errorMessage, row.label).toBe(ACP_STOPS.firstUnknown.text);
 			expect(world.children, row.label).toHaveLength(1);
 		}
 	});

@@ -87,8 +87,43 @@ const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 	parameters: obj({}, { open: true }),
 }));
 
-function context(text: string) {
-	return normalizeContext({ tools: PI_TOOLS, messages: [{ role: "user", content: text, timestamp: 0 }] });
+/** Each earlier turn of a Pi session as its context shows it: the input and a completed answer. */
+const earlierTurns = new Map<string, number>();
+function withEarlierTurns<M>(sessionId: string | undefined, input: string, now: M[]): M[] {
+	if (sessionId === undefined) return now;
+	const earlier = earlierTurns.get(sessionId) ?? 0;
+	earlierTurns.set(sessionId, earlier + 1);
+	const before: unknown[] = [];
+	for (let i = 0; i < earlier; i++) {
+		before.push(
+			{ role: "user", content: input, timestamp: 0 },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "ok" }],
+				api: "entwurf",
+				provider: "entwurf",
+				model: "claude-sonnet-5-5",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				timestamp: 0,
+			},
+		);
+	}
+	return [...(before as M[]), ...now];
+}
+
+function context(text: string, sessionId?: string) {
+	return normalizeContext({
+		tools: PI_TOOLS,
+		messages: withEarlierTurns(sessionId, text, [{ role: "user" as const, content: text, timestamp: 0 }]),
+	});
 }
 
 /** One backend world whose prompts wait at the wire until released; records steer requests. */
@@ -166,7 +201,7 @@ function makeWorld(initializeAnswer: unknown) {
 		const opts = { sessionId: sid, reasoning: "medium", signal } as Parameters<typeof backend.streamAcpTurn>[2];
 		const events: unknown[] = [];
 		const done = (async () => {
-			for await (const e of backend.streamAcpTurn(sonnet(), context("hello"), opts, deps)) events.push(e);
+			for await (const e of backend.streamAcpTurn(sonnet(), context("hello", sid), opts, deps)) events.push(e);
 		})();
 		await Promise.race([
 			entered,

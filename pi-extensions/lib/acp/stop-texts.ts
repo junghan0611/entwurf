@@ -35,10 +35,6 @@ export const ACP_STOPS = {
 		text: "entwurf: the ACP provider cannot read this Pi session, so nothing was sent",
 		exit: "restart Pi",
 	},
-	interim: {
-		text: "entwurf: resuming a stored ACP session is not enabled in this build, so nothing was sent",
-		exit: null,
-	},
 	invalid: {
 		text: "entwurf: the ACP session record is not valid, so nothing was sent; it is kept as found",
 		exit: NEW_SESSION,
@@ -153,7 +149,7 @@ export const ACP_STOPS = {
 export type AcpStopId = keyof typeof ACP_STOPS;
 
 /** The stops this build leaves with no way on. Each is a decision, not an omission. */
-export const ACP_STOPS_WITHOUT_EXIT: readonly AcpStopId[] = ["interim", "load", "piDurable"];
+export const ACP_STOPS_WITHOUT_EXIT: readonly AcpStopId[] = ["load", "piDurable"];
 
 /** The longest notice the stream shows whole (event-mapper `NOTICE_TITLE_MAX`). */
 export const ACP_STOP_NOTICE_MAX = 80;

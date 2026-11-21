@@ -2,13 +2,19 @@
 // drive `streamAcpTurn` directly.
 //
 // Pi appends each turn's inputs before it calls the provider and stores the provider's final
-// assistant message whole, turn id (`responseId`) included. This fake does the same from what a
-// gate already has: the context it passes and the stream it gets back. The branch of a call is its
-// context's messages as entries; the last assistant among them is given the provider and
-// `responseId` of the previous turn's final message for that session id, which is what Pi's file
-// would hold there. A context with no assistant at all, after a turn for that session id, is read
-// as Pi would hold it: the previous answer sits before its last message. A gate that needs another
-// shape sets the branch itself (`setBranch`).
+// assistant message whole: turn id (`responseId`), stop reason, error text and diagnostics. This
+// fake keeps the same log per session id from what a gate already has: the context it passes and
+// the stream it gets back. The first call for a session id takes its context's messages as the
+// entries Pi would hold. Every later call appends the user messages its context has beyond the ones
+// already logged. A turn that failed or was aborted is logged as it was sealed. A turn that
+// completed is logged when the next context arrives, as that context shows it (the assistant just
+// before the first new input) with the provider and `responseId` of the sealed message: Pi hands the
+// provider the very message it stored, and a gate's context stands in for it. With no such
+// assistant in the context, the sealed message itself is logged.
+//
+// Pi's context is made of the messages it stored (pi-coding-agent messages.js `convertToLlm` drops
+// no assistant), so an answer there carries the turn id it was sealed with. Where a gate's context
+// has an assistant in the place of a logged Entwurf answer, the turn is given the logged one.
 
 import type { AcpSessionReader } from "../../pi-extensions/lib/acp-host-facts.ts";
 
@@ -57,32 +63,49 @@ export function entriesOf(
 	}));
 }
 
+function roleOf(entry: unknown): unknown {
+	return (entry as { message?: { role?: unknown } })?.message?.role;
+}
+
 export function fakePiHost(): FakePiHost {
-	const lastTurn = new Map<
-		string,
-		{ responseId: string; stopReason?: unknown; errorMessage?: unknown; content?: unknown }
-	>();
-	const fixed = new Map<string, unknown[]>();
+	const logs = new Map<string, Array<{ type: "message"; id: string; parentId: string | null; message: unknown }>>();
+	const lastTurn = new Map<string, string>();
+	const sealed = new WeakSet<object>();
+	/** A completed turn's final message, not yet in the log. */
+	const completed = new Map<string, { responseId?: unknown }>();
+	const pinned = new Set<string>();
 	let current: AcpSessionReader | undefined;
 
+	function append(sessionId: string, message: unknown): void {
+		const log = logs.get(sessionId) ?? [];
+		logs.set(sessionId, log);
+		log.push({
+			type: "message",
+			id: `e${log.length}`,
+			parentId: log.length === 0 ? null : log[log.length - 1].id,
+			message,
+		});
+	}
+
 	function record(sessionId: string, message: unknown): void {
-		const final = message as
-			| { responseId?: unknown; stopReason?: unknown; errorMessage?: unknown; content?: unknown }
-			| undefined;
-		if (typeof final?.responseId === "string") {
-			lastTurn.set(sessionId, {
-				responseId: final.responseId,
-				stopReason: final.stopReason,
-				errorMessage: final.errorMessage,
-				content: final.content,
-			});
-		}
+		if (typeof message !== "object" || message === null || sealed.has(message)) return;
+		sealed.add(message);
+		const stopReason = (message as { stopReason?: unknown }).stopReason;
+		if (stopReason === "error" || stopReason === "aborted") append(sessionId, message);
+		else completed.set(sessionId, message);
+		const responseId = (message as { responseId?: unknown }).responseId;
+		if (typeof responseId === "string") lastTurn.set(sessionId, responseId);
 	}
 
 	return {
 		sessionReader: () => current,
-		setBranch: (sessionId, branch) => void fixed.set(sessionId, branch),
-		lastTurnId: (sessionId) => lastTurn.get(sessionId)?.responseId,
+		setBranch: (sessionId, branch) => {
+			logs.set(sessionId, [...(branch as never[])]);
+			completed.delete(sessionId);
+			// The next call reads exactly this branch: nothing of its context is appended to it.
+			pinned.add(sessionId);
+		},
+		lastTurnId: (sessionId) => lastTurn.get(sessionId),
 		wrap<T extends { streamAcpTurn: (...args: never[]) => unknown }>(backend: T): T {
 			const inner = backend.streamAcpTurn as unknown as Turn;
 			const streamAcpTurn: Turn = (model, context, options, deps) => {
@@ -91,9 +114,55 @@ export function fakePiHost(): FakePiHost {
 					current = undefined;
 				} else {
 					const messages = (context as { messages?: unknown[] }).messages ?? [];
-					const answered = lastTurn.get(sessionId);
-					const branch = fixed.get(sessionId) ?? entriesOf(messages, answered);
-					fixed.delete(sessionId);
+					const log = logs.get(sessionId);
+					if (pinned.delete(sessionId)) {
+						// As set.
+					} else if (!log) {
+						logs.set(sessionId, entriesOf(messages) as never[]);
+					} else {
+						const role = (m: unknown) => (m as { role?: unknown })?.role;
+						const logged = log.filter((entry) => roleOf(entry) === "user").length;
+						let seen = 0;
+						const firstNew = messages.findIndex((m) => role(m) === "user" && ++seen > logged);
+						const answer = completed.get(sessionId);
+						if (answer) {
+							completed.delete(sessionId);
+							const before = messages[(firstNew === -1 ? messages.length : firstNew) - 1];
+							append(
+								sessionId,
+								role(before) === "assistant"
+									? { ...(before as object), provider: "entwurf", responseId: answer.responseId }
+									: answer,
+							);
+						}
+						if (firstNew !== -1) {
+							for (const message of messages.slice(firstNew)) if (role(message) === "user") append(sessionId, message);
+						}
+					}
+					// Pi hands out its own array: a turn reads the branch as it stood when it asked.
+					const branch = [...(logs.get(sessionId) ?? [])];
+					// Pi hands the provider the messages it stored. Where this context has an assistant in the
+					// place of a logged Entwurf answer, the turn is given the logged one: the context's own
+					// content with the stored turn id, or the failed answer as it was sealed.
+					const answerAfter = new Map<number, unknown>();
+					let users = 0;
+					for (const entry of branch) {
+						if (roleOf(entry) === "user") users++;
+						const logged = entry.message as { provider?: unknown } | undefined;
+						if (roleOf(entry) === "assistant" && logged?.provider === "entwurf") answerAfter.set(users, logged);
+					}
+					if (answerAfter.size > 0) {
+						let seenUsers = 0;
+						let swapped = false;
+						const faithful = messages.map((m) => {
+							const role = (m as { role?: unknown })?.role;
+							if (role === "user") seenUsers++;
+							if (role !== "assistant" || !answerAfter.has(seenUsers)) return m;
+							swapped = true;
+							return answerAfter.get(seenUsers);
+						});
+						if (swapped) context = { ...(context as object), messages: faithful };
+					}
 					current = { getSessionId: () => sessionId, getBranch: () => branch, getEntries: () => branch };
 				}
 				// The backend reads the reader synchronously at the top of the call.

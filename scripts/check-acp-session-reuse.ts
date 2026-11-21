@@ -14,9 +14,9 @@
 //
 // It also proves: the mutable activePromptHandler routes each turn's
 // notifications to THAT turn's stream; a retained child is unref'd (no exit pin)
-// but never torn down between turns; a persisted record is read for its dispatch
-// marker only and NOT attached, even by a child that advertises resume and load
-// at the measured version (#171 L16; attach is L8);
+// but never torn down between turns; a persisted record that names no last answer
+// is neither resumed nor replaced, even by a child that advertises resume at the
+// measured version (#171 step 8; the resume itself is proven beside the backend);
 // a concurrent prompt fails loud BOTH on a retained busy session AND on a same-key
 // first-turn race (GPT blocker 1); a live session that cannot take a turn (another
 // directory, another model) stops it by name and stays, never replaced by a new
@@ -179,9 +179,8 @@ function makeHarness(
 			const { CLAUDE_ACP_AGENT: a } = await import(
 				pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend-adapter.js")).href
 			);
-			// #171 L16: a child that advertises everything an attach needs — loadSession, resume and the
-			// measured version — so section A's "record not used" pin fails the moment a record reaches
-			// decideBootstrap, not only while no capability is offered.
+			// #171 step 8: a child that advertises everything a resume needs — the capability and the
+			// measured version — so section A's stop is the record's doing, not a missing capability's.
 			return advertiseAttach
 				? {
 						agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
@@ -338,16 +337,18 @@ try {
 
 	// ----------------------------------------------------------------------
 	// Section A — capture: new=full transcript, reuse=delta-only, no respawn,
-	//             mutable routing, retained child unref'd, persisted NOT attached
+	//             mutable routing, retained child unref'd, an unanchored record stops
 	// ----------------------------------------------------------------------
 	{
 		const h = makeHarness(recordDir, DEFAULT_RESOLVED_CONFIG, false, true);
 		const sessionKey = "pi:gate-A0";
 
 		// Pre-write a COMPATIBLE, sealed (no marker) persisted record at a DIFFERENT
-		// acp id, for another Pi session. If the backend (wrongly) attached it, that
-		// session's turn would prompt "OLD-RESUME-ID"; if it (wrongly) ignored it, the
-		// turn would open a second session for a conversation that already has one.
+		// acp id, for another Pi session. It names no last answer (no `sealedTurnId`),
+		// so nothing can show which inputs its session never received. If the backend
+		// (wrongly) resumed it, that session's turn would prompt "OLD-RESUME-ID"; if it
+		// (wrongly) ignored it, the turn would open a second session for a conversation
+		// that already has one.
 		const turn1Ctx = tctx([{ role: "user", content: "remember NONCE-AAA", timestamp: 0 }]);
 		store.writeSessionRecord(
 			store.buildSessionRecord(
@@ -366,8 +367,8 @@ try {
 			recordDir,
 		);
 
-		// #171 step 8 (decision 17): a stored session is neither attached nor replaced. Until resume lands
-		// (L8) its turn stops with nothing spawned and nothing sent.
+		// #171 step 8 (decision 17): such a stored session is neither resumed nor replaced. Its turn stops
+		// with nothing spawned and nothing sent.
 		const stored = await collect(
 			backend.streamAcpTurn(
 				sonnet,
@@ -390,19 +391,22 @@ try {
 		assert.equal(
 			h.promptCalls[0].sessionId,
 			"ACP-1",
-			"turn 1 uses the id its own session/new answered: attach stays off until L8, though this child advertises resume and load",
+			"turn 1 uses the id its own session/new answered: another Pi session's record is not this one's",
 		);
 		assert.match(
 			h.promptCalls[0].text,
 			/NONCE-AAA/,
 			"turn 1 payload carries the turn-1 nonce (full transcript; false-positive guard)",
 		);
-		// The pin's precondition (#171 L16): this child passes the attach judgement on the facts the
-		// backend kept from its initialize, so only the call site keeps the record out of decideBootstrap.
+		// The pin's precondition (#171 step 8): this child passes the resume judgement on the facts the
+		// backend kept from its initialize, so a record reaching the guard would be resumed, not ignored.
 		assert.deepEqual(
-			adapterMod.bootstrapCapabilities(backend.readAcpAgentFacts("gate-A"), adapterMod.CLAUDE_ACP_AGENT),
-			{ resumeSession: true, loadSession: true },
-			"section A's child advertises resume and load at the measured version (the pin is not vacuous)",
+			adapterMod.resumeAllowed(backend.readAcpAgentFacts("gate-A"), adapterMod.claudeAdapter.resume, {
+				name: adapterMod.CLAUDE_ACP_AGENT.name,
+				version: adapterMod.CLAUDE_ACP_AGENT.measured,
+			}),
+			{ allowed: true },
+			"section A's child advertises resume at the measured version (the pin is not vacuous)",
 		);
 		assert.match(deltaText(t1), /NOTICE-1/, "turn 1 notice routed to the turn-1 stream");
 		assert.ok(
@@ -647,7 +651,14 @@ try {
 			/buildAcpPrompt\(context,\s*"new"\)/,
 			"new turn must build the full transcript via buildAcpPrompt",
 		);
-		assert.match(src, /buildAcpPrompt\(context,\s*"reuse"\)/, "reuse turn must build the delta via buildAcpPrompt");
+		// #171 step 8: a turn for an existing session sends the inputs the branch proof selected, not a
+		// second reading of the context.
+		assert.match(
+			src,
+			/const sent = chosen\.send\s*\.map\([\s\S]{0,200}?prompt: sent\.flatMap\(/,
+			"an existing session's delta is built from the selected inputs",
+		);
+		assert.ok(!/buildAcpPrompt\(context,\s*"reuse"\)/.test(src), "the context is not read a second time for the delta");
 		assert.ok(
 			!/\bcontextToAcpPrompt\(/.test(src),
 			"backend must not hardcode contextToAcpPrompt — the prompt scope must follow bootstrapPath via buildAcpPrompt",
@@ -897,8 +908,8 @@ try {
 console.log(
 	"[check-acp-session-reuse] ok — captured prompts prove new=full transcript / reuse=DELTA-ONLY (turn-2 carries the " +
 		"new nonce, never the turn-1 history) with no respawn; mutable activePromptHandler routes each turn's notices to " +
-		"its own stream; retained child is unref'd (no exit pin) yet never torn down between turns; a stored record stops its turn and is NOT " +
-		"attached until L8, even with resume and load advertised; concurrent prompts fail loud BOTH on a retained busy session AND on a same-key first-turn race " +
+		"its own stream; retained child is unref'd (no exit pin) yet never torn down between turns; a stored record that names no last answer stops its " +
+		"turn and is neither resumed nor replaced, even with resume advertised; concurrent prompts fail loud BOTH on a retained busy session AND on a same-key first-turn race " +
 		"(no double spawn); a live session that cannot take a turn (cwd, model) stops it by name and stays, and a stored " +
 		"session is neither attached nor replaced; source locks buildAcpPrompt wiring + single-site applyAcpSessionUpdate + unref + " +
 		"in-flight claim; S2f progress notices emit in order (new: preparing→ready→sending prompt / reuse: reusing→sending " +

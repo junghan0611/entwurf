@@ -16,7 +16,7 @@ is host-local; its decisive lines are pasted into #171 at close. The continuity 
 5. Done: the L16 base, record v2 and the marker. Its stop and drop rules are replaced by decision 17.
 6. Done: the continuity design (decisions 15–18); this table follows it.
 7. Done: the re-measurement command and the pins (Claude 0.109.0, agy 1.5.13, SDK 2.8.0); LIVE measured U9, U12, U14, U15.
-8. Now: L8 and L9 with the continuity rules, under the version guard, reviewed by GLG: L7, L11, L14, P1, Z3, Z4, V1, V2, V3, Z6; `decideBootstrap` moves after initialize.
+8. Now: L8 and L9 with the continuity rules, under the version guard, reviewed by GLG: L7, L11, L14, P1, Z3, Z4, V1, V2, V3, Z6;
 9. Close: a last live pass (U13, U16, P2 with U4), the full gates, the receipts into #171.
 
 ## How to read the table
@@ -39,7 +39,7 @@ What a Pi session does with a vendor ACP child, in the order it happens.
 | L5  | in-process reuse                  | implemented | Later turns reuse the session; delta after the last assistant, per vendor in step 8 (U13, U14, U15, U16). | [QK:ACP-ORACLE-L5-REUSE] |
 | L6  | session/cancel                    | implemented | Abort sends a cancel, waits a grace period, then ends the child.                                           | [QK:ACP-ORACLE-L6-CANCEL] |
 | L7  | session/close                     | not-wired   | Dispose still kills the child; it will send close first when the agent offers it.                          | — |
-| L8  | session/resume                    | not-wired   | A restarted Pi resumes the same id; a refused or unclear resume is an error stop, never new (17).          | — |
+| L8  | session/resume                    | implemented | A Pi that left or restarted resumes the same id with the delta; else a named stop, never new (17).         | [QK:ACP-ATTACH-SAME-ID-DELTA] |
 | L9  | session/load                      | not-wired   | Load is the fallback when resume is absent; its replay is never recorded; a refusal is an error stop (17). | — |
 | L10 | session/list                      | declined    | Pi owns the session list, so list is not used (U1).                                                        | — |
 | L11 | model and effort after attach     | not-wired   | After resume or load the vendor answers defaults; both must be set again (U2).                             | — |
@@ -47,7 +47,7 @@ What a Pi session does with a vendor ACP child, in the order it happens.
 | L13 | child death and teardown          | implemented | Teardown closes the connection, then ends the child's whole process group.                                 | [QK:ACP-ORACLE-L13-TEARDOWN] [QK:ACP-ORACLE-L13-PROCESS-GROUP] |
 | L14 | compaction across attach          | not-wired   | Pi compaction keeps the vendor session (16-1; #163 changes); a load replay is never recorded as one (U3).  | — |
 | L15 | session record store              | implemented | The record is v2; an old v1 record is resumed, not dropped (17). Read never deletes; write is atomic.      | [QK:ACP-ORACLE-L15-INVALID] [QK:ACP-ORACLE-L15-UNREADABLE] [QK:ACP-ORACLE-L15-ATOMIC] [QK:ACP-ORACLE-L15-AGENT-DIR] [QK:ACP-ORACLE-L15-DEGRADED-NEW] [QK:ACP-ORACLE-L15-DEGRADED-REUSE] |
-| L16 | record currency (pendingDispatch) | implemented | Marker and v2 record landed. No record is dropped (17); a stored session stops until resume lands (U12).    | [QK:ACP-STORED-SESSION-NO-SECOND-NEW] |
+| L16 | record currency (pendingDispatch) | implemented | Marker and v2 record landed. No record is dropped (17); one that cannot be resumed stops its turn (U12).    | [QK:ACP-STORED-SESSION-NO-SECOND-NEW] |
 | L17 | birth record before session/new   | not-wired   | An intent is written before session/new and the id the moment it answers; a lost id is an error stop (17). | — |
 | L18 | block separator in a prompt       | not-wired   | agy joins several text blocks with no separator; the prompt needs one (step 8).                            | — |
 
@@ -72,7 +72,7 @@ Read from Zed's client (zed at ad1058d78d); each row asks whether Pi needs it.
 | Z3  | agent exit as a typed error    | not-wired | A child dying during resume or load is an error stop with its stderr tail; the record is kept. | — |
 | Z4  | load response boundary         | not-wired | Updates before the load response are replayed history, not new output.                         | — |
 | Z5  | close an abandoned session/new | declined  | Close changes nothing on either vendor, so it is skipped.                                      | — |
-| Z6  | one holder inside Entwurf      | not-wired | Only one Pi process is guarded today; another holder of the same id is an error stop (V3, 17). | — |
+| Z6  | one holder inside Entwurf      | implemented | A holder lease per vendor session: a second Pi stops while it stands; released on the agent's proven end. | [QK:ACP-ATTACH-HOLDER-STOPS] |
 | Z7  | recovery by load               | declined  | Pi resume is the recovery path, so Entwurf does not reattach by load.                          | — |
 | Z8  | optional verbs                 | declined  | Delete, title, retry and the rest have no Pi surface.                                          | — |
 | Z9  | subagent sessions              | declined  | Entwurf announces no subagents, so none are loaded.                                            | — |
@@ -85,7 +85,7 @@ Measured on claude-agent-acp and agy; the client must absorb them.
 |-----|----------------------------------------|-------------|----------------------------------------------------------------------------------------------------------------------|---|
 | V1  | agy load of an unknown id succeeds     | not-wired   | Never load after a failed resume; resume first closes this (U6, U7).                                                 | — |
 | V2  | attach answers vendor defaults         | not-wired   | Both vendors forget model and effort on attach; set them again (L11).                                                | — |
-| V3  | no vendor refuses a second holder      | not-wired   | Two Pi processes can hold one id; Entwurf needs its own guard (Z6, U9).                                              | — |
+| V3  | no vendor refuses a second holder      | implemented | Two Pi processes could hold one id; Entwurf's own guard is the holder lease (Z6, U9).                                | [QK:ACP-LEASE-ONE-HOLDER] |
 | V4  | agy keeps every session/new            | declined    | Vendor storage is not ours to clean; Entwurf does not delete it (U8).                                                | — |
 | V5  | version guard                          | implemented | Attach opens only on the measured version; an unmeasured one stops with a reason, never new (16-5).                  | [QK:ACP-V5-ATTACH-UNMEASURED] |
 | V6  | Pi retries a failed turn on error text | not-wired   | Pi never retries a turn of unknown outcome: a fixed text ends it, the next human turn re-sends it (decision 15, G5). | — |

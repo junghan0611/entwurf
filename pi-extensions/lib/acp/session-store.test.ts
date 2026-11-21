@@ -18,16 +18,13 @@ import {
 	reportEntwurfControlFlag,
 } from "../acp-host-facts.ts";
 import {
-	type BootstrapParams,
 	buildSessionRecord,
-	decideBootstrap,
+	configDrift,
 	decideResident,
 	hasAcpTrace,
 	parseSessionRecord,
 	readSessionRecord,
-	recordIsBehind,
 	resolveLifecyclePolicy,
-	type SealedSessionRecord,
 	sessionRecordPath,
 	writeSessionRecord,
 } from "./session-store.ts";
@@ -42,11 +39,19 @@ const record = buildSessionRecord(
 		modelId: "model",
 		bridgeConfigSignature: "sig",
 		contextMessageSignatures: [],
+		sealedTurnId: "entwurf-turn:last",
+		config: { mcpServers: "m", text: "t", tools: "x" },
 	},
 	"2026-11-20T00:00:00Z",
 );
 
-const facts = { cwd: "/fixture", modelId: "model", bridgeConfigSignature: "sig", contextMessageSignatures: ["a", "b"] };
+const facts = {
+	cwd: "/fixture",
+	modelId: "model",
+	bridgeConfigSignature: "sig",
+	contextMessageSignatures: ["a", "b"],
+	config: { mcpServers: "m", text: "t", tools: "x" },
+};
 const no = () => false;
 const yes = () => true;
 
@@ -128,7 +133,7 @@ it("[QK:ACP-L16-OUTDATED] a record written before the marker existed reads as ou
 		// Not evidence that nothing is pending. It still names a session, so it is never followed by a birth.
 		expect(decideResident(facts, { record: { status: "outdated" }, reserved: no, hasTrace: no })).toMatchObject({
 			kind: "stop",
-			stop: "interim",
+			stop: "version",
 		});
 		// A current-version record that omits the field is not read as sealed either.
 		writeFileSync(path, JSON.stringify(withoutField));
@@ -163,45 +168,6 @@ it("a marker round-trips only when its range ends at its own signature count", (
 	]) {
 		expect(parseSessionRecord(broken, "test")).toBeUndefined();
 	}
-});
-
-describe("a sealed record against the transcript after it (#171 L16 rule 6, R12)", () => {
-	const roles = (tail: string) => ["system", "user", ...tail.split(" ").map((r) => (r === "A" ? "assistant" : "user"))];
-	const sigs = (n: number) => Array.from({ length: n }, (_, i) => `sig-${i}`);
-	const sealed: SealedSessionRecord = { ...record, contextMessageSignatures: sigs(2), pendingDispatch: null };
-	const params = (tail: string): BootstrapParams => {
-		const messageRoles = roles(tail);
-		return {
-			cwd: record.cwd,
-			modelId: record.modelId,
-			bridgeConfigSignature: record.bridgeConfigSignature,
-			contextMessageSignatures: sigs(messageRoles.length),
-			lifecyclePolicy: "process-scoped",
-			messageRoles,
-		};
-	};
-
-	it("[QK:ACP-L16-RECORD-BEHIND] is behind when a user message is followed by an assistant, and current otherwise", () => {
-		// The tail as R12 measured it after a record of 2 signatures: A is the sealed turn's own answer.
-		const cells: Array<[string, string]> = [
-			["A U", "resume"], // one turn, one input; also an answered cancel, A(aborted)
-			["A U U", "resume"], // steering or follow-ups queued together
-			["U", "resume"], // after max_tokens Pi omits the cut answer
-			["A A U", "resume"], // a custom steer answered twice
-			["A U A U", "new"], // a turn ran that the record never sealed
-			["A U A U A U", "new"], // R11: a record of one turn against four
-		];
-		for (const [tail, path] of cells) {
-			const messageRoles = roles(tail);
-			expect(recordIsBehind(2, messageRoles), tail).toBe(path === "new");
-			const decision = decideBootstrap(params(tail), {
-				persisted: sealed,
-				capabilities: { resumeSession: true, loadSession: false },
-			});
-			expect(decision.path, tail).toBe(path);
-			if (path === "new") expect(decision).toMatchObject({ invalidatePersisted: true, reason: "persisted_behind" });
-		}
-	});
 });
 
 it("[QK:ACP-D18-HOST-LIFECYCLE] only a reported control flag keeps a session, only a Pi-reported one-shot mode opens one per turn", () => {
@@ -245,20 +211,42 @@ describe("what a resident's turn may do (#171 step 8, decision 17)", () => {
 	const missing = { status: "missing" } as const;
 	const live = { ...facts, contextMessageSignatures: ["a"], alive: true };
 
-	it("[QK:ACP-RESIDENT-GUARD] a birth needs every sign of an earlier session to be absent; a stored session is never replaced", () => {
+	it("[QK:ACP-RESIDENT-GUARD] a birth needs every sign of an earlier session to be absent; a stored session is resumed or stops, never replaced", () => {
 		expect(decideResident(facts, { record: missing, reserved: no, hasTrace: no })).toEqual({ kind: "birth" });
-		// A stored session, whatever it carries: sealed, marked, or written before the marker existed.
-		const marked = { ...record, pendingDispatch: { start: 0, count: 1, contextMessageSignatures: ["a"] } };
-		for (const found of [
-			{ status: "found", record },
-			{ status: "found", record: marked },
-			{ status: "outdated" },
-		] as const) {
-			expect(decideResident(facts, { record: found, reserved: no, hasTrace: no })).toMatchObject({
-				kind: "stop",
-				stop: "interim",
+		const stored = (over: Record<string, unknown>) =>
+			decideResident(facts, {
+				record: { status: "found", record: { ...record, ...over } as typeof record },
+				reserved: no,
+				hasTrace: no,
 			});
-		}
+		// A sealed record that names its last answer is the session to resume, with or without a standing marker.
+		const marker = {
+			start: 0,
+			count: 1,
+			contextMessageSignatures: ["a"],
+			turnId: "entwurf-turn:m",
+			inputEntryIds: ["e"],
+		};
+		expect(stored({})).toEqual({
+			kind: "attach",
+			record,
+			closeLive: false,
+			mcpServersChanged: false,
+		});
+		expect(stored({ pendingDispatch: marker })).toMatchObject({ kind: "attach" });
+		// What cannot be resumed stops by name. None of these is followed by a birth.
+		expect(stored({ firstPrompt: "pending" })).toMatchObject({ kind: "stop", stop: "resume" });
+		expect(stored({ firstPrompt: "dispatched", pendingDispatch: marker })).toMatchObject({
+			kind: "stop",
+			stop: "firstUnknown",
+		});
+		expect(stored({ sealedTurnId: undefined })).toMatchObject({ kind: "stop", stop: "version" });
+		expect(stored({ modelId: "other" })).toMatchObject({ kind: "stop", stop: "model" });
+		expect(stored({ cwd: "/elsewhere" })).toMatchObject({ kind: "stop", stop: "cwd" });
+		expect(decideResident(facts, { record: { status: "outdated" }, reserved: no, hasTrace: no })).toMatchObject({
+			kind: "stop",
+			stop: "version",
+		});
 		expect(decideResident(facts, { record: { status: "invalid" }, reserved: no, hasTrace: no })).toMatchObject({
 			kind: "stop",
 			stop: "invalid",
@@ -274,7 +262,39 @@ describe("what a resident's turn may do (#171 step 8, decision 17)", () => {
 				reserved: no,
 				hasTrace: no,
 			}),
-		).toMatchObject({ kind: "stop", stop: "interim" });
+		).toMatchObject({ kind: "attach", closeLive: false });
+	});
+
+	it("[QK:ACP-RESIDENT-CONFIG-CLASSES] a changed MCP server set resumes the session with the new set, a changed text keeps a live session and stops a stored one, anything else stops", () => {
+		const now = (config: Partial<typeof facts.config>) => ({
+			...facts,
+			bridgeConfigSignature: "sig-now",
+			config: { ...facts.config, ...config },
+		});
+		expect(configDrift(record, facts)).toBe("same");
+		// Equal signatures are the same whatever the parts say; without recorded parts a difference has no name.
+		expect(configDrift(record, { ...facts, config: { mcpServers: "M2", text: "T2", tools: "X2" } })).toBe("same");
+		expect(configDrift({ bridgeConfigSignature: "sig" }, now({ mcpServers: "M2" }))).toBe("other");
+		expect(configDrift(record, now({ mcpServers: "M2" }))).toBe("mcpServers");
+		expect(configDrift(record, now({ text: "T2" }))).toBe("text");
+		expect(configDrift(record, now({ tools: "X2" }))).toBe("other");
+		expect(configDrift(record, now({ mcpServers: "M2", text: "T2" }))).toBe("other");
+		expect(configDrift(record, now({}))).toBe("other");
+		const turn = (params: typeof facts, existing?: typeof live) =>
+			decideResident(params, { existing, record: { status: "found", record }, reserved: no, hasTrace: no });
+		// Stored: a changed server set resumes under the same carrier. A changed text does not: a resume
+		// request would carry a carrier the session was not opened with.
+		expect(turn(now({ mcpServers: "M2" }))).toMatchObject({ kind: "attach", mcpServersChanged: true });
+		expect(turn(now({ text: "T2" }))).toMatchObject({ kind: "stop", stop: "config" });
+		expect(turn(now({ tools: "X2" }))).toMatchObject({ kind: "stop", stop: "config" });
+		// Live: a text change keeps the session as it is; an MCP change closes it and resumes from the record.
+		expect(turn(now({ text: "T2" }), live)).toEqual({ kind: "reuse", textDrift: true });
+		expect(turn(now({ mcpServers: "M2" }), live)).toMatchObject({ kind: "attach", closeLive: true });
+		expect(turn(now({ tools: "X2" }), live)).toMatchObject({ kind: "stop", stop: "config" });
+		// A live session with an MCP change and no record to resume from stops and is kept.
+		expect(
+			decideResident(now({ mcpServers: "M2" }), { existing: live, record: missing, reserved: no, hasTrace: no }),
+		).toMatchObject({ kind: "stop", stop: "noRecord" });
 	});
 
 	it("[QK:ACP-RESIDENT-RESERVED-STOPS] a birth that was attempted and left no record is never attempted again", () => {
@@ -288,11 +308,10 @@ describe("what a resident's turn may do (#171 step 8, decision 17)", () => {
 		};
 		expect(
 			decideResident(facts, { record: { status: "found", record }, reserved: boom, hasTrace: boom }),
-		).toMatchObject({
-			stop: "interim",
-		});
+		).toMatchObject({ kind: "attach" });
 		expect(decideResident(facts, { existing: live, record: missing, reserved: boom, hasTrace: boom })).toEqual({
 			kind: "reuse",
+			textDrift: false,
 		});
 	});
 
@@ -306,7 +325,7 @@ describe("what a resident's turn may do (#171 step 8, decision 17)", () => {
 	it("[QK:ACP-RESIDENT-LIVE-KEPT] a live session that cannot take the turn stops it by name and is never abandoned for a new one", () => {
 		const turn = (over: Partial<typeof facts>) =>
 			decideResident({ ...facts, ...over }, { existing: live, record: missing, reserved: no, hasTrace: no });
-		expect(turn({})).toEqual({ kind: "reuse" });
+		expect(turn({})).toEqual({ kind: "reuse", textDrift: false });
 		expect(turn({ modelId: "other" })).toMatchObject({ kind: "stop", stop: "model" });
 		expect(turn({ cwd: "/elsewhere" })).toMatchObject({ kind: "stop", stop: "cwd" });
 		expect(turn({ bridgeConfigSignature: "changed" })).toMatchObject({ kind: "stop", stop: "config" });

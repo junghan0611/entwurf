@@ -864,9 +864,14 @@ describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11
 			],
 		});
 		// #171 step 8 (decision 17): the closed session's record stays, and no second session is opened for
-		// this conversation. Until a stored session can be resumed the turn stops, with nothing sent.
+		// this conversation. Pi's branch now ends in the compaction and the input after it; what the vendor
+		// session holds of the compacted part cannot be shown, so the turn stops with nothing sent.
+		piHost.setBranch("S-compact", [
+			{ type: "compaction", id: "c1", summary: SUMMARY_BODY },
+			{ type: "message", id: "u1", message: { role: "user", content: "continue" } },
+		]);
 		const sealed = await ordinaryTurn(world, after, "S-compact");
-		expect(sealed.type === "error" && sealed.error.errorMessage).toBe(ACP_STOPS.interim.text);
+		expect(sealed.type === "error" && sealed.error.errorMessage).toBe(ACP_STOPS.compacted.text);
 		expect(world.children).toHaveLength(1);
 		expect(world.calls("prompt")).toHaveLength(2);
 	});
@@ -942,16 +947,19 @@ describe("a session replaced in this process closes the child it leaves (#151, G
 		}
 	});
 
-	it("[QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD] reload keeps the same session and quit is reaped by the exit hook — neither closes the retained child here", async () => {
+	it("[QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD] reload keeps the same session and its child; quit closes every retained child so its session can be released", async () => {
 		const shutdown = await shutdownHandler();
-		for (const reason of ["reload", "quit"]) {
-			const world = makeWorld();
-			const staying = `S-stay-${reason}`;
-			await ordinaryTurn(world, transcript("one"), staying);
-			shutdown(reason, staying);
-			expect(world.killed.size).toBe(0);
-			await ordinaryTurn(world, transcript("one", "two"), staying);
-			expect(world.children).toHaveLength(1);
-		}
-	});
+		const world = makeWorld();
+		await ordinaryTurn(world, transcript("one"), "S-stay-reload");
+		await shutdown("reload", "S-stay-reload");
+		expect(world.killed.size).toBe(0);
+		await ordinaryTurn(world, transcript("one", "two"), "S-stay-reload");
+		expect(world.children).toHaveLength(1);
+		// quit: Pi awaits the handler. The agent is closed at once, whichever session Pi names.
+		const quitting = makeWorld();
+		await ordinaryTurn(quitting, transcript("one"), "S-stay-quit");
+		const left = shutdown("quit", "another-session");
+		expect(quitting.killed.has(quitting.children[0])).toBe(true);
+		await left;
+	}, 20_000);
 });

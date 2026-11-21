@@ -329,6 +329,21 @@ export interface AcpBackendAdapter {
 	 *  launched server's own name and version — an operator override included — so a floor needs no
 	 *  PATH probe. Throws a named refusal. ABSENT admits every server. */
 	admitAgent?(initializeAnswer: unknown): void;
+
+	/**
+	 * OPTIONAL capability (#171 step 8): this backend's stored sessions can be resumed under the same
+	 * id. ABSENT: a stored session of this backend stops. Every value is a measured fact, never a guess:
+	 * - `agent`: the pin whose `measured` version is the only reader that may attach (`attachAllowed`);
+	 * - `writers`: the versions whose sessions that reader was measured to resume;
+	 * - `unknownDispatch`: what to do with inputs of a prompt whose outcome is unknown. `skip`: never
+	 *   send them again (the agent may hold them). `resend`: send every input after the last answer
+	 *   again (the agent keeps nothing of an unanswered prompt).
+	 */
+	resume?: Readonly<{
+		agent: AcpAgentPin;
+		writers: readonly string[];
+		unknownDispatch: "skip" | "resend";
+	}>;
 }
 
 /** Explicit summary-turn modes a backend adapter may declare (#168 S1). */
@@ -483,20 +498,26 @@ export function attachAllowed(facts: AcpAgentFacts, agent: AcpAgentPin, need: "r
 	return advertised ? { allowed: true } : { allowed: false, reason: "capability-absent" };
 }
 
-/** The capability input `decideBootstrap` takes, from one child's facts: a capability counts only when
- *  `attachAllowed` admits it. For L8, which decides after that child's initialize; nothing calls it yet. */
-export function bootstrapCapabilities(
-	facts: AcpAgentFacts,
-	agent: AcpAgentPin,
-): { resumeSession: boolean; loadSession: boolean } {
-	return {
-		resumeSession: attachAllowed(facts, agent, "resume").allowed,
-		loadSession: attachAllowed(facts, agent, "load").allowed,
-	};
-}
-
 /** The pi diagnostic type under which backend.ts preserves a recognised rejection verbatim. */
 export const ACP_PROMPT_REJECTION_DIAGNOSTIC = "entwurf_acp_prompt_rejection";
+
+/**
+ * May the session a record names be resumed on this child (#171 step 8)? The reader must be the
+ * adapter's measured version advertising resume (`attachAllowed`), and the record's writer must be
+ * one of the versions that reader was measured to resume. Pure.
+ */
+export function resumeAllowed(
+	facts: AcpAgentFacts,
+	resume: NonNullable<AcpBackendAdapter["resume"]>,
+	writer: Readonly<{ name: string; version: string }>,
+): AcpAttachJudgement | { allowed: false; reason: "writer-unmeasured" } {
+	const reader = attachAllowed(facts, resume.agent, "resume");
+	if (!reader.allowed) return reader;
+	if (writer.name !== resume.agent.name || !resume.writers.includes(writer.version)) {
+		return { allowed: false, reason: "writer-unmeasured" };
+	}
+	return { allowed: true };
+}
 
 /** The verdict for claude-agent-acp's `incomplete_tool_call` (#127; upstream #1212, 0.85.0+). */
 export const INCOMPLETE_TOOL_CALL_VERDICT =
@@ -817,6 +838,14 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// #168: the server that answered initialize must be claude-agent-acp at the bundled pin or newer.
 	admitAgent: (answer) =>
 		admitAcpAgent(answer, "claude", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, "CLAUDE_AGENT_ACP_COMMAND"),
+	// #171 step 7 receipts: 0.109.0 resumes its own sessions. A record an earlier version wrote names no
+	// last answer and never reaches this judgement (GLG 2026-11-22). An input of an unanswered prompt
+	// may be in the session's history (G2a), so it is never sent twice.
+	resume: Object.freeze({
+		agent: CLAUDE_ACP_AGENT,
+		writers: Object.freeze(["0.109.0"]),
+		unknownDispatch: "skip",
+	}),
 };
 
 // ---------------------------------------------------------------------------
@@ -1142,6 +1171,13 @@ export const agyAdapter: AcpBackendAdapter = {
 
 	// #168: the server that answered initialize must be agy's own ACP server at the measured floor or newer.
 	admitAgent: (answer) => admitAcpAgent(answer, "agy", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, "AGY_ACP_COMMAND"),
+	// #171 step 7 receipts (U26, U17): 1.5.13 resumes its own sessions and 1.5.12's, and keeps nothing of
+	// a prompt it did not answer, so the inputs after the last answer are sent again.
+	resume: Object.freeze({
+		agent: AGY_ACP_AGENT,
+		writers: Object.freeze(["1.5.13", "1.5.12"]),
+		unknownDispatch: "resend",
+	}),
 
 	// #168: agy takes no tool list on session/new, so the model still sees tool schemas; summary
 	// turns run in an isolated per-turn root with a `v1:deny-all` PreToolUse hook and neutral cwd.

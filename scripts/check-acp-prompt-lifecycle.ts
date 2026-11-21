@@ -541,22 +541,29 @@ try {
 			.filter((e: any) => e.type === "text" || e.type === "text_start" || e.type === "text_delta")
 			.map((e: any) => String(e.delta ?? e.text ?? e.content ?? ""))
 			.join("");
-		const announced = notices.includes("previous claude session ended between turns");
+		const announced = notices.includes("previous claude agent ended between turns");
 		assert.ok(
 			announced && notices.includes("exit code 137") && notices.includes("signal SIGKILL"),
 			"[QK:IDLE-DEATH-ANNOUNCED] a backend session that died BETWEEN turns must be announced by the next turn, with " +
 				`how it ended — a silent respawn hides that the session the operator was talking to is gone. Saw: ${JSON.stringify(notices.slice(0, 400))}`,
 		);
-		// #171 step 8 (decision 17): the dead session's record stays and no second session is opened for the
-		// conversation. Until a stored session can be resumed the turn stops; the announcement says why.
+		// #171 step 8 (decision 17): the dead agent's session stays in its record, and the next turn resumes
+		// it. This harness's agent offers no resume, so the turn stops by name; no second session is opened.
 		await t2.done;
+		const all = t2.events
+			.filter((e: any) => e.type === "text_delta")
+			.map((e: any) => String(e.delta ?? ""))
+			.join("");
 		assert.ok(
-			notices.indexOf("previous claude session ended between turns") <
-				notices.indexOf("a stored ACP session exists for this conversation"),
-			"the death is announced BEFORE the stop's cause — otherwise the stop reads as if no session had been there",
+			all.indexOf("previous claude agent ended between turns") < all.indexOf("resume not allowed"),
+			`the death is announced BEFORE the stop's cause — otherwise the stop reads as if no session had been there. Saw: ${JSON.stringify(all.slice(0, 400))}`,
 		);
 		assert.equal(sealed(t2.events)[0].type, "error", "the turn stops: a dead session is not replaced by a new one");
-		assert.equal(h.children.length, 1, "no second child is spawned for this conversation");
+		assert.match(
+			String(sealed(t2.events)[0].error?.errorMessage),
+			/offers no resume/,
+			"the stop names the missing resume: the agent started for it is refused before any session call",
+		);
 
 		// Announced ONCE: a third turn stops the same way and says nothing about the death again.
 		const t3 = startTurn(
@@ -572,7 +579,7 @@ try {
 			.map((e: any) => String(e.delta ?? e.text ?? e.content ?? ""))
 			.join("");
 		assert.ok(
-			!laterNotices.includes("previous claude session ended between turns"),
+			!laterNotices.includes("ended between turns"),
 			"the announcement is read-and-clear — a stale death must not be re-announced every turn",
 		);
 	}

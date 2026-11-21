@@ -100,8 +100,8 @@
 			"claim": "ACP-BRANCH-GATE-EXACT-ANSWER",
 			"title": "any Entwurf answer at the end of the branch passes the gate — a sibling answer or a refused turn's answer lets a delta into a vendor session that holds another conversation",
 			"subject": "pi-extensions/lib/acp/branch-gate.ts",
-			"find": ["\t\tif (typeof sealedTurnId === \"string\" && sealedTurnId.length > 0 && turnId === sealedTurnId)\n"],
-			"replace": [""],
+			"find": ["\t\tif (typeof anchorTurnId === \"string\" && anchorTurnId.length > 0 && turnId === anchorTurnId) {"],
+			"replace": ["\t\tif (anchorTurnId !== null) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-BRANCH-GATE-EXACT-ANSWER]",
@@ -192,8 +192,8 @@
 			"claim": "ACP-REUSE-INPUTS-MATCH-CONTEXT",
 			"title": "the inputs the Pi session shows are not held against the context — a transform drops a sibling's mail and the next input is sent as if nothing were missing",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\t\t\t!isDeepStrictEqual(shown, carried) ||\n"],
-			"replace": [""],
+			"find": ["\t\t\t\tif (!carried.ok) {"],
+			"replace": ["\t\t\t\tif (!carried.ok && Date.now() < 0) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:ACP-REUSE-INPUTS-MATCH-CONTEXT]",
@@ -214,7 +214,9 @@
 			"claim": "ACP-BRANCH-GATE-INPUTS-IN-ORDER",
 			"title": "a custom message after the answer is not returned as an input — mail the session shows is left out of the comparison",
 			"subject": "pi-extensions/lib/acp/branch-gate.ts",
-			"find": ["\t\t\tinputs.unshift(field(entry, \"content\"));\n"],
+			"find": [
+				"\t\t\titems.unshift({ kind: \"input\", entryId, content: field(entry, \"content\"), extension: true });\n"
+			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
@@ -247,8 +249,8 @@
 			"claim": "ACP-BIRTH-ONE-SNAPSHOT",
 			"title": "a birth renders its prompt again after bootstrapping — the marker and the signatures name another context than the one sent",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["const basePrompt = birth?.prompt ?? buildAcpPrompt(context, \"new\");"],
-			"replace": ["const basePrompt = buildAcpPrompt(context, \"new\");"],
+			"find": ["const basePrompt = attach?.checked.prompt ?? birth?.prompt ?? buildAcpPrompt(context, \"new\");"],
+			"replace": ["const basePrompt = attach?.checked.prompt ?? buildAcpPrompt(context, \"new\");"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-BIRTH-ONE-SNAPSHOT]",
@@ -311,9 +313,9 @@
 			"title": "a live session asked for another model is not stopped by the guard",
 			"subject": "pi-extensions/lib/acp/session-store.ts",
 			"find": [
-				"\t\tif (existing.modelId !== params.modelId)\n\t\t\treturn { kind: \"stop\", stop: \"model\", why: \"the live session has another model\" };"
+				"\tif (was.modelId !== params.modelId)\n\t\treturn { kind: \"stop\", stop: \"model\", why: `the ${which} session has another model` };"
 			],
-			"replace": ["\t\tvoid 0;"],
+			"replace": ["\tvoid 0;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-RESIDENT-LIVE-KEPT]",
@@ -422,7 +424,7 @@
 			"claim": "ACP-SEAL-OWED-BEFORE-REUSE",
 			"title": "a session whose last answer is not in the record is used again, and the next marker goes over the unsealed one",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["if (existing.sealOwed) {"],
+			"find": ["if (live?.sealOwed) {"],
 			"replace": ["if (Date.now() < 0) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
@@ -471,6 +473,201 @@
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-ABORT-STANDING-STAYS-ABORTED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-UNKNOWN-BY-ENTRY-ID",
+			"title": "an input whose prompt has no confirmed answer is sent to the agent a second time",
+			"subject": "pi-extensions/lib/acp/branch-gate.ts",
+			"find": ["\t\tsend: walk.inputs.filter((input) => !dispatched.has(input.entryId)),"],
+			"replace": ["\t\tsend: [...walk.inputs],"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-DELTA-UNKNOWN-BY-ENTRY-ID]",
+			"signatureSource": "pi-extensions/lib/acp/branch-gate.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-TOLD-NEEDS-EVIDENCE",
+			"title": "any failed answer counts as having told the operator that an input is held back",
+			"subject": "pi-extensions/lib/acp/branch-gate.ts",
+			"find": [
+				"\t\tif (item.stopReason === \"error\" && item.unknownStamped && item.turnId !== undefined) told.add(item.turnId);"
+			],
+			"replace": ["\t\tif (item.turnId !== undefined) told.add(item.turnId);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-DELTA-TOLD-NEEDS-EVIDENCE]",
+			"signatureSource": "pi-extensions/lib/acp/branch-gate.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-CONTEXT-CARRIES",
+			"title": "an answer that carries no turn id stands in the context for the one the session gave last",
+			"subject": "pi-extensions/lib/acp/branch-gate.ts",
+			"find": ["\tif (field(anchor, \"responseId\") !== anchorTurnId) {"],
+			"replace": [
+				"\tif (typeof field(anchor, \"responseId\") === \"string\" && field(anchor, \"responseId\") !== anchorTurnId) {"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-DELTA-CONTEXT-CARRIES]",
+			"signatureSource": "pi-extensions/lib/acp/branch-gate.test.ts"
+		},
+		{
+			"claim": "ACP-RESIDENT-CONFIG-CLASSES",
+			"title": "changed tools or permissions are named as a single nameable difference instead of stopping the turn",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\tif (differs.length !== 1 || differs[0] === \"tools\") return \"other\";"],
+			"replace": ["\tif (differs.length !== 1) return \"other\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-RESIDENT-CONFIG-CLASSES]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-ONE-HOLDER",
+			"title": "a live holder of another process is reported as a holder that did not release",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": [
+				"\tif (holder === \"live\") return { ok: false, stop: \"holder\", why: `process ${found.holder.pid} holds this session` };"
+			],
+			"replace": ["\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-ONE-HOLDER]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-DEAD-HOLDER-STOPS",
+			"title": "a holder seen dead on this boot is taken over without a reboot",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": ["\tif (!rebooted) {"],
+			"replace": ["\tif (!rebooted && holder !== \"dead\") {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-DEAD-HOLDER-STOPS]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-REBOOT-TAKEOVER",
+			"title": "a lease written on another machine is taken over as if this machine had rebooted",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": ["\t\tfound.scope.machine === probe.scope.machine &&\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-REBOOT-TAKEOVER]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-RELEASE-OWNER-ONLY",
+			"title": "any process releases a lease it can read",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": ["\tif (!current || !mine(current, probe) || current.nonce !== probe.nonce) return false;"],
+			"replace": ["\tif (!current) return false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-RELEASE-OWNER-ONLY]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-SAME-ID-DELTA",
+			"title": "a stored session is replaced by a new one instead of being resumed under its id",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["connection.resumeSession({ ...newSessionArgs, sessionId: attach.record.acpSessionId }),"],
+			"replace": ["connection.newSession(newSessionArgs),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-SAME-ID-DELTA]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-REFUSAL-KEEPS-RECORD",
+			"title": "a resume the judgement does not allow is tried anyway",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tif (!allowed.allowed) {"],
+			"replace": ["\t\t\t\tif (!allowed.allowed && Date.now() < 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-REFUSAL-KEEPS-RECORD]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-HOLDER-STOPS",
+			"title": "another holder's lease is reported as a failed resume — the operator is not told who holds the session",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tif (!lease.ok) throw new AcpStopSignal(lease.stop, lease.why);"],
+			"replace": ["\t\t\t\tif (!lease.ok) throw new AcpStopSignal(\"resume\", lease.why);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-HOLDER-STOPS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-RELEASE-NEEDS-PROOF",
+			"title": "the hold on a session is given up while its agent has not been seen to end",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (agents.size > 0) return false;"],
+			"replace": ["\tif (agents.size < 0) return false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-RELEASE-NEEDS-PROOF]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-MCP-CHANGE",
+			"title": "a changed MCP server set never reaches the live session: it is reused as it was",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\t\tif (live.drift !== \"mcpServers\") return { kind: \"reuse\", textDrift: live.drift === \"text\" };"
+			],
+			"replace": ["\t\treturn { kind: \"reuse\", textDrift: live.drift === \"text\" };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-MCP-CHANGE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-SKIP-STOP-NAMES-DISPATCH",
+			"title": "an input is held back and the turn goes on though nothing stored told the operator",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tif (chosen.held.length > 0 && (chosen.untold.length > 0 || chosen.send.length === 0)) {"],
+			"replace": ["\t\t\t\tif (chosen.held.length > 0 && chosen.send.length === 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SKIP-STOP-NAMES-DISPATCH]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-RECORD-RECHECKED",
+			"title": "a record that moved between the plan and the lease is resumed on the stale plan",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tif (again.status !== \"found\" || !isDeepStrictEqual(again.record, attach.record)) {"],
+			"replace": ["\t\t\t\tif (again.status !== \"found\") {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-RECORD-RECHECKED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-AGENT-TRACKED-PAST-EXIT",
+			"title": "an agent's observed exit alone counts as proof that nothing of it still runs",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\treturn ended && groupGone(session.child);"],
+			"replace": ["\treturn ended;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-AGENT-TRACKED-PAST-EXIT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-TEXT-CHANGE-STOPS",
+			"title": "a stored session is resumed under a setup text it was not opened with",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\t\tif (stored.drift === \"text\") {"],
+			"replace": ["\t\tif (stored.drift === \"never\") {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-TEXT-CHANGE-STOPS]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
