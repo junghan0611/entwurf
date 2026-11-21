@@ -96,6 +96,8 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
   - **GLG 2026-11-22: U4(/renew on an ACP row)와 U16(실제 length 정지의 usage)은 #156으로 미룬다. #171 close를 막지 않는다.** (조율자 전달, issuecomment-7069232824)
   - 열린 채 두는 것: P1의 `entwurf_resume_call` launcher 종단 경로는 돌리지 않았다(record seam과 Pi 직접 재개만 LIVE). resume 때 바뀐 carrier를 vendor가 적용하는지는 재지 않았고 STOP `config` 뒤에 있다. U13의 중복 질문은 length-cut 답 뒤 다음 턴의 STOP `changed`로 대체됐다(`ACP-DELTA-MAX-TOKENS`).
   - [ ] 동결 후보에서 FULL · raw `all` · ACP PARTIAL 13그룹. 첫 FULL(`62af356c`)은 red였다: `demo/lib/claude-native-work.test.ts`의 record 픽스처에 `writer`/`firstPrompt`가 없었다(고침).
+    - 둘째 FULL(`fa6f3271`)도 red였다: `check-entwurf-self-address`의 source pin이 `8a248bc9`(결정 18)에서 call site에 들어간 `reportEntwurfControlFlag(enabled)` 줄을 몰랐다. pin을 그 한 줄까지 고정하도록 고쳤다(56/56).
+    - 같은 run의 raw `all`은 `R4.agy.load.order`에서 멈췄다: agy 1.5.13이 `session/load` 재생 끝에 `session_info_update`를 한 번 더 냈다. 같은 버전 세 번 중 한 번(`62af356c` run과 직후 재실행은 일치)이라 vendor 변동으로 기록하고 expected.json은 그대로 둔다. `session/load`는 쓰지 않는 경로다(L9 declined).
   - [ ] 영수증을 #171에 붙이고 #171을 닫는다. main에 병합하기 전에 이 파일을 지운다.
   - 0.61.0에서 Entwurf ACP의 방향을 이야기한다.
 - 이 레일 밖, 그다음: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
