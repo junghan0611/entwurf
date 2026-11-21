@@ -15,18 +15,8 @@
 import { chmodSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO, RUN } from "./common.mjs";
-import {
-	AGENT,
-	backend,
-	launch,
-	leases,
-	MODEL,
-	mtimeBefore,
-	mtimes,
-	records,
-	steps,
-	storedAnswers,
-} from "./pi-host.mjs";
+import { AGENT, backend, launch, leases, MODEL, mtimeBefore, mtimes, records, steps } from "./pi-host.mjs";
+import { judgeUnknownRun } from "./pi-unknown-judge.mjs";
 
 const WIRE = join(RUN, "wire");
 const TEE = join(REPO, "scripts/raw-acp-session-measure/wire-tee.mjs");
@@ -80,7 +70,6 @@ try {
 	const sessionFile = (await a.command({ type: "get_state" })).data?.sessionFile ?? null;
 	summary.run.sessionFile = sessionFile;
 	const t1 = await a.turn("birth", "Reply with exactly: OK");
-	const idAtBirth = records()[0]?.acpSessionId ?? null;
 	// --- X: seen on the wire, then the agent is gone
 	const t2 = await a.turn(
 		"unknown",
@@ -108,7 +97,6 @@ try {
 	summary.run.leasesAfterKill = leases();
 	summary.run.quit1 = await a.quit();
 	summary.run.leasesAfterQuit = leases();
-	const agentsBefore = wire().length;
 
 	// --- the same Pi session reopened: Y
 	const b = launch(sessionFile, env);
@@ -121,47 +109,11 @@ try {
 	summary.run.quit2 = await b.quit();
 	summary.run.leasesAtEnd = leases();
 
-	const w = wire();
-	summary.run.wire = w.map((x) => ({
-		file: x.file,
-		requests: x.requests.map((r) => ({
-			method: r.method ?? null,
-			sessionId: r.params?.sessionId ?? null,
-			hasX: r.method === "session/prompt" ? promptText(r).includes(X) : undefined,
-			hasY: r.method === "session/prompt" ? promptText(r).includes(Y) : undefined,
-		})),
-	}));
-	const later = w.slice(agentsBefore).flatMap((x) => x.requests);
-	const laterPrompts = later.filter((r) => r.method === "session/prompt");
-	const stored = sessionFile ? storedAnswers(sessionFile) : [];
-	summary.run.storedAnswers = stored;
-	const last = t4 ?? t3;
-	const marker = summary.run.recordAtKill?.pendingDispatch ?? null;
-	const after = summary.run.recordAfterKill;
-	summary.checks = {
-		birthDone: t1.stopReason === "stop",
-		xSeenOnWire: summary.run.xSeenOnWire === true,
-		markerStoodAtKill: typeof marker?.turnId === "string" && Array.isArray(marker?.inputEntryIds),
-		unknownStoredAsError: t2.stopReason === "error" && typeof t2.responseId === "string" && t2.diagnostics.length > 0,
-		unknownTurnIdIsTheMarker: marker?.turnId === t2.responseId,
-		recordStillNamesDispatch:
-			after?.pendingDispatch?.turnId === marker?.turnId ||
-			(after?.unsealed ?? []).some((d) => d.turnId === marker?.turnId),
-		reopenResumedRecordedId:
-			later.some((r) => /^session\/(resume|load)$/.test(r.method ?? "") && r.params?.sessionId === idAtBirth) &&
-			!later.some((r) => r.method === "session/new"),
-		oneSessionNew: w.flatMap((x) => x.requests).filter((r) => r.method === "session/new").length === 1,
-		oneVendorId: new Set([idAtBirth, after?.acpSessionId, summary.run.recordAfterReopen?.acpSessionId]).size === 1,
-		wireSelection:
-			backend === "agy"
-				? laterPrompts.length === 1 &&
-					promptText(laterPrompts[0]).includes(X) &&
-					promptText(laterPrompts[0]).includes(Y)
-				: laterPrompts.length === 1 &&
-					!promptText(laterPrompts[0]).includes(X) &&
-					promptText(laterPrompts[0]).includes(Y),
-		reopenAnswered: last.stopReason === "stop" && last.text.includes(Y),
-		skipStopFirst: t4 !== null,
+	summary.run.asked = {
+		birth: t1.stopReason,
+		unknown: t2.stopReason,
+		reopen: t3.stopReason,
+		again: t4?.stopReason ?? null,
 	};
 } catch (error) {
 	summary.run.fatal = String(error?.stack ?? error);
@@ -170,5 +122,24 @@ try {
 summary.run.mtimeBefore = mtimeBefore;
 summary.run.mtimeAfter = mtimes();
 writeFileSync(join(RUN, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
-console.log(JSON.stringify({ status, checks: summary.checks, fatal: summary.run.fatal ?? null }, null, 2));
+// The oracle reads what the run left (pi-unknown-judge.mjs); a check that does not hold fails the run.
+if (status === 0) {
+	try {
+		const verdict = judgeUnknownRun(RUN);
+		summary.checks = verdict.checks;
+		summary.observations = verdict.observations;
+		if (!verdict.ok) status = 1;
+	} catch (error) {
+		summary.run.fatal = String(error?.stack ?? error);
+		status = 3;
+	}
+	writeFileSync(join(RUN, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
+}
+console.log(
+	JSON.stringify(
+		{ status, checks: summary.checks, observations: summary.observations ?? null, fatal: summary.run.fatal ?? null },
+		null,
+		2,
+	),
+);
 process.exit(status);
