@@ -63,6 +63,15 @@ export const ACP_STOPS = {
 		text: "entwurf: the ACP prompt stopped without an answer, so its outcome is unknown; the session record is kept",
 		exit: NEXT_INPUT,
 	},
+	seal: {
+		text: "entwurf: the last answer of this ACP session could not be confirmed in its record, so nothing was sent",
+		// Until a turn can continue past a refused one, sending again stops on that refusal.
+		exit: NEW_SESSION,
+	},
+	internal: {
+		text: "entwurf: this ACP turn failed inside entwurf; whether anything was sent is not known here",
+		exit: "restart Pi",
+	},
 	claudeSkip: {
 		text: "entwurf: an earlier ACP prompt has no confirmed answer; its input is named in the notice and will not be sent again, so nothing was sent",
 		exit: NEXT_INPUT,

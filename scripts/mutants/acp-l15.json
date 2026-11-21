@@ -53,9 +53,9 @@
 			"title": "failed persistence on a reused turn is swallowed without the visible notice",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"if (!persistRecord(session, deps)) {\n\t\t\t\tpushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);"
+				"if (!persistRecord(session, deps)) {\n\t\t\t\tsession.sealOwed = true;\n\t\t\t\tpushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);"
 			],
-			"replace": ["if (!persistRecord(session, deps)) {\n\t\t\t\tvoid state;"],
+			"replace": ["if (!persistRecord(session, deps)) {\n\t\t\t\tsession.sealOwed = true;\n\t\t\t\tvoid state;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-ORACLE-L15-DEGRADED-REUSE]",

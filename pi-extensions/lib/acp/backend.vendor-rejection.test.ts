@@ -455,7 +455,7 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		expect(world.children).toHaveLength(1);
 	});
 
-	it("[QK:ACP-VENDOR-REJECTION-OTHERS-UNCHANGED] every other rejection keeps today's verbatim-first errorMessage and gains no diagnostic", async () => {
+	it("[QK:ACP-VENDOR-REJECTION-OTHERS-UNCHANGED] every other rejection is not read as the vendor's: on a resident it seals as unknown, its raw text in a diagnostic of its own", async () => {
 		const others: Array<{ label: string; error: Error }> = [
 			{ label: "-32603 without data", error: new RequestError(-32603, "Internal error: no result") },
 			{
@@ -476,11 +476,15 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 			});
 			const { message } = sealedOf(await runTurn(world, transcript("go"), `cell-other-${i}`));
 			expect(message.stopReason, other.label).toBe("error");
-			// Today's composition, byte for byte: the raw text first, then the vendor tail.
-			expect(message.errorMessage, other.label).toBe(
-				`${other.error.message}\n--- backend stderr (tail) ---\n${LEGACY_STDERR}`,
-			);
-			expect(message.diagnostics, other.label).toBeUndefined();
+			// #171 step 8: the prompt may have been dispatched and no classified answer came back, so the sealed text is the fixed one
+			// (Pi reads it alone to decide a retry). What the agent said is kept whole, beside it.
+			expect(message.errorMessage, other.label).toBe(ACP_STOPS.unknown.text);
+			expect(message.diagnostics, other.label).toHaveLength(1);
+			const [diagnostic] = message.diagnostics ?? [];
+			expect(diagnostic?.type, other.label).toBe("entwurf_acp_prompt_unknown");
+			expect(diagnostic?.error?.message, other.label).toBe(other.error.message);
+			expect(diagnostic?.details?.stderrTail, other.label).toBe(LEGACY_STDERR);
+			expect(JSON.stringify(diagnostic), other.label).not.toContain(adapters.INCOMPLETE_TOOL_CALL_VERDICT);
 		}
 	});
 

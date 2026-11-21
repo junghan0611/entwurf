@@ -354,6 +354,8 @@ interface BridgeSession {
 	/** #171 step 8: the turn id (`responseId`) of the last turn this session sealed; the branch gate
 	 *  allows a reuse turn only when that exact answer is the last one on Pi's branch. */
 	sealedTurnId?: string;
+	/** #171 step 8: the last seal did not reach the record; the next turn writes it again before any reuse. */
+	sealOwed?: boolean;
 	/** #171 step 8: the agent that answered `initialize` for this session, as the record names it. */
 	writer: RecordWriter;
 	/** #171 step 8: where this session's first prompt stands, as the record states it. */
@@ -1209,6 +1211,47 @@ export function mapPromptStopReason(stopReason: string | undefined): AcpStopVerd
 	}
 }
 
+/**
+ * #171 step 8: the stop reasons that are an answer. The agent ended the turn and said how, so the session
+ * is where its own history says it is: the dispatch marker may be cleared and a live session kept. Anything
+ * else (no reason, or one this build does not know) is not an answer; the marker stays.
+ */
+const ACP_ANSWERED_STOP_REASONS: ReadonlySet<string> = new Set([
+	"end_turn",
+	"max_tokens",
+	"cancelled",
+	"refusal",
+	"max_turn_requests",
+]);
+
+export function isAnsweredAcpStop(stopReason: unknown): boolean {
+	return typeof stopReason === "string" && ACP_ANSWERED_STOP_REASONS.has(stopReason);
+}
+
+/** A `session/prompt` response whose stop reason is not an answer (see `isAnsweredAcpStop`). */
+class AcpUnansweredStop extends Error {
+	readonly rawStopReason: string | undefined;
+	constructor(stopReason: unknown) {
+		super(mapPromptStopReason(typeof stopReason === "string" ? stopReason : undefined).errorMessage ?? "");
+		this.rawStopReason = typeof stopReason === "string" ? stopReason : undefined;
+	}
+}
+
+/**
+ * What a thrown value says, for a notice or stderr. Total: anything can be thrown (a hook may reject with
+ * an object that has no `toString`), and the code that ends a turn must not fail on reading why.
+ */
+export function thrownText(thrown: unknown): string {
+	try {
+		return thrown instanceof Error ? thrown.message : String(thrown);
+	} catch {
+		return "a value that cannot be printed";
+	}
+}
+
+/** The diagnostic that carries what a prompt with a standing marker failed with (the sealed text is fixed). */
+export const ACP_PROMPT_UNKNOWN_DIAGNOSTIC = "entwurf_acp_prompt_unknown";
+
 // Signal the child's whole PROCESS GROUP. claude-agent-acp spawns a `claude`
 // grandchild that inherits the stdio pipe fds; killing only the direct child
 // leaves the grandchild holding the write end of pi's stdout pipe, so pi's event
@@ -1565,6 +1608,9 @@ export function streamAcpTurn(
 	/** #163 S8: the session key this turn's prompt window ran under (set when it opens). */
 	let compactionKey: string | undefined;
 	/** #163 S8: the prompt window opens and closes this turn's compaction collector. */
+	/** Set by the two seals. An exception that escapes the dispatch below before either one ends the stream itself. */
+	let sealed = false;
+
 	function compactionWindow(session: BridgeSession): (open: boolean) => void {
 		return (open) => {
 			if (!open) {
@@ -1907,6 +1953,7 @@ export function streamAcpTurn(
 				message: state.output,
 			});
 		}
+		sealed = true;
 		stream.end();
 	}
 
@@ -1966,11 +2013,20 @@ export function streamAcpTurn(
 		/** Passed only from the two turn catches, and only once the prompt is on the wire
 		 *  (`phase === "prompt"`): a bootstrap failure ran no tool and keeps the verbatim path. */
 		adapter?: AcpBackendAdapter,
+		/** The dispatch marker this turn left standing: the prompt may have been dispatched, and no
+		 *  classified terminal answer came back. */
+		standing?: PendingDispatch,
 	): void {
+		const base = thrownText(err);
+		// #171 step 8: what the agent or the transport said is shown before the fixed text replaces it below.
+		const unknown = standing !== undefined && !aborted;
+		if (unknown) pushAcpLifecycleNotice(state, base.split("\n", 1)[0]);
 		finalizeAcpStreamState(state);
 		depositCompaction();
 		state.output.stopReason = aborted ? "aborted" : "error";
-		const base = err instanceof Error ? err.message : String(err);
+		if (err instanceof AcpUnansweredStop && err.rawStopReason !== undefined) {
+			state.output.rawStopReason = err.rawStopReason;
+		}
 		// The FIRST failure stays first and verbatim (it is what the backend
 		// actually said); the lifecycle line is added, never substituted, so a
 		// reader can still match the transport's own text. One typed exception
@@ -2008,14 +2064,50 @@ export function streamAcpTurn(
 				}),
 			);
 			state.output.errorMessage = rejection.verdict;
+		} else if (unknown) {
+			// #171 step 8: Pi reads `errorMessage` alone to decide a retry, and a retry of a prompt that may have
+			// run is a second send. So the text is fixed; everything raw rides a diagnostic and stderr.
+			process.stderr.write(`[acp] prompt outcome unknown: ${full}\n`);
+			appendAssistantMessageDiagnostic(
+				state.output,
+				createAssistantMessageDiagnostic(ACP_PROMPT_UNKNOWN_DIAGNOSTIC, err, {
+					...(lifecycle ? { lifecycle } : {}),
+					...(observed ? { launchSignal: observed } : {}),
+					...(tail ? { stderrTail: tail } : {}),
+					...(hint ? { hint } : {}),
+				}),
+			);
+			state.output.errorMessage = ACP_STOPS.unknown.text;
 		} else {
 			state.output.errorMessage = hint ? `${full}\n\n${hint}` : full;
 		}
 		stream.push({ type: "error", reason: aborted ? "aborted" : "error", error: state.output });
+		sealed = true;
 		stream.end();
 	}
 
-	queueMicrotask(async () => {
+	/**
+	 * The seal of last resort, for a turn whose own seal failed partway. It formats nothing and finalizes
+	 * nothing: the fixed text, one terminal event, the end of the stream. Each step is tried on its own.
+	 */
+	function sealLastResort(): void {
+		if (sealed) return;
+		sealed = true;
+		try {
+			state.output.stopReason = "error";
+			state.output.errorMessage = ACP_STOPS.internal.text;
+			stream.push({ type: "error", reason: "error", error: state.output });
+		} catch {
+			// The stream refused its terminal event; ending it is all that is left.
+		}
+		try {
+			stream.end();
+		} catch {
+			// Nothing further can be done for this turn.
+		}
+	}
+
+	const dispatch = async (): Promise<void> => {
 		// Operator provider config (S2g) — resolve FIRST. A config the bridge
 		// cannot honor (bad mcpServers / skillPlugins / appendSystemPrompt:true /
 		// strictMcpConfig:false) fails loud into the stream before any spawn. This
@@ -2286,6 +2378,15 @@ export function streamAcpTurn(
 		/** The delta a reuse turn sends and the range its marker names, fixed here and never read again. */
 		let checkedReuse: { prompt: AcpTextBlock[]; range: { start: number; count: number } } | undefined;
 		if (decision.path === "reuse" && existing) {
+			// A seal the record never took is written again before this session is used: its last answer must
+			// be in the record before the next marker goes over it. While it cannot be written the turn stops.
+			if (existing.sealOwed) {
+				if (!persistRecord(existing, deps)) {
+					finishStop("seal", "the session record still cannot be written");
+					return;
+				}
+				existing.sealOwed = false;
+			}
 			const verdict = reuseBranchVerdict(existing.sealedTurnId, piSession?.getBranch() ?? []);
 			if (!verdict.ok) {
 				finishStop(verdict.stop, verdict.why);
@@ -2334,6 +2435,20 @@ export function streamAcpTurn(
 		} finally {
 			inFlightKeys.delete(sessionKey);
 		}
+	};
+	queueMicrotask(() => {
+		// An exception nothing above caught must still end the stream: a turn that never seals holds Pi
+		// forever. The text is fixed, as for every stop; what was thrown goes to the notice and stderr.
+		dispatch().catch((error: unknown) => {
+			const text = thrownText(error);
+			process.stderr.write(`[acp] turn failed inside entwurf: ${text}\n`);
+			try {
+				if (!sealed) finishStop("internal", text.split("\n", 1)[0]);
+			} catch {
+				// The ordinary seal failed too (below): the turn still ends.
+			}
+			sealLastResort();
+		});
 	});
 
 	// --- #163: Pi's summary request → a one-shot, tool-less child that is never retained
@@ -2706,6 +2821,9 @@ export function streamAcpTurn(
 				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
 				onWindow: compactionWindow(session),
 			});
+			// #171 step 8: a response that is not an answer leaves the marker standing, like a prompt that never
+			// returned: the catch seals it `unknown` and closes this session.
+			if (marker && !isAnsweredAcpStop(promptResult?.stopReason)) throw new AcpUnansweredStop(promptResult?.stopReason);
 
 			session.activePromptHandler = undefined;
 			session.busy = false;
@@ -2748,6 +2866,8 @@ export function streamAcpTurn(
 			// #171 step 8: the turn sealed, so its marker is cleared whether or not the session is kept (an
 			// answered abort, a child gone right after its answer). The record stays: it is the only binding.
 			if (marker && !persistRecord(session, deps)) {
+				// The answer is not in the record, and nothing here says which of the two the file now holds.
+				session.sealOwed = true;
 				pushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);
 			}
 			marker = undefined;
@@ -2788,6 +2908,7 @@ export function streamAcpTurn(
 				lifecycle,
 				session?.launchObservation ?? launchObservation,
 				phase === "prompt" ? adapter : undefined,
+				marker,
 			);
 			// error/abort → drop the (uncertain) session and close its child; an
 			// uncertain connection must never be reused (GPT ④).
@@ -2890,6 +3011,8 @@ export function streamAcpTurn(
 				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
 				onWindow: compactionWindow(session),
 			});
+			// #171 step 8: as on a new turn — a response that is not an answer leaves the marker standing.
+			if (!isAnsweredAcpStop(promptResult?.stopReason)) throw new AcpUnansweredStop(promptResult?.stopReason);
 
 			session.activePromptHandler = undefined;
 			session.busy = false;
@@ -2903,6 +3026,7 @@ export function streamAcpTurn(
 				pushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);
 			}
 			if (!persistRecord(session, deps)) {
+				session.sealOwed = true;
 				pushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);
 			}
 			finishSuccess(adapter, session, promptResult);
@@ -2941,6 +3065,7 @@ export function streamAcpTurn(
 				lifecycle,
 				session.launchObservation,
 				phase === "prompt" ? adapter : undefined,
+				marker,
 			);
 			// error/abort on a reused session → drop it and close the child (GPT ④).
 			session.retiring = true;

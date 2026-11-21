@@ -345,9 +345,19 @@ function transcript(...userTurns: string[]): TranscriptContext {
 	return normalizeContext({ tools: PI_TOOLS, messages });
 }
 
-function makeFakeChild(events: string[] = []): AcpChildLike {
+/** The fake child, with the one thing a test may do to it: end it as its own exit would. */
+type FakeChild = AcpChildLike & { exit(code: number): void };
+
+function makeFakeChild(events: string[] = []): FakeChild {
 	const pipe = () => ({ destroy() {}, unref() {} });
+	const listeners = new Map<string, (...args: unknown[]) => void>();
 	return {
+		exit(code) {
+			this.exitCode = code;
+			const listener = listeners.get("exit");
+			listeners.delete("exit");
+			listener?.(code, null);
+		},
 		pid: undefined,
 		exitCode: null,
 		signalCode: null,
@@ -359,7 +369,9 @@ function makeFakeChild(events: string[] = []): AcpChildLike {
 			return true;
 		},
 		unref() {},
-		once() {},
+		once(event: string, listener: (...args: unknown[]) => void) {
+			listeners.set(event, listener);
+		},
 	};
 }
 
@@ -370,7 +382,7 @@ function makeWorld(
 	promptGate?: { hold: boolean; waiting?: () => void },
 ) {
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
-	const children: AcpChildLike[] = [];
+	const children: FakeChild[] = [];
 	const log: string[] = [];
 	const wire: string[] = [];
 	const lifecycle: string[] = [];
@@ -380,7 +392,12 @@ function makeWorld(
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
 	const hooks: {
 		onPrompt?: () => void | Promise<void>;
-		stopReason?: AcpPromptResponse["stopReason"];
+		/** The stop reason of each answer; `null` answers with none at all. */
+		stopReason?: AcpPromptResponse["stopReason"] | null;
+		/** The send itself throws, before any promise exists. */
+		refuseSend?: Error;
+		/** The child ends in the same tick as its answer, after it. */
+		exitAfterAnswer?: number;
 		/** Extra fields of each child's initialize answer, beside its agentInfo. */
 		initialize?: Record<string, unknown>;
 	} = {};
@@ -438,7 +455,30 @@ function makeWorld(
 						? { configOptions: [{ id: "effort", currentValue: effortAnswer(p.value) }] }
 						: { configOptions: [{ id: "model", currentValue: p.value }] };
 				},
-				prompt: async (p): Promise<AcpPromptResponse> => {
+				prompt: (p): Promise<AcpPromptResponse> => {
+					if (hooks.refuseSend) throw hooks.refuseSend;
+					if (hooks.exitAfterAnswer === undefined) return answer(p);
+					// Settled first, then the exit, with nothing between them: the turn's continuation finds
+					// its answer in hand and its child already gone.
+					const code = hooks.exitAfterAnswer;
+					return new Promise((resolve, reject) => {
+						answer(p).then((response) => {
+							resolve(response);
+							(child as FakeChild).exit(code);
+						}, reject);
+					});
+				},
+				cancel: () => {
+					log.push("cancel");
+					pendingPrompt?.();
+					pendingPrompt = undefined;
+				},
+				close: () => {
+					lifecycle.push("close");
+				},
+			};
+			async function answer(p: Parameters<AcpConnectionLike["prompt"]>[0]): Promise<AcpPromptResponse> {
+				{
 					const blocks = p.prompt.map((b) => ("text" in b ? b.text : ""));
 					prompts.push({ sessionId: p.sessionId, text: blocks.join("\n"), blocks });
 					log.push("prompt");
@@ -451,17 +491,9 @@ function makeWorld(
 						});
 					}
 					await hooks.onPrompt?.();
-					return { stopReason: hooks.stopReason ?? "end_turn" };
-				},
-				cancel: () => {
-					log.push("cancel");
-					pendingPrompt?.();
-					pendingPrompt = undefined;
-				},
-				close: () => {
-					lifecycle.push("close");
-				},
-			};
+					return (hooks.stopReason === null ? {} : { stopReason: hooks.stopReason ?? "end_turn" }) as AcpPromptResponse;
+				}
+			}
 		},
 		lifecyclePolicy: () => "process-scoped",
 		sessionReader: piHost.sessionReader,
@@ -1344,6 +1376,299 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			ACP_STOPS.interim.text,
 		);
 		expect(live.wire).toEqual(["initialize", "new", "prompt", "prompt"]);
+	});
+
+	it("[QK:ACP-UNKNOWN-FIXED-TEXT] a prompt that may have been dispatched and got no classified answer seals the fixed text; what was said is kept in a diagnostic, not in errorMessage", async () => {
+		quietStderr();
+		const cases: Array<{ id: string; arm: (world: ReturnType<typeof makeWorld>) => void; said: string }> = [
+			{
+				id: "unknown-rejected",
+				arm: (world) => {
+					world.hooks.onPrompt = () => {
+						throw new Error("overloaded_error: 529 try again");
+					};
+				},
+				said: "overloaded_error: 529 try again",
+			},
+			{
+				// The send refused on the spot: the marker was already in the record, so it is the same case.
+				id: "unknown-refused-send",
+				arm: (world) => {
+					world.hooks.refuseSend = new Error("write EPIPE 503");
+				},
+				said: "write EPIPE 503",
+			},
+		];
+		for (const reuse of [false, true]) {
+			for (const { id, arm, said } of cases) {
+				const sessionId = `${id}-${reuse}`;
+				const world = makeWorld();
+				if (reuse) await runTurn(world, transcript("FIRST"), sessionId, "high");
+				arm(world);
+				const context = reuse ? transcript("FIRST", "CUT") : transcript("CUT");
+				const { sealed, shown } = await shownTurn(world, context, sessionId);
+				if (sealed.type !== "error") throw new Error(`${sessionId}: expected an error seal`);
+				expect(sealed.error.stopReason, sessionId).toBe("error");
+				// Control: the raw text alone would have had Pi send the whole prompt again.
+				expect(isRetryableAssistantError(errorProbe(said)), sessionId).toBe(true);
+				expect(sealed.error.errorMessage, sessionId).toBe(ACP_STOPS.unknown.text);
+				assertNoReplay(sealed.error.errorMessage ?? "");
+				expect(sealed.error.diagnostics, sessionId).toHaveLength(1);
+				expect(sealed.error.diagnostics?.[0], sessionId).toMatchObject({
+					type: "entwurf_acp_prompt_unknown",
+					error: { message: said },
+				});
+				expect(shown, sessionId).toContain(`[acp: ${said}]`);
+				expect(shown, sessionId).toContain(`[acp: ${backend.ACP_RECORD_KEPT_NOTICE}]`);
+				// The marker stands, the transport is closed, and no later turn opens another session.
+				expect(recordOf(world, sessionId), sessionId).toMatchObject({
+					status: "found",
+					record: { acpSessionId: "ACP-1", pendingDispatch: { count: reuse ? 1 : 2 } },
+				});
+				expect(world.lifecycle, sessionId).toContain("close");
+				world.hooks.onPrompt = undefined;
+				world.hooks.refuseSend = undefined;
+				const next = await runTurn(world, transcript(...(reuse ? ["FIRST"] : []), "CUT", "NEXT"), sessionId, "high");
+				expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
+				expect(world.children, sessionId).toHaveLength(1);
+			}
+		}
+	});
+
+	it("[QK:ACP-UNANSWERED-STOP-KEEPS-MARKER] a response with no stop reason, or one this build does not know, is not an answer: the marker stays and the session is closed", async () => {
+		quietStderr();
+		for (const reuse of [false, true]) {
+			for (const reason of ["teapot", null] as const) {
+				const sessionId = `unanswered-${reason}-${reuse}`;
+				const world = makeWorld();
+				if (reuse) await runTurn(world, transcript("FIRST"), sessionId, "high");
+				world.hooks.stopReason = reason as never;
+				const context = reuse ? transcript("FIRST", "CUT") : transcript("CUT");
+				const { sealed } = await shownTurn(world, context, sessionId);
+				if (sealed.type !== "error") throw new Error(`${sessionId}: expected an error seal`);
+				expect(sealed.error.errorMessage, sessionId).toBe(ACP_STOPS.unknown.text);
+				// The wire value survives the mapping, as for every stop reason.
+				expect(sealed.error.rawStopReason, sessionId).toBe(reason ?? undefined);
+				expect(sealed.error.diagnostics?.[0]?.error?.message, sessionId).toBe(
+					reason === null
+						? "ACP backend ended the turn without a stop reason"
+						: "ACP backend stopped with an unrecognized reason: teapot",
+				);
+				expect(recordOf(world, sessionId), sessionId).toMatchObject({
+					status: "found",
+					record: { pendingDispatch: { count: reuse ? 1 : 2 } },
+				});
+				expect(world.lifecycle, sessionId).toContain("close");
+				world.hooks.stopReason = undefined;
+				const next = await runTurn(world, transcript(...(reuse ? ["FIRST"] : []), "CUT", "NEXT"), sessionId, "high");
+				expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
+				expect(world.prompts, sessionId).toHaveLength(reuse ? 2 : 1);
+			}
+		}
+	});
+
+	it("[QK:ACP-ANSWERED-STOP-KEEPS-SESSION] a refusal or an exhausted budget is an answer: the marker is cleared, the session stays and takes the next input", async () => {
+		for (const reason of ["refusal", "max_turn_requests", "max_tokens"] as const) {
+			const sessionId = `answered-${reason}`;
+			const world = makeWorld();
+			world.hooks.stopReason = reason;
+			const first = await runTurn(world, transcript("ASK"), sessionId, "high");
+			expect(first.type, reason).toBe(reason === "max_tokens" ? "done" : "error");
+			expect(recordOf(world, sessionId), reason).toMatchObject({
+				status: "found",
+				record: { firstPrompt: "sealed", pendingDispatch: null },
+			});
+			expect(world.lifecycle, reason).not.toContain("close");
+			world.hooks.stopReason = undefined;
+			const next = await runTurn(world, transcript("ASK", "AGAIN"), sessionId, "high");
+			expect(next.type, reason).toBe("done");
+			expect(world.children, reason).toHaveLength(1);
+			expect(
+				world.prompts.map((p) => p.sessionId),
+				reason,
+			).toEqual(["ACP-1", "ACP-1"]);
+		}
+	});
+
+	it("[QK:ACP-SEAL-OWED-BEFORE-REUSE] an answer the record did not take is written again before the session is used, and the turn stops while it cannot be", async () => {
+		quietStderr();
+		for (const reuse of [false, true]) {
+			for (const repaired of [false, true]) {
+				const sessionId = `seal-owed-${reuse}-${repaired}`;
+				const world = makeWorld();
+				const badDir = join(SANDBOX, `not-a-directory-${sessionId}`);
+				writeFileSync(badDir, "keep");
+				const recordDir = world.deps.sessionDir;
+				if (reuse) await runTurn(world, transcript("FIRST"), sessionId, "high");
+				// Only the seal fails: the marker is in the record, the answer is not.
+				world.hooks.onPrompt = () => {
+					world.deps.sessionDir = badDir;
+				};
+				const asked = reuse ? ["FIRST", "SECOND"] : ["FIRST"];
+				expect((await runTurn(world, transcript(...asked), sessionId, "high")).type, sessionId).toBe("done");
+				world.hooks.onPrompt = undefined;
+				const sent = world.prompts.length;
+				if (repaired) world.deps.sessionDir = recordDir;
+				const { sealed, shown } = await shownTurn(world, transcript(...asked, "AFTER"), sessionId);
+				if (repaired) {
+					// The record held the answered turn's marker; it is sealed before this turn's marker goes over it.
+					expect(sealed.type, sessionId).toBe("done");
+					expect(world.prompts, sessionId).toHaveLength(sent + 1);
+					expect(recordOf(world, sessionId), sessionId).toMatchObject({
+						status: "found",
+						record: { pendingDispatch: null },
+					});
+				} else {
+					expect(errorText(sealed), sessionId).toBe(ACP_STOPS.seal.text);
+					expect(shown, sessionId).toContain(
+						"[acp: next: start a new session with /new; the record stays for diagnosis]",
+					);
+					expect(world.prompts, sessionId).toHaveLength(sent);
+					// The session is kept: it is this conversation's only one.
+					expect(world.lifecycle, sessionId).not.toContain("close");
+				}
+				expect(world.children, sessionId).toHaveLength(1);
+			}
+		}
+	});
+
+	it("[QK:ACP-ANSWER-THEN-GONE-SEALS] a child gone right after its answer still seals: the marker is cleared, the record stays, and no other session is opened", async () => {
+		quietStderr();
+		for (const reuse of [false, true]) {
+			const sessionId = `gone-after-answer-${reuse}`;
+			const world = makeWorld();
+			if (reuse) await runTurn(world, transcript("FIRST"), sessionId, "high");
+			world.hooks.exitAfterAnswer = 0;
+			const asked = reuse ? ["FIRST", "LAST"] : ["LAST"];
+			expect((await runTurn(world, transcript(...asked), sessionId, "high")).type, sessionId).toBe("done");
+			expect(recordOf(world, sessionId), sessionId).toMatchObject({
+				status: "found",
+				record: { acpSessionId: "ACP-1", firstPrompt: "sealed", pendingDispatch: null },
+			});
+			world.hooks.exitAfterAnswer = undefined;
+			const next = await runTurn(world, transcript(...asked, "NEXT"), sessionId, "high");
+			expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
+			expect(world.children, sessionId).toHaveLength(1);
+		}
+		// The same end a moment later, once the turn has sealed and kept its session.
+		const world = makeWorld();
+		await runTurn(world, transcript("LAST"), "gone-after-seal", "high");
+		world.children[0].exit(0);
+		const { sealed, shown } = await shownTurn(world, transcript("LAST", "NEXT"), "gone-after-seal");
+		expect(errorText(sealed)).toBe(ACP_STOPS.interim.text);
+		expect(shown).toContain("[acp: previous claude session ended between turns (exit code 0)]");
+		expect(recordOf(world, "gone-after-seal")).toMatchObject({ status: "found", record: { pendingDispatch: null } });
+		expect(world.children).toHaveLength(1);
+	});
+
+	it("[QK:ACP-DISPATCH-THROW-SEALS] an exception nothing caught still ends the turn, with a fixed text and nothing sent", async () => {
+		const stderr = quietStderr();
+		const world = makeWorld();
+		await runTurn(world, transcript("FIRST"), "dispatch-throw", "high");
+		const reader = world.deps.sessionReader;
+		const broken: AcpTurnDeps["sessionReader"] = () => {
+			const inner = reader();
+			return (
+				inner && {
+					...inner,
+					getBranch: () => {
+						throw new Error("ECONNRESET 502 reading the branch");
+					},
+				}
+			);
+		};
+		const { sealed, shown } = await shownTurn(
+			{ ...world, deps: { ...world.deps, sessionReader: broken } },
+			transcript("FIRST", "SECOND"),
+			"dispatch-throw",
+		);
+		expect(errorText(sealed)).toBe(ACP_STOPS.internal.text);
+		assertNoReplay(errorText(sealed));
+		expect(shown).toContain("[acp: ECONNRESET 502 reading the branch]");
+		expect(stderr).toHaveBeenCalledWith(expect.stringContaining("turn failed inside entwurf"));
+		expect(world.prompts).toHaveLength(1);
+		expect(world.lifecycle).not.toContain("close");
+	});
+
+	it("[QK:ACP-THROWN-UNPRINTABLE-SEALS] a thrown value that cannot even be printed still ends the turn", async () => {
+		quietStderr();
+		const seed = makeWorld();
+		const reader = seed.deps.sessionReader;
+		// Anything can be thrown: from the reader, where nothing catches it, and from a payload hook, where
+		// the turn's own catch has to read it.
+		const unprintable = Object.create(null);
+		const mute: AcpTurnDeps["sessionReader"] = () => {
+			const inner = reader();
+			return (
+				inner && {
+					...inner,
+					getBranch: () => {
+						throw unprintable;
+					},
+				}
+			);
+		};
+		const other = makeWorld();
+		await runTurn(other, transcript("FIRST"), "dispatch-throw-mute", "high");
+		const muted = await shownTurn(
+			{ ...other, deps: { ...other.deps, sessionReader: mute } },
+			transcript("FIRST", "SECOND"),
+			"dispatch-throw-mute",
+		);
+		expect(errorText(muted.sealed)).toBe(ACP_STOPS.internal.text);
+		expect(muted.shown).toContain("[acp: a value that cannot be printed]");
+		for (const sessionId of ["hook-throw-new", "hook-throw-reuse"]) {
+			const hooked = makeWorld();
+			const asked = ["FIRST"];
+			if (sessionId === "hook-throw-reuse") {
+				await runTurn(hooked, transcript("FIRST"), sessionId, "high");
+				asked.push("SECOND");
+			}
+			const sent = hooked.prompts.length;
+			const sealed = await runTurn(hooked, transcript(...asked), sessionId, "high", {
+				options: {
+					onPayload: () => {
+						throw unprintable;
+					},
+				},
+			});
+			expect(sealed.type, sessionId).toBe("error");
+			expect(errorText(sealed), sessionId).toContain("a value that cannot be printed");
+			expect(hooked.prompts, sessionId).toHaveLength(sent);
+		}
+	});
+
+	it("[QK:ACP-ABORT-STANDING-STAYS-ABORTED] an abort whose prompt never answered seals as aborted with what was said, keeps the marker and closes the session", async () => {
+		quietStderr();
+		for (const reuse of [false, true]) {
+			const sessionId = `abort-standing-${reuse}`;
+			const world = makeWorld();
+			if (reuse) await runTurn(world, transcript("FIRST"), sessionId, "high");
+			const controller = new AbortController();
+			// The agent fails while the operator's abort is in flight, with a text that reads as transient.
+			world.hooks.onPrompt = () => {
+				controller.abort();
+				throw new Error("overloaded_error: 529 try again");
+			};
+			const context = reuse ? transcript("FIRST", "CUT") : transcript("CUT");
+			const sealed = await runTurn(world, context, sessionId, "high", { options: { signal: controller.signal } });
+			if (sealed.type !== "error") throw new Error(`${sessionId}: expected an error seal`);
+			// Pi retries only `error` (pi-ai `isRetryableAssistantError`), so an aborted seal keeps its raw text.
+			expect(sealed.reason, sessionId).toBe("aborted");
+			expect(sealed.error.stopReason, sessionId).toBe("aborted");
+			expect(sealed.error.errorMessage, sessionId).toContain("overloaded_error: 529 try again");
+			expect(isRetryableAssistantError(sealed.error), sessionId).toBe(false);
+			expect(sealed.error.diagnostics, sessionId).toBeUndefined();
+			expect(recordOf(world, sessionId), sessionId).toMatchObject({
+				status: "found",
+				record: { pendingDispatch: { count: reuse ? 1 : 2 } },
+			});
+			expect(world.lifecycle, sessionId).toContain("close");
+			world.hooks.onPrompt = undefined;
+			const next = await runTurn(world, transcript(...(reuse ? ["FIRST"] : []), "CUT", "NEXT"), sessionId, "high");
+			expect(errorText(next), sessionId).toBe(ACP_STOPS.interim.text);
+			expect(world.children, sessionId).toHaveLength(1);
+		}
 	});
 
 	it("[QK:ACP-D18-UNHOSTED-STOPS] a Pi that is neither a resident nor an explicit one-shot stops an ACP turn before any spawn", async () => {

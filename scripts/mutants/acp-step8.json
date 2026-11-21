@@ -384,6 +384,94 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-BIRTH-RECHECKED-AT-NEW]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-UNKNOWN-FIXED-TEXT",
+			"title": "a prompt that went out and got no answer seals the agent's raw text, which Pi reads as transient and sends again",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const unknown = standing !== undefined && !aborted;"],
+			"replace": ["const unknown = Date.now() < 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-UNKNOWN-FIXED-TEXT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-UNANSWERED-STOP-KEEPS-MARKER",
+			"title": "a response with no stop reason clears the marker and keeps the session as if it had answered",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["return typeof stopReason === \"string\" && ACP_ANSWERED_STOP_REASONS.has(stopReason);"],
+			"replace": ["return stopReason !== \"\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-UNANSWERED-STOP-KEEPS-MARKER]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ANSWERED-STOP-KEEPS-SESSION",
+			"title": "a refusal is treated as no answer: the session that answered is closed and the conversation is stranded",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\"refusal\",\n\t\"max_turn_requests\",\n]);"],
+			"replace": ["\t\"max_turn_requests\",\n]);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ANSWERED-STOP-KEEPS-SESSION]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-SEAL-OWED-BEFORE-REUSE",
+			"title": "a session whose last answer is not in the record is used again, and the next marker goes over the unsealed one",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (existing.sealOwed) {"],
+			"replace": ["if (Date.now() < 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-SEAL-OWED-BEFORE-REUSE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ANSWER-THEN-GONE-SEALS",
+			"title": "an answered turn whose child is gone leaves its marker standing, so the record says the answer is unknown",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (marker && !persistRecord(session, deps)) {"],
+			"replace": ["if (retain && marker && !persistRecord(session, deps)) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ANSWER-THEN-GONE-SEALS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-DISPATCH-THROW-SEALS",
+			"title": "an exception nothing caught leaves the turn unsealed and Pi waiting on it forever",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["dispatch().catch((error: unknown) => {"],
+			"replace": ["dispatch().catch((error: unknown) => {\n\t\t\tif (Date.now() > 0) return;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-DISPATCH-THROW-SEALS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THROWN-UNPRINTABLE-SEALS",
+			"title": "reading why a turn failed throws on a value with no string form, inside the code that was ending the turn",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t} catch {\n\t\treturn \"a value that cannot be printed\";\n\t}"],
+			"replace": ["\t} catch (unreadable) {\n\t\tthrow unreadable;\n\t}"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-THROWN-UNPRINTABLE-SEALS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ABORT-STANDING-STAYS-ABORTED",
+			"title": "an aborted turn is sealed with the unknown text and loses what the agent said",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const unknown = standing !== undefined && !aborted;"],
+			"replace": ["const unknown = standing !== undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ABORT-STANDING-STAYS-ABORTED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

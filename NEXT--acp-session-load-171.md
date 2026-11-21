@@ -1,6 +1,6 @@
 # NEXT--acp-session-load-171 — #171 ACP 코어 레일
 
-**현재 (2026-11-21):** 브랜치 `acp-session-load-171`(로컬, 푸시는 `8ecd6aef`까지). 8단계 진행 중: 8a와 8b.1 완료, 다음은 8b.2. 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
+**현재 (2026-11-21):** 브랜치 `acp-session-load-171`(로컬, 푸시는 `8ecd6aef`까지, 로컬 HEAD `e8ec5840`). 8단계 진행 중: 8a, 8b.1, 8b.2 완료, 다음은 8b.3. 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
 
 역할 (8단계, GLG 2026-11-21):
 - 조율: `20261113T043350-ff08d4`
@@ -66,7 +66,10 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
     - [x] 8b.1: 살아 있는 세션의 재사용 가드. 턴마다 마지막 메시지에 턴 id(`responseId`)를 찍고, Pi 브랜치의 마지막 답변이 세션이 마지막으로 완료한 바로 그 턴일 때만 delta를 보낸다(`branch-gate.ts`). 브랜치가 보여 주는 입력과 보낼 delta는 같은 렌더러의 전송 문자열로 비교하고, 다르거나 텍스트가 아니면 멈춘다. 상주 턴의 payload hook은 아무것도 바꿀 수 없다. 프롬프트 전에 거절된 재사용 턴은 세션을 유지한다. 정지 문구는 27개(`host` 추가). PARTIAL 157/157, 10/10, 9/9.
       - plan v3와 다른 점: 형제 메일(`custom_message`)은 입력으로 받는다(v3대로 멈추면 ACP 상주 시민이 메일마다 멈춘다). Pi의 system 메시지 엔트리는 건너뛴다.
       - 8c까지의 중간 상태: 프롬프트 전에 거절된 재사용 턴(ESC 포함) 뒤로는 `changed`로 멈춘다. 이미지가 든 재사용 입력도 멈춘다.
-    - [ ] 8b.2: 영속 birth 예약(Pi 세션 id당 지우지 않는 파일, `session/new` 직전 `wx` + fsync), 단일 가드, record를 `session/new` 응답 즉시 기록, record 삭제 경로 제거. 상주 birth의 프롬프트·서명·마커 범위를 한 스냅샷에서 뽑는다(Sol #C20). 설계는 `.agent-reports/171-step8-8b-design.md` §8.
+    - [x] 8b.2 `e8ec5840`: 상주 세션은 birth일 때만 `session/new`를 연다(record 없음, 예약 없음, Pi 브랜치에 ACP 흔적 없음). 그 밖은 모두 이름 붙은 정지이고 record는 지우지 않는다. `streamAcpTurn`의 단일 가드(`decideResident`), 영속 birth 예약(`birth-reservation.ts`, `wx` + 파일·디렉터리 체인 fsync), `session/new` 직전 재확인(호스트 세션 id, abort), record는 `session/new` 응답 직후 기록(fsync). 브랜치의 Entwurf 답변은 "no ACP session was started this turn" 스탬프가 붙은 것만 pre-birth로 본다. 응답된 cancel은 첫 턴 세션도 유지한다(B5 앞당김). 정지 문구 28개(`reserve` 추가). PARTIAL 10개 그룹 249/249(영수증 `~/.local/share/entwurf-lab/171/step8/8b2*-*.json`; `IDLE-DEATH-ANNOUNCED` mutant는 가드 쪽 공지 지점으로 옮겨 재실행). LIVE·FULL 미실행.
+      - 8c 전에: `decideBootstrap`(+`SessionModelLockedError`, `invalidatePersisted`)은 배선되지 않은 옛 정책이다. 배선 전에 정책과 핀(`scripts/check-acp-session-store.ts`의 해당 구간)을 치우거나 바꾼다. `runNewTurn`의 "— opening a new one" 공지는 상주 턴이 더는 닿지 않는다. resume 배선 때 문구를 정리한다.
+      - 9단계 Pi smoke에서 잴 가정 둘: 실제 Pi가 aborted 최종 메시지에 `responseId`를 저장하는가, 실패한 답변의 content 블록을 `textSignature`째 저장하는가. 둘 다 fake Pi host(`scripts/lib/acp-fake-pi-session.ts`)가 모델링한 것이지 측정한 것이 아니다.
+      - rename 뒤 sync 오류는 롤백을 주장하지 않는다(Sol). 실패한 봉인 기록이 재사용을 막는 게이트는 8b.3.
     - [ ] 8b.3: 마커 기준 `unknown` 봉인, 전송 격리, 종료 사유 분류, B5/B5b, E1 은퇴. attach는 아직 꺼 둔다(`interim` 정지).
     - [ ] 8c: 같은 id resume(측정된 writer→reader 쌍만), holder lease, 설정 변경 분류, L-b, delta 증명(턴 id 앵커).
     - [ ] 8d: compaction 뒤 세션 유지(16-1), `session/close`(L7).

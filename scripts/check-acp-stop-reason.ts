@@ -80,6 +80,24 @@ type Stream = AsyncIterable<AssistantMessageEvent> & {
 	result: () => Promise<{ stopReason: string; errorMessage?: string }>;
 };
 
+/**
+ * What a failed turn says. Since #171 step 8 a prompt that may have been dispatched and got no classified
+ * terminal answer seals a fixed text
+ * (Pi reads `errorMessage` alone to decide a retry), and the raw failure is kept whole in a diagnostic:
+ * the first failure, the lifecycle line, the launch signal and the stderr tail. A turn with no standing
+ * marker still carries them in `errorMessage`. Both are read here, in that order.
+ */
+function failureText(error: any): string {
+	const parts = [String(error?.errorMessage)];
+	for (const d of error?.diagnostics ?? []) {
+		if (d?.type !== "entwurf_acp_prompt_unknown") continue;
+		for (const part of [d.error?.message, d.details?.lifecycle, d.details?.launchSignal, d.details?.stderrTail]) {
+			if (typeof part === "string") parts.push(part);
+		}
+	}
+	return parts.join("\n");
+}
+
 async function collect(stream: Stream): Promise<AssistantMessageEvent[]> {
 	const events: AssistantMessageEvent[] = [];
 	for await (const ev of stream) events.push(ev);
@@ -363,11 +381,11 @@ try {
 
 		if (cell.errorContains) {
 			assert.ok(
-				typeof final.errorMessage === "string" && final.errorMessage.includes(cell.errorContains),
+				typeof final.errorMessage === "string" && failureText(final).includes(cell.errorContains),
 				tag(
 					cell,
-					`[${label}] errorMessage must name the reason (expected to contain "${cell.errorContains}", got ` +
-						`${JSON.stringify(final.errorMessage)})`,
+					`[${label}] the failure must name the reason, in errorMessage or in the unknown diagnostic (expected to contain "${cell.errorContains}", got ` +
+						`${JSON.stringify(failureText(final))})`,
 				),
 			);
 		} else {
