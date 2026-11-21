@@ -110,6 +110,16 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
     - 표식 쓰기에 실패하면 보내기 전에 오류로 멈춘다(Hard Rule 15). 세션은 유지한다.
     - 구버전(v1) record에도 벤더 id가 있으므로, 버리지 말고 읽어서 resume한다(결정 8의 "outdated → new"를 대체).
 
+18. **ACP는 `entwurf pi`에서만 쓴다 (GLG 2026-11-21, A9b 안 c).**
+    - 운영자의 Pi 설정은 이 checkout을 user scope 패키지로 불러온다(`~/.pi/agent/settings.json`의 `packages`, `package.json`의 `pi.extensions`). 그래서 지금은 플래그 없는 `pi`에서도 ACP 모델이 보이고, 매 턴 new로 열고 닫는다.
+    - 바꾸는 것: `--entwurf-control` 없는 tui·rpc에서 ACP 턴을 시작하면 "`entwurf pi`로 띄우라"는 오류로 멈춘다.
+      - 플래그가 없을 때 ACP 모델을 아예 등록하지 않는 형태가 가장 깔끔하다. 다만 명시적인 `pi -p`로 ACP를 쓰는 곳이 있는지(게이트, fresh call) 먼저 확인한다.
+      - 그런 곳이 있으면 `pi -p`만 일회용으로 남긴다(16-7).
+    - `entwurf` 커맨드가 정본이다. 필요하면 `entwurf help pi` 페이지(ENTWURF-CLI.json)에 ACP 이야기를 넣는다.
+    - A10(`/tree`·compaction 요약용 별도 세션): 허용한다. 네이티브의 무상태 요약 호출에 해당한다. 대화 record는 읽지도 쓰지도 않으며, 이 성질을 테스트로 고정한다.
+    - 16-4 수정(맥락이 갈라지면 오류로 멈춤)과 C14의 결과(Claude 첫 턴이 프롬프트 전에 끊기면 다음 턴도 멈춤)는 권고대로 확정한다.
+    - claude-agent-acp 핀 올리기: 측정이 끝난 뒤 별도 커밋으로 한다. 이 checkout이 운영 런타임이므로(#165) ACP 행이 열려 있지 않은 시간에 한다. 오라클에서는 이 작업이 메인이며, 필요하면 다른 세션을 끌 수 있다(GLG). 끌 세션은 이름을 대서 확인한다.
+
 # 진행 방식
 
 구현 → focused 게이트 → Sonnet 리뷰 → 수정 한 묶음 → 바뀐 mutant 그룹의 PARTIAL → 동결 FULL → 커밋. 푸시는 GLG가 요청할 때만 한다. mutant 대상 파일은 PARTIAL 전에 stage한다. FULL 전에는 build-bridge를 돌린다.
