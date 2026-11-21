@@ -44,6 +44,11 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
   - `scripts/raw-acp-session-measure/`를 명령 하나로 만든다: 시나리오를 돌리고 R1–R10의 결정적인 줄과 자동으로 대조한다. 같으면 `measured`만 올리고, 다른 줄만 사람이 본다.
   - 그 명령으로 agy 1.5.13을 재고, claude-agent-acp를 0.109.x로 올린다(`package.json` 핀, lockfile, 재측정).
   - 연속성에 필요한 벤더 사실도 이 명령에 넣는다: 턴 도중 child가 죽으면 디스크의 벤더 세션에 무엇이 남는지(U12), 같은 프롬프트가 두 번 오면 벤더가 어떻게 받는지, 오류로 멈춘 뒤 같은 세션이 계속 쓸 만한지.
+  - **들어가기 전 물음표 점검 (2026-11-21, 조율자가 확인)**
+    - [x] 기존 probe 수정: `claudeLauncherArg`가 prefix 변수가 없으면 이전 동작 그대로다(`common.mjs`). 그래서 저장된 R1–R10 run은 계속 대조 기준이 된다.
+    - [x] Claude 쿼터: 7일 창의 48%를 썼고, 속도는 0.6x다. 프롬프트 약 42회를 쓰기에 충분하다.
+    - [ ] agy 토큰: quota 도구가 "agy token expired"라고 보고했다. GLG가 agy를 한 번 열어 갱신한다. 우리는 자격증명을 열지 않는다.
+    - [x] agy 쓰기 도구: hook 정책 `v1:hidden-turns`는 모델 턴을 여는 도구만 막고 나머지는 허용한다(`agy-acp-hook.mjs:13`). agy 자체의 권한 요청을 하네스가 어떻게 받는지는 오푸스가 확인한다.
 - [ ] **8. L8/L9와 연속성 구현 (GLG 리뷰).**
   - 같은 세션을 잇는다:
     - child가 살아 있으면 세션을 유지한다. 오류가 나면 세션을 닫던 GPT ④(`backend.ts:2711`)를 뒤집는다.
@@ -52,6 +57,10 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
   - resume과 load를 배선하고, "record not used" 핀(`scripts/check-acp-session-reuse.ts`)을 뒤집는다. `decideBootstrap`은 initialize 뒤로 옮긴다.
   - V5 가드와 결정 1(resume 실패 계약)을 적용한다.
   - 같은 단계에서 닫을 행: L7, L11/V2, L14, P1, Z3, Z4, V1, Z6/V3(U9와 함께).
+  - **설계 물음표에 대한 답 (2026-11-21, 조율자가 확인)**
+    - 결정 18의 형태: ACP 모델 등록은 유지하고, `--entwurf-control` 없는 tui·rpc만 오류로 멈춘다. 다섯 LIVE smoke가 control 없이 `pi -p`로 ACP를 쓰기 때문이다(`smoke-acp-mcp`, `carrier-augment`, `provider`, `long-turn`, `skill`).
+    - fork 출처: extension이 받는 `ctx.sessionManager`(ReadonlySessionManager, `types.d.ts:243`)의 `getHeader().parentSession`으로 판별한다. fork가 이 값을 채운다(`session-manager.js:1259`).
+    - `/tree` 감지: 같은 manager의 `getLeafId()`와 `getBranch()`로 entry id를 얻는다. 봉인할 때 leaf entry id를 record에 남기고, 다음 턴에 비교한다. 지금의 서명은 내용만 보므로 가지 전환을 놓친다.
 - [ ] **9. 마감.**
   - 7단계의 명령으로 마지막 LIVE를 돌린다: U12–U16, P2/U4.
   - 표의 모든 행이 종착 상태여야 한다.
