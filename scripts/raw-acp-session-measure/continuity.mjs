@@ -26,6 +26,10 @@
 //   ENTWURF_RAW_CLAUDE_ACP_PREFIX  measure claude-agent-acp from that prefix; U26 then builds on the pin
 //   ENTWURF_RAW_U26_AGY_SOURCE     a stored `agy` scenario run dir; U26 resumes a COPY of its session
 //   ENTWURF_RAW_U26_AGY_PAIR       the agy version pair U26 must cross, "<stored>:<launched>"
+//   ENTWURF_RAW_AGY_MODEL          agy's model (default gemini-3.8-flash)
+//   ENTWURF_RAW_ROWS               a comma list of rows to run (default: every row); completeness is
+//                                  judged on those rows only. U23 and U25 read U21's live session, so
+//                                  without U21 they are inconclusive.
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -76,6 +80,9 @@ const ONLY = process.argv[3];
 if (ONLY !== undefined && ONLY !== "claude" && ONLY !== "agy")
 	throw new Error(`backend filter must be claude or agy: ${ONLY}`);
 if (ONLY !== "claude") agyBin();
+const AGY_MODEL = process.env.ENTWURF_RAW_AGY_MODEL ?? "gemini-3.8-flash";
+if (!/^[\w.-]+$/.test(AGY_MODEL)) throw new Error(`ENTWURF_RAW_AGY_MODEL must be a model id: ${AGY_MODEL}`);
+const ROWS = process.env.ENTWURF_RAW_ROWS === undefined ? null : process.env.ENTWURF_RAW_ROWS.split(",");
 
 const ov = await import(join(D, "overlay.js"));
 const BA = await import(join(D, "backend-adapter.js"));
@@ -86,6 +93,7 @@ const summary = {
 	mtimeBefore: { agyToken: mt(TOKEN), claudeCred: mt(CLAUDE_CRED) },
 	provenance: existsSync(PROVENANCE) ? JSON.parse(readFileSync(PROVENANCE, "utf8")) : null,
 	backends: {},
+	rows: ROWS,
 };
 const save = () => writeFileSync(join(RUN, "summary.json"), JSON.stringify(summary, null, 2));
 const EFFECTS = join(scratch, "effects.txt");
@@ -190,7 +198,7 @@ function agyBackend() {
 	return {
 		name: "agy",
 		adapter: BA.agyAdapter,
-		model: "gemini-3.8-flash",
+		model: AGY_MODEL,
 		thinking: "low",
 		command: agyBin(),
 		args: BA.agyLaunchArgs(stateDir),
@@ -254,6 +262,8 @@ const SAMPLES = {
 	"U14-U15-16-1": ["16-1", "U14", "U15"],
 	U26: [""],
 };
+if (ROWS && (ROWS.length === 0 || ROWS.some((row) => !(row in SAMPLES))))
+	throw new Error(`ENTWURF_RAW_ROWS must name rows of ${Object.keys(SAMPLES).join(", ")}: ${ROWS.join(",")}`);
 const at = (key, k) => (key ? `${key}.${k}` : k);
 /** One sample's verdict: complete, or inconclusive with the reasons. */
 function judge(f, key, reasons) {
@@ -262,6 +272,11 @@ function judge(f, key, reasons) {
 }
 
 async function item(B, row, fn) {
+	if (ROWS && !ROWS.includes(row)) {
+		B.items[row] = { skipped: "not in ENTWURF_RAW_ROWS" };
+		B.facts[row] = { skipped: true };
+		return true;
+	}
 	B.items[row] = {};
 	B.facts[row] = {};
 	let ok = true;
@@ -990,15 +1005,17 @@ async function finish(reason) {
 	);
 	// Measurement completeness, apart from cleanup: every mandatory sample of every requested backend.
 	const incomplete = (ONLY ? [ONLY] : ["claude", "agy"]).flatMap((b) =>
-		Object.entries(SAMPLES).flatMap(([row, keys]) =>
-			keys.flatMap((key) => {
-				const facts = summary.backends[b]?.facts?.[row];
-				const status = facts?.[at(key, "status")];
-				if (status === "complete") return [];
-				const why = status === undefined ? "missing" : (facts[at(key, "inconclusiveBecause")] ?? []).join("; ");
-				return [`${b}:${row}${key ? `.${key}` : ""}: ${why}`];
-			}),
-		),
+		Object.entries(SAMPLES)
+			.filter(([row]) => !ROWS || ROWS.includes(row))
+			.flatMap(([row, keys]) =>
+				keys.flatMap((key) => {
+					const facts = summary.backends[b]?.facts?.[row];
+					const status = facts?.[at(key, "status")];
+					if (status === "complete") return [];
+					const why = status === undefined ? "missing" : (facts[at(key, "inconclusiveBecause")] ?? []).join("; ");
+					return [`${b}:${row}${key ? `.${key}` : ""}: ${why}`];
+				}),
+			),
 	);
 	summary.mtimeAfter = { agyToken: mt(TOKEN), claudeCred: mt(CLAUDE_CRED) };
 	summary.linkTargetsAfter = linkTargetMtimes(overlays);

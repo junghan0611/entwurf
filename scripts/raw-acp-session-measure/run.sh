@@ -35,6 +35,8 @@
 #   ENTWURF_RAW_U26_AGY_SOURCE  optional: a stored `agy` scenario run directory; continuity's agy U26
 #                           resumes a COPY of its session
 #   ENTWURF_RAW_U26_AGY_PAIR    "<stored>:<launched>": the agy version pair U26 must cross
+#   ENTWURF_RAW_AGY_MODEL       optional: continuity's agy model (default gemini-3.8-flash)
+#   ENTWURF_RAW_ROWS            optional: continuity's rows, a comma list (default every row)
 #   PROBE_MODEL, PROBE_EFFORT  optional, rail0 and agy only
 set -euo pipefail
 
@@ -94,6 +96,8 @@ child_env=(
 )
 if [ -n "${PROBE_MODEL:-}" ]; then child_env+=(PROBE_MODEL="$PROBE_MODEL"); fi
 if [ -n "${PROBE_EFFORT:-}" ]; then child_env+=(PROBE_EFFORT="$PROBE_EFFORT"); fi
+if [ -n "${ENTWURF_RAW_AGY_MODEL:-}" ]; then child_env+=(ENTWURF_RAW_AGY_MODEL="$ENTWURF_RAW_AGY_MODEL"); fi
+if [ -n "${ENTWURF_RAW_ROWS:-}" ]; then child_env+=(ENTWURF_RAW_ROWS="$ENTWURF_RAW_ROWS"); fi
 if [ -n "${ENTWURF_RAW_CLAUDE_ACP_PREFIX:-}" ]; then
 	case "$ENTWURF_RAW_CLAUDE_ACP_PREFIX" in
 	/*) ;;

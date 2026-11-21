@@ -62,6 +62,9 @@ claude-agent-acp 0.107.3 and agy 1.5.12; those versions describe that run, not t
   `ENTWURF_RAW_U26_AGY_SOURCE` (optional) names a stored `agy` run; `continuity` resumes a copy of its
   session for agy U26. `ENTWURF_RAW_U26_AGY_PAIR` (`<stored>:<launched>`) names the version pair agy
   U26 must cross; without it, or with another pair answering, the sample is inconclusive.
+  `ENTWURF_RAW_AGY_MODEL` (optional) sets `continuity`'s agy model (default `gemini-3.8-flash`), and
+  `ENTWURF_RAW_ROWS` (optional, a comma list such as `U17`) runs only those rows and judges completeness
+  on them; U23 and U25 need U21's live session.
 - **Completeness and cleanup are separate.** Every mandatory U sample records `status`: `complete`, or
   `inconclusive` with `inconclusiveBecause` (a precondition failed, a call got no terminal frame, a
   re-send did not end its turn). A complete sample may say "no"; that is a result. `continuity` exits
