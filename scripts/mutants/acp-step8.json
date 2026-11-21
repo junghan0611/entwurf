@@ -1,0 +1,75 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-step8",
+	"mutants": [
+		{
+			"claim": "ACP-STOP-TEXT-NO-REPLAY",
+			"title": "a stop text is worded so that Pi reads it as transient and retries the turn",
+			"subject": "pi-extensions/lib/acp/stop-texts.ts",
+			"find": ["entwurf: the ACP prompt stopped without an answer, so its outcome is unknown"],
+			"replace": ["entwurf: the ACP prompt ended without an answer, so its outcome is unknown"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-STOP-TEXT-NO-REPLAY]",
+			"signatureSource": "pi-extensions/lib/acp/stop-texts.test.ts"
+		},
+		{
+			"claim": "ACP-STOP-TEXT-EXIT",
+			"title": "a stop loses its way out without being listed as having none",
+			"subject": "pi-extensions/lib/acp/stop-texts.ts",
+			"find": ["exit: \"reopen this session in its own directory\","],
+			"replace": ["exit: null,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-STOP-TEXT-EXIT]",
+			"signatureSource": "pi-extensions/lib/acp/stop-texts.test.ts"
+		},
+		{
+			"claim": "ACP-D18-UNHOSTED-STOPS",
+			"title": "an unhosted Pi opens a vendor session for an ACP turn instead of stopping",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (policy === \"unhosted\") {\n"],
+			"replace": ["\t\tif (policy === \"unhosted\" && process.argv.length < 0) {\n"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-D18-UNHOSTED-STOPS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-D18-HOST-LIFECYCLE",
+			"title": "a bare interactive or RPC Pi is read as an explicit one-shot",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["return facts.mode === \"print\" || facts.mode === \"json\" ? \"turn-scoped\" : \"unhosted\";"],
+			"replace": ["return \"turn-scoped\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-D18-HOST-LIFECYCLE]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-D18-FACTS-NOT-ARGV",
+			"title": "a literal --entwurf-control token in argv is read as the control flag",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["if (facts.controlEnabled === true) return \"process-scoped\";"],
+			"replace": [
+				"if (facts.controlEnabled === true || process.argv.includes(ENTWURF_CONTROL_FLAG)) return \"process-scoped\";"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-D18-FACTS-NOT-ARGV]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-D18-FLAG-REVOKED-AT-SHUTDOWN",
+			"title": "the control flag report outlives the control extension's session",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\treportEntwurfControlFlag(undefined);\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-mcp-register"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-D18-FLAG-REVOKED-AT-SHUTDOWN]",
+			"signatureSource": "pi-extensions/entwurf-control.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		}
+	]
+}

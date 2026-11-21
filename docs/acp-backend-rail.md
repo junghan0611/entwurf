@@ -63,15 +63,21 @@ backend-specific keys; `adapterSettings` remains opaque until handed back to its
 A connection, model, carrier, MCP declaration, or overlay-relevant setting change must
 change the reuse signature rather than mutate a live incompatible session.
 
-**Session reuse needs a resident pi.** Reuse — the live ACP session kept across turns, each
-later turn sending only the new user message — exists only in a pi process started with
-`--entwurf-control` (`entwurf pi` adds it). Every other pi process, plain interactive `pi`
-and `pi -p` included, is turn-scoped: each turn opens a new ACP session, sends the pi
-transcript rendered as one text prompt, and tears the child down when the turn ends
-(`resolveLifecyclePolicy`, `pi-extensions/lib/acp/session-store.ts`). This boundary is as
-old as reuse itself (S2c, hang-safe one-shot exit); it is stated here so that "reuse without
-resending the transcript" is not read as a property of every pi process. Nothing in a pi
-profile or AGENTS file changes it.
+**ACP rows run under a resident pi.** Reuse — the live ACP session kept across turns, each
+later turn sending only the new user message — exists only in a pi process whose control
+extension reports `--entwurf-control` as set (`entwurf pi` adds it). A pi whose reported run
+mode is `print` or `json` (`pi -p`, `--mode json`, or redirected stdio) is a one-shot and
+turn-scoped: its turn opens a new ACP session, sends the pi transcript rendered as one text
+prompt, and tears the child down when the turn ends. Any other pi process — a plain
+interactive `pi`, or RPC, without the flag — is unhosted: a conversation turn on an ACP row
+stops with a fixed text that names `entwurf pi`, and no child is started (#171 decision 18;
+before it, such a process opened a new vendor session on every turn). The one exception is
+Pi's own stateless summary request (compaction and `/tree` summaries), which is classified
+before this check and still runs on its isolated child. The split is `resolveLifecyclePolicy`
+(`pi-extensions/lib/acp/session-store.ts`) over two reported facts
+(`pi-extensions/lib/acp-host-facts.ts`): the control extension's parsed flag first, Pi's run
+mode second. It never scans argv, so `pi -- --entwurf-control` (a prompt) is not a resident.
+Nothing in a pi profile or AGENTS file changes it.
 
 **What a rebuilt prompt carries (`context.ts`).** The rebuild is a TEXT rendering of pi's own
 transcript, not a replay: user text, assistant text and tool results become `User:` /

@@ -14,9 +14,10 @@
 //     transcript would duplicate history). buildAcpPrompt() owns that split.
 //   - lifecyclePolicy (does the child outlive the turn): `process-scoped`
 //     (`--entwurf-control` resident) MAY keep the child + connection in an
-//     in-memory map and reuse it; `turn-scoped` (`pi -p` one-shot AND plain
-//     interactive) is ALWAYS `new` + teardown — a surviving child's stdio handle
-//     would pin a one-shot pi's exit (the S2c hang).
+//     in-memory map and reuse it; `turn-scoped` (an explicit `pi -p` / json
+//     one-shot) is ALWAYS `new` + teardown — a surviving child's stdio handle
+//     would pin a one-shot pi's exit (the S2c hang). A plain interactive or RPC
+//     pi without the flag is `unhosted`: its ACP turn stops (#171 decision 18).
 //
 // Scope of THIS cut (GPT 73b44d / c617cb):
 //   - in-memory reuse + new ONLY. Persisted resume/load is the next lane (1b-2c):
@@ -52,6 +53,7 @@ import {
 	getCurrentSystemPrompt,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
+import { readAcpHostFacts } from "../acp-host-facts.js";
 import type { AcpSteerEffect, AcpSteerSeamV1 } from "../acp-steer-seam.js";
 import {
 	type AcpClientHandlers,
@@ -102,7 +104,7 @@ import {
 	decideBootstrap,
 	deleteSessionRecord,
 	type ExistingSession,
-	type LifecyclePolicy,
+	type HostLifecycle,
 	type PendingDispatch,
 	readSessionRecord,
 	resolveLifecyclePolicy,
@@ -110,6 +112,7 @@ import {
 	standingRecordVerdict,
 	writeSessionRecord,
 } from "./session-store.js";
+import { ACP_STOPS, type AcpStopId, acpStopExitNotice } from "./stop-texts.js";
 import { assertExcludeToolsHonored, isPiSummaryRequest } from "./tool-surface.js";
 
 // Bootstrap boundaries ONLY. initialize / newSession / set-model are handshake
@@ -264,7 +267,7 @@ export interface AcpChildLike {
 export interface AcpTurnDeps {
 	spawnChild(launch: { command: string; args: string[] }, cwd: string, extraEnv: Record<string, string>): AcpChildLike;
 	createConnection(child: AcpChildLike, handlers: AcpClientHandlers): AcpConnectionLike;
-	lifecyclePolicy(): LifecyclePolicy;
+	lifecyclePolicy(): HostLifecycle;
 	/** Resolve operator provider config (S2g). Real impl reads global+project settings.
 	 *  Takes the already-routed `adapter` (resolved once at turn entry) so the backend
 	 *  can parse its OWN settings without config.ts re-routing — the model id stays the
@@ -978,8 +981,8 @@ export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — future c
 // 500 or 503 there reads as transient). The range and the store's code ride the notices and stderr instead.
 export const ACP_DISPATCH_STOP_MESSAGE =
 	"entwurf: the last prompt to this ACP session has no sealed answer, so nothing was sent this turn";
-export const ACP_RECORD_UNREADABLE_MESSAGE =
-	"entwurf: the ACP session record cannot be read, so nothing was sent this turn; make it readable or remove it";
+// Decision 17: a stop never asks the operator to remove a record — deleting it can erase the only binding.
+export const ACP_RECORD_UNREADABLE_MESSAGE = ACP_STOPS.unreadable.text;
 export const ACP_DISPATCH_MARKER_NOT_SAVED =
 	"entwurf: the dispatch marker was not saved, so nothing was sent this turn";
 export const ACP_RECORD_DROPPED_NOTICE = "session record dropped — the next turn starts a new session";
@@ -1256,7 +1259,8 @@ function defaultDeps(): AcpTurnDeps {
 			const transport = ndJsonStream(stdinWeb, stdoutWeb);
 			return connectAcpClient(transport as unknown as Parameters<typeof connectAcpClient>[0], handlers);
 		},
-		lifecyclePolicy: () => resolveLifecyclePolicy(),
+		// #171 decision 18: from the facts the control extension and the provider entry reported, not argv.
+		lifecyclePolicy: () => resolveLifecyclePolicy(readAcpHostFacts()),
 		loadConfig: (cwd, modelId, adapter) => resolveProviderConfig({ cwd, modelId, adapter }),
 		now: () => new Date().toISOString(),
 	};
@@ -1837,6 +1841,12 @@ export function streamAcpTurn(
 		return marker;
 	}
 
+	/** #171 step 8: the way out of a stop, as its own notice so the 80-character clip cannot cut it. */
+	function pushStopExit(id: AcpStopId): void {
+		const exit = acpStopExitNotice(id);
+		if (exit !== null) pushAcpLifecycleNotice(state, exit);
+	}
+
 	/** #171 L16: say what a drop did. A failed drop keeps the marker, so the next turn stops on it again. */
 	function reportRecordDrop(failureCode: string | undefined): void {
 		pushAcpLifecycleNotice(
@@ -2016,6 +2026,13 @@ export function streamAcpTurn(
 		}
 
 		const policy = deps.lifecyclePolicy();
+		if (policy === "unhosted") {
+			// Decision 18: neither a resident nor an explicit one-shot. Nothing is spawned.
+			pushAcpLifecycleNotice(state, "this Pi has no entwurf control and is not an explicit one-shot");
+			pushStopExit("mode");
+			finishError(new Error(ACP_STOPS.mode.text), false);
+			return;
+		}
 		const sessionKey = resolveSessionKey(opts, cwd);
 		// Billing/memory carrier (S2d-1c): SHORT operator-authored system-prompt
 		// additions. The shipped default is NON-empty → tiny string carrier →
@@ -2105,6 +2122,7 @@ export function streamAcpTurn(
 				);
 				const refusal = acpStoreRefusal(ACP_RECORD_UNREADABLE_MESSAGE, "session record unreadable", code);
 				pushAcpLifecycleNotice(state, refusal.notice);
+				pushStopExit("unreadable");
 				finishError(new Error(refusal.errorMessage), false);
 				return;
 			}

@@ -18,8 +18,8 @@
 // from its own history. Delta-only on the wire stays the deterministic gate's
 // claim: the vendor stdio is not observed here.
 //
-// It forces process-scoped by pushing the real `--entwurf-control` resident flag
-// into argv (resolveLifecyclePolicy reads process.argv), then calls the REAL
+// It forces process-scoped by reporting the control flag as set, the way the control extension does,
+// as a reported host fact (resolveLifecyclePolicy reads those), then calls the REAL
 // streamShellAcp (real overlay + real spawn) twice with the same sessionId.
 //
 // The one-shot exit0 half (a `pi -p` turn-scoped session tears down cleanly) is
@@ -110,9 +110,12 @@ async function main(): Promise<void> {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const backend = (await import(backendUrl)) as any;
 
-	// Force process-scoped: the real resident flag makes resolveLifecyclePolicy
-	// pick `process-scoped`, so turn 2 reuses the in-memory child.
-	if (!process.argv.includes("--entwurf-control")) process.argv.push("--entwurf-control");
+	// Force process-scoped: report the control flag as the control extension would (#171 decision 18:
+	// resolveLifecyclePolicy reads the reported host facts, never argv), so turn 2 reuses the in-memory child.
+	const hostFacts = (await import(pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp-host-facts.js")).href)) as {
+		reportEntwurfControlFlag: (enabled: boolean) => void;
+	};
+	hostFacts.reportEntwurfControlFlag(true);
 
 	// #142: the Claude ACP rail maps pi's thinking level through the REGISTERED row's
 	// `thinkingLevelMap` and refuses a turn with no level (pi sends none for `off` or an unset

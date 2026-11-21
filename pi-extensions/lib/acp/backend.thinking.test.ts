@@ -19,7 +19,7 @@
  * point into a temp dir BEFORE the dynamic import.
  */
 
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RequestError } from "@agentclientprotocol/sdk";
@@ -43,6 +43,7 @@ import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+import { ACP_STOPS } from "./stop-texts.ts";
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-thinking-"));
 const SANDBOXED_ENV = [
@@ -506,6 +507,12 @@ async function noticesOf(
 		if (event.type === "text_delta") text += event.delta;
 	}
 	return text;
+}
+
+/** The `[acp: …]` notices an error seal carries, in order. */
+function sealedNotices(event: AssistantMessageEvent): string[] {
+	if (event.type !== "error") throw new Error(`expected an error seal, got ${event.type}`);
+	return event.error.content.flatMap((block) => (block.type === "text" ? [block.text.trim()] : []));
 }
 
 function errorText(event: AssistantMessageEvent): string {
@@ -1075,6 +1082,23 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(recordOf(broken, "l16-unretained-close")).toEqual({ status: "missing" });
 	});
 
+	it("[QK:ACP-D18-UNHOSTED-STOPS] a Pi that is neither a resident nor an explicit one-shot stops an ACP turn before any spawn", async () => {
+		const world = makeWorld();
+		const unhosted = { ...world.deps, lifecyclePolicy: () => "unhosted" as const };
+		const opts = { sessionId: "d18-unhosted", reasoning: "high" } as Parameters<typeof backend.streamAcpTurn>[2];
+		let sealed: AssistantMessageEvent | undefined;
+		for await (const event of backend.streamAcpTurn(sonnet(), transcript("NEVER-SENT"), opts, unhosted)) sealed = event;
+		if (!sealed) throw new Error("no seal");
+		expect(errorText(sealed)).toBe(ACP_STOPS.mode.text);
+		assertNoReplay(errorText(sealed));
+		expect(sealedNotices(sealed)).toEqual([
+			"[acp: this Pi has no entwurf control and is not an explicit one-shot]",
+			"[acp: next: start this session with entwurf pi]",
+		]);
+		expect(world.children).toHaveLength(0);
+		expect(readdirSync(world.deps.sessionDir as string)).toEqual([]);
+	});
+
 	it("[QK:ACP-L16-UNREADABLE-REFUSES] a record that cannot be read refuses the turn before any spawn, and stays as evidence", async () => {
 		const stderr = quietStderr();
 		const world = makeWorld();
@@ -1086,6 +1110,12 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(stderr).toHaveBeenCalledWith(expect.stringContaining("code=EISDIR"));
 		assertNoReplay(errorText(refused));
 		expect(world.children).toHaveLength(0);
+		// The way out is a notice of its own and arrives whole: one line with the cause would be clipped at 80.
+		expect(sealedNotices(refused)).toEqual([
+			"[acp: session record unreadable (code=EISDIR)]",
+			"[acp: next: make the record file readable, then send again]",
+		]);
+		expect(errorText(refused)).not.toMatch(/remove/);
 		expect(readFileSync(join(path, "keep"), "utf8")).toBe("evidence");
 		expect(stderr).toHaveBeenCalledWith(expect.stringContaining(`path=${path}`));
 	});

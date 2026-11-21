@@ -28,6 +28,7 @@ import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, write
 import { join } from "node:path";
 import type { Message, ToolResultMessage, TranscriptContext } from "@earendil-works/pi-ai";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { AcpHostFacts } from "../acp-host-facts.js";
 import type { AcpBootstrapPath } from "./context.js";
 
 // MUST equal event-mapper.ts `LIFECYCLE_NOTICE_SIGNATURE` (the SSOT/producer).
@@ -51,24 +52,35 @@ export const SESSION_RECORD_PROVIDER = "entwurf" as const;
 /** Where the child survives relative to a turn — ORTHOGONAL to bootstrapPath. */
 export type LifecyclePolicy = "process-scoped" | "turn-scoped";
 
-/** The exact argv token that marks a long-lived resident pi process. */
+/** The flag `entwurf pi` adds. The control extension owns its parsing; this constant is the spelling SSOT. */
 export const ENTWURF_CONTROL_FLAG = "--entwurf-control";
 
 /**
- * Decide whether this pi process may keep an ACP child alive across turns. Only
- * an explicit long-lived resident (`--entwurf-control`) is `process-scoped`;
- * everything else — `pi -p` one-shot AND plain interactive — is `turn-scoped`
- * (new + teardown each turn), the S2c hang-safe default (a surviving child's
- * stdio handle would pin a one-shot pi's exit).
- *
- * Keyed on the resident flag, NEVER on `-p`: a resident may ALSO carry `-p`
- * (fire a first prompt, then stay alive), so a `-p` test would kill real
- * resident reuse. Exact-token match, not substring (`--not-entwurf-control`
- * must NOT qualify). A future explicit pi lifecycle/mode hint would take
- * precedence over argv, but argv is the most honest marker available today.
+ * What this pi process is to an ACP row (#171 decision 18, GLG 2026-11-21): a resident
+ * that keeps one vendor session (`process-scoped`), an explicit one-shot that opens and
+ * closes one (`turn-scoped`), or neither (`unhosted`), where an ACP turn stops.
  */
-export function resolveLifecyclePolicy(argv: readonly string[] = process.argv): LifecyclePolicy {
-	return argv.includes(ENTWURF_CONTROL_FLAG) ? "process-scoped" : "turn-scoped";
+export type HostLifecycle = LifecyclePolicy | "unhosted";
+
+/**
+ * Decide what this pi process is to an ACP row, from the two reported host facts
+ * (lib/acp-host-facts.ts) — never from raw argv: `pi -- --entwurf-control` passes that
+ * token as a prompt, and only Pi's parser knows whether the control flag is set.
+ *
+ * - The control extension reported its flag as set: a long-lived resident,
+ *   `process-scoped`. Read first and alone: a resident may ALSO be in print mode (fire a
+ *   first prompt, then stay alive).
+ * - Otherwise, Pi-reported mode `print` or `json`: a one-shot, `turn-scoped` (new +
+ *   teardown each turn). Pi also reports `print` for redirected stdio without `-p`.
+ * - Otherwise, mode `tui` or `rpc`: `unhosted`. Such a process used to open a new vendor
+ *   session on every turn and write no record, which is the internal `new` decision 17
+ *   forbids. ACP runs under `entwurf pi`.
+ * - A fact nobody reported grants nothing: no flag report is not a resident, and no mode
+ *   report is not a one-shot.
+ */
+export function resolveLifecyclePolicy(facts: AcpHostFacts): HostLifecycle {
+	if (facts.controlEnabled === true) return "process-scoped";
+	return facts.mode === "print" || facts.mode === "json" ? "turn-scoped" : "unhosted";
 }
 
 /**

@@ -80,6 +80,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Box, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
+import { reportEntwurfControlFlag } from "./lib/acp-host-facts.js";
 import { lookupAcpSteerSeam } from "./lib/acp-steer-seam.js";
 import {
 	type CompactionGuard,
@@ -1291,6 +1292,9 @@ export default function (pi: ExtensionAPI) {
 		// non-control session.
 		applyEmacsAgentSocketEnv(pi);
 		const enabled = pi.getFlag(ENTWURF_FLAG) === true;
+		// #171 decision 18: the parsed flag, for the ACP backend. Pi scopes getFlag to this extension, and a
+		// raw argv scan would read `pi -- --entwurf-control` (a prompt) as the flag.
+		reportEntwurfControlFlag(enabled);
 		await noticeUncitizenedSession(ctx, enabled);
 		if (!enabled) {
 			await stopControlServer(state);
@@ -1419,6 +1423,9 @@ export default function (pi: ExtensionAPI) {
 	// handlers registered above are a different thing: the #151 /renew lineage admission.
 
 	pi.on("session_shutdown", async () => {
+		// #171 decision 18: take the flag report back first, before anything here can await or throw. After a
+		// /reload that no longer loads this extension, nobody would overwrite a `true` left on globalThis.
+		reportEntwurfControlFlag(undefined);
 		const previousContext = state.context;
 		invalidateControlBinding(state);
 		residentGardenId = null;

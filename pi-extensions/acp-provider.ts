@@ -30,6 +30,7 @@ import {
 import { allCuratedModels } from "./lib/acp/backend-adapter.js";
 import { writeAcpCompactionRecords } from "./lib/acp/compaction-writer.js";
 import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
+import { reportAcpHostMode } from "./lib/acp-host-facts.js";
 import { registerAcpSteerSeam } from "./lib/acp-steer-seam.js";
 
 // Idempotent registration guard. pi may evaluate an extension entry more than
@@ -75,6 +76,15 @@ export default function (pi: ExtensionAPI) {
 		streamSimple: streamShellAcp,
 	});
 
+	// #171 decision 18 (GLG 2026-11-21): ACP rows run under `entwurf pi`. The backend needs Pi's run mode to
+	// tell a one-shot (Pi-reported `print` or `json`) from a bare interactive or RPC Pi, which stops.
+	// Whether this Pi is a resident is the control extension's fact to report (lib/acp-host-facts). Pi binds the
+	// mode before `session_start` (pi-coding-agent dist/core/agent-session.js:2756-2776), and a `/reload`
+	// re-imports this module and fires `session_start` again, so the new instance is told too.
+	pi.on("session_start", (_event, ctx) => {
+		reportAcpHostMode(ctx.mode);
+	});
+
 	// #163, GLG 2026-11-14: a successful compaction closes the Claude child of this Pi session at
 	// once. The next turn opens a new child from the compacted transcript (backend.ts
 	// `closeRetainedAcpSession`). A session that never used an ACP model has nothing to close.
@@ -91,6 +101,8 @@ export default function (pi: ExtensionAPI) {
 	// alone by the same busy guard as compaction. "reload" keeps the same session, and "quit" is
 	// reaped by the backend's exit hook, which SIGKILLs every retained group — both stay as they were.
 	pi.on("session_shutdown", (event, ctx) => {
+		// #171 decision 18: the mode report ends with the runner that made it; the next session_start reports again.
+		reportAcpHostMode(undefined);
 		if (!REPLACING_SHUTDOWN_REASONS.has(event.reason)) return;
 		const leaving = ctx.sessionManager.getSessionId();
 		closeRetainedAcpSession(leaving);

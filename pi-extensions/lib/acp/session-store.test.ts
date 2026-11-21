@@ -3,12 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	ACP_HOST_FACTS_KEY,
+	readAcpHostFacts,
+	reportAcpHostMode,
+	reportEntwurfControlFlag,
+} from "../acp-host-facts.ts";
+import {
 	type BootstrapParams,
 	buildSessionRecord,
 	decideBootstrap,
 	parseSessionRecord,
 	readSessionRecord,
 	recordIsBehind,
+	resolveLifecyclePolicy,
 	type SealedSessionRecord,
 	sessionRecordPath,
 	standingRecordVerdict,
@@ -173,4 +180,39 @@ describe("a sealed record against the transcript after it (#171 L16 rule 6, R12)
 			if (path === "new") expect(decision).toMatchObject({ invalidatePersisted: true, reason: "persisted_behind" });
 		}
 	});
+});
+
+it("[QK:ACP-D18-HOST-LIFECYCLE] only a reported control flag keeps a session, only a Pi-reported one-shot mode opens one per turn", () => {
+	for (const mode of ["tui", "rpc", "json", "print", undefined] as const) {
+		expect(resolveLifecyclePolicy({ controlEnabled: true, mode }), String(mode)).toBe("process-scoped");
+	}
+	for (const controlEnabled of [false, undefined]) {
+		expect(resolveLifecyclePolicy({ controlEnabled, mode: "print" })).toBe("turn-scoped");
+		expect(resolveLifecyclePolicy({ controlEnabled, mode: "json" })).toBe("turn-scoped");
+		expect(resolveLifecyclePolicy({ controlEnabled, mode: "tui" })).toBe("unhosted");
+		expect(resolveLifecyclePolicy({ controlEnabled, mode: "rpc" })).toBe("unhosted");
+		// A mode Pi has not reported is not read as a one-shot.
+		expect(resolveLifecyclePolicy({ controlEnabled, mode: undefined })).toBe("unhosted");
+	}
+});
+
+it("[QK:ACP-D18-FACTS-NOT-ARGV] the control flag is the owner's parsed report: a literal token in argv grants nothing", () => {
+	const host = {};
+	const argv = process.argv;
+	// `pi -- --entwurf-control`: Pi reads the token as a prompt, so the control extension reports false.
+	process.argv = [...argv, "--", "--entwurf-control"];
+	try {
+		expect(readAcpHostFacts(host)).toEqual({ controlEnabled: undefined, mode: undefined });
+		expect(resolveLifecyclePolicy(readAcpHostFacts(host))).toBe("unhosted");
+		reportEntwurfControlFlag(false, host);
+		reportAcpHostMode("tui", host);
+		expect(resolveLifecyclePolicy(readAcpHostFacts(host))).toBe("unhosted");
+		reportEntwurfControlFlag(true, host);
+		expect(resolveLifecyclePolicy(readAcpHostFacts(host))).toBe("process-scoped");
+	} finally {
+		process.argv = argv;
+	}
+	// A value of the wrong shape reads as not reported.
+	const forged = { [ACP_HOST_FACTS_KEY]: { controlEnabled: "true", mode: "resident" } };
+	expect(readAcpHostFacts(forged)).toEqual({ controlEnabled: undefined, mode: undefined });
 });
