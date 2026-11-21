@@ -17,10 +17,8 @@
 			"claim": "ACP-AGY-ADMIT-FLOOR",
 			"title": "agy's floor drops one patch — a 1.5.8 server, never measured, is admitted",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": ["export const AGY_ACP_AGENT = Object.freeze({ name: \"Antigravity ACP Server\", floor: \"1.5.9\" });"],
-			"replace": [
-				"export const AGY_ACP_AGENT = Object.freeze({ name: \"Antigravity ACP Server\", floor: \"1.5.8\" });"
-			],
+			"find": ["\tfloor: \"1.5.9\","],
+			"replace": ["\tfloor: \"1.5.8\","],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-AGY-ADMIT-FLOOR]",
@@ -75,12 +73,8 @@
 			"claim": "ACP-CLAUDE-FLOOR-MATCHES-PIN",
 			"title": "the Claude floor drifts below the bundled pin",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": [
-				"export const CLAUDE_ACP_AGENT = Object.freeze({ name: \"@agentclientprotocol/claude-agent-acp\", floor: \"0.107.3\" });"
-			],
-			"replace": [
-				"export const CLAUDE_ACP_AGENT = Object.freeze({ name: \"@agentclientprotocol/claude-agent-acp\", floor: \"0.107.0\" });"
-			],
+			"find": ["\tfloor: \"0.107.3\","],
+			"replace": ["\tfloor: \"0.107.0\","],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]",
@@ -418,6 +412,93 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-AGY-SUMMARY-CLEANUP-THROW-CONTAINED]",
 			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-L1-FACTS-READ",
+			"title": "a truthy non-boolean loadSession reads as the load capability",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tloadSession: capabilities?.loadSession === true,"],
+			"replace": ["\t\tloadSession: Boolean(capabilities?.loadSession),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-L1-FACTS-READ]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-L1-FACTS-STORED",
+			"title": "the child's initialize facts are never kept — the session holds an empty reading",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tsession.agentFacts = readAgentFacts(initialized);"],
+			"replace": ["\t\t\tsession.agentFacts = readAgentFacts({});"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-L1-FACTS-STORED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L1-BOOTSTRAP-CAPABILITIES",
+			"title": "the load capability is read from the resume judgement",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tloadSession: attachAllowed(facts, agent, \"load\").allowed,"],
+			"replace": ["\t\tloadSession: attachAllowed(facts, agent, \"resume\").allowed,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-L1-BOOTSTRAP-CAPABILITIES]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-V5-ATTACH-EQUAL",
+			"title": "attach compares the reported version to the admission floor instead of the measured version",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tif (facts.agent.version !== agent.measured) return { allowed: false, reason: \"version-unmeasured\" };"
+			],
+			"replace": [
+				"\tif (facts.agent.version !== agent.floor) return { allowed: false, reason: \"version-unmeasured\" };"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-V5-ATTACH-EQUAL]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-V5-ATTACH-UNMEASURED",
+			"title": "the measured version is read as a floor, so a newer admitted server may attach",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tif (facts.agent.version !== agent.measured) return { allowed: false, reason: \"version-unmeasured\" };"
+			],
+			"replace": [
+				"\tif (!versionAtLeast(parseReleaseVersion(facts.agent.version) ?? [0, 0, 0], parseReleaseVersion(agent.measured) ?? [0, 0, 0])) return { allowed: false, reason: \"version-unmeasured\" };"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-V5-ATTACH-UNMEASURED]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-V5-ATTACH-CAPABILITY-ABSENT",
+			"title": "attach never checks the advertised capability",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tconst advertised = need === \"resume\" ? facts.sessionCapabilities.includes(\"resume\") : facts.loadSession;"
+			],
+			"replace": ["\tconst advertised = true;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-V5-ATTACH-CAPABILITY-ABSENT]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-V5-ATTACH-NAME",
+			"title": "attach checks only that some agent answered, not that it is the pinned one",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tif (facts.agent?.name !== agent.name) return { allowed: false, reason: \"agent-unnamed\" };"],
+			"replace": ["\tif (!facts.agent) return { allowed: false, reason: \"agent-unnamed\" };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-V5-ATTACH-NAME]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		}
 	]
 }

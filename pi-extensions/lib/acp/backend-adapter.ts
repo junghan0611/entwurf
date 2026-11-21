@@ -346,9 +346,22 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
 
 /** `initialize.agentInfo` as each server answers it. Claude: the bundled pin, which a test binds to
  *  package.json (`[측정 2026-11-17]` 0.107.0 and 0.107.3 answered this name and their own version).
- *  agy: the one measured version (#167, 2026-11-16). */
-export const CLAUDE_ACP_AGENT = Object.freeze({ name: "@agentclientprotocol/claude-agent-acp", floor: "0.107.3" });
-export const AGY_ACP_AGENT = Object.freeze({ name: "Antigravity ACP Server", floor: "1.5.9" });
+ *  agy: the one measured version (#167, 2026-11-16).
+ *
+ *  `floor` admits a server to run at all (#168). `measured` is the one version whose session
+ *  resume/load the receipts of docs/acp-client-baseline.md measured (#171 V5, decision 10,
+ *  GLG 2026-11-21); only that exact version may attach a stored session (`attachAllowed`). A gate binds
+ *  each `measured` to the version the Receipts paragraph names (receipt-versions.ts). */
+export const CLAUDE_ACP_AGENT = Object.freeze({
+	name: "@agentclientprotocol/claude-agent-acp",
+	floor: "0.107.3",
+	measured: "0.107.3",
+});
+export const AGY_ACP_AGENT = Object.freeze({
+	name: "Antigravity ACP Server",
+	floor: "1.5.9",
+	measured: "1.5.12",
+});
 
 function parseReleaseVersion(value: unknown): [number, number, number] | undefined {
 	if (typeof value !== "string") return undefined;
@@ -389,6 +402,87 @@ export function admitAcpAgent(
 				? ` (The server was launched by ${overrideEnv}, which owns its whole command line.)`
 				: ""),
 	);
+}
+
+/** What one ACP child said about itself in its `initialize` answer (#171 L1). Read once per child and
+ *  never inferred: a field that is absent, null or of the wrong type reads as absent. */
+export interface AcpAgentFacts {
+	/** `agentInfo` name and version as answered; null unless both are strings. */
+	readonly agent: Readonly<{ name: string; version: string }> | null;
+	/** `agentCapabilities.loadSession === true`. */
+	readonly loadSession: boolean;
+	/** The keys of `agentCapabilities.sessionCapabilities` whose value is an object, sorted. */
+	readonly sessionCapabilities: readonly string[];
+	/** The `id` of each `authMethods` entry, in answer order. */
+	readonly authMethods: readonly string[];
+}
+
+function objectOrUndefined(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === "object" && value !== null && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
+/** Read an `initialize` answer into the child's facts. Pure and total: it never throws. */
+export function readAgentFacts(initializeAnswer: unknown): AcpAgentFacts {
+	const answer = objectOrUndefined(initializeAnswer);
+	const info = objectOrUndefined(answer?.agentInfo);
+	const capabilities = objectOrUndefined(answer?.agentCapabilities);
+	const session = objectOrUndefined(capabilities?.sessionCapabilities) ?? {};
+	const methods = Array.isArray(answer?.authMethods) ? answer.authMethods : [];
+	return Object.freeze({
+		agent:
+			typeof info?.name === "string" && typeof info.version === "string"
+				? Object.freeze({ name: info.name, version: info.version })
+				: null,
+		loadSession: capabilities?.loadSession === true,
+		sessionCapabilities: Object.freeze(
+			Object.keys(session)
+				.filter((key) => objectOrUndefined(session[key]))
+				.sort(),
+		),
+		authMethods: Object.freeze(
+			methods.flatMap((method) => {
+				const id = objectOrUndefined(method)?.id;
+				return typeof id === "string" ? [id] : [];
+			}),
+		),
+	});
+}
+
+/** An ACP agent as entwurf pins it: the name it answers, the admission floor and the measured version. */
+export type AcpAgentPin = Readonly<{ name: string; floor: string; measured: string }>;
+
+/** Why a stored session may not be attached on a child. */
+export type AcpAttachRefusal = "agent-unnamed" | "version-unmeasured" | "capability-absent";
+export type AcpAttachJudgement = { allowed: true } | { allowed: false; reason: AcpAttachRefusal };
+
+/**
+ * May a stored ACP session be attached (`session/resume` or `session/load`) on this child (#171 V5,
+ * decision 10)? Only the pinned agent, reporting exactly its `measured` version, advertising the
+ * capability the attach needs: resume needs `sessionCapabilities.resume`, load needs `loadSession`.
+ * Admission (`admitAcpAgent`) is a floor; this is not — a newer admitted server, an operator
+ * override's included, is unmeasured and refused. Pure; no attach path calls it yet (L8).
+ */
+export function attachAllowed(facts: AcpAgentFacts, agent: AcpAgentPin, need: "resume" | "load"): AcpAttachJudgement {
+	if (!parseReleaseVersion(agent.measured))
+		throw new Error(`entwurf: the measured version ${jsonText(agent.measured)} of ${agent.name} is not X.Y.Z`);
+	if (facts.agent?.name !== agent.name) return { allowed: false, reason: "agent-unnamed" };
+	if (facts.agent.version !== agent.measured) return { allowed: false, reason: "version-unmeasured" };
+	const advertised = need === "resume" ? facts.sessionCapabilities.includes("resume") : facts.loadSession;
+	return advertised ? { allowed: true } : { allowed: false, reason: "capability-absent" };
+}
+
+/** The capability input `decideBootstrap` takes, from one child's facts: a capability counts only when
+ *  `attachAllowed` admits it. For L8, which decides after that child's initialize; nothing calls it yet. */
+export function bootstrapCapabilities(
+	facts: AcpAgentFacts,
+	agent: AcpAgentPin,
+): { resumeSession: boolean; loadSession: boolean } {
+	return {
+		resumeSession: attachAllowed(facts, agent, "resume").allowed,
+		loadSession: attachAllowed(facts, agent, "load").allowed,
+	};
 }
 
 /** The pi diagnostic type under which backend.ts preserves a recognised rejection verbatim. */

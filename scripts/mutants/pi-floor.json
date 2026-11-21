@@ -119,6 +119,28 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-FLOOR-PUBLISHED-SCOPE]",
 			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "ACP-RECEIPT-CLAUDE-MEASURED",
+			"title": "CLAUDE_ACP_AGENT.measured moves to a version the receipts never measured",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tmeasured: \"0.107.3\","],
+			"replace": ["\tmeasured: \"0.107.4\","],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-CLAUDE-MEASURED]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
+			"claim": "ACP-RECEIPT-AGY-MEASURED",
+			"title": "AGY_ACP_AGENT.measured moves to the installed agy 1.5.13 without new receipts",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tmeasured: \"1.5.12\","],
+			"replace": ["\tmeasured: \"1.5.13\","],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-AGY-MEASURED]",
+			"signatureSource": "scripts/version-mentions.ts"
 		}
 	]
 }

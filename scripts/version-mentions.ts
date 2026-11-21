@@ -48,5 +48,10 @@ if (receipts.claude.length)
 	console.error(`[QK:ACP-RECEIPT-CLAUDE-PIN] docs/acp-client-baseline.md: ${receipts.claude.join("; ")}`);
 if (receipts.agy.length)
 	console.error(`[QK:ACP-RECEIPT-AGY-FLOOR] docs/acp-client-baseline.md: ${receipts.agy.join("; ")}`);
-if (args.includes("--check") && (counts.A || pinMismatch || receipts.claude.length || receipts.agy.length))
-	process.exitCode = 1;
+if (receipts.claudeMeasured.length)
+	console.error(`[QK:ACP-RECEIPT-CLAUDE-MEASURED] docs/acp-client-baseline.md: ${receipts.claudeMeasured.join("; ")}`);
+if (receipts.agyMeasured.length)
+	console.error(`[QK:ACP-RECEIPT-AGY-MEASURED] docs/acp-client-baseline.md: ${receipts.agyMeasured.join("; ")}`);
+const receiptIssues =
+	receipts.claude.length + receipts.agy.length + receipts.claudeMeasured.length + receipts.agyMeasured.length;
+if (args.includes("--check") && (counts.A || pinMismatch || receiptIssues)) process.exitCode = 1;

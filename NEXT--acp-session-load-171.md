@@ -11,40 +11,41 @@
 
 # RAIL
 
-- [x] **0. 측정.** RAIL 0(Claude와 agy의 resume·load), 모르는 id, Z5, U11/U12를 쟀다. 영수증은 `~/.local/share/entwurf-lab/171/`에 있고, 결정적인 줄은 표의 Receipts 절에 옮겼다.
-- [x] **1. 표와 오라클.** `e330d472`, `b87340a1`: 표 44행, ROW-COVERAGE, receipt 버전 묶기.
+- [x] **0. 측정.** RAIL 0(Claude와 agy의 resume·load), 모르는 id, Z5, U11/U12를 쟀다. 영수증은 `~/.local/share/entwurf-lab/171/`에 있다.
+- [x] **1. 표와 오라클.** `e330d472`, `b87340a1`.
 - [x] **2. L15 저장소 수선과 V5 결정.** `5fa8c225`.
 - [x] **3. L5 reuse delta 유실 수정.** `44e0e5fd`.
-- [ ] **4. 표 정정, 그다음 L1/V5.** ← CURRENT
-  - 4a 문서 커밋을 먼저 한다(GLG가 읽고 전체 얼개를 그린다).
-    - L16 행을 아래 결정 8–9의 계약으로 다시 쓴다.
-    - U11/U12를 측정한 칸과 아직 안 잰 칸으로 나눈다.
-    - max_tokens 중복은 U 행으로 남긴다.
-    - 결정 7–10을 적는다.
-    - V5의 "Claude는 그대로"를 결정 10으로 고친다.
-  - 4b 코드.
-    - 실제로 띄운 child의 `initialize`에서 버전과 capability를 저장한다.
-    - `measured` 상수를 Claude(0.107.3)와 agy(1.5.12) 양쪽에 두고, 영수증과 같은지 게이트로 묶는다.
-    - "보고된 버전 = measured"일 때만 attach를 허용하는 판정을 QK와 mutant로 고정한다.
-    - attach 배선은 하지 않는다. 기본 경로(new, prompt, cancel)는 바뀌지 않는다.
-    - 지금 설치된 agy는 1.5.13이다. 4b가 들어가면 agy attach는 이유를 보이고 new로 간다. 이것은 가드가 정상 동작한 결과다.
+- [ ] **4. L1/V5와 문서.** ← CURRENT
+  - 4a. 표를 정정했다(`79157a17`). B 검토(issuecomment-7055533122) 반영분은 미커밋이다.
+  - 4b. 코드는 Opus가 끝냈고 Sonnet이 리뷰하고 있다.
+    - initialize facts를 저장하고, `measured` 상수(Claude 0.107.3, agy 1.5.12)를 영수증과 게이트로 묶었다.
+    - `attachAllowed` 판정을 만들었다. 아직 부르는 곳은 없다.
+    - 남은 순서: PARTIAL(`check-acp-set-model-readback`, `check-dep-versions`) → FULL → 커밋.
+  - 4c. 문서를 쪼갠다(GLG 2026-11-21).
+    - `docs/acp-client-baseline.md`는 GLG가 이맥스에서 개념을 비교할 수 있을 만큼 짧게 만든다: 한 행에 한 줄, 짧은 셀.
+    - 원래의 전체 문서는 `.agent-reports/171-acp-client-baseline-full.md`(gitignore, 호스트 로컬)로 옮긴다.
+    - 표 게이트(`client-baseline.test.ts`)와 영수증 버전 게이트는 짧아진 문서를 기준으로 고친다.
+    - 결정적인 영수증 줄은 마감 때 #171에 붙인다. 리포 밖 파일은 다른 형제가 읽을 수 없기 때문이다.
 - [ ] **5. L16 pendingDispatch.**
-  - 표식을 쓰고 지우는 일, 그리고 재접속 때의 판정을 구현한다.
+  - 표식을 쓰고 지우는 일, 그리고 재접속 판정을 구현한다.
+  - 정지 네 경우 모두 record를 버린다(G2).
   - fake agent 시나리오는 넷이다: 안 보낸 입력 여럿은 순서대로 보낸다 / 표식이 있으면 두 id 모두 전송 0회 / 표식 저장에 실패하면 전송 0회 / 정지 한 번 뒤 new.
-  - 아무도 record를 읽지 않으므로 L8보다 먼저 들어가도 된다.
-- [ ] **6. L8/L9 (GLG 리뷰).**
-  - resume과 load를 배선한다.
-  - "record not used" 핀(`scripts/check-acp-session-reuse.ts:320-351`)을 뒤집는다.
+  - 적용 범위는 retained·process-scoped 세션뿐이다.
+  - 이 단계부터 표식을 쓰지 못하면 턴이 거절된다. 이 checkout을 쓰는 운영 세션도 포함된다.
+- [ ] **6. 재측정 도구와 벤더 올리기 (G3).**
+  - `scripts/raw-acp-session-measure/`를 명령 하나로 돌게 만든다: 시나리오를 실행하고, R1–R10의 결정적인 줄과 자동으로 대조한다. 같으면 `measured`만 올리고, 다른 줄만 사람이 본다.
+  - 그 명령으로 agy 1.5.13을 재고, claude-agent-acp를 0.109.x로 올린다(`package.json` 핀, lockfile, 재측정).
+  - `measured` 상수와 영수증을 함께 갱신한다.
+- [ ] **7. L8/L9 묶음 (GLG 리뷰).**
+  - resume과 load를 배선하고, "record not used" 핀(`scripts/check-acp-session-reuse.ts:320-351`)을 뒤집는다.
   - V5 가드 아래에서 결정 1의 실패 계약을 적용한다.
-  - L7 close도 함께 다룬다.
-- [ ] **7. 벤더 재측정.**
-  - claude-agent-acp를 0.109.x로 올린다: `package.json` 핀, lockfile, 재측정.
-  - agy를 1.5.13으로 재측정한다.
-  - 둘 다 `scripts/raw-acp-session-measure/`로 재고, `measured` 상수와 영수증을 함께 갱신한다.
+  - `decideBootstrap`을 initialize 뒤로 옮긴다(spawn → initialize → 판정).
+  - 같은 단계에서 닫을 행: L7 close, L11/V2(attach 뒤 model·effort 재적용), L14(attach를 건너는 compaction), P1(`entwurf_resume_call`), Z3(typed load error와 stderr tail), Z4(load 응답 경계), V1(resume 우선), Z6/V3(Pi 프로세스 사이의 one-holder 가드, U9와 함께).
 - [ ] **8. 마감.**
-  - 표의 모든 행이 종착 상태여야 한다: implemented, declined, 또는 이유가 붙은 unmeasured.
-  - PARTIAL을 돌리고, 동결 FULL을 돌린다.
-  - #171을 닫는다. main에 병합하기 전에 이 파일을 지운다.
+  - 6단계의 명령으로 마지막 LIVE를 한 번 돌린다: U12–U16, 그리고 P2/U4(`/renew` on ACP row, 오늘 동작이 맞으면 implemented).
+  - 표의 모든 행이 종착 상태여야 한다.
+  - PARTIAL과 동결 FULL을 돌린다.
+  - 영수증을 #171에 붙이고 #171을 닫는다. main에 병합하기 전에 이 파일을 지운다.
   - 0.61.0에서 Entwurf ACP의 방향을 이야기한다.
 - 이 레일 밖, 그다음: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
 
@@ -53,17 +54,20 @@
 2026-11-20 결정 1–5와 2026-11-21 결정 6(V5)은 표 문서의 Decisions 절에 있다. 2026-11-21에 더한 것:
 
 7. **reuse delta.** 마지막 assistant 뒤의 user 메시지를 모두 보낸다. 첫 user skip은 버린다(유실보다 소음을 택함). `/compact`는 첫 블록으로 판정한다.
-8. **L16 pendingDispatch** (B와 닷이 합의한 안).
-   - `session/prompt` 직전에 record에 원자적으로 쓴다. 뜻은 "이 범위는 실행됐을 수 있다"이다.
+8. **L16 pendingDispatch** (B와 닷이 합의한 안, #171 issuecomment-7055533122).
+   - `session/prompt` 직전에 record에 원자적으로 쓴다. 뜻은 "이 범위는 실행됐을 수 있다"이다. 프롬프트 원문은 넣지 않는다: 위치, 개수, 서명만.
    - 봉인할 때, record를 전진시키는 같은 쓰기에서 지운다.
    - 재접속 때 표식이 있으면 assistant가 보이더라도 정지한다. 기존 id와 새 id 모두 자동 전송은 0회다.
    - 표식 필드가 없는 구버전 record는 resume에 쓰지 않고 new로 간다.
    - 새 버전 record에 표식이 없을 때: 꼬리에 assistant가 없으면 순서대로 보내고, 있으면 new로 간다.
-   - **(a) 정지는 한 번이다.** 이유를 보이고, 표식이 담은 범위를 알림에 적은 뒤 그 record를 버린다. 다음 턴은 new다. 오늘 같은 프로세스 안에서 child가 죽었을 때와 같은 동작이다(U12 영수증).
+   - **(a) 정지는 한 번이다.** 이유와 범위(위치와 개수)를 보이고 record를 버린다. 다음 턴은 new다.
+   - **G2:** 이 규칙은 이름 붙은 정지 전부에 적용된다: 재시작 뒤 표식 발견, 살아 있는 프로세스의 prompt 실패, attach 성공 뒤 첫 prompt 실패, attach timeout이나 child 사망.
 9. **표식 저장 실패 → 전송 0회.** 결정 3이 바뀐다: 저장소가 계속 실패하면 다음 턴은 이유를 보이며 거절된다.
-10. **Claude에도 measured 가드.** resume과 load는 "보고된 버전 = 측정한 버전"일 때만 연다. `CLAUDE_AGENT_ACP_COMMAND` override는 하한만 검사하기 때문이다. 번들로 설치하면 동작은 바뀌지 않는다.
-
-L16 계약은 B가 자기 이름으로 #171에 올린다.
+10. **Claude에도 measured 가드.** resume과 load는 "보고된 버전 = 측정한 버전"일 때만 연다.
+11. **G1:** Z5와 V4는 declined로 확정한다(R10).
+12. **G3:** 재측정을 L8/L9 앞으로 옮기고, 명령 하나로 영수증과 자동 대조하게 만든다. 6단계에서 Claude 0.109.x와 agy 1.5.13을 함께 다룬다.
+13. **G4:** P2는 마지막 LIVE에서 재서 닫는다. Z7은 declined로 둔다(복구 경로는 Pi resume).
+14. **문서 분리.** docs에는 개념 비교용 짧은 표를 두고, 전체 문서는 `.agent-reports`에 둔다.
 
 # 진행 방식
 

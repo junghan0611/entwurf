@@ -64,10 +64,12 @@ import { prependNewPromptAugment } from "./augment.js";
 import {
 	ACP_PROMPT_REJECTION_DIAGNOSTIC,
 	ACP_SUMMARY_TURN_UNSUPPORTED,
+	type AcpAgentFacts,
 	type AcpBackendAdapter,
 	type AcpOverlayResult,
 	type AcpSummaryTurnMode,
 	assertSupportedDeclaredBackend,
+	readAgentFacts,
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
 import {
@@ -332,6 +334,9 @@ interface BridgeSession {
 	busy: boolean;
 	/** #163 S7: the adapter advertised `_meta.steering.supported === true` at initialize. */
 	steeringSupported?: boolean;
+	/** #171 L1: what this child answered `initialize` with, read once after admission. A fact about
+	 *  the child, never part of the reuse signature; L8 decides attach from it after initialize. */
+	agentFacts?: AcpAgentFacts;
 	/** Mutable per-turn router — see the CRITICAL note in the file header. */
 	activePromptHandler?: (event: AcpBridgeEvent) => void;
 	/**
@@ -564,6 +569,11 @@ function discardStrandedCompactionRecords(key: string): void {
 			.map((d) => `${d.compactionId.slice(0, 8)}/${d.status}`)
 			.join(", ")}\n`,
 	);
+}
+
+/** #171 L1: the `initialize` facts of the live ACP child kept for Pi session `piSessionId`, if any. */
+export function readAcpAgentFacts(piSessionId: string): AcpAgentFacts | undefined {
+	return bridgeSessions.get(`pi:${piSessionId}`)?.agentFacts;
 }
 
 /** Take (and drain) the records and the drop notices of a Pi session. Empty means no compaction. */
@@ -2255,6 +2265,8 @@ export function streamAcpTurn(
 			session.steeringSupported = readSteeringSupported(initialized);
 			// #168: the server that answered must be the adapter's vendor at or above its floor, before any session.
 			adapter.admitAgent?.(initialized);
+			// #171 L1: keep what this child said about itself (version, capabilities, auth methods).
+			session.agentFacts = readAgentFacts(initialized);
 
 			// Tool-narrowed session meta (S2b) + the billing carrier (S2d-1c). The
 			// carrier is the SAME rendered engraving folded into configSig above;

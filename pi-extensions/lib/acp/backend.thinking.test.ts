@@ -369,7 +369,12 @@ function makeWorld(
 	let pendingPrompt: (() => void) | undefined;
 	// The connection handlers the backend registered — the producer side of session/update.
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
-	const hooks: { onPrompt?: () => void | Promise<void>; stopReason?: AcpPromptResponse["stopReason"] } = {};
+	const hooks: {
+		onPrompt?: () => void | Promise<void>;
+		stopReason?: AcpPromptResponse["stopReason"];
+		/** Extra fields of each child's initialize answer, beside its agentInfo. */
+		initialize?: Record<string, unknown>;
+	} = {};
 	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
 	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
 		const ambient = process.env[name];
@@ -401,7 +406,10 @@ function makeWorld(
 			return {
 				initialize: async () => {
 					wire.push("initialize");
-					return { agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor } };
+					return {
+						...hooks.initialize,
+						agentInfo: { name: agentOf.get(child)?.name, version: agentOf.get(child)?.floor },
+					};
 				},
 				newSession: async () => {
 					wire.push("new");
@@ -573,6 +581,28 @@ describe("streamAcpTurn — disabled Cortex configuration", () => {
 		const accepted = await runTurn(world, transcript("hello"), "config-claude", "low");
 		expect(accepted.type).toBe("done");
 		expect(world.children).toHaveLength(1);
+	});
+});
+
+describe("ACP initialize facts kept per child (#171 L1)", () => {
+	it("[QK:ACP-L1-FACTS-STORED] the facts a child answered initialize with are kept for its session, and a reuse turn keeps the same ones", async () => {
+		const world = makeWorld();
+		world.hooks.initialize = {
+			agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, close: {}, fork: null } },
+			authMethods: [{ id: "method-l1" }],
+		};
+		await runTurn(world, transcript("FACTS-ONE"), "facts-l1", "high");
+		const facts = backend.readAcpAgentFacts("facts-l1");
+		expect(facts).toEqual({
+			agent: { name: adapters.CLAUDE_ACP_AGENT.name, version: adapters.CLAUDE_ACP_AGENT.floor },
+			loadSession: true,
+			sessionCapabilities: ["close", "resume"],
+			authMethods: ["method-l1"],
+		});
+		await runTurn(world, transcript("FACTS-ONE", "FACTS-TWO"), "facts-l1", "high");
+		expect(world.children).toHaveLength(1);
+		expect(world.wire.filter((call) => call === "initialize")).toHaveLength(1);
+		expect(backend.readAcpAgentFacts("facts-l1")).toBe(facts);
 	});
 });
 
