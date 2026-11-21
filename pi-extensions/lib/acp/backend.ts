@@ -682,10 +682,38 @@ function abandonRetainedSession(session: BridgeSession): void {
 	session.alive = false;
 	session.retiring = true;
 	if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
-	retainedChildren.delete(session.child);
-	session.connection.close?.();
-	teardownChild(session.child);
+	const dispose = (): void => {
+		retainedChildren.delete(session.child);
+		session.connection.close?.();
+		teardownChild(session.child);
+	};
+	// #171 L7 (decision 2): an idle session we leave is closed by the protocol first, where its agent
+	// offers that. The answer is waited for briefly and never decides anything: the agent is disposed
+	// either way, and the child stays in the exit hook's set until it is.
+	const close = session.connection.closeSession;
+	if (!close || !session.acpSessionId || !session.agentFacts?.sessionCapabilities.includes("close")) {
+		dispose();
+		return;
+	}
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	void Promise.race([
+		Promise.resolve()
+			.then(() => close({ sessionId: session.acpSessionId as string }))
+			.catch((error) => {
+				process.stderr.write(`[acp] session/close not answered cleanly: ${thrownText(error)}\n`);
+			}),
+		new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, SESSION_CLOSE_WAIT_MS);
+			timer.unref?.();
+		}),
+	]).then(() => {
+		if (timer) clearTimeout(timer);
+		dispose();
+	});
 }
+
+/** How long a `session/close` may take before the agent is disposed anyway. */
+const SESSION_CLOSE_WAIT_MS = 1_500;
 
 /**
  * #163, GLG 2026-11-14: after a successful Pi compaction the retained Claude child of that Pi
@@ -2555,6 +2583,11 @@ export function streamAcpTurn(
 					hasTrace: () => {
 						reading = "entries";
 						return hasAcpTrace(piSession?.getEntries() ?? [], provenPreBirthAnswer);
+					},
+					compacted: () => {
+						reading = "entries";
+						const walk = walkDelta(existing?.sealedTurnId, piSession?.getBranch() ?? []);
+						return walk.ok && walk.items.some((item) => item.kind === "compaction");
 					},
 				});
 			} catch (error) {

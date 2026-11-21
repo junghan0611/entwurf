@@ -669,6 +669,85 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-ATTACH-TEXT-CHANGE-STOPS]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-COMPACTION-PASSED",
+			"title": "a compaction summary passes in place of an answer Pi kept",
+			"subject": "pi-extensions/lib/acp/branch-gate.ts",
+			"find": ["\tif (walk.compacted && !walk.compacted.anchorKept) {"],
+			"replace": ["\tif (walk.compacted && field(anchor, \"role\") === \"user\") {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-DELTA-COMPACTION-PASSED]",
+			"signatureSource": "pi-extensions/lib/acp/branch-gate.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-KEEPS-SESSION",
+			"title": "a Pi compaction stops the live session's next turn as a changed conversation",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\t\t\t!(sources.compacted?.() ?? false)"],
+			"replace": ["\t\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACT-KEEPS-SESSION]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CLOSE-BEFORE-DISPOSE",
+			"title": "a session that is left is disposed with no session/close although its agent offers one",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\tif (!close || !session.acpSessionId || !session.agentFacts?.sessionCapabilities.includes(\"close\")) {"
+			],
+			"replace": ["\tif (session.alive === false) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLOSE-BEFORE-DISPOSE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-SETS-MODEL-AGAIN",
+			"title": "a resumed session is prompted on whatever model the vendor defaulted to",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tawait withTimeout(", "\t\t\t\t\"enforceModel\","],
+			"replace": ["\t\t\tif (!attach) await withTimeout(", "\t\t\t\t\"enforceModel\","],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-SETS-MODEL-AGAIN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-SETS-EFFORT-AGAIN",
+			"title": "a resumed session is prompted on whatever effort the vendor defaulted to",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tif (thinkingValue !== undefined && adapter.enforceThinking) {"],
+			"replace": ["\t\t\tif (thinkingValue !== undefined && adapter.enforceThinking && !attach) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-SETS-EFFORT-AGAIN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-AGENT-DIES",
+			"title": "an agent that dies while resuming ends the turn as an ordinary error instead of the named stop",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\t\tthrow new AcpStopSignal(\"resume\", thrownText(error).split(\"\\n\", 1)[0]);"],
+			"replace": ["\t\t\t\t\tthrow new Error(thrownText(error));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-AGENT-DIES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ATTACH-REOPENED-PI",
+			"title": "a record with no live session beside it is not resumed",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\tif (record.status === \"found\") {"],
+			"replace": ["\tif (record.status === \"found\" && existing) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ATTACH-REOPENED-PI]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

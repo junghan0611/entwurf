@@ -648,7 +648,14 @@ function compatibility(
  */
 export function decideResident(
 	params: ResidentParams,
-	sources: { existing?: ExistingSession; record: SessionRecordRead; reserved: () => boolean; hasTrace: () => boolean },
+	sources: {
+		existing?: ExistingSession;
+		record: SessionRecordRead;
+		reserved: () => boolean;
+		hasTrace: () => boolean;
+		/** The Pi branch shows a compaction after the live session's last answer. Read only on a prefix break. */
+		compacted?: () => boolean;
+	},
 ): ResidentVerdict {
 	const { existing, record } = sources;
 	let closeLive = false;
@@ -656,7 +663,12 @@ export function decideResident(
 		// A live session is never abandoned for another: what it cannot take stops the turn, and it stays.
 		const live = compatibility(existing, params, "live");
 		if ("kind" in live) return live;
-		if (!hasPrefix(existing.contextMessageSignatures, params.contextMessageSignatures)) {
+		// A context that no longer starts with what the session answered is explained by one thing only: a
+		// Pi compaction after its last answer (decision 16). The delta proof then holds the new context.
+		if (
+			!hasPrefix(existing.contextMessageSignatures, params.contextMessageSignatures) &&
+			!(sources.compacted?.() ?? false)
+		) {
 			return {
 				kind: "stop",
 				stop: "changed",

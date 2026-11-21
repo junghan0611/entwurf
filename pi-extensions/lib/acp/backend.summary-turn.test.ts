@@ -864,14 +864,15 @@ describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11
 			],
 		});
 		// #171 step 8 (decision 17): the closed session's record stays, and no second session is opened for
-		// this conversation. Pi's branch now ends in the compaction and the input after it; what the vendor
-		// session holds of the compacted part cannot be shown, so the turn stops with nothing sent.
+		// this conversation. This branch shows a compaction and an input but not the answer the session
+		// gave last, so nothing proves what to send: the turn stops with nothing sent. (A branch that does
+		// show it resumes the same session: [QK:ACP-COMPACT-KEEPS-SESSION].)
 		piHost.setBranch("S-compact", [
 			{ type: "compaction", id: "c1", summary: SUMMARY_BODY },
 			{ type: "message", id: "u1", message: { role: "user", content: "continue" } },
 		]);
 		const sealed = await ordinaryTurn(world, after, "S-compact");
-		expect(sealed.type === "error" && sealed.error.errorMessage).toBe(ACP_STOPS.compacted.text);
+		expect(sealed.type === "error" && sealed.error.errorMessage).toBe(ACP_STOPS.changed.text);
 		expect(world.children).toHaveLength(1);
 		expect(world.calls("prompt")).toHaveLength(2);
 	});

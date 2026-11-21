@@ -43,12 +43,35 @@ export interface FailedTurn {
 	skipNoticeFor: readonly string[];
 }
 
-export type DeltaItem = ({ kind: "input" } & DeltaInput) | ({ kind: "failed" } & FailedTurn);
+export type DeltaItem =
+	| ({ kind: "input" } & DeltaInput)
+	| ({ kind: "failed" } & FailedTurn)
+	/** A Pi compaction after the anchor. It is Pi's own view of the conversation and is not sent. */
+	| { kind: "compaction"; summary: string; firstKeptEntryId: string | undefined };
+
+/**
+ * The user message Pi puts at the head of a compacted context (pi-coding-agent dist/core/messages.js
+ * `COMPACTION_SUMMARY_PREFIX` / `_SUFFIX`, which the package does not export; the test reads them there).
+ */
+export function compactionSummaryText(summary: string): string {
+	return `The conversation history before this point was compacted into the following summary:\n\n<summary>\n${summary}\n</summary>`;
+}
 
 export type DeltaWalk =
 	/** `items`: everything after the anchor, oldest first. `anchor`: the anchor's stored message. */
-	| { ok: true; items: DeltaItem[]; inputs: DeltaInput[]; anchor: unknown }
-	| { ok: false; stop: Extract<AcpStopId, "changed" | "laterAnswer" | "shellInput" | "compacted">; why: string };
+	| {
+			ok: true;
+			items: DeltaItem[];
+			inputs: DeltaInput[];
+			anchor: unknown;
+			/**
+			 * The latest compaction after the anchor, as Pi projects it (pi-coding-agent session-manager.js
+			 * `buildContextEntries`): its summary first, then the branch from `firstKeptEntryId` on.
+			 * `anchorKept`: that kept range reaches back to the anchor, so the context still shows it.
+			 */
+			compacted?: { summary: string; anchorKept: boolean };
+	  }
+	| { ok: false; stop: Extract<AcpStopId, "changed" | "laterAnswer" | "shellInput">; why: string };
 
 /** Diagnostic types this rail stamps on a failed answer (backend.ts owns the writers). */
 export const ACP_PROMPT_UNKNOWN_DIAGNOSTIC = "entwurf_acp_prompt_unknown";
@@ -95,6 +118,8 @@ function readFailedTurn(message: unknown, stopReason: "error" | "aborted"): Fail
  */
 export function walkDelta(anchorTurnId: string | undefined, branch: readonly unknown[]): DeltaWalk {
 	const items: DeltaItem[] = [];
+	/** The branch index of each item, in step with `items`. */
+	const at: number[] = [];
 	for (let i = branch.length - 1; i >= 0; i--) {
 		const entry = branch[i];
 		const type = field(entry, "type");
@@ -107,10 +132,23 @@ export function walkDelta(anchorTurnId: string | undefined, branch: readonly unk
 			if (typeof entryId !== "string" || entryId === "") {
 				return { ok: false, stop: "changed", why: "an input entry without an id" };
 			}
+			at.unshift(i);
 			items.unshift({ kind: "input", entryId, content: field(entry, "content"), extension: true });
 			continue;
 		}
-		if (type === "compaction") return { ok: false, stop: "compacted", why: "a compaction after the last answer" };
+		// #171 decision 16: a compaction changes what Pi shows a provider, not what the vendor session holds.
+		if (type === "compaction") {
+			const summary = field(entry, "summary");
+			const firstKept = field(entry, "firstKeptEntryId");
+			if (typeof summary !== "string") return { ok: false, stop: "changed", why: "a compaction without a summary" };
+			at.unshift(i);
+			items.unshift({
+				kind: "compaction",
+				summary,
+				firstKeptEntryId: typeof firstKept === "string" ? firstKept : undefined,
+			});
+			continue;
+		}
 		if (type !== "message") return { ok: false, stop: "changed", why: `a ${type} entry after the last answer` };
 		const message = field(entry, "message");
 		const role = field(message, "role");
@@ -118,6 +156,7 @@ export function walkDelta(anchorTurnId: string | undefined, branch: readonly unk
 			if (typeof entryId !== "string" || entryId === "") {
 				return { ok: false, stop: "changed", why: "an input entry without an id" };
 			}
+			at.unshift(i);
 			items.unshift({ kind: "input", entryId, content: field(message, "content"), extension: false });
 			continue;
 		}
@@ -135,15 +174,32 @@ export function walkDelta(anchorTurnId: string | undefined, branch: readonly unk
 		// (a refusal), and it is still the answer the session gave last.
 		const turnId = field(message, "responseId");
 		if (typeof anchorTurnId === "string" && anchorTurnId.length > 0 && turnId === anchorTurnId) {
+			let compacted: { summary: string; anchorKept: boolean } | undefined;
+			const last = items.map((item) => item.kind).lastIndexOf("compaction");
+			const latest = items[last];
+			if (latest?.kind === "compaction") {
+				// What Pi keeps before a compaction starts at `firstKeptEntryId`; an id that is not on the
+				// branch before the compaction keeps nothing.
+				const kept = branch.findIndex((entry) => field(entry, "id") === latest.firstKeptEntryId);
+				const keptFrom = latest.firstKeptEntryId !== undefined && kept >= 0 && kept < at[last] ? kept : at[last];
+				// An input between the anchor and the kept range is in no context any more: the session never
+				// got it and this turn cannot give it.
+				if (items.some((item, k) => item.kind === "input" && at[k] < keptFrom)) {
+					return { ok: false, stop: "changed", why: "an input this session never received was compacted away" };
+				}
+				compacted = { summary: latest.summary, anchorKept: keptFrom <= i };
+			}
 			return {
 				ok: true,
 				items,
 				inputs: items.flatMap((item) => (item.kind === "input" ? [item] : [])),
 				anchor: message,
+				...(compacted ? { compacted } : {}),
 			};
 		}
 		const stopReason = field(message, "stopReason");
 		if (stopReason === "error" || stopReason === "aborted") {
+			at.unshift(i);
 			items.unshift({ kind: "failed", ...readFailedTurn(message, stopReason) });
 			continue;
 		}
@@ -210,7 +266,7 @@ export function selectDelta(
 }
 
 /**
- * Hold the walk against the context the provider was given, from its end. Every input must be a user
+ * Hold the walk against the context the provider was given, from its end. A compaction is passed. Every input must be a user
  * message there with the same wire blocks, in order; a failed turn of ours may be there or not (Pi
  * decides what it hands a provider); before them must stand the anchor. The anchor is matched by the
  * turn id it was sealed with and by nothing else: equal content is not the same answer.
@@ -231,6 +287,7 @@ export function contextCarries<Block>(
 	const positions: number[] = [];
 	for (let k = walk.items.length - 1; k >= 0; k--) {
 		const item = walk.items[k];
+		if (item.kind === "compaction") continue;
 		const message = next();
 		if (item.kind === "failed") {
 			const carried =
@@ -251,6 +308,16 @@ export function contextCarries<Block>(
 		at--;
 	}
 	const anchor = next();
+	// After a compaction Pi's context begins with the summary of the latest one, then what it kept. Which
+	// of the two stands before the inputs is not a choice: where the kept range reaches the anchor, the
+	// anchor; where it does not, the summary, as the exact text of that compaction with nothing before it.
+	if (walk.compacted && !walk.compacted.anchorKept) {
+		const head = field(anchor, "role") === "user" ? blocksOf(field(anchor, "content")) : undefined;
+		const summary = blocksOf(compactionSummaryText(walk.compacted.summary));
+		at--;
+		if (head && summary && equal(head, summary) && next() === undefined) return { ok: true, positions };
+		return { ok: false, why: "the compacted context is not the one the Pi session shows" };
+	}
 	if (field(anchor, "role") !== "assistant")
 		return { ok: false, why: "this turn carries more than the Pi session shows" };
 	// Content cannot prove which answer this is: only the turn id it was sealed with does.

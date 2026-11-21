@@ -7,12 +7,16 @@
  * the entry ids its marker named, and "told" is read only from evidence stored with an answer.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import { convertToLlm, SessionManager } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "vitest";
 import {
 	ACP_PROMPT_REJECTION_DIAGNOSTIC_TYPE,
 	ACP_PROMPT_UNKNOWN_DIAGNOSTIC,
 	ACP_SKIP_NOTICE_DIAGNOSTIC,
+	compactionSummaryText,
 	contextCarries,
 	type DeltaWalk,
 	selectDelta,
@@ -83,7 +87,7 @@ it("[QK:ACP-BRANCH-GATE-NAMED-STOPS] what follows the last answer decides which 
 		ok: false,
 		stop: "laterAnswer",
 	});
-	expect(after(entry("compaction", { summary: "s" }), user("b"))).toMatchObject({ ok: false, stop: "compacted" });
+	expect(after(entry("compaction", {}), user("b"))).toMatchObject({ ok: false, stop: "changed" });
 	expect(after(entry("branch_summary", { summary: "s" }), user("b"))).toMatchObject({ ok: false, stop: "changed" });
 	expect(after(entry("context_edit", { targetId: "e1", replacement: null }), user("b"))).toMatchObject({
 		ok: false,
@@ -217,4 +221,81 @@ it("[QK:ACP-DELTA-CONTEXT-CARRIES] the context must hold exactly the walked inpu
 	expect(carries([u("seed"), { role: "assistant", content: anchorMessage.content }, u("X"), u("Y")]).ok).toBe(false);
 	// No answer before the inputs at all.
 	expect(carries([u("X"), u("Y")]).ok).toBe(false);
+});
+
+it("[QK:ACP-DELTA-COMPACTION-PASSED] a Pi compaction after the last answer is passed: what stands before the inputs is the answer where Pi kept it and that compaction's summary where it did not", () => {
+	const blocksOf = (content: unknown) => {
+		if (typeof content === "string") return [{ type: "text", text: content }];
+		return Array.isArray(content) ? content : undefined;
+	};
+	// Branch and context are Pi's own: its session manager appends, compacts and projects.
+	const project = (keep: "answer" | "input" | "nothing") => {
+		const session = SessionManager.inMemory();
+		session.appendMessage({ role: "user", content: "seed", timestamp: 0 });
+		const answerId = session.appendMessage({
+			role: "assistant",
+			content: [{ type: "text", text: "ok" }],
+			api: "entwurf",
+			provider: "entwurf",
+			model: "m",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			responseId: T1,
+			timestamp: 1,
+		} as never);
+		const inputId = session.appendMessage({ role: "user", content: "X", timestamp: 2 });
+		session.appendCompaction("OLD", answerId, 10);
+		session.appendCompaction("SUM", keep === "answer" ? answerId : keep === "input" ? inputId : null, 10);
+		session.appendMessage({ role: "user", content: "Y", timestamp: 3 });
+		return {
+			branch: session.getBranch() as unknown[],
+			context: convertToLlm(session.buildSessionContext().messages) as unknown[],
+		};
+	};
+	const carries = (branch: unknown[], context: unknown[]) =>
+		contextCarries(walked(T1, branch), context, T1, blocksOf, isDeepStrictEqual);
+	const keptAnswer = project("answer");
+	const keptInput = project("input");
+	expect(keptAnswer.context.map((m) => (m as { role: string }).role)).toEqual(["user", "assistant", "user", "user"]);
+	expect(keptInput.context.map((m) => (m as { role: string }).role)).toEqual(["user", "user", "user"]);
+	expect(walked(T1, keptAnswer.branch).compacted).toEqual({ summary: "SUM", anchorKept: true });
+	expect(walked(T1, keptInput.branch).compacted).toEqual({ summary: "SUM", anchorKept: false });
+	// Control: each branch with its own projection.
+	expect(carries(keptAnswer.branch, keptAnswer.context)).toEqual({ ok: true, positions: [2, 3] });
+	expect(carries(keptInput.branch, keptInput.context)).toEqual({ ok: true, positions: [1, 2] });
+	// The two are not interchangeable: a summary where Pi kept the answer, an answer where it did not.
+	expect(carries(keptAnswer.branch, keptInput.context).ok).toBe(false);
+	expect(carries(keptInput.branch, keptAnswer.context).ok).toBe(false);
+	// An input Pi compacted away is in no context: the walk stops, whatever a context shows.
+	expect(walkDelta(T1, project("nothing").branch)).toMatchObject({ ok: false, stop: "changed" });
+	// The head must be that compaction's summary, alone at the start.
+	const head = (summary: string) => ({
+		role: "user",
+		content: [{ type: "text", text: compactionSummaryText(summary) }],
+	});
+	const u = (text: string) => ({ role: "user", content: text });
+	expect(carries(keptInput.branch, [head("SUM"), u("X"), u("Y")]).ok).toBe(true);
+	expect(carries(keptInput.branch, [head("OLD"), u("X"), u("Y")]).ok).toBe(false);
+	expect(carries(keptInput.branch, [u("SUM"), u("X"), u("Y")]).ok).toBe(false);
+	expect(carries(keptInput.branch, [u("earlier"), head("SUM"), u("X"), u("Y")]).ok).toBe(false);
+	expect(carries(keptInput.branch, [head("SUM"), u("Y")]).ok).toBe(false);
+	// Without a compaction on the branch a user message is never a head.
+	const plain = walked(T1, [user("seed"), answer(T1), user("X", "id-x")]);
+	expect(contextCarries(plain, [head("SUM"), u("X")], T1, blocksOf, isDeepStrictEqual).ok).toBe(false);
+	// The head text is Pi's own, which the package does not export.
+	const source = readFileSync(
+		join(process.cwd(), "node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js"),
+		"utf8",
+	);
+	const constant = (name: string) => new RegExp(`export const ${name} = \`([^\`]*)\`;`).exec(source)?.[1];
+	expect(compactionSummaryText("S")).toBe(
+		`${constant("COMPACTION_SUMMARY_PREFIX")}S${constant("COMPACTION_SUMMARY_SUFFIX")}`,
+	);
 });

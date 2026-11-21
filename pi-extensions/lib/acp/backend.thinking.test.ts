@@ -415,6 +415,7 @@ function makeWorld(
 		exitAfterAnswer?: number;
 		/** Runs when `session/resume` arrives; what it throws is the agent's refusal. */
 		onResume?: (params: Record<string, unknown>) => void | Promise<void>;
+		onClose?: (params: { sessionId: string }) => void | Promise<void>;
 		/** The answer to `session/resume`; an empty object when unset. */
 		resumeAnswer?: { sessionId?: string } | null;
 		/** Extra fields of each child's initialize answer, beside its agentInfo. */
@@ -467,6 +468,10 @@ function makeWorld(
 					resumes.push(p as Record<string, unknown>);
 					await hooks.onResume?.(p as Record<string, unknown>);
 					return hooks.resumeAnswer === undefined ? {} : hooks.resumeAnswer;
+				},
+				closeSession: async (p) => {
+					wire.push(`close:${p.sessionId}`);
+					await hooks.onClose?.(p);
 				},
 				setSessionConfigOption: async (p: any) => {
 					log.push(`set:${p.configId}=${p.value}`);
@@ -747,6 +752,43 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 		expect(world.children).toHaveLength(1);
 		expect(world.prompts).toHaveLength(2);
 		expect(world.lifecycle).toEqual([]);
+	});
+	it("[QK:ACP-COMPACT-KEEPS-SESSION] after a Pi compaction the same session gets the next input alone, whether Pi kept the last answer or only its summary", async () => {
+		// `closed`: Pi's session_compact handler closed the agent (acp-provider.ts), so the turn is an attach.
+		for (const [kept, closed] of [
+			[true, false],
+			[false, false],
+			[true, true],
+			[false, true],
+		]) {
+			const world = makeWorld();
+			const id = `compact-keeps-${kept}-${closed}`;
+			const first = await runTurn(world, transcript("seed"), id, "high");
+			if (first.type !== "done") throw new Error(`first turn sealed as ${first.type}`);
+			const session = SessionManager.inMemory();
+			session.appendMessage({ role: "user", content: "seed", timestamp: 0 });
+			const answerId = session.appendMessage(first.message);
+			session.appendCompaction("SUMMARY-OF-SEED", kept ? answerId : null, 1000);
+			session.appendMessage({ role: "user", content: "AFTER-COMPACTION", timestamp: 2 });
+			const context = normalizeContext({
+				tools: PI_TOOLS,
+				messages: convertToLlm(session.buildSessionContext().messages),
+			});
+			expect(context.messages.map((m) => m.role)).toEqual(
+				kept ? ["system", "user", "assistant", "user"] : ["system", "user", "user"],
+			);
+			piHost.setBranch(id, session.getBranch());
+			if (closed) expect(backend.closeRetainedAcpSession(id)).toBe(true);
+			const next = await runTurn(world, context, id, "high");
+			expect(next.type, `${kept} ${closed}`).toBe("done");
+			// One vendor session in all, and the summary is Pi's: it is never on the wire.
+			expect(world.wire).toEqual(
+				closed
+					? ["initialize", "new", "prompt", "initialize", "resume", "prompt"]
+					: ["initialize", "new", "prompt", "prompt"],
+			);
+			expect(world.prompts[1]).toMatchObject({ sessionId: world.prompts[0].sessionId, blocks: ["AFTER-COMPACTION"] });
+		}
 	});
 });
 
@@ -1877,6 +1919,64 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		}
 	});
 
+	/** An attach answers the vendor's defaults (U2), so what the birth set is set again: `prefix` picks the option. */
+	async function setAgainOnAttach(id: string, prefix: string): Promise<void> {
+		const world = makeWorld();
+		await runTurn(world, transcript("FIRST"), id, "high");
+		const atBirth = world.log.filter((line) => line.startsWith(prefix));
+		expect(atBirth.length).toBeGreaterThan(0);
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		const resumedAt = world.log.length;
+		expect((await runTurn(world, transcript("FIRST", "SECOND"), id, "high")).type).toBe("done");
+		expect(world.wire.slice(3)).toEqual(["initialize", "resume", "prompt"]);
+		expect(world.log.slice(resumedAt).filter((line) => line.startsWith(prefix))).toEqual(atBirth);
+	}
+	it("[QK:ACP-ATTACH-SETS-MODEL-AGAIN] a resumed session is given its model again before the prompt", async () => {
+		await setAgainOnAttach("attach-model-again", "set:model=");
+	});
+	it("[QK:ACP-ATTACH-SETS-EFFORT-AGAIN] a resumed session is given its effort again before the prompt", async () => {
+		await setAgainOnAttach("attach-effort-again", "set:effort=");
+	});
+
+	it("[QK:ACP-ATTACH-AGENT-DIES] an agent that dies while resuming stops the turn by name: nothing is sent, no session is opened, the record stays", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "attach-agent-dies";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		const before = recordBytes(world, id);
+		world.hooks.onResume = () => {
+			world.children.at(-1)?.exit(1);
+			throw new Error("ACP connection closed");
+		};
+		const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+		expect(errorText(stopped)).toBe(ACP_STOPS.resume.text);
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "initialize", "resume"]);
+		expect(recordBytes(world, id)).toBe(before);
+		// The dead agent is proven gone, so the same input goes to the same session afterwards.
+		world.hooks.onResume = undefined;
+		expect((await runTurn(world, transcript("FIRST", "SECOND"), id, "high")).type).toBe("done");
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+		expect(world.wire.filter((w) => w === "new")).toHaveLength(1);
+	});
+
+	it("[QK:ACP-ATTACH-REOPENED-PI] a Pi session reopened later has only its record: its first ACP turn resumes the recorded id and opens none", async () => {
+		const first = makeWorld();
+		const id = "attach-reopened";
+		await runTurn(first, transcript("FIRST"), id, "high");
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		// Another launch of Pi: nothing of the first one's agent or connection, the same stores.
+		const reopened = makeWorld();
+		reopened.deps.sessionDir = first.deps.sessionDir;
+		reopened.deps.holderDir = first.deps.holderDir;
+		reopened.deps.birthDir = first.deps.birthDir;
+		const sealed = await runTurn(reopened, transcript("FIRST", "SECOND"), id, "high");
+		expect(sealed.type).toBe("done");
+		expect(reopened.wire).toEqual(["initialize", "resume", "prompt"]);
+		expect(reopened.resumes[0]).toMatchObject({ sessionId: "ACP-1" });
+		expect(reopened.prompts).toEqual([expect.objectContaining({ sessionId: "ACP-1", blocks: ["SECOND"] })]);
+	});
+
 	it("[QK:ACP-ATTACH-HOLDER-STOPS] a session another holder's lease stands on is not resumed: nothing is spawned and the lease stays as found", async () => {
 		const others: Record<number, "live" | "dead" | "uncertain"> = {};
 		const probe = (pid: number, nonce = "module-1"): LeaseProbe => ({
@@ -1963,6 +2063,47 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["NEXT", "THEN"] });
 		expect(world.prompts.flatMap((prompt) => prompt.blocks)).toEqual(expect.arrayContaining(["CUT", "NEXT", "THEN"]));
 		expect(world.prompts.filter((prompt) => prompt.blocks.includes("CUT"))).toHaveLength(1);
+	});
+
+	it("[QK:ACP-CLOSE-BEFORE-DISPOSE] an idle session that is left gets session/close before its agent is disposed, where the agent offers it; its answer decides nothing", async () => {
+		quietStderr();
+		const offers = { agentCapabilities: { sessionCapabilities: { resume: {}, close: {} } } };
+		const rows: Array<[string, (() => void | Promise<void>) | undefined]> = [
+			["answered", undefined],
+			[
+				"refused",
+				() => {
+					throw new Error("close refused");
+				},
+			],
+			["never answered", () => new Promise<void>(() => {})],
+		];
+		for (const [name, onClose] of rows) {
+			const world = makeWorld();
+			world.hooks.initialize = offers;
+			world.hooks.onClose = onClose;
+			const id = `close-${name.replaceAll(" ", "-")}`;
+			await runTurn(world, transcript("FIRST"), id, "high");
+			const kills: string[] = [];
+			const kill = world.children[0].kill.bind(world.children[0]);
+			world.children[0].kill = (signal?: NodeJS.Signals | number) => {
+				kills.push(world.wire.at(-1) ?? "");
+				return kill(signal);
+			};
+			expect(await backend.releaseAcpSessions(id), name).toBe(1);
+			expect(world.wire, name).toEqual(["initialize", "new", "prompt", "close:ACP-1"]);
+			// The agent was signalled only after the close had gone out.
+			expect(kills.length, name).toBeGreaterThan(0);
+			expect(new Set(kills), name).toEqual(new Set(["close:ACP-1"]));
+			// Closed is not deleted: the same session is resumed afterwards.
+			expect((await runTurn(world, transcript("FIRST", "SECOND"), id, "high")).type, name).toBe("done");
+			expect(world.prompts.at(-1), name).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+		}
+		// An agent that does not offer it is sent none.
+		const world = makeWorld();
+		await runTurn(world, transcript("FIRST"), "close-not-offered", "high");
+		expect(await backend.releaseAcpSessions("close-not-offered")).toBe(1);
+		expect(world.wire).toEqual(["initialize", "new", "prompt"]);
 	});
 
 	it("[QK:ACP-LEASE-RELEASE-NEEDS-PROOF] the hold on a session is given up only once its agent is seen gone, and until then no second agent resumes it", async () => {

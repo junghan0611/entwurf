@@ -1124,7 +1124,8 @@ occupancy it reads (`usage.totalTokens` = the child's `used`, `[QK:ACP-CONTEXT-O
 exceeds `contextWindow − reserveTokens` (983,616 on the 1M window). The child compacts inside a
 prompt (observed once at 969k, mid-prompt, 2026-11-15). Inside one long ACP prompt the child
 compacts first whatever Pi's setting is, and a Pi compaction does not shrink the live child's
-context — only closing it and building a new child does (`[QK:ACP-COMPACT-CLOSES-CHILD]`). The
+context: since #171 the next turn resumes the same vendor session (`[QK:ACP-COMPACT-CLOSES-CHILD]`,
+`[QK:ACP-COMPACT-KEEPS-SESSION]`), whose context the vendor's own compaction governs. The
 adapter's own idle compaction is off (`idleCompaction: false`, `[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]`).
 
 **What is recorded.** For each compaction of a prompt, one plain custom entry
@@ -1165,7 +1166,7 @@ not examined. Pi emits `entry_appended` for it, so an RPC/JSON consumer sees it 
 own summary and what followed; a child built anew from the host transcript remembers the host
 transcript, which never held the child's internal tool results. The record shows where the live
 child's memory became a summary, but a rebuild does not receive it. Unchanged and approved: a Pi
-compaction closes the child and the next turn builds a new one from the compacted host context.
+compaction closes the child and the next turn resumes the same vendor session with the inputs after its last answer (#171, `[QK:ACP-COMPACT-KEEPS-SESSION]`).
 What is refused is injecting the recorded compaction facts or summary into a live child, or
 using a recorded summary as rebuild input. Since Pi's threshold reads the child's occupancy, the host transcript a rebuild would
 send is not measured by anything; a very long session's rebuild can exceed the window and then
@@ -1325,8 +1326,8 @@ summary on a Claude ACP model.
   `stop` and preserving it on `length`/error/unconfirmed exit.
 - **After compaction.** `acp-provider.ts` subscribes to `session_compact` and closes that Pi
   session's retained child at once (GLG 2026-11-14), unless a turn is in flight. A session is busy
-  only inside its key's in-flight claim, so the in-flight check covers both. The next turn opens a
-  new child from the compacted transcript.
+  only inside its key's in-flight claim, so the in-flight check covers both. The next turn resumes
+  the same vendor session and sends it the inputs after its last answer (#171).
 
 Proof: `pi-extensions/lib/acp/backend.summary-turn.test.ts` drives Pi's own `generateSummary` and
 `generateBranchSummary` through `streamAcpTurn`, so the request shape is Pi's, not a fixture's. A Pi

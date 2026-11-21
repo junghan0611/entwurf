@@ -128,10 +128,6 @@ export const ACP_STOPS = {
 		text: "entwurf: the agent has no record of this ACP session, so nothing more was sent; its record is kept",
 		exit: NEW_SESSION,
 	},
-	compacted: {
-		text: "entwurf: inputs this ACP session never received were compacted away, so nothing was sent",
-		exit: NEW_SESSION,
-	},
 	load: {
 		text: "entwurf: this agent offers no resume for its stored ACP session, so nothing was sent",
 		exit: null,

@@ -1,6 +1,6 @@
 # NEXT--acp-session-load-171 — #171 ACP 코어 레일
 
-**현재 (2026-11-21):** 브랜치 `acp-session-load-171`(로컬, 푸시는 `8ecd6aef`까지, 로컬 HEAD `e8ec5840`). 8단계 진행 중: 8a, 8b.1, 8b.2 완료, 다음은 8b.3. 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
+**현재 (2026-11-22):** 브랜치 `acp-session-load-171`(로컬, 푸시는 `8ecd6aef`까지, 로컬 HEAD `9ddf950a`). 8단계 구현 완료(8a–8e), 다음은 9단계(LIVE, FULL, mutant body). 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
 
 역할 (8단계, GLG 2026-11-21):
 - 조율: `20261113T043350-ff08d4`
@@ -67,31 +67,22 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
       - plan v3와 다른 점: 형제 메일(`custom_message`)은 입력으로 받는다(v3대로 멈추면 ACP 상주 시민이 메일마다 멈춘다). Pi의 system 메시지 엔트리는 건너뛴다.
       - 8c까지의 중간 상태: 프롬프트 전에 거절된 재사용 턴(ESC 포함) 뒤로는 `changed`로 멈춘다. 이미지가 든 재사용 입력도 멈춘다.
     - [x] 8b.2 `e8ec5840`: 상주 세션은 birth일 때만 `session/new`를 연다(record 없음, 예약 없음, Pi 브랜치에 ACP 흔적 없음). 그 밖은 모두 이름 붙은 정지이고 record는 지우지 않는다. `streamAcpTurn`의 단일 가드(`decideResident`), 영속 birth 예약(`birth-reservation.ts`, `wx` + 파일·디렉터리 체인 fsync), `session/new` 직전 재확인(호스트 세션 id, abort), record는 `session/new` 응답 직후 기록(fsync). 브랜치의 Entwurf 답변은 "no ACP session was started this turn" 스탬프가 붙은 것만 pre-birth로 본다. 응답된 cancel은 첫 턴 세션도 유지한다(B5 앞당김). 정지 문구 28개(`reserve` 추가). PARTIAL 10개 그룹 249/249(영수증 `~/.local/share/entwurf-lab/171/step8/8b2*-*.json`; `IDLE-DEATH-ANNOUNCED` mutant는 가드 쪽 공지 지점으로 옮겨 재실행). LIVE·FULL 미실행.
-      - 8c 전에: `decideBootstrap`(+`SessionModelLockedError`, `invalidatePersisted`)은 배선되지 않은 옛 정책이다. 배선 전에 정책과 핀(`scripts/check-acp-session-store.ts`의 해당 구간)을 치우거나 바꾼다. `runNewTurn`의 "— opening a new one" 공지는 상주 턴이 더는 닿지 않는다. resume 배선 때 문구를 정리한다.
       - 9단계 Pi smoke에서 잴 가정 둘: 실제 Pi가 aborted 최종 메시지에 `responseId`를 저장하는가, 실패한 답변의 content 블록을 `textSignature`째 저장하는가. 둘 다 fake Pi host(`scripts/lib/acp-fake-pi-session.ts`)가 모델링한 것이지 측정한 것이 아니다.
       - rename 뒤 sync 오류는 롤백을 주장하지 않는다(Sol). 실패한 봉인 기록이 재사용을 막는 게이트는 8b.3.
-    - [ ] 8b.3: 마커 기준 `unknown` 봉인, 전송 격리, 종료 사유 분류, B5/B5b, E1 은퇴. attach는 아직 꺼 둔다(`interim` 정지).
-    - [ ] 8c: 같은 id resume(측정된 writer→reader 쌍만), holder lease, 설정 변경 분류, L-b, delta 증명(턴 id 앵커).
-    - [ ] 8d: compaction 뒤 세션 유지(16-1), `session/close`(L7).
-    - [ ] 8e: 표의 행을 종착 상태로.
-  - **이번 레일에서 STOP으로 남기는 것 (GLG 2026-11-21 승인, 조율자 전달).** 결정은 CONNECT지만 싸게 증명되지 않아 고정 문구로 멈춘다:
-    - `/fork`(나가는 길 `/new`). CLI `--fork`와 `switchToForkedSession`도 같다.
-    - 같은 벤더 안의 모델 변경(나가는 길: 원래 모델로 되돌림).
-    - load(L9)와 16-6의 재시도 1회.
-    - 같은 부팅 안에서 Pi가 크래시한 뒤의 lease. 호스트 재부팅 뒤에는 boot id로 증명해 잇는다.
-  - **확정된 기본값 (GLG 2026-11-21, 조율자 전달).** Claude에서 전달 여부를 모르면 한 번 멈추고 그 입력을 다시 보내지 않는다. 설정 변경은 `mcpServers`는 새 값으로 resume, 글만 바뀌면 알림과 함께 유지, 도구·권한은 U24 확장 측정 전까지 정지. v1 record는 L-b 조건으로 읽어 resume한다.
-  - **처음의 진입 순서 (2026-11-21):**
-    - 오푸스가 계획을 쓴다(#O49, `.agent-reports/171-step8-plan.md`). 하위 단계 8a…, 각 단계의 계약·게이트·LIVE를 적는다.
-    - Codex Sol이 계획을 리뷰한다.
-    - 물음표를 닫는다. GLG 결정이 필요한 것만 GLG에게 올린다.
-    - 그다음 구현에 들어간다. 하위 단계마다 체크포인트 커밋을 남긴다.
-  - 16-9를 벤더별로 구현한다. Claude는 보낸 범위 뒤의 입력만 보내고, agy는 보낸 범위부터 다시 보낸다. 이 규칙은 어댑터의 데이터로 두고, 근거로 U17을 적는다.
-  - agy에서 여러 블록이 붙어 버리는 문제에 구분자를 넣는다.
+    - [x] 8b.3 `567d10bb`: 답이 없는 상주 프롬프트를 `unknown`으로 봉인(마커 기준), 전송 격리, 종료 사유 분류.
+    - [x] 8c `9ddf950a`: 같은 id `session/resume`(측정된 writer→reader 쌍만: Claude `0.109.0`, agy `1.5.13`/`1.5.12`), delta 증명(봉인된 턴 id 앵커, 마커의 entry id), holder lease, 설정 변경 분류. Sol 리뷰 1회 + 수선 1회(B1 lease 아래 record 재확인, B2 agent 추적, B3 text 변경은 저장 세션에서 정지).
+      - GLG 2026-11-22: v1 record는 붙지 않는다(STOP `version`). `interim` 정지는 없앴다(정지 문구 29개).
+      - 저장 세션은 setup text가 바뀌면 STOP `config`다. carrier가 MCP 서버 이름을 담으므로 서버 추가/제거도 여기에 걸린다. 같은 이름의 서버 정의 변경만 resume으로 넘어간다. resume 요청의 carrier를 vendor가 적용하는지 재면 풀 수 있다.
+      - length-cut 답(U12) 뒤 다음 턴은 `changed`로 멈춘다(`context_edit` 엔트리에서 walk가 멈춤). 세션은 유지.
+      - 앵커는 context의 `responseId` 정확 일치만 받는다. **9단계 Pi smoke 필수 측정:** 실제 Pi가 provider context의 assistant에 `responseId`를 실어 주는가(평범한 두 번째 턴), 실패·중단 답변에 `responseId`/`diagnostics`를 저장하는가(재개, 실패 답변 케이스). 아니면 모든 두 번째 턴이 `changed`로 멈춘다. Sol: 이것을 재기 전에는 reuse/resume을 LIVE 검증됐다고 부르지 않는다.
+      - kill-power: 영향 그룹 12개는 PARTIAL green(`~/.local/share/entwurf-lab/171/step8/8c-*.json`, `8cr-*`). `check-acp-set-model-readback` 그룹(8b.3 + 8c 몫)은 돌리지 않았다. GLG 2026-11-22: 홉마다 body를 돌리지 않는다. 변경된 ACP 구획의 focused 게이트만 돌리며 나아가고, mutant body는 9단계에서 한 번 돌린다.
+    - [x] 8d: Pi compaction 뒤에도 같은 vendor 세션(16-1). branch walk가 compaction을 지나가고, context는 Pi가 남긴 범위(`firstKeptEntryId`)에 따라 앵커 답변 또는 그 compaction의 summary head로만 증명된다. `compacted` 정지 제거(28개). 떠나는 idle 세션에는 `session/close`를 먼저 보낸다(L7, 최대 1.5초, 응답 무관).
+      - 운영에서는 `session_compact` 핸들러가 child를 닫으므로(#163 그대로) 같은 vendor id에 agent만 바뀐다. vendor context는 vendor의 compaction이 관리한다.
+    - [x] 8e: 표의 not-wired 행을 종착 상태로. **GLG 2026-11-22: L9(`session/load`)와 Z4는 declined로 확정. 지금 지원하는 ACP들에 집중한다.** P2는 deferred(9단계 U4), U 행은 9단계.
   - 같은 세션을 잇는다:
     - child가 살아 있으면 세션을 유지한다. 오류가 나면 세션을 닫던 GPT ④(`backend.ts:2711`)를 뒤집는다.
     - child가 죽었거나 Pi를 다시 열면 같은 id로 resume한다.
     - 재시도와 다음 입력도 같은 세션으로 보낸다.
-  - resume과 load를 배선하고, "record not used" 핀(`scripts/check-acp-session-reuse.ts`)을 뒤집는다. `decideBootstrap`은 initialize 뒤로 옮긴다.
   - V5 가드와 결정 1(resume 실패 계약)을 적용한다.
   - 같은 단계에서 닫을 행: L7, L11/V2, L14, P1, Z3, Z4, V1, Z6/V3(U9와 함께).
   - **설계 물음표에 대한 답 (2026-11-21, 조율자가 확인)**
