@@ -1383,20 +1383,30 @@ async function proveChildGone(
 	ms: number,
 	groupGone: (child: AcpChildLike) => boolean = childGroupGone,
 ): Promise<boolean> {
-	const deadline = Date.now() + ms;
-	const pause = (wait: number): Promise<void> =>
-		new Promise((resolve) => {
-			setTimeout(resolve, wait).unref?.();
+	// A monotonic clock: a wall-clock step must neither cut the wait short nor stretch it.
+	const deadline = performance.now() + ms;
+	const pause = (wait: number): { done: Promise<void>; clear: () => void } => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const done = new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, wait);
+			timer.unref?.();
 		});
-	if (!session.childEnd.settled) await Promise.race([session.childEnd.promise, pause(ms)]);
+		return { done, clear: () => clearTimeout(timer) };
+	};
+	if (!session.childEnd.settled) {
+		const limit = pause(ms);
+		await Promise.race([session.childEnd.promise, limit.done]);
+		limit.clear();
+	}
 	const ended = session.exit !== undefined || (session.spawnFailed === true && session.child.pid == null);
 	if (!ended) return false;
 	// The agent's own exit comes first; what it started (the vendor's `claude` process, measured
 	// 2026-11-22) leaves the group a moment later, or at the group SIGKILL. The group is asked until
 	// the same deadline.
 	while (!groupGone(session.child)) {
-		if (Date.now() >= deadline) return false;
-		await pause(Math.min(50, Math.max(1, deadline - Date.now())));
+		const left = deadline - performance.now();
+		if (left <= 0) return false;
+		await pause(Math.min(50, Math.max(1, left))).done;
 	}
 	return true;
 }

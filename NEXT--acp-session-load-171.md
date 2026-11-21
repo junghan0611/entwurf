@@ -78,7 +78,7 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
       - kill-power: 영향 그룹 12개는 PARTIAL green(`~/.local/share/entwurf-lab/171/step8/8c-*.json`, `8cr-*`). `check-acp-set-model-readback` 그룹(8b.3 + 8c 몫)은 돌리지 않았다. GLG 2026-11-22: 홉마다 body를 돌리지 않는다. 변경된 ACP 구획의 focused 게이트만 돌리며 나아가고, mutant body는 9단계에서 한 번 돌린다.
     - [x] 8d: Pi compaction 뒤에도 같은 vendor 세션(16-1). branch walk가 compaction을 지나가고, context는 Pi가 남긴 범위(`firstKeptEntryId`)에 따라 앵커 답변 또는 그 compaction의 summary head로만 증명된다. `compacted` 정지 제거(28개). 떠나는 idle 세션에는 `session/close`를 먼저 보낸다(L7, 최대 1.5초, 응답 무관).
       - 운영에서는 `session_compact` 핸들러가 child를 닫으므로(#163 그대로) 같은 vendor id에 agent만 바뀐다. vendor context는 vendor의 compaction이 관리한다.
-    - [x] 8e: 표의 not-wired 행을 종착 상태로. **GLG 2026-11-22: L9(`session/load`)와 Z4는 declined로 확정. 지금 지원하는 ACP들에 집중한다.** P2는 deferred(9단계 U4), U 행은 9단계.
+    - [x] 8e: 표의 not-wired 행을 종착 상태로. **GLG 2026-11-22: L9(`session/load`)와 Z4는 declined로 확정. 지금 지원하는 ACP들에 집중한다.** P2는 deferred, U 행은 9단계.
   - 같은 세션을 잇는다:
     - child가 살아 있으면 세션을 유지한다. 오류가 나면 세션을 닫던 GPT ④(`backend.ts:2711`)를 뒤집는다.
     - child가 죽었거나 Pi를 다시 열면 같은 id로 resume한다.
@@ -89,11 +89,14 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
     - 결정 18의 형태: ACP 모델 등록은 유지하고, `--entwurf-control` 없는 tui·rpc만 오류로 멈춘다. 다섯 LIVE smoke가 control 없이 `pi -p`로 ACP를 쓰기 때문이다(`smoke-acp-mcp`, `carrier-augment`, `provider`, `long-turn`, `skill`).
     - fork 출처: extension이 받는 `ctx.sessionManager`(ReadonlySessionManager, `types.d.ts:243`)의 `getHeader().parentSession`으로 판별한다. fork가 이 값을 채운다(`session-manager.js:1259`).
     - `/tree` 감지: 같은 manager의 `getLeafId()`와 `getBranch()`로 entry id를 얻는다. 봉인할 때 leaf entry id를 record에 남기고, 다음 턴에 비교한다. 지금의 서명은 내용만 보므로 가지 전환을 놓친다.
-- [ ] **9. 마감.**
-  - 7단계의 명령으로 마지막 LIVE를 돌린다: U12–U16, P2/U4.
-  - 표의 모든 행이 종착 상태여야 한다.
-  - PARTIAL과 동결 FULL을 돌린다.
-  - 영수증을 #171에 붙이고 #171을 닫는다. main에 병합하기 전에 이 파일을 지운다.
+- [ ] **9. 마감.** (push·#171 close·이 파일 삭제·병합은 GLG 몫)
+  - [x] 실제 Pi 상주 smoke(`pi-smoke`, n=1씩, 2026-11-22 `62af356c`): Claude(claude-sonnet-5-5)·agy(agy-gemini-3.8-flash) 각 15/15. 실제 Pi가 `responseId`를 저장하고 돌려준다(중단 답 포함). run 내내 vendor id 하나, 재개 뒤 recall, compaction 뒤 유지, 두 번째 Pi는 holder lease에서 정지.
+    - 여기서 나온 결함: quit 때 lease가 남았다(vendor 손자 프로세스가 agent exit 뒤에 그룹을 떠남). `proveChildGone`이 같은 기한까지 그룹을 다시 묻는다(`62af356c`, Sol 수락; monotonic clock 후속 반영).
+  - [x] 결과 불명 턴 뒤 재개(`pi-unknown`, n=1씩, 2026-11-22): X가 wire에 보인 뒤 run 자신의 agent 그룹을 kill → Pi 종료 → 같은 세션 재개 → Y. 두 vendor 모두 11항목 참. wire(`wire-tee.mjs`): 재개는 기록된 id의 `session/resume`, run 전체 `session/new` 1회, 재개 프롬프트는 Claude가 Y만(skip), agy가 X+Y(resend). X의 답은 `error` + `entwurf_acp_prompt_unknown` + `responseId`로 저장됐고 record marker의 `turnId`와 같다. 측정된 변형: 불명 답이 이미 branch에 있어 별도 skip 정지 없이 바로 Y가 나갔다. Claude는 `CLAUDE_AGENT_ACP_COMMAND` 경유라 launcher의 이름 분리·신호 관측은 이 run의 대상이 아니다.
+  - **GLG 2026-11-22: U4(/renew on an ACP row)와 U16(실제 length 정지의 usage)은 #156으로 미룬다. #171 close를 막지 않는다.** (조율자 전달, issuecomment-7069232824)
+  - 열린 채 두는 것: P1의 `entwurf_resume_call` launcher 종단 경로는 돌리지 않았다(record seam과 Pi 직접 재개만 LIVE). resume 때 바뀐 carrier를 vendor가 적용하는지는 재지 않았고 STOP `config` 뒤에 있다. U13의 중복 질문은 length-cut 답 뒤 다음 턴의 STOP `changed`로 대체됐다(`ACP-DELTA-MAX-TOKENS`).
+  - [ ] 동결 후보에서 FULL · raw `all` · ACP PARTIAL 13그룹. 첫 FULL(`62af356c`)은 red였다: `demo/lib/claude-native-work.test.ts`의 record 픽스처에 `writer`/`firstPrompt`가 없었다(고침).
+  - [ ] 영수증을 #171에 붙이고 #171을 닫는다. main에 병합하기 전에 이 파일을 지운다.
   - 0.61.0에서 Entwurf ACP의 방향을 이야기한다.
 - 이 레일 밖, 그다음: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
 

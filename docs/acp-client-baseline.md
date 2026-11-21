@@ -17,7 +17,7 @@ is host-local; its decisive lines are pasted into #171 at close. The continuity 
 6. Done: the continuity design (decisions 15–18); this table follows it.
 7. Done: the re-measurement command and the pins (Claude 0.109.0, agy 1.5.13, SDK 2.8.0); LIVE measured U9, U12, U14, U15.
 8. Done: L8 with the continuity rules, under the version guard: L7, L11, L14, P1, Z3, V1, V2, V3, Z6; L9 and Z4 declined;
-9. Close: a last live pass (U13, U16, P2 with U4), the full gates, the receipts into #171.
+9. Close: a last live pass (a real Pi resident; an unknown outcome and its reopen), the full gates, the receipts into #171. U4 and U16: #156.
 
 ## How to read the table
 
@@ -57,8 +57,8 @@ Where Pi itself reopens or renews a session.
 
 | Row | Name                      | Status    | Note                                                                                                                    | QK |
 |-----|---------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------|---|
-| P1  | entwurf_resume_call       | implemented | A reopened Pi session resumes its recorded id (L8), never new; the entwurf_resume_call path itself: step 9.             | [QK:ACP-ATTACH-REOPENED-PI] |
-| P2  | /renew on an ACP row      | deferred  | /renew is a new chapter by intent: a new Pi session and a new vendor session (16-2); the final live run checks it (U4). | — |
+| P1  | entwurf_resume_call       | implemented | A reopened Pi session resumes its recorded id (L8), never new (LIVE: pi-smoke); the launcher itself is not run.         | [QK:ACP-ATTACH-REOPENED-PI] |
+| P2  | /renew on an ACP row      | deferred  | /renew is a new chapter by intent: a new Pi session and a new vendor session (16-2); its live check (U4): #156.         | — |
 | P3  | ACP only under entwurf pi | implemented | A tui or rpc ACP turn without --entwurf-control stops and names entwurf pi; explicit pi -p stays one-shot (18).         | [QK:ACP-D18-UNHOSTED-STOPS] |
 
 ## Found in Zed
@@ -99,7 +99,7 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 | U1  | agy list for a prompted session                    | unmeasured | Parent L10. Is a prompted agy session listed? stays: L10 is declined.                   | — |
 | U2  | effect of the re-applied effort                    | unmeasured | Parent L11. Does the effort set again change behaviour? stays: not a correctness issue. | — |
 | U3  | agy compaction                                     | unmeasured | Parent L14. Does agy compact across attach? stays: no trigger exists.                   | — |
-| U4  | /renew transition on an ACP row                    | unmeasured | Parent P2. Does /renew work as it stands? blocks close: step 9.                         | — |
+| U4  | /renew transition on an ACP row                    | unmeasured | Parent P2. Does /renew work as it stands? stays: deferred to #156 (GLG 2026-11-22).     | — |
 | U5  | an agent calling fs read                           | unmeasured | Parent Z1. Does any agent call fs read? stays: the capability is not offered.           | — |
 | U6  | a V1 discriminator as a detector                   | unmeasured | Parent V1. Can a phantom load be detected? stays: resume-first closes V1.               | — |
 | U7  | an agent with load but no resume                   | unmeasured | Parent V1. Do load-only agents exist? stays: no such vendor.                            | — |
@@ -107,10 +107,10 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 | U9  | two holders both prompting                         | measured   | Parent V3. Both holders answered (Claude, agy); no vendor guard, so Z6 is needed.       | — |
 | U10 | a v2-shaped initialize                             | unmeasured | Parent Z2. How does a v2-shaped initialize fare? stays: Z2 is declined.                 | — |
 | U12 | vendor state after a cut prompt                    | measured   | Parent L16. A cut turn stays in the vendor session and resumes on both; re-send: 16-9.  | — |
-| U13 | record-relative delta and the max_tokens duplicate | unmeasured | Parent L5. Does a record-relative delta remove the duplicate? blocks close: step 9.     | — |
+| U13 | record-relative delta and the max_tokens duplicate | measured   | Parent L5. Superseded: the turn after a length-cut answer stops (changed); no re-send.  | — |
 | U14 | vendor compacts on a multi-block /compact          | measured   | Parent L5. A multi-block prompt does not compact; /compact must be alone.               | — |
 | U15 | /compact on a new turn                             | measured   | Parent L5. /compact on a fresh session compacts nothing on both.                        | — |
-| U16 | usage on a real length stop                        | unmeasured | Parent L5. What usage does a real length stop report? blocks close: step 9.             | — |
+| U16 | usage on a real length stop                        | unmeasured | Parent L5. Usage on a real length stop? stays: deferred to #156 (GLG 2026-11-22).       | — |
 
 ## Decisions (GLG, 2026-11-20 and 2026-11-21)
 
@@ -126,7 +126,7 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 10. Claude gets the same version guard, because the command override is checked only against the floor.
 11. Z5 and V4 are declined (measured in R10).
 12. Re-measurement came before L8 and L9: one command compares fresh runs with R1–R10; only a changed line needs a person.
-13. P2 is closed by the final live run (U4); Z7 is declined, since Pi resume is the recovery path.
+13. P2's live check (U4) is deferred to #156 (GLG 2026-11-22); Z7 is declined, since Pi resume is the recovery path.
 14. This page is the short table; the full document with evidence lives in `.agent-reports/`, and its receipts go to #171 at close.
 15. Continuity: alive, keep the session; disconnected, resume the same id; outcome unknown, keep the record and stop only that turn. New is for birth or a human choice. (G5: a turn of unknown outcome ends with a fixed text, and the next human turn re-sends the input.)
 16. Compaction keeps the vendor session; /renew is a new chapter; a model change stays inside the session or is refused; an unmeasured version or an ambiguous resume error is never absence; an explicit `pi -p` stays one-shot; config drift resumes the same id; a failed turn's input is re-sent, except a range Claude already got (a re-send repeats the work); agy re-sends (a lost message is worse than a duplicate).

@@ -120,6 +120,8 @@ function cacheRecord(key: string, over: Record<string, unknown> = {}) {
 		bridgeConfigSignature: "sig",
 		contextMessageSignatures: [],
 		pendingDispatch: null,
+		writer: { name: "claude-agent-acp", version: "0.0.0" },
+		firstPrompt: "sealed",
 		updatedAt: "2026-10-11T00:00:00.000Z",
 		...over,
 	};
