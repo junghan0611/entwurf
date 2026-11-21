@@ -41,8 +41,12 @@ import {
 import { calculateContextTokens, getLastAssistantUsage, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
+import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpClientHandlers, AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-vendor-rejection-"));
 const SANDBOXED_ENV = [
@@ -78,7 +82,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	adapters = await import("./backend-adapter.ts");
 	config = await import("./config.ts");
 	models = await import("./models.ts");
@@ -280,6 +284,7 @@ function makeWorld() {
 			return connection;
 		},
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,

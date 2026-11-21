@@ -21,6 +21,18 @@
 /** Pi's run mode as an extension sees it (`ctx.mode`, pi-coding-agent `ExtensionMode`). */
 export type AcpHostMode = "tui" | "rpc" | "json" | "print";
 
+/**
+ * The Pi session this process is running, as the ACP provider entry holds it (`ctx.sessionManager`,
+ * read-only). `getBranch()` is the path from the root to the current leaf; the backend reads entry
+ * ids and types from it and never writes. Entries are `unknown` here: the backend validates the few
+ * fields it reads.
+ */
+export interface AcpSessionReader {
+	getSessionId(): string;
+	getBranch(): unknown[];
+	getEntries(): unknown[];
+}
+
 export interface AcpHostFacts {
 	readonly controlEnabled: boolean | undefined;
 	readonly mode: AcpHostMode | undefined;
@@ -28,11 +40,12 @@ export interface AcpHostFacts {
 
 export const ACP_HOST_FACTS_KEY: unique symbol = Symbol.for("entwurf.acp.host-facts.v1") as never;
 
-type FactsHost = { [ACP_HOST_FACTS_KEY]?: { controlEnabled?: unknown; mode?: unknown } };
+type FactsSlot = { controlEnabled?: unknown; mode?: unknown; session?: unknown };
+type FactsHost = { [ACP_HOST_FACTS_KEY]?: FactsSlot };
 
 const MODES: readonly string[] = ["tui", "rpc", "json", "print"];
 
-function slot(host: object): { controlEnabled?: unknown; mode?: unknown } {
+function slot(host: object): FactsSlot {
 	const h = host as FactsHost;
 	const existing = h[ACP_HOST_FACTS_KEY];
 	if (typeof existing === "object" && existing !== null) return existing;
@@ -63,4 +76,22 @@ export function readAcpHostFacts(host: object = globalThis): AcpHostFacts {
 		controlEnabled: typeof raw.controlEnabled === "boolean" ? raw.controlEnabled : undefined,
 		mode: typeof raw.mode === "string" && MODES.includes(raw.mode) ? (raw.mode as AcpHostMode) : undefined,
 	};
+}
+
+/**
+ * The ACP provider entry reports the session manager of the session that just started, and takes it
+ * back (`undefined`) at its `session_shutdown`, so a reader never outlives the session it reads.
+ */
+export function reportAcpSessionReader(reader: AcpSessionReader | undefined, host: object = globalThis): void {
+	slot(host).session = reader;
+}
+
+/** The reported session reader, or `undefined` when none was reported or it has the wrong shape. */
+export function readAcpSessionReader(host: object = globalThis): AcpSessionReader | undefined {
+	const raw = (host as FactsHost)[ACP_HOST_FACTS_KEY]?.session;
+	if (typeof raw !== "object" || raw === null) return undefined;
+	const r = raw as Record<string, unknown>;
+	return typeof r.getSessionId === "function" && typeof r.getBranch === "function" && typeof r.getEntries === "function"
+		? (raw as AcpSessionReader)
+		: undefined;
 }

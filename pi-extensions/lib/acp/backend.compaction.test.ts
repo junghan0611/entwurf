@@ -17,10 +17,14 @@ import { join } from "node:path";
 import { type Api, type Model, normalizeContext } from "@earendil-works/pi-ai";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpClientHandlers, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 import { AcpCompactionCollector } from "./compaction-record.ts";
 import * as mapper from "./event-mapper.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-compaction-"));
 const SANDBOXED_ENV = [
@@ -55,7 +59,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	models = await import("./models.ts");
 	config = await import("./config.ts");
 });
@@ -155,6 +159,7 @@ function makeWorld(
 			};
 		},
 		lifecyclePolicy: () => (shape.turnScoped ? "turn-scoped" : "process-scoped"),
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,
@@ -293,7 +298,8 @@ describe("the ACP child's compactions through the turn driver (#163 S8)", () => 
 		const plainSummary = await makeWorld({}).turn({ sessionId: "S-summary-uuid-2", summary: true });
 		expect((s.value as { shown: string }).shown).toBe(plainSummary.shown);
 
-		const cwd = makeWorld({ prompt: c2Frames("IN-CWD") });
+		// A one-shot may run with no Pi session id; a resident may not (#171 step 8).
+		const cwd = makeWorld({ prompt: c2Frames("IN-CWD") }, { turnScoped: true });
 		const c = await stderrLines(() => cwd.turn({}));
 		expect((c.value as { shown: string }).shown).toContain("[acp: compaction completed 18k→4k");
 		expect(c.lines.join("")).toContain("not recorded: outside the record's scope");

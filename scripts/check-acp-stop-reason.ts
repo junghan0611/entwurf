@@ -54,7 +54,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { fakePiHost } from "./lib/acp-fake-pi-session.ts";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 // #142: a Claude turn carries pi's thinking level, which the backend sets as effort and reads back
 // before the prompt. This fixture runs every turn at one fixed level on rows carrying the curated
@@ -153,6 +157,7 @@ function makeHarness(recordDir: string, wireReason: string | null) {
 			},
 		}),
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 		now: () => "2026-07-30T00:00:00Z",
 		sessionDir: recordDir,
@@ -270,11 +275,11 @@ try {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const eventUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/event-mapper.js")).href;
 	const backendModule = (await import(backendUrl)) as any;
-	const backend = {
+	const backend = piHost.wrap({
 		...backendModule,
 		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
 			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
-	};
+	});
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const eventMod = (await import(eventUrl)) as any;
 

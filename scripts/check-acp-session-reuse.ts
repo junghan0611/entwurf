@@ -34,7 +34,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Context, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { fakePiHost } from "./lib/acp-fake-pi-session.ts";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 // The pi built-ins the Claude child also exposes natively. pi declares its tool
 // surface on every turn; since 0.86 that declaration reaches a provider as the
@@ -218,6 +222,7 @@ function makeHarness(
 		},
 		createConnection: (_child: any, handlers: any) => makeConnection(handlers),
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: () => config,
 		now: () => "2026-06-18T00:00:00Z",
 		sessionDir: recordDir,
@@ -318,11 +323,11 @@ try {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const storeUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/session-store.js")).href;
 	const backendModule = (await import(backendUrl)) as any;
-	const backend = {
+	const backend = piHost.wrap({
 		...backendModule,
 		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
 			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
-	};
+	});
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const store = (await import(storeUrl)) as any;
 	const configUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/config.js")).href;

@@ -42,8 +42,10 @@
 // AssistantMessageEventStream contract).
 
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
+import { isDeepStrictEqual } from "node:util";
 import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { Api, AssistantMessage, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
 import {
@@ -53,7 +55,7 @@ import {
 	getCurrentSystemPrompt,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
-import { readAcpHostFacts } from "../acp-host-facts.js";
+import { type AcpSessionReader, readAcpHostFacts, readAcpSessionReader } from "../acp-host-facts.js";
 import type { AcpSteerEffect, AcpSteerSeamV1 } from "../acp-steer-seam.js";
 import {
 	type AcpClientHandlers,
@@ -74,6 +76,7 @@ import {
 	readAgentFacts,
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
+import { ACP_TURN_ID_PREFIX, reuseBranchVerdict } from "./branch-gate.js";
 import {
 	AcpCompactionCollector,
 	type AcpCompactionRecord,
@@ -86,7 +89,14 @@ import {
 	type ResolvedAcpConfig,
 	resolveProviderConfig,
 } from "./config.js";
-import { type AcpTextBlock, buildAcpPrompt, latestUserDelta, separateTextBlocks, userDeltaRange } from "./context.js";
+import {
+	type AcpTextBlock,
+	buildAcpPrompt,
+	latestUserDelta,
+	separateTextBlocks,
+	textInputBlocks,
+	userDeltaRange,
+} from "./context.js";
 import {
 	type AcpPiStreamState,
 	applyAcpSessionUpdate,
@@ -268,6 +278,8 @@ export interface AcpTurnDeps {
 	spawnChild(launch: { command: string; args: string[] }, cwd: string, extraEnv: Record<string, string>): AcpChildLike;
 	createConnection(child: AcpChildLike, handlers: AcpClientHandlers): AcpConnectionLike;
 	lifecyclePolicy(): HostLifecycle;
+	/** #171 step 8: the Pi session this process runs, read-only; `undefined` when none was reported. */
+	sessionReader(): AcpSessionReader | undefined;
 	/** Resolve operator provider config (S2g). Real impl reads global+project settings.
 	 *  Takes the already-routed `adapter` (resolved once at turn entry) so the backend
 	 *  can parse its OWN settings without config.ts re-routing — the model id stays the
@@ -335,6 +347,9 @@ interface BridgeSession {
 	acpSessionId: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
+	/** #171 step 8: the turn id (`responseId`) of the last turn this session sealed; the branch gate
+	 *  allows a reuse turn only when that exact answer is the last one on Pi's branch. */
+	sealedTurnId?: string;
 	/** The backend thinking value the driver last read back on this session (#142); a fact about the
 	 *  live session, never part of the reuse signature. Undefined until one is set. */
 	thinkingValue?: string;
@@ -975,6 +990,8 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promis
 // settled, and only about the live session — not about any private transcript.
 export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
 export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
+/** #171 step 8: an abort before a reuse turn's prompt went out. Nothing ran and the live session is kept. */
+export const ACP_CANCEL_UNSENT_NOTICE = "stopped before the prompt was sent — nothing ran; the ACP session is kept";
 export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — future continuation may require a new session";
 // #171 L16 — the dispatch marker. Pi's retry classifier reads `errorMessage` alone, and a retried turn after a
 // stop would be an automatic send, so these error texts are fixed and carry no number, id or path (a bare
@@ -1266,6 +1283,7 @@ function defaultDeps(): AcpTurnDeps {
 		},
 		// #171 decision 18: from the facts the control extension and the provider entry reported, not argv.
 		lifecyclePolicy: () => resolveLifecyclePolicy(readAcpHostFacts()),
+		sessionReader: () => readAcpSessionReader(),
 		loadConfig: (cwd, modelId, adapter) => resolveProviderConfig({ cwd, modelId, adapter }),
 		now: () => new Date().toISOString(),
 	};
@@ -1396,8 +1414,11 @@ export function actionableAcpBackendHint(message: string): string | undefined {
  * fully built (augment / reuse delta included) and immediately before
  * `connection.prompt`. That is the truthful analogue of the built-in providers'
  * post-build/pre-send boundary. Replacement is honored fail-closed, never
- * silently: it must be a non-null, non-array object, keep the bootstrapped
- * `sessionId`, and carry a non-empty prompt array — prompt rewriting is
+ * silently: the effective payload — the replacement, or `params` itself when the
+ * hook returned nothing and may have mutated it — must be a non-null, non-array
+ * object, keep the `sessionId` captured before the hook ran, and carry a
+ * non-empty prompt array. It is a detached copy, so a hook that changes its
+ * object afterwards changes nothing that is sent — prompt rewriting is
  * upstream-granted power, but entwurf cannot truthfully deliver to an ACP
  * session it did not open, and an emptied prompt would undo this rail's own
  * non-empty-prompt invariant; either refuses the turn before the wire.
@@ -1410,32 +1431,53 @@ export function actionableAcpBackendHint(message: string): string | undefined {
  * unmappable, so any call would fabricate HTTP evidence that does not exist.
  * The absence is pinned behaviorally by check-acp-stream-hooks.
  */
-async function applyProviderPayloadHook<T extends { sessionId: string }>(
+async function applyProviderPayloadHook<T extends { sessionId: string; prompt: AcpTextBlock[] }>(
 	options: SimpleStreamOptions | undefined,
 	params: T,
 	model: Model<Api>,
+	/** #171 step 8: a resident's prompt is what the session record accounts for, so no hook may change it. */
+	resident: boolean,
 ): Promise<T> {
 	const onPayload = options?.onPayload;
 	if (!onPayload) return params;
+	// Taken BEFORE the hook runs: a hook may mutate `params` in place and return nothing.
+	const sessionId = params.sessionId;
+	const sent = resident ? { sessionId, prompt: structuredClone(params.prompt) } : undefined;
 	const replacement = await onPayload(params, model);
-	if (replacement === undefined) return params;
-	if (typeof replacement !== "object" || replacement === null || Array.isArray(replacement)) {
+	// Detached at once: the hook keeps its own object and may change it later, after these checks and
+	// before the caller resumes. What is checked below is what is sent.
+	const effective: unknown = structuredClone(replacement === undefined ? params : replacement);
+	if (typeof effective !== "object" || effective === null || Array.isArray(effective)) {
 		throw new Error(
 			"entwurf: before_provider_request returned a non-object replacement — the ACP prompt payload must stay a non-null, non-array object",
 		);
 	}
-	if ((replacement as { sessionId?: unknown }).sessionId !== params.sessionId) {
+	if ((effective as { sessionId?: unknown }).sessionId !== sessionId) {
 		throw new Error(
 			"entwurf: before_provider_request changed the ACP sessionId — entwurf cannot truthfully deliver to a session it did not bootstrap; prompt rewriting is allowed, session identity is not",
 		);
 	}
-	const replacementPrompt = (replacement as { prompt?: unknown }).prompt;
-	if (!Array.isArray(replacementPrompt) || replacementPrompt.length === 0) {
+	const effectivePrompt = (effective as { prompt?: unknown }).prompt;
+	if (!Array.isArray(effectivePrompt) || effectivePrompt.length === 0) {
 		throw new Error(
 			"entwurf: before_provider_request returned a replacement without a non-empty prompt array — an empty ACP prompt cannot be sent",
 		);
 	}
-	return replacement as T;
+	if (sent && !isDeepStrictEqual(effective, sent))
+		throw new AcpStopSignal("hook", "a provider hook changed the prompt");
+	return effective as T;
+}
+
+/** #171 step 8: a named stop raised inside a turn; the catch shows its cause and its way out. */
+class AcpStopSignal extends Error {
+	readonly stop: AcpStopId;
+	readonly why: string;
+	constructor(stop: AcpStopId, why: string) {
+		super(ACP_STOPS[stop].text);
+		this.name = "AcpStopSignal";
+		this.stop = stop;
+		this.why = why;
+	}
 }
 
 /**
@@ -1476,6 +1518,12 @@ export function streamAcpTurn(
 		| undefined;
 	const cwd = opts?.cwd ?? process.cwd();
 	const signal = opts?.signal;
+	// #171 step 8: this turn's id rides its final assistant message, sealed or not. Pi stores that message
+	// whole, so the branch gate can tell this answer from any other entry with the same text.
+	const turnId = `${ACP_TURN_ID_PREFIX}${randomUUID()}`;
+	state.output.responseId = turnId;
+	// Read once, synchronously: the session whose prompt this call is.
+	const piSession = deps.sessionReader();
 	/** #163: this turn is Pi's one-shot summary request (set by runSummaryTurn). */
 	let summaryTurnActive = false;
 
@@ -1832,8 +1880,12 @@ export function streamAcpTurn(
 	 * It names the messages after the last assistant of this call's context; if it cannot be written, this
 	 * throws before the prompt, so nothing is sent and the turn is refused with the reason.
 	 */
-	function markDispatch(session: BridgeSession, ctxSigs: string[]): PendingDispatch {
-		const marker: PendingDispatch = { ...userDeltaRange(context), contextMessageSignatures: [...ctxSigs] };
+	function markDispatch(
+		session: BridgeSession,
+		ctxSigs: string[],
+		range: { start: number; count: number } = userDeltaRange(context),
+	): PendingDispatch {
+		const marker: PendingDispatch = { ...range, contextMessageSignatures: [...ctxSigs] };
 		try {
 			writeRecordFor(session, deps, marker);
 		} catch (error) {
@@ -1850,6 +1902,13 @@ export function streamAcpTurn(
 	function pushStopExit(id: AcpStopId): void {
 		const exit = acpStopExitNotice(id);
 		if (exit !== null) pushAcpLifecycleNotice(state, exit);
+	}
+
+	/** #171 step 8: a named stop before anything is sent; whatever session is live stays as it is. */
+	function finishStop(id: AcpStopId, cause: string): void {
+		pushAcpLifecycleNotice(state, cause);
+		pushStopExit(id);
+		finishError(new Error(ACP_STOPS[id].text), false);
 	}
 
 	/** #171 L16: say what a drop did. A failed drop keeps the marker, so the next turn stops on it again. */
@@ -2038,6 +2097,12 @@ export function streamAcpTurn(
 			finishError(new Error(ACP_STOPS.mode.text), false);
 			return;
 		}
+		// #171 step 8: a resident's key is the native id of the Pi session it can read. No reader, or a
+		// prompt for another session id, stops: neither the environment nor the cwd stands in for it.
+		if (policy === "process-scoped" && (!piSession || piSession.getSessionId() !== opts?.sessionId?.trim())) {
+			finishStop("host", piSession ? "this prompt is not for the Pi session in view" : "no Pi session reader");
+			return;
+		}
 		const sessionKey = resolveSessionKey(opts, cwd);
 		// Billing/memory carrier (S2d-1c): SHORT operator-authored system-prompt
 		// additions. The shipped default is NON-empty → tiny string carrier →
@@ -2171,13 +2236,53 @@ export function streamAcpTurn(
 		// connection + child so it is not orphaned in retainedChildren (GPT blocker 2).
 		if (decision.path === "new" && existing) abandonRetainedSession(existing);
 
+		// #171 step 8: equal content is not proof. The live session is sent a delta only when the last answer
+		// on Pi's branch is the exact one it sealed last; otherwise this turn stops and the session is kept.
+		/** The delta a reuse turn sends and the range its marker names, fixed here and never read again. */
+		let checkedReuse: { prompt: AcpTextBlock[]; range: { start: number; count: number } } | undefined;
+		if (decision.path === "reuse" && existing) {
+			const verdict = reuseBranchVerdict(existing.sealedTurnId, piSession?.getBranch() ?? []);
+			if (!verdict.ok) {
+				finishStop(verdict.stop, verdict.why);
+				return;
+			}
+			// The delta this turn would send must be exactly the inputs the branch shows after that answer: the
+			// same wire texts in the same order, rendered by the one renderer. Pi transforms the context before
+			// the provider sees it; a dropped, replaced or added input stops here instead of leaving the
+			// conversation without a word. Only text inputs are admitted: anything else cannot be compared.
+			const delta = userDeltaRange(context);
+			const tail = context.messages.slice(delta.start).filter((message) => message.role !== "system");
+			const shown = textInputBlocks(verdict.inputs);
+			const carried = textInputBlocks(tail.map((message) => (message as { content: unknown }).content));
+			// The live ACP session already remembers the prior turns → only the user messages after the last
+			// assistant are sent (re-sending the transcript would duplicate history). Built once, here.
+			const prompt = buildAcpPrompt(context, "reuse");
+			if (
+				tail.some((message) => message.role !== "user") ||
+				!shown ||
+				!carried ||
+				!isDeepStrictEqual(shown, carried) ||
+				!isDeepStrictEqual(carried, prompt)
+			) {
+				finishStop("changed", "this turn's inputs are not the ones the Pi session shows after the last answer");
+				return;
+			}
+			// Pi hands the provider its own message objects, and an extension that kept the context can change
+			// one while this turn awaits the effort readback. What was just compared is what is sent and what
+			// the marker names: the reuse turn takes these, and reads the context for neither again.
+			checkedReuse = { prompt, range: { start: delta.start, count: delta.count } };
+		}
+
 		// Claim the key for the whole turn — atomic with the checks above (no await
 		// in between), so a concurrent first turn for the same key sees it in flight
 		// and fails loud (GPT blocker 1).
 		inFlightKeys.add(sessionKey);
 		try {
 			if (decision.path === "reuse" && existing) {
-				await runReuseTurn(existing, ctxSigs, adapter, thinkingValue);
+				// Unreachable: the gate above either set it or ended the turn. A reuse decision without a
+				// checked delta must never fall through to a new session.
+				if (!checkedReuse) throw new Error("entwurf: a reuse turn has no checked delta");
+				await runReuseTurn(existing, ctxSigs, adapter, thinkingValue, checkedReuse);
 			} else {
 				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId, thinkingValue);
 			}
@@ -2496,7 +2601,8 @@ export function streamAcpTurn(
 			// replace them (fail-closed integrity inside the helper). It runs while the
 			// bootstrap abort listener is still armed; the recheck below keeps an abort
 			// raised during a slow handler ahead of the wire write.
-			const wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);
+			const resident = params.lifecyclePolicy === "process-scoped";
+			const wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model, resident);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
 			// #171 L16: the marker, immediately before the prompt, for a process-scoped session only — a
 			// turn-scoped Pi (and a summary turn) never writes a record. A failed write throws here, before
@@ -2539,6 +2645,7 @@ export function streamAcpTurn(
 			// local: the session is discoverable before anything can act on the seal,
 			// whatever the code around it later does.
 			if (retain) {
+				session.sealedTurnId = turnId;
 				bridgeSessions.set(sessionKey, session);
 				retainedChildren.add(spawned);
 				registerGlobalCleanup();
@@ -2586,6 +2693,10 @@ export function streamAcpTurn(
 			// touches the stderr pipe.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
 			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
+			if (err instanceof AcpStopSignal) {
+				pushAcpLifecycleNotice(state, err.why);
+				pushStopExit(err.stop);
+			}
 			stopAfterFailure(sessionKey, marker);
 			finishError(
 				err,
@@ -2631,6 +2742,8 @@ export function streamAcpTurn(
 		ctxSigs: string[],
 		adapter: AcpBackendAdapter,
 		thinkingValue: string | undefined,
+		/** The delta and its range as the branch gate compared them (#171 step 8). */
+		checked: { prompt: AcpTextBlock[]; range: { start: number; count: number } },
 	): Promise<void> {
 		/** Same phase discipline as a new turn — reuse just has no bootstrap to lose. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
@@ -2667,7 +2780,8 @@ export function streamAcpTurn(
 
 			// The live ACP session already remembers the prior turns → send only the user
 			// messages after the last assistant (re-sending the transcript would duplicate history).
-			const prompt = buildAcpPrompt(context, "reuse");
+			// The blocks the branch gate compared, not a second rendering of a context that may have moved.
+			const prompt = checked.prompt;
 			if (prompt.length === 0) throw new Error("empty delta — a reuse turn has no new user message");
 
 			// S2f visibility: about to send the delta to the resident child.
@@ -2676,11 +2790,11 @@ export function streamAcpTurn(
 			// params here. The recheck keeps an abort raised during a slow handler
 			// ahead of the wire write; the prompt driver then owns the abort surface.
 			const built = { sessionId: session.acpSessionId, prompt: wireTextBlocks(prompt, adapter) };
-			const wireParams = await applyProviderPayloadHook(options, built, model);
+			const wireParams = await applyProviderPayloadHook(options, built, model, true);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
 			// #171 L16: the marker, immediately before the prompt. A reused session is always process-scoped.
 			// A failed write throws here: nothing is sent, and this session is dropped like any pre-prompt failure.
-			marker = markDispatch(session, ctxSigs);
+			marker = markDispatch(session, ctxSigs, checked.range);
 			// #142: this turn's stream receives updates only from the moment its own prompt goes out.
 			// Before that, nothing on this live session can be this turn's output — a late update of
 			// the previous (cancelled) turn arriving during the effort set would otherwise be shown as
@@ -2700,6 +2814,7 @@ export function streamAcpTurn(
 			// prefix-compat check sees the full prior history (GPT ④: store the
 			// ctxSigs from the START of this call, only after the turn succeeds).
 			session.contextMessageSignatures = ctxSigs;
+			session.sealedTurnId = turnId;
 			// A cancel the agent answered itself leaves this live session in place (no drop below).
 			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
 				pushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);
@@ -2712,6 +2827,18 @@ export function streamAcpTurn(
 			const aborted = Boolean(signal?.aborted);
 			session.activePromptHandler = undefined;
 			session.busy = false;
+			// #171 step 8: a turn refused before its marker sent nothing, so the live session is as it was and
+			// is kept; only this turn fails. Its answer carries a turn id the session never sealed, so the
+			// branch gate stops later turns until the unsent input can be placed.
+			if (phase === "pre-prompt" && !marker && session.alive) {
+				if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_UNSENT_NOTICE);
+				if (err instanceof AcpStopSignal) {
+					pushAcpLifecycleNotice(state, err.why);
+					pushStopExit(err.stop);
+				}
+				finishError(err, aborted);
+				return;
+			}
 			if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
 			// The SAME diagnostics a new turn reports, in the SAME order (#72):
 			// natural settle → seal → teardown. This is the path the field sample

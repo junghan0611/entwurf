@@ -184,9 +184,36 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
 	const { start } = userDeltaRange(context);
 	return context.messages.slice(start).flatMap((message): AcpTextBlock[] => {
 		if (message.role !== "user") return [];
-		const raw = textFromUserOrToolContent(message.content);
-		return raw.trim() ? [{ type: "text", text: raw }] : [];
+		return userInputBlock(message.content);
 	});
+}
+
+/** One user input as the delta sends it: its text as one block, or nothing when it is blank. */
+function userInputBlock(content: UserMessage["content"]): AcpTextBlock[] {
+	const raw = textFromUserOrToolContent(content);
+	return raw.trim() ? [{ type: "text", text: raw }] : [];
+}
+
+/**
+ * The delta blocks a list of text-only inputs would produce, by the renderer `latestUserDelta` uses,
+ * or `undefined` when an input is not text only (#171 step 8). An input is its content as Pi stores
+ * it: a string, or an array of `{type: "text", text}` blocks. The branch gate's caller holds this
+ * against the delta built from the provider context, so the comparison is between two wire texts
+ * and never between two hashes of something else.
+ */
+export function textInputBlocks(inputs: readonly unknown[]): AcpTextBlock[] | undefined {
+	const blocks: AcpTextBlock[] = [];
+	for (const content of inputs) {
+		if (typeof content !== "string") {
+			if (!Array.isArray(content)) return undefined;
+			for (const part of content) {
+				const p = part as { type?: unknown; text?: unknown } | null;
+				if (typeof p !== "object" || p === null || p.type !== "text" || typeof p.text !== "string") return undefined;
+			}
+		}
+		blocks.push(...userInputBlock(content as UserMessage["content"]));
+	}
+	return blocks;
 }
 
 /**

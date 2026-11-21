@@ -34,7 +34,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { fakePiHost } from "./lib/acp-fake-pi-session.ts";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 // #142: a Claude turn carries pi's thinking level, which the backend sets as effort and reads back
 // before the prompt. This fixture runs every turn at one fixed level on rows carrying the curated
@@ -136,6 +140,7 @@ function makeHarness(recordDir: string) {
 			},
 			createConnection: (_child: any, handlers: any) => makeConnection(handlers),
 			lifecyclePolicy: () => "process-scoped",
+			sessionReader: piHost.sessionReader,
 			loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 			now: () => "2026-08-07T00:00:00Z",
 			sessionDir: recordDir,
@@ -218,11 +223,11 @@ try {
 	const backendModule = (await import(
 		pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href
 	)) as any;
-	const backend = {
+	const backend = piHost.wrap({
 		...backendModule,
 		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
 			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
-	};
+	});
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 
 	// ----------------------------------------------------------------------
@@ -261,7 +266,7 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
-	// CELL 2 — NEW turn: a returned replacement becomes the wire params.
+	// CELL 2 — NEW one-shot turn: a returned replacement becomes the wire params.
 	// ----------------------------------------------------------------------
 	{
 		const h = makeHarness(recordDir);
@@ -277,7 +282,8 @@ try {
 					}),
 					onResponse,
 				},
-				h.deps,
+				// A one-shot: a resident's prompt may not be rewritten (#171 step 8, cell 3).
+				{ ...h.deps, lifecyclePolicy: () => "turn-scoped" },
 			) as Stream,
 		);
 		assert.equal(sealed(events)[0]?.type, "done", "the replaced turn completes normally");
@@ -292,7 +298,7 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
-	// CELL 3 — REUSE turn parity: same boundary, delta params, replacement honored.
+	// CELL 3 — REUSE turn parity: same boundary, delta params; a replacement stops the turn.
 	// ----------------------------------------------------------------------
 	{
 		const h = makeHarness(recordDir);
@@ -313,20 +319,19 @@ try {
 		const second = await collect(
 			backend.streamAcpTurn(sonnet, reuseCtx("NONCE-TURN-ONE", "NONCE-TURN-TWO"), options, h.deps) as Stream,
 		);
-		assert.equal(sealed(second)[0]?.type, "done", "turn 2 (reuse) completes");
-		assert.equal(h.children.length, 1, "turn 2 reused the live session — no second child");
 		const reuseSeen = JSON.stringify(seen[1] ?? null);
-		const reuseWire = JSON.stringify(h.promptCalls[1] ?? null);
 		assert.ok(
 			seen.length === 2 &&
 				reuseSeen.includes("NONCE-TURN-TWO") &&
 				!reuseSeen.includes("NONCE-TURN-ONE") &&
-				reuseWire.includes("NONCE-REUSE-REPLACED") &&
-				!reuseWire.includes("NONCE-TURN-TWO"),
+				h.promptCalls.length === 1,
 			"[QK:ACPHOOK-REUSE-PARITY] the reuse turn owes the hook the SAME truthful boundary as a new turn — the payload " +
-				"it sees is the actual delta-only wire params for the live session, and its replacement crosses the wire; " +
-				"a hook that only fires on cold turns would hide every resident-session request from extensions",
+				"it sees is the actual delta-only wire params for the live session; a hook that only fires on cold turns " +
+				"would hide every resident-session request from extensions. Its replacement does not cross the wire: the " +
+				"session record accounts for the prompt as built, so the turn stops with nothing sent (#171 step 8)",
 		);
+		assert.equal(sealed(second)[0]?.type, "error", "turn 2 (reuse) stops: a resident's prompt is not rewritten");
+		assert.equal(h.children.length, 1, "turn 2 reused the live session — no second child");
 	}
 
 	// ----------------------------------------------------------------------
@@ -543,7 +548,8 @@ try {
 
 console.log(
 	"[check-acp-stream-hooks] ok — before_provider_request receives the exact ACP session/prompt wire params on new " +
-		"AND reuse turns and its replacement is honored fail-closed (non-null non-array object, sessionId invariant, " +
+		"AND reuse turns; a one-shot's replacement is honored fail-closed and a resident's stops the turn with nothing " +
+		"sent (non-null non-array object, sessionId invariant, " +
 		"non-empty prompt array, loud refusal with zero sends otherwise, rejection loud, abort-during-hook wins on " +
 		"BOTH paths), and after_provider_response is a deliberate non-HTTP exemption invoked zero times across " +
 		"success/error/abort",

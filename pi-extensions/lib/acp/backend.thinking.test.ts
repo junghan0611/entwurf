@@ -41,9 +41,13 @@ import {
 import { convertToLlm, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
+import { entriesOf, fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 import { ACP_STOPS } from "./stop-texts.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-thinking-"));
 const SANDBOXED_ENV = [
@@ -80,7 +84,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	adapters = await import("./backend-adapter.ts");
 	models = await import("./models.ts");
 	config = await import("./config.ts");
@@ -458,6 +462,7 @@ function makeWorld(
 			};
 		},
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,
@@ -477,7 +482,7 @@ function makeWorld(
 		if (!handlers) throw new Error("connection handlers not registered");
 		return handlers.requestPermission(req);
 	};
-	return { deps, children, log, wire, lifecycle, prompts, agentSays, hooks, requestPermission };
+	return { deps, children, log, wire, lifecycle, prompts, agentSays, hooks, requestPermission, sessionDir };
 }
 
 async function runTurn(
@@ -485,10 +490,12 @@ async function runTurn(
 	context: TranscriptContext,
 	sessionId: string,
 	reasoning: string | undefined,
+	more: { options?: Record<string, unknown>; deps?: Partial<AcpTurnDeps> } = {},
 ): Promise<AssistantMessageEvent> {
 	const events: AssistantMessageEvent[] = [];
-	const opts = { sessionId, reasoning } as Parameters<typeof backend.streamAcpTurn>[2];
-	for await (const event of backend.streamAcpTurn(sonnet(), context, opts, world.deps)) events.push(event);
+	const opts = { sessionId, reasoning, ...more.options } as Parameters<typeof backend.streamAcpTurn>[2];
+	const deps = more.deps ? { ...world.deps, ...more.deps } : world.deps;
+	for await (const event of backend.streamAcpTurn(sonnet(), context, opts, deps)) events.push(event);
 	const sealed = events.filter((e) => e.type === "done" || e.type === "error");
 	expect(sealed).toHaveLength(1);
 	return sealed[0];
@@ -540,18 +547,19 @@ async function reuseAbortDuringEffort(sessionId: string, deferAbort: boolean): P
 		if (event.type === "text_delta") shown += event.delta;
 	}
 	const settledMs = Date.now() - started;
-	expect(shown).toContain(`[acp: ${backend.ACP_CANCEL_CLOSED_NOTICE}]`);
+	expect(shown).toContain(`[acp: ${backend.ACP_CANCEL_UNSENT_NOTICE}]`);
 	const sealed = events.filter((e) => e.type === "done" || e.type === "error");
 	expect(sealed).toHaveLength(1);
 	expect(sealed[0].type === "error" && sealed[0].reason).toBe("aborted");
 	// Bounded by the abort, not by the 30s bootstrap timeout.
 	expect(settledMs).toBeLessThan(2_000);
 	expect(world.log).toEqual(["set:model=claude-sonnet-5-5", "set:effort=high", "prompt", "set:effort=low"]);
-	// The effort the driver holds is unknown, so the session is not reused.
+	// Nothing was sent, so the live session is kept; the unsent input stops the next turn (#171 step 8).
 	gate.hold = false;
-	await runTurn(world, transcript("first", "second", "third"), sessionId, "low");
-	expect(world.children).toHaveLength(2);
-	expect(world.log.slice(4)).toEqual(["set:model=claude-sonnet-5-5", "set:effort=low", "prompt"]);
+	const next = await runTurn(world, transcript("first", "second", "third"), sessionId, "low");
+	expect(errorText(next)).toBe(ACP_STOPS.changed.text);
+	expect(world.children).toHaveLength(1);
+	expect(world.log.slice(4)).toEqual([]);
 }
 
 describe("streamAcpTurn — disabled Cortex configuration", () => {
@@ -1206,7 +1214,7 @@ describe("streamAcpTurn — effort on the live session (#142)", () => {
 		assertNoReplay(errorText(sealed));
 	});
 
-	it("a mismatched answer on reuse fails before the prompt and drops the session", async () => {
+	it("[QK:ACP-REUSE-REFUSAL-KEEPS-SESSION] a mismatched answer on reuse fails before the prompt, keeps the live session, and the next turn stops instead of opening another", async () => {
 		let answer = (value: string) => value;
 		const world = makeWorld((value) => answer(value));
 		await runTurn(world, transcript("first"), "th-reuse-mismatch", "high");
@@ -1214,16 +1222,22 @@ describe("streamAcpTurn — effort on the live session (#142)", () => {
 		const sealed = await runTurn(world, transcript("first", "second"), "th-reuse-mismatch", "low");
 		expect(world.log.at(-1)).toBe("set:effort=low");
 		assertNoReplay(errorText(sealed));
+		expect(world.children).toHaveLength(1);
 		answer = (value) => value;
-		await runTurn(world, transcript("first", "second", "third"), "th-reuse-mismatch", "low");
-		expect(world.children).toHaveLength(2);
+		// The refused turn's answer is on the branch and "second" never reached the vendor: the next turn
+		// neither sends "third" alone nor opens a second session.
+		const prompts = world.log.filter((line) => line === "prompt").length;
+		const next = await runTurn(world, transcript("first", "second", "third"), "th-reuse-mismatch", "low");
+		expect(errorText(next)).toBe(ACP_STOPS.changed.text);
+		expect(world.children).toHaveLength(1);
+		expect(world.log.filter((line) => line === "prompt")).toHaveLength(prompts);
 	});
 
-	it("[QK:ACP-THINKING-REUSE-ABORT] an abort already raised when a reuse turn starts waiting for a changed effort settles at once, sends no prompt, and the next turn opens a new session", async () => {
+	it("[QK:ACP-THINKING-REUSE-ABORT] an abort already raised when a reuse turn starts waiting for a changed effort settles at once, sends no prompt and keeps the session", async () => {
 		await reuseAbortDuringEffort("th-reuse-abort", false);
 	}, 40_000);
 
-	it("[QK:ACP-THINKING-REUSE-ABORT-LATE] an abort that arrives while a reuse turn is waiting for a changed effort settles at once, sends no prompt, and the next turn opens a new session", async () => {
+	it("[QK:ACP-THINKING-REUSE-ABORT-LATE] an abort that arrives while a reuse turn is waiting for a changed effort settles at once, sends no prompt and keeps the session", async () => {
 		await reuseAbortDuringEffort("th-reuse-abort-late", true);
 	}, 40_000);
 
@@ -1410,5 +1424,295 @@ describe("server admission before any session (#168)", () => {
 		const { world } = belowFloorWorld();
 		const sealed = await runTurn(world, transcript("go"), "admit-not-transient", "high");
 		assertNoReplay(errorText(sealed));
+	});
+});
+
+describe("streamAcpTurn — a resident's branch gate and payload hook (#171 step 8)", () => {
+	const finalOf = (event: AssistantMessageEvent): AssistantMessage => {
+		if (event.type === "done") return event.message;
+		if (event.type === "error") return event.error;
+		throw new Error(`not a seal: ${event.type}`);
+	};
+
+	it("[QK:ACP-TURN-ID-ON-FINAL] every turn's final message carries its own turn id, sealed or stopped", async () => {
+		const world = makeWorld();
+		const first = finalOf(await runTurn(world, transcript("one"), "turn-id", "high"));
+		const second = finalOf(await runTurn(world, transcript("one", "two"), "turn-id", "high"));
+		const stopped = finalOf(
+			await runTurn(world, transcript("x"), "turn-id-stop", "high", { deps: { sessionReader: () => undefined } }),
+		);
+		const ids = [first.responseId, second.responseId, stopped.responseId];
+		for (const id of ids) expect(id).toMatch(/^entwurf-turn:[0-9a-f-]{36}$/);
+		expect(new Set(ids).size).toBe(3);
+	});
+
+	it("[QK:ACP-REUSE-NEEDS-EXACT-ANSWER] equal text is not proof: another answer to the same input stops the turn and keeps the session", async () => {
+		const world = makeWorld();
+		const id = "gate-sibling";
+		await runTurn(world, transcript("first"), id, "high");
+		const firstAnswer = piHost.lastTurnId(id);
+		if (!firstAnswer) throw new Error("no first turn id");
+		// Control: Pi's branch ends in the answer this session gave, so the delta goes to the live session.
+		expect((await runTurn(world, transcript("first", "second"), id, "high")).type).toBe("done");
+		expect(world.prompts).toHaveLength(2);
+		const context = transcript("first", "second", "third");
+		// The pin moves with each seal: a branch that ends in the FIRST answer is no longer this session's last.
+		piHost.setBranch(id, entriesOf(context.messages, { responseId: firstAnswer }));
+		expect(errorText(await runTurn(world, context, id, "high"))).toBe(ACP_STOPS.changed.text);
+		expect(world.prompts).toHaveLength(2);
+		// /tree onto a sibling answer B with the same text, then a new input. The content prefix still matches.
+		piHost.setBranch(id, entriesOf(context.messages, { responseId: "entwurf-turn:another-answer" }));
+		const stopped = await runTurn(world, context, id, "high");
+		expect(errorText(stopped)).toBe(ACP_STOPS.changed.text);
+		expect(sealedNotices(stopped)).toContain(`[acp: next: ${ACP_STOPS.changed.exit}]`);
+		expect(world.prompts).toHaveLength(2);
+		expect(world.children).toHaveLength(1);
+		expect(world.lifecycle).toEqual([]);
+	});
+
+	it("[QK:ACP-REUSE-INPUTS-MATCH-CONTEXT] an input the Pi session shows and the provider context lacks stops the turn: nothing is sent and nothing vanishes", async () => {
+		const world = makeWorld();
+		const id = "gate-dropped-input";
+		await runTurn(world, transcript("first"), id, "high");
+		const sealedId = piHost.lastTurnId(id);
+		if (!sealedId) throw new Error("no sealed turn id");
+		// Pi's branch: the answer, then X (sibling mail) and Y. A context transform dropped X: the context
+		// carries the answer and Y only. The content prefix and the pinned answer both hold.
+		const context = transcript("first", "Y");
+		const shown = (extra: unknown[]) => {
+			const entries = entriesOf(context.messages, { responseId: sealedId });
+			entries.splice(entries.length - 1, 0, ...extra);
+			return entries;
+		};
+		const mail = { type: "custom_message", id: "mail", customType: "entwurf", content: "X" };
+		for (const [name, branch] of [
+			["dropped", shown([mail])],
+			["dropped user", shown([{ type: "message", id: "x", message: { role: "user", content: "X" } }])],
+			[
+				"replaced",
+				shown([]).map((e, i, all) =>
+					i === all.length - 1 ? { ...(e as object), message: { role: "user", content: "Z" } } : e,
+				),
+			],
+			["added", shown([]).slice(0, -1)],
+		] as const) {
+			piHost.setBranch(id, branch as unknown[]);
+			const stopped = await runTurn(world, context, id, "high");
+			expect(errorText(stopped), name).toBe(ACP_STOPS.changed.text);
+			expect(world.prompts, name).toHaveLength(1);
+			expect(world.children, name).toHaveLength(1);
+		}
+		// Two inputs that a joined-and-hashed comparison reads alike and the wire does not: one string
+		// against two text blocks. And an input that is not text only is not compared at all.
+		const split = transcript("first", "unused");
+		split.messages.splice(-1, 1, {
+			role: "user",
+			content: [
+				{ type: "text", text: "alpha" },
+				{ type: "text", text: "beta" },
+			],
+			timestamp: 9,
+		});
+		const asOneString = entriesOf(split.messages, { responseId: sealedId });
+		asOneString[asOneString.length - 1] = {
+			type: "message",
+			id: "joined",
+			message: { role: "user", content: "alpha|text:beta" },
+		};
+		piHost.setBranch(id, asOneString);
+		expect(errorText(await runTurn(world, split, id, "high"))).toBe(ACP_STOPS.changed.text);
+		const image = transcript("first", "unused");
+		image.messages.splice(-1, 1, {
+			role: "user",
+			content: [{ type: "image", data: "AAAA", mimeType: "image/png" }],
+			timestamp: 9,
+		});
+		piHost.setBranch(id, entriesOf(image.messages, { responseId: sealedId }));
+		expect(errorText(await runTurn(world, image, id, "high"))).toBe(ACP_STOPS.changed.text);
+		expect(world.prompts).toHaveLength(1);
+
+		// Control: the same branch without the dropped input sends Y; and mail the context does carry is sent.
+		piHost.setBranch(id, shown([]));
+		expect((await runTurn(world, context, id, "high")).type).toBe("done");
+		expect(world.prompts.at(-1)?.blocks).toEqual(["Y"]);
+		const withMail = transcript("first", "Y", "unused");
+		withMail.messages.splice(
+			-1,
+			1,
+			{ role: "user", content: [{ type: "text", text: "MAIL" }], timestamp: 9 },
+			{ role: "user", content: "after mail", timestamp: 9 },
+		);
+		const entries = entriesOf(withMail.messages, { responseId: piHost.lastTurnId(id) ?? "" });
+		entries[entries.length - 2] = { type: "custom_message", id: "m2", customType: "entwurf", content: "MAIL" };
+		piHost.setBranch(id, entries);
+		expect((await runTurn(world, withMail, id, "high")).type).toBe("done");
+		expect(world.prompts.at(-1)?.blocks).toEqual(["MAIL", "after mail"]);
+	});
+
+	it("[QK:ACP-REUSE-SENDS-CHECKED-DELTA] the delta that was compared is the delta that is sent and marked, whatever happens to the context while the turn waits", async () => {
+		const gate: { hold: boolean; waiting?: () => void; release?: () => void } = { hold: false };
+		const world = makeWorld(undefined, gate);
+		const id = "gate-check-use";
+		await runTurn(world, transcript("first"), id, "high");
+		const context = transcript("first", "second");
+		const range = { start: context.messages.length - 1, count: 1 };
+		// An extension that kept the context changes the checked input and adds another, while the turn
+		// waits for the effort readback.
+		gate.hold = true;
+		gate.waiting = () => {
+			(context.messages.at(-1) as { content: unknown }).content = "CHANGED-AFTER-CHECK";
+			context.messages.push({ role: "user", content: "ADDED-AFTER-CHECK", timestamp: 9 });
+			gate.hold = false;
+			gate.release?.();
+		};
+		let marked: unknown;
+		world.hooks.onPrompt = () => {
+			const file = join(world.sessionDir, readdirSync(world.sessionDir)[0]);
+			marked = JSON.parse(readFileSync(file, "utf8")).pendingDispatch;
+		};
+		expect((await runTurn(world, context, id, "low")).type).toBe("done");
+		expect(world.log.slice(-2)).toEqual(["set:effort=low", "prompt"]);
+		expect(world.prompts.at(-1)?.blocks).toEqual(["second"]);
+		expect(marked).toMatchObject(range);
+	});
+
+	it("[QK:ACP-RESIDENT-NEEDS-PI-SESSION] a resident turn with no readable Pi session, or for another session id, stops before any process", async () => {
+		const world = makeWorld();
+		const none = await runTurn(world, transcript("go"), "host-none", "high", {
+			deps: { sessionReader: () => undefined },
+		});
+		expect(errorText(none)).toBe(ACP_STOPS.host.text);
+		const other = await runTurn(world, transcript("go"), "host-other", "high", {
+			deps: {
+				sessionReader: () => ({ getSessionId: () => "someone-else", getBranch: () => [], getEntries: () => [] }),
+			},
+		});
+		expect(errorText(other)).toBe(ACP_STOPS.host.text);
+		expect(world.children).toHaveLength(0);
+		// A one-shot reads no Pi session.
+		const oneShot = await runTurn(world, transcript("go"), "host-one-shot", "high", {
+			deps: { sessionReader: () => undefined, lifecyclePolicy: () => "turn-scoped" },
+		});
+		expect(oneShot.type).toBe("done");
+	});
+
+	it("[QK:ACP-HOOK-RESIDENT-STOPS] a hook that changes a resident's prompt stops the turn before the marker and keeps the session", async () => {
+		const rewrites: Record<
+			string,
+			(payload: { sessionId: string; prompt: Array<{ type: string; text: string }> }) => unknown
+		> = {
+			replacement: (p) => ({ sessionId: p.sessionId, prompt: [{ type: "text", text: "REWRITTEN" }] }),
+			"in place": (p) => {
+				p.prompt[0].text = "REWRITTEN";
+				return undefined;
+			},
+			"an extra key": (p) => ({ ...p, _meta: { added: true } }),
+			"an added block": (p) => ({ sessionId: p.sessionId, prompt: [...p.prompt, { type: "text", text: "MORE" }] }),
+		};
+		for (const [name, onPayload] of Object.entries(rewrites)) {
+			const world = makeWorld();
+			const id = `hook-${name}`;
+			await runTurn(world, transcript("first"), id, "high");
+			const record = () => readFileSync(join(world.sessionDir, readdirSync(world.sessionDir)[0]), "utf8");
+			const before = record();
+			const stopped = await runTurn(world, transcript("first", "second", "also"), id, "high", {
+				options: { onPayload },
+			});
+			expect(errorText(stopped), name).toBe(ACP_STOPS.hook.text);
+			expect(sealedNotices(stopped), name).toContain(`[acp: next: ${ACP_STOPS.hook.exit}]`);
+			expect(world.prompts, name).toHaveLength(1);
+			expect(world.children, name).toHaveLength(1);
+			expect(world.lifecycle, name).toEqual([]);
+			// No marker: the record is byte-identical to the sealed one.
+			expect(record(), name).toBe(before);
+		}
+		// Control: a hook that only looks leaves the resident turn alone.
+		const world = makeWorld();
+		await runTurn(world, transcript("first"), "hook-observer", "high");
+		const seen: unknown[] = [];
+		const passed = await runTurn(world, transcript("first", "second"), "hook-observer", "high", {
+			options: { onPayload: (p: unknown) => void seen.push(structuredClone(p)) },
+		});
+		expect(passed.type).toBe("done");
+		expect(seen).toHaveLength(1);
+		// The first turn of a resident is held to the same rule.
+		const birth = makeWorld();
+		const first = await runTurn(birth, transcript("first"), "hook-birth", "high", {
+			options: { onPayload: rewrites.replacement },
+		});
+		expect(errorText(first)).toBe(ACP_STOPS.hook.text);
+		expect(birth.prompts).toHaveLength(0);
+	});
+
+	it("[QK:ACP-HOOK-DETACHED-PAYLOAD] what is checked is what is sent: a hook that changes its object after the check changes nothing on the wire", async () => {
+		// A microtask queued from a microtask runs after the hook's result was checked and before the caller resumes.
+		const later = (change: () => void) => queueMicrotask(() => queueMicrotask(change));
+		const world = makeWorld();
+		await runTurn(world, transcript("first"), "hook-late", "high");
+		const resident = await runTurn(world, transcript("first", "second"), "hook-late", "high", {
+			options: {
+				onPayload: (p: { sessionId: string; prompt: Array<{ text: string }> }) => {
+					later(() => {
+						p.sessionId = "SOMEONE-ELSE";
+						p.prompt[0].text = "LATE";
+					});
+				},
+			},
+		});
+		expect(resident.type).toBe("done");
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: world.prompts[0].sessionId, blocks: ["second"] });
+
+		const replacement = { sessionId: "", prompt: [{ type: "text", text: "REPLACED" }] };
+		const oneShot = await runTurn(world, transcript("go"), "hook-late-one-shot", "high", {
+			deps: { lifecyclePolicy: () => "turn-scoped" as const },
+			options: {
+				onPayload: (p: { sessionId: string }) => {
+					replacement.sessionId = p.sessionId;
+					later(() => {
+						replacement.sessionId = "SOMEONE-ELSE";
+						replacement.prompt[0].text = "LATE";
+					});
+					return replacement;
+				},
+			},
+		});
+		expect(oneShot.type).toBe("done");
+		expect(world.prompts.at(-1)?.blocks).toEqual(["REPLACED"]);
+		expect(world.prompts.at(-1)?.sessionId).not.toBe("SOMEONE-ELSE");
+	});
+
+	it("[QK:ACP-HOOK-EFFECTIVE-PAYLOAD] a hook that returns nothing is still checked: a session id changed in place is refused, a one-shot's in-place rewrite is sent", async () => {
+		const oneShot = { lifecyclePolicy: () => "turn-scoped" as const };
+		const world = makeWorld();
+		const tampered = await runTurn(world, transcript("go"), "hook-inplace-id", "high", {
+			deps: oneShot,
+			options: {
+				onPayload: (p: { sessionId: string }) => {
+					p.sessionId = "SOMEONE-ELSE";
+				},
+			},
+		});
+		expect(errorText(tampered)).toContain("changed the ACP sessionId");
+		expect(world.prompts).toHaveLength(0);
+		const emptied = await runTurn(world, transcript("go"), "hook-inplace-empty", "high", {
+			deps: oneShot,
+			options: {
+				onPayload: (p: { prompt: unknown[] }) => {
+					p.prompt.length = 0;
+				},
+			},
+		});
+		expect(errorText(emptied)).toContain("non-empty prompt array");
+		expect(world.prompts).toHaveLength(0);
+		const rewritten = await runTurn(world, transcript("go"), "hook-inplace-text", "high", {
+			deps: oneShot,
+			options: {
+				onPayload: (p: { prompt: Array<{ text: string }> }) => {
+					p.prompt[p.prompt.length - 1].text = "REWRITTEN-IN-PLACE";
+				},
+			},
+		});
+		expect(rewritten.type).toBe("done");
+		expect(world.prompts.at(-1)?.text).toContain("REWRITTEN-IN-PLACE");
 	});
 });

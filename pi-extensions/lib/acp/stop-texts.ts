@@ -31,6 +31,10 @@ export const ACP_STOPS = {
 		text: "entwurf: ACP models run under entwurf pi; this Pi has no entwurf control, so nothing was sent",
 		exit: "start this session with entwurf pi",
 	},
+	host: {
+		text: "entwurf: the ACP provider cannot read this Pi session, so nothing was sent",
+		exit: "restart Pi",
+	},
 	interim: {
 		text: "entwurf: resuming a stored ACP session is not enabled in this build, so nothing was sent",
 		exit: null,
@@ -44,12 +48,12 @@ export const ACP_STOPS = {
 		exit: "make the record file readable, then send again",
 	},
 	intent: {
-		text: "entwurf: a previous ACP session id was never saved, so nothing was sent; start a new session explicitly",
+		text: "entwurf: an ACP session was started for this conversation and its id is not available here, so nothing was sent",
 		exit: NEW_SESSION,
 	},
 	idSave: {
 		text: "entwurf: the ACP session id could not be saved, so no prompt was sent this turn",
-		exit: "send the next input; after a restart this session needs /new",
+		exit: NEW_SESSION,
 	},
 	unknown: {
 		text: "entwurf: the ACP prompt stopped without an answer, so its outcome is unknown; the session record is kept",

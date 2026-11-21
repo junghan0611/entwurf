@@ -1,11 +1,13 @@
 # NEXT--acp-session-load-171 — #171 ACP 코어 레일
 
-**현재 (2026-11-21):** 브랜치 `acp-session-load-171` @ `593c7a5f`(로컬, 푸시는 `44e0e5fd`까지). 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
+**현재 (2026-11-21):** 브랜치 `acp-session-load-171`(로컬, 푸시는 `8ecd6aef`까지). 8단계 진행 중: 8a와 8b.1 완료, 다음은 8b.2. 목표는 ACP 전체 스펙이 아니라 Pi가 쓰는 코어 능력(initialize, new, prompt, cancel, reuse, resume, load, close, record)을 잘 검증된 구현으로 닫는 것이다. plan 모드나 todo 같은 하네스 모드 기능은 의도적으로 거절한다("안되는게 더 pi 스타일", GLG). **이 레일 안에서 #171을 닫고, ACP용 다음 이슈는 만들지 않는다**(GLG 2026-11-21). 기준은 [`docs/acp-client-baseline.md`](docs/acp-client-baseline.md)의 표다. 표와 #171 댓글이 다르면 표를 고친다.
 
-역할:
-- 조율과 게이트: `20261113T043350-ff08d4`
-- 구현: Opus `20261120T213316-793499`
-- 리뷰와 표: Sonnet `20261120T204416-ad4dae`
+역할 (8단계, GLG 2026-11-21):
+- 조율: `20261113T043350-ff08d4`
+- 8단계 설계와 구현(이 트리의 유일한 작성자): Fable `20261121T180949-b6d8f7`
+- 검수: Codex Sol `20261121T135110-09fa15`. 체크포인트마다 커밋 전에 받는다.
+- 측정과 raw-acp 도구: Opus `20261120T213316-793499`
+- 표(`docs/acp-client-baseline.md`): Sonnet `20261120T204416-ad4dae`. 행 변경을 넘겨받을 때만 고친다.
 - Terra `20261120T204430-b0194d`는 Pi 수선 중이라 대기한다.
 - 외부 자문 B는 GLG를 거쳐 받는다.
 
@@ -58,7 +60,24 @@ new는 벤더 세션을 정말 쓸 수 없을 때만 이유를 보이며 만든�
     - U24: 설정을 바꿔 resume할 때 carrier 변경은 확인되지 않았다.
     - agy는 여러 텍스트 블록을 구분자 없이 한 문장으로 붙인다. 운영의 여러 블록 전송(보강, 여러 user 메시지)에 구분자가 필요하다. 구분자를 넣으면 agy U17 결과가 바뀔 수 있으므로 9단계에서 다시 잰다.
 - [ ] **8. L8/L9와 연속성 구현 (GLG 리뷰).** ← CURRENT
-  - **진입 순서 (2026-11-21):**
+  - **체크포인트 (2026-11-21).** 기준은 plan v3(`.agent-reports/171-step8-plan-v3.md`)에 Sol 검수(#C9–#C14)를 반영한 것이다. 원칙은 "싸게 증명되는 경로만 잇고 나머지는 고정 문구로 멈춘다"이고, 모든 정지는 나가는 길을 문구 모듈에 함께 적는다.
+    - [x] 8a.1 + 8a.2 `8a248bc9`: 정지 문구 26개(`stop-texts.ts`, Pi의 재시도·오버플로 분류기가 오라클)와 결정 18. resident 여부는 argv가 아니라 control extension이 보고한 파싱된 플래그로 판정한다(`lib/acp-host-facts.ts`). PARTIAL 144/144, 4/4.
+    - [x] 8a.3 `6f9b268c`: agy 블록 구분자(L18). PARTIAL 145/145, 9/9, 10/10.
+    - [x] 8b.1: 살아 있는 세션의 재사용 가드. 턴마다 마지막 메시지에 턴 id(`responseId`)를 찍고, Pi 브랜치의 마지막 답변이 세션이 마지막으로 완료한 바로 그 턴일 때만 delta를 보낸다(`branch-gate.ts`). 브랜치가 보여 주는 입력과 보낼 delta는 같은 렌더러의 전송 문자열로 비교하고, 다르거나 텍스트가 아니면 멈춘다. 상주 턴의 payload hook은 아무것도 바꿀 수 없다. 프롬프트 전에 거절된 재사용 턴은 세션을 유지한다. 정지 문구는 27개(`host` 추가). PARTIAL 157/157, 10/10, 9/9.
+      - plan v3와 다른 점: 형제 메일(`custom_message`)은 입력으로 받는다(v3대로 멈추면 ACP 상주 시민이 메일마다 멈춘다). Pi의 system 메시지 엔트리는 건너뛴다.
+      - 8c까지의 중간 상태: 프롬프트 전에 거절된 재사용 턴(ESC 포함) 뒤로는 `changed`로 멈춘다. 이미지가 든 재사용 입력도 멈춘다.
+    - [ ] 8b.2: 영속 birth 예약(Pi 세션 id당 지우지 않는 파일, `session/new` 직전 `wx` + fsync), 단일 가드, record를 `session/new` 응답 즉시 기록, record 삭제 경로 제거. 상주 birth의 프롬프트·서명·마커 범위를 한 스냅샷에서 뽑는다(Sol #C20). 설계는 `.agent-reports/171-step8-8b-design.md` §8.
+    - [ ] 8b.3: 마커 기준 `unknown` 봉인, 전송 격리, 종료 사유 분류, B5/B5b, E1 은퇴. attach는 아직 꺼 둔다(`interim` 정지).
+    - [ ] 8c: 같은 id resume(측정된 writer→reader 쌍만), holder lease, 설정 변경 분류, L-b, delta 증명(턴 id 앵커).
+    - [ ] 8d: compaction 뒤 세션 유지(16-1), `session/close`(L7).
+    - [ ] 8e: 표의 행을 종착 상태로.
+  - **이번 레일에서 STOP으로 남기는 것 (GLG 2026-11-21 승인, 조율자 전달).** 결정은 CONNECT지만 싸게 증명되지 않아 고정 문구로 멈춘다:
+    - `/fork`(나가는 길 `/new`). CLI `--fork`와 `switchToForkedSession`도 같다.
+    - 같은 벤더 안의 모델 변경(나가는 길: 원래 모델로 되돌림).
+    - load(L9)와 16-6의 재시도 1회.
+    - 같은 부팅 안에서 Pi가 크래시한 뒤의 lease. 호스트 재부팅 뒤에는 boot id로 증명해 잇는다.
+  - **확정된 기본값 (GLG 2026-11-21, 조율자 전달).** Claude에서 전달 여부를 모르면 한 번 멈추고 그 입력을 다시 보내지 않는다. 설정 변경은 `mcpServers`는 새 값으로 resume, 글만 바뀌면 알림과 함께 유지, 도구·권한은 U24 확장 측정 전까지 정지. v1 record는 L-b 조건으로 읽어 resume한다.
+  - **처음의 진입 순서 (2026-11-21):**
     - 오푸스가 계획을 쓴다(#O49, `.agent-reports/171-step8-plan.md`). 하위 단계 8a…, 각 단계의 계약·게이트·LIVE를 적는다.
     - Codex Sol이 계획을 리뷰한다.
     - 물음표를 닫는다. GLG 결정이 필요한 것만 GLG에게 올린다.

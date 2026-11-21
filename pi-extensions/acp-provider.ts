@@ -30,7 +30,7 @@ import {
 import { allCuratedModels } from "./lib/acp/backend-adapter.js";
 import { writeAcpCompactionRecords } from "./lib/acp/compaction-writer.js";
 import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
-import { reportAcpHostMode } from "./lib/acp-host-facts.js";
+import { reportAcpHostMode, reportAcpSessionReader } from "./lib/acp-host-facts.js";
 import { registerAcpSteerSeam } from "./lib/acp-steer-seam.js";
 
 // Idempotent registration guard. pi may evaluate an extension entry more than
@@ -83,6 +83,8 @@ export default function (pi: ExtensionAPI) {
 	// re-imports this module and fires `session_start` again, so the new instance is told too.
 	pi.on("session_start", (_event, ctx) => {
 		reportAcpHostMode(ctx.mode);
+		// #171 step 8: the backend reads this session's branch to prove what a live ACP session last answered.
+		reportAcpSessionReader(ctx.sessionManager);
 	});
 
 	// #163, GLG 2026-11-14: a successful compaction closes the Claude child of this Pi session at
@@ -103,6 +105,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_shutdown", (event, ctx) => {
 		// #171 decision 18: the mode report ends with the runner that made it; the next session_start reports again.
 		reportAcpHostMode(undefined);
+		reportAcpSessionReader(undefined);
 		if (!REPLACING_SHUTDOWN_REASONS.has(event.reason)) return;
 		const leaving = ctx.sessionManager.getSessionId();
 		closeRetainedAcpSession(leaving);
