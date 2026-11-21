@@ -4,7 +4,18 @@ import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { agyBin, CLAUDE_CRED, D, mt, REAL_CLAUDE, REAL_GEMINI, REPO, RUN, TOKEN } from "./common.mjs";
+import {
+	agyBin,
+	CLAUDE_CRED,
+	claudeLauncherArg,
+	D,
+	mt,
+	REAL_CLAUDE,
+	REAL_GEMINI,
+	REPO,
+	RUN,
+	TOKEN,
+} from "./common.mjs";
 
 const ov = await import(join(D, "overlay.js"));
 const { claudeAdapter, agyLaunchArgs, agyAcpHookCommand, AGY_HOOK_POLICY_HIDDEN_TURNS } = await import(
@@ -194,7 +205,7 @@ const cMeta = claudeAdapter.buildSessionMeta(
 );
 const cl = claudeAdapter.resolveLaunch({ nativeModelId: "claude-sonnet-5-5", config: cCfg });
 const SRC_LAUNCHER = join(REPO, "pi-extensions/lib/acp/claude-acp-launch.js");
-const cArgs = cl.args.map((a) => (a.endsWith("/claude-acp-launch.js") && !existsSync(a) ? SRC_LAUNCHER : a));
+const cArgs = cl.args.map((a) => claudeLauncherArg(a, SRC_LAUNCHER));
 await one("claude", cl.command, cArgs, { ...process.env, ...claudeAdapter.launchEnvDefaults() }, cMeta, claudeOverlay);
 
 // agy

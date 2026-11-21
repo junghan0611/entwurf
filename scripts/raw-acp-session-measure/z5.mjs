@@ -6,7 +6,18 @@
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { agyBin, CLAUDE_CRED, D, mt, REAL_CLAUDE, REAL_GEMINI, REPO, RUN, TOKEN } from "./common.mjs";
+import {
+	agyBin,
+	CLAUDE_CRED,
+	claudeLauncherArg,
+	D,
+	mt,
+	REAL_CLAUDE,
+	REAL_GEMINI,
+	REPO,
+	RUN,
+	TOKEN,
+} from "./common.mjs";
 
 const ONLY = process.argv[3]; // optional: "claude" | "agy"
 if (ONLY !== undefined && ONLY !== "claude" && ONLY !== "agy")
@@ -303,7 +314,7 @@ function claudeBackend() {
 		thinking: "low",
 		thinkingId: "effort",
 		command: launch.command,
-		args: launch.args.map((a) => (a.endsWith("/claude-acp-launch.js") && !existsSync(a) ? SRC : a)),
+		args: launch.args.map((a) => claudeLauncherArg(a, SRC)),
 		env: { ...process.env, ...BA.claudeAdapter.launchEnvDefaults() },
 		meta: BA.claudeAdapter.buildSessionMeta(
 			{ modelId: "claude-sonnet-5-5", nativeModelId: "claude-sonnet-5-5", config },

@@ -6,7 +6,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { agyBin, CLAUDE_CRED, D, mt, REAL_CLAUDE, REPO, RUN, TOKEN } from "./common.mjs";
+import { agyBin, CLAUDE_CRED, claudeLauncherArg, D, mt, REAL_CLAUDE, REPO, RUN, TOKEN } from "./common.mjs";
 
 const MODEL = process.env.PROBE_MODEL ?? "claude-sonnet-5-5";
 const EFFORT = process.env.PROBE_EFFORT ?? "low";
@@ -55,7 +55,7 @@ const launch0 = claudeAdapter.resolveLaunch({ nativeModelId: MODEL, config });
 const SRC_LAUNCHER = join(REPO, "pi-extensions/lib/acp/claude-acp-launch.js");
 const launch = {
 	...launch0,
-	args: launch0.args.map((a) => (a.endsWith("/claude-acp-launch.js") && !existsSync(a) ? SRC_LAUNCHER : a)),
+	args: launch0.args.map((a) => claudeLauncherArg(a, SRC_LAUNCHER)),
 };
 const baseEnv = claudeAdapter.launchEnvDefaults();
 L("launch", { launch, baseEnv, carrierChars: carrier?.length ?? null, mcpServers: config.mcpServers.length });

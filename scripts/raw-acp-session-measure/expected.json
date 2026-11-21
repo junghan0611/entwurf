@@ -1,0 +1,249 @@
+{
+	"rail0": {
+		"R1.claude.initialize.protocolVersion": 1,
+		"R1.claude.initialize.loadSession": true,
+		"R1.claude.initialize.sessionCapabilities": [
+			"additionalDirectories",
+			"close",
+			"delete",
+			"fork",
+			"list",
+			"options",
+			"resume",
+			"status",
+			"systemPrompt",
+			"title"
+		],
+		"R1.claude.agentInfo.name": ["@agentclientprotocol/claude-agent-acp"],
+		"R1.agy.initialize.protocolVersion": 1,
+		"R1.agy.initialize.loadSession": true,
+		"R1.agy.initialize.sessionCapabilities": ["additionalDirectories", "close", "list", "load", "resume"],
+		"R1.agy.agentInfo.name": ["Antigravity ACP Server"],
+		"R2.claude.load.recall": true,
+		"R2.claude.load.reenforce": "ok",
+		"R2.claude.resume.windowUpdates": 0,
+		"R2.claude.resume.recall": true,
+		"R2.claude.resume.reenforce": "ok",
+		"R2.claude.unknownLoad.code": -32002,
+		"R2.claude.unknownLoad.windowUpdates": 0,
+		"R2.claude.otherOverlayLoad.code": -32002
+	},
+	"agy": {
+		"RH.agy.tokenMtimeUnchanged": true,
+		"R1.agy.initialize.loadSession": true,
+		"R1.agy.initialize.sessionCapabilities": ["additionalDirectories", "close", "list", "load", "resume"],
+		"R1.agy.agentInfo.name": ["Antigravity ACP Server"],
+		"R2.agy.load.recall": true,
+		"R2.agy.resume.windowUpdates": 0,
+		"R2.agy.resume.afterKinds": ["available_commands_update", "session_info_update"],
+		"R2.agy.resume.recall": true,
+		"R8.agy.otherOverlayLoad.ok": true,
+		"R8.agy.otherOverlayLoad.windowUpdates": 0,
+		"R8.agy.unknownLoad.ok": true,
+		"R8.agy.unknownLoad.windowUpdates": 0
+	},
+	"resume-unknown": {
+		"RH.mtimeUnchanged": true,
+		"R2.claude.unknownResume.code": -32002,
+		"R2.claude.unknownResume.hasData": true,
+		"R2.claude.unknownResume.updates": 0,
+		"R2.claude.unknownResume.fileForId": false,
+		"R2.agy.unknownResume.code": -32603,
+		"R2.agy.unknownResume.unableToRead": true,
+		"R2.agy.unknownResume.hasData": false,
+		"R2.agy.unknownResume.updates": 0,
+		"R2.agy.unknownResume.fileForId": false
+	},
+	"experiments": {
+		"RH.mtimeUnchanged": true,
+		"R6.processesUnderRunAtEnd": 0,
+		"R7.claude.protocolV2.ok": false,
+		"R7.claude.protocolV2.code": -32602,
+		"R7.claude.protocolV2.protocolVersion": null,
+		"R5.claude.resume-both.ok": true,
+		"R5.claude.resume-both.answeredConfig": {
+			"mode": "bypassPermissions",
+			"model": "sonnet",
+			"effort": "default"
+		},
+		"R5.claude.resume-both.readbackAfterEnforce": {
+			"mode": "bypassPermissions",
+			"model": "sonnet",
+			"effort": "low"
+		},
+		"R5.claude.load-both.ok": true,
+		"R5.claude.load-both.answeredConfig": {
+			"mode": "bypassPermissions",
+			"model": "sonnet",
+			"effort": "default"
+		},
+		"R5.claude.load-both.readbackAfterEnforce": {
+			"mode": "bypassPermissions",
+			"model": "sonnet",
+			"effort": "low"
+		},
+		"R5.claude.resume-modelonly.ok": true,
+		"R5.claude.resume-modelonly.answeredConfig": {
+			"mode": "bypassPermissions",
+			"model": "sonnet",
+			"effort": "default"
+		},
+		"R5.claude.resume-modelonly.readbackAfterEnforce": {
+			"mode": "bypassPermissions",
+			"model": "sonnet",
+			"effort": "default"
+		},
+		"R2b.claude.l11.resume-both.windowUpdates": 0,
+		"R2b.claude.l11.resume-modelonly.windowUpdates": 0,
+		"R3.claude.closeAdvertised": true,
+		"R3.claude.close.result": "{}",
+		"R3.claude.close.updates": 0,
+		"R3.claude.vendorFilesRemain": true,
+		"R3.claude.resumeSameChild.ok": true,
+		"R3.claude.loadSameChild.ok": true,
+		"R3.claude.loadSameChild.replayKinds": {
+			"user_message_chunk": 4,
+			"agent_message_chunk": 4
+		},
+		"R3.claude.resumeNewChild.ok": true,
+		"R2b.claude.l7Resume.windowUpdates": 0,
+		"R4.claude.compact.stopReason": "end_turn",
+		"R4.claude.compact.statuses": ["in_progress", "completed", "completed"],
+		"R4.claude.load.order": [
+			"user_message_chunk",
+			"agent_message_chunk",
+			"user_message_chunk",
+			"tool_call",
+			"tool_call_update",
+			"agent_message_chunk",
+			"user_message_chunk",
+			"agent_message_chunk",
+			"compaction_update"
+		],
+		"R4.claude.load.compactionReplay": [
+			{
+				"status": "completed",
+				"summary": true
+			}
+		],
+		"R4.claude.resume.windowUpdates": 0,
+		"R2b.claude.compactedResume.recall": true,
+		"R4.claude.load.compactionIdIsNew": true,
+		"R9.claude.bothResumed": true,
+		"R9.claude.sameId": true,
+		"R9.claude.replayUpdates": 0,
+		"R6.claude.groupsLeftAt3s": 0,
+		"R7.agy.protocolV2.ok": true,
+		"R7.agy.protocolV2.code": null,
+		"R7.agy.protocolV2.protocolVersion": 1,
+		"R5.agy.resume-both.ok": true,
+		"R5.agy.resume-both.answeredConfig": {
+			"model": "gemini-4-neon",
+			"thought_level": "high",
+			"mode": "default"
+		},
+		"R5.agy.resume-both.readbackAfterEnforce": {
+			"model": "gemini-3.8-flash",
+			"thought_level": "low",
+			"mode": "default"
+		},
+		"R5.agy.load-both.ok": true,
+		"R5.agy.load-both.answeredConfig": {
+			"model": "gemini-4-neon",
+			"thought_level": "high",
+			"mode": "default"
+		},
+		"R5.agy.load-both.readbackAfterEnforce": {
+			"model": "gemini-3.8-flash",
+			"thought_level": "low",
+			"mode": "default"
+		},
+		"R5.agy.resume-modelonly.ok": true,
+		"R5.agy.resume-modelonly.answeredConfig": {
+			"model": "gemini-4-neon",
+			"thought_level": "high",
+			"mode": "default"
+		},
+		"R5.agy.resume-modelonly.readbackAfterEnforce": {
+			"model": "gemini-3.8-flash",
+			"thought_level": "high",
+			"mode": "default"
+		},
+		"R2b.agy.l11.resume-both.windowUpdates": 0,
+		"R2b.agy.l11.resume-modelonly.windowUpdates": 0,
+		"R3.agy.closeAdvertised": true,
+		"R3.agy.close.result": "{}",
+		"R3.agy.close.updates": 0,
+		"R3.agy.vendorFilesRemain": true,
+		"R3.agy.resumeSameChild.ok": true,
+		"R3.agy.loadSameChild.ok": true,
+		"R3.agy.loadSameChild.replayKinds": {
+			"user_message_chunk": 4,
+			"agent_message_chunk": 4
+		},
+		"R3.agy.resumeNewChild.ok": true,
+		"R2b.agy.l7Resume.windowUpdates": 0,
+		"R4.agy.compact.stopReason": "end_turn",
+		"R4.agy.compact.statuses": [],
+		"R4.agy.load.order": [
+			"user_message_chunk",
+			"agent_message_chunk",
+			"user_message_chunk",
+			"tool_call",
+			"agent_message_chunk",
+			"user_message_chunk",
+			"agent_message_chunk",
+			"user_message_chunk"
+		],
+		"R4.agy.load.compactionReplay": [],
+		"R4.agy.resume.windowUpdates": 0,
+		"R2b.agy.compactedResume.recall": true,
+		"R9.agy.bothResumed": true,
+		"R9.agy.sameId": true,
+		"R9.agy.replayUpdates": 0,
+		"R6.agy.groupsLeftAt3s": 0,
+		"R8.agy.phantomLoad.ok": true,
+		"R8.agy.phantomLoad.replayUpdates": 0,
+		"R8.agy.phantomLoad.enforce": ["accepted", "accepted"],
+		"R8.agy.phantomPrompt.code": -32603,
+		"R8.agy.phantomPrompt.notFound": true,
+		"R8.agy.phantomPrompt.textOrTools": 0,
+		"R8.agy.phantomPrompt.sessionFileAfter": false,
+		"R8.agy.resumeAfter.code": -32603
+	},
+	"z5": {
+		"RH.mtimeUnchanged": true,
+		"R10.claude.S-late.listed": false,
+		"R10.claude.S-late.resume.ok": false,
+		"R10.claude.S-late.resume.code": -32002,
+		"R10.claude.S-late.vendorFile": false,
+		"R10.claude.S-late-close.listed": false,
+		"R10.claude.S-late-close.resume.ok": false,
+		"R10.claude.S-late-close.resume.code": -32002,
+		"R10.claude.S-late-close.vendorFile": false,
+		"R10.claude.S-kill.idReceived": false,
+		"R10.claude.S-kill.newAnswer.kind": "none",
+		"R10.claude.S-kill.newAnswer.code": null,
+		"R10.claude.S-kill.orphanState": false,
+		"R10.agy.S-late.listed": false,
+		"R10.agy.S-late.resume.ok": true,
+		"R10.agy.S-late.resume.code": null,
+		"R10.agy.S-late.vendorFile": true,
+		"R10.agy.S-late-close.listed": false,
+		"R10.agy.S-late-close.resume.ok": true,
+		"R10.agy.S-late-close.resume.code": null,
+		"R10.agy.S-late-close.vendorFile": true,
+		"R10.agy.S-kill.idReceived": false,
+		"R10.agy.S-kill.newAnswer.kind": "error",
+		"R10.agy.S-kill.newAnswer.code": -32603,
+		"R10.agy.S-kill.orphanState": true
+	},
+	"continuity": {
+		"RUN.fatalRows": [],
+		"RUN.unverifiedReaps": [],
+		"RUN.processesUnderRunAtEnd": 0,
+		"RUN.ownedLeftAfterKill": 0,
+		"RUN.interrupted": null,
+		"RUN.incomplete": []
+	}
+}
