@@ -12,7 +12,9 @@
 // their order): ok or a JSON-RPC code, a stop reason, update
 // kinds, capability sets, config readbacks, agent names, and booleans from a planted nonce or a narrow
 // predicate. Durations, ids, usage numbers, paths and free text never are. A missing observation is
-// "<absent>", which differs from every stored value; a summary an extractor cannot read is an input
+// "<absent>", which differs from every stored value. A fact whose measurement precondition failed in
+// this run (R10 S-kill when the kill landed after session/new answered) is listed as incomplete: never
+// matched, never differ, never stored. A summary an extractor cannot read is an input
 // error (exit 2). Keys starting "diag." are diagnostics: printed and written to verdict.json, never
 // compared or stored. Each key starts with the receipt it stands for (R1–R10, RH for the receipts'
 // header, RUN for a continuity run's own validity), so a differing key points at one receipt line
@@ -138,6 +140,14 @@ function canonical(v) {
 	return v;
 }
 const sameFact = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+/**
+ * A fact whose measurement precondition failed in this run: listed under `incomplete`, never counted as
+ * matched or differ, and never stored as an expected value.
+ */
+const PRECONDITION_FAILED = "<precondition-failed";
+const preconditionFailed = (why) => `${PRECONDITION_FAILED} (${why})>`;
+const isPreconditionFailed = (v) => typeof v === "string" && v.startsWith(PRECONDITION_FAILED);
 
 // ── extractors, one per scenario ──────────────────────────────────────────────────────────────────
 // Each returns flat facts. Keys starting "diag." are diagnostics: reported, never compared or stored.
@@ -326,6 +336,12 @@ function z5(s, { run, ran }) {
 		out[`R10.${b}.S-kill.orphanState`] = Array.isArray(k.newStateFiles)
 			? k.newStateFiles.some((f) => String(f).includes("/conversations/"))
 			: ABSENT;
+		// S-kill measures an abort BEFORE session/new answers (z5.mjs:434 sets the kill point from S-late's
+		// timing and does not check it). When the answer was already in hand at the kill, every S-kill fact
+		// describes a kill after the answer instead: precondition failed, not compared.
+		if (k.answeredBeforeKill?.sid)
+			for (const key of Object.keys(out).filter((x) => x.startsWith(`R10.${b}.S-kill.`)))
+				out[key] = preconditionFailed("kill after answer");
 	}
 	return out;
 }
@@ -397,7 +413,7 @@ function requestedBackends(run) {
 
 /** Keys of a backend that was not asked to run (a filtered run) are reported as not run, not as differing. */
 function diff(expected, actual, ranBackends) {
-	const verdict = { matched: [], differ: [], notRun: [], unexpected: [] };
+	const verdict = { matched: [], differ: [], notRun: [], incomplete: [], unexpected: [] };
 	for (const [key, want] of Object.entries(expected)) {
 		const backend = key.split(".")[1];
 		if (!(key in actual)) {
@@ -405,7 +421,8 @@ function diff(expected, actual, ranBackends) {
 			else verdict.differ.push({ key, expected: want, actual: "<missing>" });
 			continue;
 		}
-		if (sameFact(actual[key], want)) verdict.matched.push(key);
+		if (isPreconditionFailed(actual[key])) verdict.incomplete.push({ key, expected: want, reason: actual[key] });
+		else if (sameFact(actual[key], want)) verdict.matched.push(key);
 		else verdict.differ.push({ key, expected: want, actual: actual[key] });
 	}
 	for (const key of Object.keys(actual)) if (!(key in expected)) verdict.unexpected.push({ key, actual: actual[key] });
@@ -425,8 +442,9 @@ if (cmd === "facts" && args.length === 2) {
 	const n = (k) => verdict[k].length;
 	console.log(
 		`[compare] ${scenario}: ${n("matched")} matched, ${n("differ")} differ, ${n("notRun")} not run, ` +
-			`${n("unexpected")} without an expected value; versions ${JSON.stringify(seen)}`,
+			`${n("incomplete")} incomplete, ${n("unexpected")} without an expected value; versions ${JSON.stringify(seen)}`,
 	);
+	for (const d of verdict.incomplete) console.log(`  INCOMPLETE ${d.key}: ${d.reason}`);
 	for (const d of verdict.differ)
 		console.log(`  DIFFER ${d.key}: expected ${JSON.stringify(d.expected)}, got ${JSON.stringify(d.actual)}`);
 	for (const u of verdict.unexpected) console.log(`  NEW    ${u.key}: ${JSON.stringify(u.actual)}`);
@@ -438,6 +456,8 @@ if (cmd === "facts" && args.length === 2) {
 		const [scenario, run] = pair.split("=");
 		if (!scenario || !run) fail(`expected <scenario>=<run-dir>, got ${pair}`);
 		out[scenario] = factsOf(scenario, run).facts;
+		const failed = Object.keys(out[scenario]).filter((k) => isPreconditionFailed(out[scenario][k]));
+		if (failed.length > 0) fail(`${run}: a precondition failed, so these cannot be stored: ${failed.join(", ")}`);
 	}
 	console.log(JSON.stringify(out, null, "\t"));
 } else {
