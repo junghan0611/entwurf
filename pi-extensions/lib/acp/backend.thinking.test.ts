@@ -30,6 +30,7 @@ import {
 	clampThinkingLevel,
 	getSupportedThinkingLevels,
 	isContextOverflow,
+	isRecoverableLength,
 	isRetryableAssistantError,
 	type Message,
 	type Model,
@@ -37,7 +38,7 @@ import {
 	type TranscriptContext,
 	type Usage,
 } from "@earendil-works/pi-ai";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { convertToLlm, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
@@ -364,11 +365,11 @@ function makeWorld(
 	const log: string[] = [];
 	const wire: string[] = [];
 	const lifecycle: string[] = [];
-	const prompts: Array<{ sessionId: string; text: string }> = [];
+	const prompts: Array<{ sessionId: string; text: string; blocks: string[] }> = [];
 	let pendingPrompt: (() => void) | undefined;
 	// The connection handlers the backend registered — the producer side of session/update.
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
-	const hooks: { onPrompt?: () => void | Promise<void> } = {};
+	const hooks: { onPrompt?: () => void | Promise<void>; stopReason?: AcpPromptResponse["stopReason"] } = {};
 	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
 	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
 		const ambient = process.env[name];
@@ -421,7 +422,8 @@ function makeWorld(
 						: { configOptions: [{ id: "model", currentValue: p.value }] };
 				},
 				prompt: async (p): Promise<AcpPromptResponse> => {
-					prompts.push({ sessionId: p.sessionId, text: p.prompt.map((b) => ("text" in b ? b.text : "")).join("\n") });
+					const blocks = p.prompt.map((b) => ("text" in b ? b.text : ""));
+					prompts.push({ sessionId: p.sessionId, text: blocks.join("\n"), blocks });
 					log.push("prompt");
 					wire.push("prompt");
 					if (promptGate?.hold) {
@@ -432,7 +434,7 @@ function makeWorld(
 						});
 					}
 					await hooks.onPrompt?.();
-					return { stopReason: "end_turn" };
+					return { stopReason: hooks.stopReason ?? "end_turn" };
 				},
 				cancel: () => {
 					log.push("cancel");
@@ -571,6 +573,66 @@ describe("streamAcpTurn — disabled Cortex configuration", () => {
 		const accepted = await runTurn(world, transcript("hello"), "config-claude", "low");
 		expect(accepted.type).toBe("done");
 		expect(world.children).toHaveLength(1);
+	});
+});
+
+describe("ACP reuse projected multi-user wire (#171)", () => {
+	async function trailingUsers(id: string, first: string, second: string): Promise<void> {
+		const world = makeWorld();
+		await runTurn(world, transcript("seed"), id, "high");
+		const base = transcript("seed", first);
+		const context: TranscriptContext = {
+			...base,
+			messages: [
+				...base.messages,
+				{ role: "user", content: "  ", timestamp: 3 },
+				{ role: "user", content: second, timestamp: 4 },
+			],
+		};
+		const result = await runTurn(world, context, id, "high");
+		expect(result.type).toBe("done");
+		expect(world.children).toHaveLength(1);
+		expect(world.prompts[1].sessionId).toBe(world.prompts[0].sessionId);
+		expect(world.prompts[1].blocks).toEqual([first, second]);
+	}
+	it("[QK:ACP-DELTA-STEER-ALL] forwards both queued steer messages in order", async () => {
+		await trailingUsers("delta-steer", "STEER-A-q7", "STEER-B-q7");
+	});
+	it("[QK:ACP-DELTA-FOLLOWUP-ALL] forwards both queued follow-up messages in order", async () => {
+		await trailingUsers("delta-followup", "FOLLOW-A-q7", "FOLLOW-B-q7");
+	});
+	it("[QK:ACP-DELTA-BASH-NEXT] forwards bash output and the following human prompt", async () => {
+		await trailingUsers("delta-bash", "Ran `echo BASH-OUTPUT`", "NEXT-U11-bash");
+	});
+	it("[QK:ACP-DELTA-MAX-TOKENS] after Pi omits a length-cut answer, the next prompt reaches the vendor and the cut prompt is sent again", async () => {
+		const world = makeWorld();
+		await runTurn(world, transcript("seed"), "delta-length", "high");
+		world.hooks.stopReason = "max_tokens";
+		const cut = await runTurn(world, transcript("seed", "BRAVO-q72"), "delta-length", "high");
+		world.hooks.stopReason = "end_turn";
+		if (cut.type !== "done") throw new Error(`length cut sealed as ${cut.type}`);
+		expect(cut.reason).toBe("length");
+		// Pi 1.5.2 treats this answer as a recoverable length stop (zero usage: output 0 < maxTokens,
+		// pi-ai utils/overflow.js:177-178) and persists a context_edit with a null replacement for it
+		// (agent-session.js:2533, :2564, :924). That edit, not the message projection, removes it:
+		// convertToLlm keeps a length-stopped assistant.
+		expect(isRecoverableLength(cut.message, sonnet().maxTokens)).toBe(true);
+		const session = SessionManager.inMemory();
+		for (const message of transcript("seed", "BRAVO-q72").messages) {
+			if (message.role !== "system") session.appendMessage(message);
+		}
+		const cutId = session.appendMessage(cut.message);
+		const project = () =>
+			normalizeContext({ tools: PI_TOOLS, messages: convertToLlm(session.buildSessionContext().messages) });
+		expect(project().messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "length" });
+		session.appendContextEdit(cutId, null);
+		session.appendMessage({ role: "user", content: "NEXT-U12-max-tokens", timestamp: 4 });
+		const context = project();
+		expect(context.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "user", "user"]);
+		await runTurn(world, context, "delta-length", "high");
+		expect(world.children).toHaveLength(1);
+		expect(world.prompts[2].sessionId).toBe(world.prompts[0].sessionId);
+		expect(world.prompts[2].blocks).toEqual(["BRAVO-q72", "NEXT-U12-max-tokens"]);
 	});
 });
 

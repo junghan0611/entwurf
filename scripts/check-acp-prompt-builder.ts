@@ -5,9 +5,8 @@
 // that whole transcript to a session that ALREADY remembers the prior turns
 // duplicates history. So the prompt SCOPE must follow bootstrapPath:
 //   - "new"                      → full transcript (the only history carrier)
-//   - "reuse" | "resume" | "load"→ latest user delta only (first user after the
-//                                  last assistant; the trailing-group FIRST user
-//                                  so the SessionStart hook message is skipped).
+//   - "reuse" | "resume" | "load"→ all nonempty user messages after the last assistant,
+//                                  as separate ordered text blocks.
 //
 // This gate proves the split deterministically. It was written BEFORE the
 // session store that produces the reuse paths existed, so that the builder was
@@ -28,7 +27,7 @@ import {
 const REUSE_PATHS: AcpBootstrapPath[] = ["reuse", "resume", "load"];
 
 // A multi-turn context: a prior turn, an assistant answer, the real latest user
-// turn (with an image), and a SessionStart hook user-message appended AFTER it.
+// turn (with an image), and a second projected user-message appended AFTER it.
 //
 // Built through `normalizeContext` (pi-ai) because that is what pi 0.86 hands a
 // custom provider: `systemPrompt`/`tools` are folded into a LEADING
@@ -67,8 +66,7 @@ function multiTurn(): TranscriptContext {
 				],
 				timestamp: 0,
 			},
-			// pi appends the SessionStart hook AFTER the real prompt — the builder
-			// must NOT pick this as the latest user delta.
+			// The projected custom message is a user role and must not be lost.
 			{ role: "user", content: "device=thinkpad time_kst=20260618T160000", timestamp: 0 },
 		],
 	});
@@ -91,22 +89,19 @@ function multiTurn(): TranscriptContext {
 }
 
 // ---------------------------------------------------------------------------
-// 2) reuse / resume / load → latest user delta ONLY
+// 2) reuse / resume / load → the user blocks after the last assistant ONLY
 // ---------------------------------------------------------------------------
 for (const path of REUSE_PATHS) {
 	const ctx = multiTurn();
 	const prompt = buildAcpPrompt(ctx, path);
 	assert.deepEqual(prompt, latestUserDelta(ctx), `"${path}" is the delta builder`);
-	assert.equal(prompt.length, 1, `"${path}" is a single text block`);
+	assert.equal(prompt.length, 2, `"${path}" carries both trailing user blocks`);
 	const text = prompt[0].text;
-	// Only the real latest user turn — not prior history, not the hook message.
+	// The first block is the first trailing user, not prior history.
 	assert.match(text, /follow up/, `"${path}" carries the latest user turn`);
 	assert.ok(!text.includes("first question"), `"${path}" excludes prior history (no duplicate injection)`);
 	assert.ok(!text.includes("an answer"), `"${path}" excludes the assistant turn`);
-	assert.ok(
-		!text.includes("device=thinkpad"),
-		`"${path}" skips the SessionStart hook user-message (trailing-group FIRST user, not last)`,
-	);
+	assert.equal(prompt[1].text, "device=thinkpad time_kst=20260618T160000", `"${path}" keeps the second projected user`);
 	// Image still leaves a marker, never raw data.
 	assert.match(text, /\[image omitted: image\/png\]/, `"${path}" keeps the image marker`);
 	assert.ok(!text.includes("BASE64IMAGEDATA"), `"${path}" never embeds raw image data`);
@@ -125,7 +120,7 @@ for (const path of REUSE_PATHS) {
 }
 
 // ---------------------------------------------------------------------------
-// 4) no assistant yet → first user of the whole context is the delta
+// 4) no assistant yet → all user messages are the delta
 // ---------------------------------------------------------------------------
 {
 	const ctx = normalizeContext({
@@ -135,8 +130,11 @@ for (const path of REUSE_PATHS) {
 		],
 	});
 	const delta = latestUserDelta(ctx);
-	assert.equal(delta.length, 1, "delta exists when there is a user turn");
-	assert.equal(delta[0].text, "only question", "first user wins (hook message skipped) even with no assistant");
+	assert.deepEqual(
+		delta.map((block) => block.text),
+		["only question", "device=thinkpad time_kst=x"],
+		"both users remain ordered even with no assistant",
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +193,7 @@ for (const path of REUSE_PATHS) {
 
 console.log(
 	"[check-acp-prompt-builder] ok — bootstrapPath scopes the prompt: new=full transcript (history carrier), " +
-		"reuse/resume/load=latest user delta (first user after last assistant, SessionStart hook skipped, image marker " +
-		"kept, no raw image data, prior history excluded), no-assistant/trailing-assistant/empty edges, " +
+		"reuse/resume/load=every nonempty user block after the last assistant, in order (image marker kept, " +
+		"no raw image data, prior history excluded), no-assistant/trailing-assistant/empty edges, " +
 		"unknown bootstrapPath → throw (fail-loud, never silent delta-only)",
 );

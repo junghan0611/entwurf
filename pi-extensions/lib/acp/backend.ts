@@ -9,8 +9,8 @@
 //
 // Two orthogonal axes (GPT 73b44d):
 //   - bootstrapPath (history source): `new` sends the FULL transcript (a fresh ACP
-//     session holds no history); `reuse` sends only the latest user delta (the
-//     live ACP session already remembers the prior turns — re-sending the whole
+//     session holds no history); `reuse` sends only the user messages after the last
+//     assistant (the live ACP session already remembers the prior turns — re-sending the whole
 //     transcript would duplicate history). buildAcpPrompt() owns that split.
 //   - lifecyclePolicy (does the child outlive the turn): `process-scoped`
 //     (`--entwurf-control` resident) MAY keep the child + connection in an
@@ -1414,15 +1414,15 @@ export function streamAcpTurn(
 				return;
 			}
 			compactionKey = session.key;
+			const delta = latestUserDelta(context);
 			state.compaction = new AcpCompactionCollector({
 				// Scope is decided HERE, at collection (S8 v5.1 §3): Pi's summary turn and a key with no
 				// Pi session (`cwd:`) record nothing, so nothing of theirs waits in backend memory.
 				collect: !summaryTurnActive && session.key.startsWith("pi:"),
-				promptWasCompactCommand: isCompactCommand(
-					latestUserDelta(context)
-						.map((b) => b.text)
-						.join(""),
-				),
+				// Claude ACP reads a command from the first text block (claude-agent-acp 0.107.3
+				// prompt-to-claude.js:36-39, v1/acp-agent.js:1146-1147). Whether the vendor compacts
+				// on a multi-block prompt that starts with /compact is unmeasured.
+				promptWasCompactCommand: isCompactCommand(delta[0]?.text),
 				carried: session.contextOccupancyTokens,
 				now: Date.now,
 				emitLine: (text) => pushAcpLifecycleNotice(state, text),
@@ -2451,7 +2451,7 @@ export function streamAcpTurn(
 		}
 	}
 
-	// --- reuse: send only the latest user delta to the live ACP session
+	// --- reuse: send only the user messages after the last assistant to the live ACP session
 	async function runReuseTurn(
 		session: BridgeSession,
 		ctxSigs: string[],
@@ -2489,8 +2489,8 @@ export function streamAcpTurn(
 				pushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);
 			}
 
-			// The live ACP session already remembers the prior turns → send only the
-			// latest user delta (re-sending the transcript would duplicate history).
+			// The live ACP session already remembers the prior turns → send only the user
+			// messages after the last assistant (re-sending the transcript would duplicate history).
 			const prompt = buildAcpPrompt(context, "reuse");
 			if (prompt.length === 0) throw new Error("empty delta — a reuse turn has no new user message");
 

@@ -85,7 +85,7 @@ describe("aborted assistant turns in a rebuilt transcript (#142)", () => {
 		);
 	});
 
-	it("a reused session receives only the latest user text, never the status line", () => {
+	it("a reused session receives the user text after the last assistant, never the aborted-turn status line", () => {
 		const messages: Message[] = [userRun, assistant("aborted", [said("[tool:failed] rejected")]), userNext];
 		const blocks = buildAcpPrompt(normalizeContext({ tools: [], messages }), "reuse");
 		expect(blocks).toEqual([{ type: "text", text: "change of plan" }]);

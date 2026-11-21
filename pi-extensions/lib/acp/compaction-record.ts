@@ -34,7 +34,7 @@ export interface AcpCompactionRecord {
 	compactionId: string;
 	/** The adapter's own terminal status; `unterminated` means only that no terminal was observed. */
 	status: AcpCompactionStatus;
-	/** Observed fact: this prompt's latest user delta was a `/compact` command. Not a cause. */
+	/** Observed fact: the first block of this prompt's user delta was a `/compact` command. Not a cause. */
 	promptWasCompactCommand: boolean;
 	startedObservedAt: string | null;
 	endedObservedAt: string | null;
@@ -101,7 +101,7 @@ export interface AcpCompactionCollectorOptions {
 	emitLine: (text: string) => void;
 }
 
-/** True when a prompt's latest user text is the `/compact` command (args allowed). */
+/** True when the first block of a prompt's user delta is the `/compact` command (args allowed). */
 export function isCompactCommand(text: string | undefined): boolean {
 	return typeof text === "string" && /^\/compact(\s|$)/.test(text.trim());
 }

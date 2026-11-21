@@ -1,0 +1,61 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-delta",
+	"mutants": [
+		{
+			"claim": "ACP-DELTA-STEER-ALL",
+			"title": "only the first queued steer is sent",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": ["context.messages.slice(lastAssistantIdx + 1).flatMap((message): AcpTextBlock[] => {"],
+			"replace": ["context.messages.slice(lastAssistantIdx + 1).slice(0, 1).flatMap((message): AcpTextBlock[] => {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-DELTA-STEER-ALL]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-FOLLOWUP-ALL",
+			"title": "the queued follow-up sequence is reversed",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": ["context.messages.slice(lastAssistantIdx + 1).flatMap((message): AcpTextBlock[] => {"],
+			"replace": ["context.messages.slice(lastAssistantIdx + 1).reverse().flatMap((message): AcpTextBlock[] => {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-DELTA-FOLLOWUP-ALL]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-BASH-NEXT",
+			"title": "the first projected user block is dropped before the prompt",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": ["context.messages.slice(lastAssistantIdx + 1).flatMap((message): AcpTextBlock[] => {"],
+			"replace": ["context.messages.slice(lastAssistantIdx + 2).flatMap((message): AcpTextBlock[] => {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-DELTA-BASH-NEXT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-DELTA-MAX-TOKENS",
+			"title": "only the last projected user survives a length-cut turn",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": ["context.messages.slice(lastAssistantIdx + 1).flatMap((message): AcpTextBlock[] => {"],
+			"replace": ["context.messages.slice(lastAssistantIdx + 1).slice(-1).flatMap((message): AcpTextBlock[] => {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-DELTA-MAX-TOKENS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-FIRST-USER-BLOCK",
+			"title": "compaction attribution looks at the last delta block instead of the first",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["isCompactCommand(delta[0]?.text)"],
+			"replace": ["isCompactCommand(delta[delta.length - 1]?.text)"],
+			"gate": ["bash", "run.sh", "check-acp-compaction"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-COMPACT-FIRST-USER-BLOCK]",
+			"signatureSource": "pi-extensions/lib/acp/backend.compaction.test.ts"
+		}
+	]
+}

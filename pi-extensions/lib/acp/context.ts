@@ -82,7 +82,7 @@ function textFromAssistantContent(content: AssistantMessage["content"]): string 
  * not run when its first effect was on disk). It adds no claim about what did or
  * did not happen — only that the turn was cut and that a cut is not a rollback.
  * Only the full transcript carries it: a reused session already holds its own
- * record of the interruption and receives just the latest user delta.
+ * record of the interruption and receives only the user messages after the last assistant.
  */
 export const ABORTED_TURN_STATUS =
 	"[turn status: aborted — actions this turn had started may already have taken effect; cancellation is not rollback]";
@@ -155,12 +155,10 @@ export function contextToAcpPrompt(context: TranscriptContext): AcpTextBlock[] {
 export type AcpBootstrapPath = "new" | "reuse" | "resume" | "load";
 
 /**
- * The latest user turn only — the first user message AFTER the last assistant
- * message. Ported from 0.11.0 `index.ts:732 extractPromptBlocks`: taking the
- * FIRST user of the trailing group (not `reverse().find()`) skips the
- * SessionStart hook user-message (`device=…, time_kst=…`) that pi appends AFTER
- * the real prompt. Images leave a text marker (S2c decision — real ACP image
- * passthrough is a later lane), never raw data.
+ * Every nonempty user-role message after the last assistant, in order, as separate
+ * blocks. Pi's projection can turn custom messages and bash output into user-role
+ * messages without retaining their origin; no message is silently discarded here.
+ * Images leave a text marker, never raw data.
  *
  * This is the prompt scope for a session that ALREADY holds the prior turns
  * (reuse/resume/load): re-sending the whole transcript there would duplicate
@@ -174,13 +172,11 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
 			break;
 		}
 	}
-	const latestUser = context.messages.slice(lastAssistantIdx + 1).find((m): m is UserMessage => m.role === "user");
-	if (!latestUser) return [];
-	// The delta IS the user's actual prompt — preserve its body verbatim (0.11.0
-	// extractPromptBlocks sent it near-raw). Only the EMPTINESS test trims, so a
-	// whitespace-only turn yields no block.
-	const raw = textFromUserOrToolContent(latestUser.content);
-	return raw.trim() ? [{ type: "text", text: raw }] : [];
+	return context.messages.slice(lastAssistantIdx + 1).flatMap((message): AcpTextBlock[] => {
+		if (message.role !== "user") return [];
+		const raw = textFromUserOrToolContent(message.content);
+		return raw.trim() ? [{ type: "text", text: raw }] : [];
+	});
 }
 
 /**
@@ -190,8 +186,8 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
  *     S2c spawn-per-turn path). Delta-only here would lose history on
  *     rebuild/compaction/edited-history.
  *   - `"reuse" | "resume" | "load"`: the stateful ACP session already holds the
- *     prior turns, so send only the latest user delta — the whole transcript
- *     would duplicate remembered history.
+ *     prior turns, so send only the user-role messages after the last assistant
+ *     (`latestUserDelta`) — the whole transcript would duplicate remembered history.
  *
  * The caller's prefix-compat gate detects divergence, not a record that is
  * behind the transcript. Record currency is the not-yet-implemented L16

@@ -168,10 +168,14 @@ function makeWorld(
 		abortGraceMs: 40,
 	};
 	/** Run one whole turn; returns what it showed and how it sealed. */
-	const turn = async (opts: { sessionId?: string; summary?: boolean; text?: string }) => {
+	const turn = async (opts: { sessionId?: string; summary?: boolean; text?: string; texts?: string[] }) => {
 		const ctx = normalizeContext({
 			tools: opts.summary ? [] : PI_TOOLS,
-			messages: [{ role: "user", content: opts.text ?? "hello", timestamp: 0 }],
+			messages: (opts.texts ?? [opts.text ?? "hello"]).map((text) => ({
+				role: "user" as const,
+				content: text,
+				timestamp: 0,
+			})),
 		});
 		const options = {
 			sessionId: opts.sessionId,
@@ -216,6 +220,16 @@ function stderrLines(run: () => Promise<unknown>) {
 }
 
 describe("the ACP child's compactions through the turn driver (#163 S8)", () => {
+	it("[QK:ACP-COMPACT-FIRST-USER-BLOCK] attributes the command only to the first delta block, where Claude ACP reads a command", async () => {
+		// claude-agent-acp 0.107.3 takes a command from the first text block (prompt-to-claude.js:36-39,
+		// v1/acp-agent.js:1146-1147); a session-info line after it must not hide the command.
+		const first = makeWorld({ prompt: c2Frames("first-compact") });
+		await first.turn({ sessionId: "first-compact", texts: ["/compact", "device=oracle time_kst=20261121T091435"] });
+		expect(backend.takeAcpCompactionRecords("first-compact").records[0]?.promptWasCompactCommand).toBe(true);
+		const second = makeWorld({ prompt: c2Frames("first-bash") });
+		await second.turn({ sessionId: "first-bash", texts: ["Ran `echo hi`", "/compact"] });
+		expect(backend.takeAcpCompactionRecords("first-bash").records[0]?.promptWasCompactCommand).toBe(false);
+	});
 	it("[QK:ACP-COMPACT-CAPABILITY-DECLARED] initialize declares the session.compaction client capability", async () => {
 		const w = makeWorld({});
 		await w.turn({ sessionId: "S-cap" });
