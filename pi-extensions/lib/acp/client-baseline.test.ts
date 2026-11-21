@@ -5,9 +5,10 @@ import { expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const EXPECTED = [
-	...Array.from({ length: 16 }, (_, i) => `L${i + 1}`),
+	...Array.from({ length: 17 }, (_, i) => `L${i + 1}`),
 	"P1",
 	"P2",
+	"P3",
 	...Array.from({ length: 9 }, (_, i) => `Z${i + 1}`),
 	"V1",
 	"V2",
