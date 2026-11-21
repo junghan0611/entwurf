@@ -8,7 +8,8 @@
 //                                                          (run `biome format --write` on the file you
 //                                                          write it to: the repository lint checks it)
 //
-// A fact is categorical and compared by exact equality: ok or a JSON-RPC code, a stop reason, update
+// A fact is categorical and compared by exact equality (a plain object's keys sorted first; arrays keep
+// their order): ok or a JSON-RPC code, a stop reason, update
 // kinds, capability sets, config readbacks, agent names, and booleans from a planted nonce or a narrow
 // predicate. Durations, ids, usage numbers, paths and free text never are. A missing observation is
 // "<absent>", which differs from every stored value; a summary an extractor cannot read is an input
@@ -109,6 +110,35 @@ function wireAnswer(run, child, method) {
 	return got.error ? { kind: "error", code: got.error.code ?? null } : { kind: "result", code: null };
 }
 
+/** The ids of the configOptions one child's `method` answer carried, in the vendor's order; ABSENT if unread. */
+function configOptionIds(run, childPattern, method) {
+	const files = readdirSync(run).filter((f) => new RegExp(`^${childPattern}\\.wire-out\\.ndjson$`).test(f));
+	if (files.length !== 1) return ABSENT;
+	const sent = ndjson(join(run, files[0])).find((m) => m.method === method);
+	const inPath = join(run, files[0].replace(".wire-out.", ".wire-in."));
+	const got =
+		sent && existsSync(inPath) ? ndjson(inPath).find((m) => m.id === sent.id && m.method === undefined) : undefined;
+	const options = got?.result?.configOptions;
+	return Array.isArray(options) ? options.map((o) => o?.id ?? null) : ABSENT;
+}
+
+/**
+ * The form two facts are compared in: a plain object's keys sorted, recursively. Arrays keep their
+ * order (update orders and status sequences are facts). A vendor's key order inside an object is not
+ * a contract (production reads options by id, backend-adapter.ts:615-617, :683-685).
+ */
+function canonical(v) {
+	if (Array.isArray(v)) return v.map(canonical);
+	if (v !== null && typeof v === "object")
+		return Object.fromEntries(
+			Object.keys(v)
+				.sort()
+				.map((k) => [k, canonical(v[k])]),
+		);
+	return v;
+}
+const sameFact = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
 // ── extractors, one per scenario ──────────────────────────────────────────────────────────────────
 // Each returns flat facts. Keys starting "diag." are diagnostics: reported, never compared or stored.
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -187,7 +217,7 @@ function resumeUnknown(s, { ran }) {
 	return out;
 }
 
-function experiments(s, { ran }) {
+function experiments(s, { run, ran }) {
 	const out = {
 		"RH.mtimeUnchanged": unchanged(s.mtimeBefore, s.mtimeAfter, ran),
 		"R6.processesUnderRunAtEnd": count(s.underRunAtEnd),
@@ -208,6 +238,12 @@ function experiments(s, { ran }) {
 			out[`R5.${b}.${how}.readbackAfterEnforce`] = readback[Object.keys(readback).at(-1)];
 			// The arithmetic answer is a model's, not the rail's: reported, not compared.
 			out[`diag.R5.${b}.${how}.answerCorrect`] = x.Q.stopReason === "end_turn" && answered(x.Q, "391");
+			// The vendor's option order (claude-agent-acp 0.109.0 reorders it): visible, never compared.
+			out[`diag.R5.${b}.${how}.configOptionIds`] = configOptionIds(
+				run,
+				`${b}-\\d+-l11-${how}`,
+				how.startsWith("load") ? "session/load" : "session/resume",
+			);
 		}
 		for (const how of ["resume-both", "resume-modelonly"])
 			out[`R2b.${b}.l11.${how}.windowUpdates`] = updates(l11[how].open.window);
@@ -369,7 +405,7 @@ function diff(expected, actual, ranBackends) {
 			else verdict.differ.push({ key, expected: want, actual: "<missing>" });
 			continue;
 		}
-		if (JSON.stringify(actual[key]) === JSON.stringify(want)) verdict.matched.push(key);
+		if (sameFact(actual[key], want)) verdict.matched.push(key);
 		else verdict.differ.push({ key, expected: want, actual: actual[key] });
 	}
 	for (const key of Object.keys(actual)) if (!(key in expected)) verdict.unexpected.push({ key, actual: actual[key] });
