@@ -753,7 +753,7 @@
 			"claim": "ACP-LEASE-RELEASE-WAITS-FOR-GROUP",
 			"title": "a process group that is not empty at the agent's exit is given no time: the lease stays on every real quit",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\tif (Date.now() >= deadline) return false;"],
+			"find": ["\t\tif (left <= 0) return false;"],
 			"replace": ["\t\treturn false;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
