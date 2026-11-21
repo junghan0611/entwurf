@@ -190,6 +190,19 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
 }
 
 /**
+ * End every block but the last with `separator`, for a backend that joins the text blocks of one
+ * prompt with nothing between them (#171 L18). A block that already ends with it is left as it is,
+ * so applying this twice changes nothing. The count and order of blocks do not change.
+ */
+export function separateTextBlocks(blocks: readonly AcpTextBlock[], separator: string): AcpTextBlock[] {
+	return blocks.map((block, index) =>
+		index === blocks.length - 1 || block.text.endsWith(separator)
+			? { ...block }
+			: { ...block, text: `${block.text}${separator}` },
+	);
+}
+
+/**
  * Build the ACP prompt array for a turn, scoping it by bootstrapPath (핀4):
  *   - `"new"` (incompatible rebuild included): a fresh ACP session holds NO
  *     history, so the whole transcript is the only history carrier (same as the

@@ -301,6 +301,16 @@ export interface AcpBackendAdapter {
 	 *  ABSENT means no summary mode is declared, so backend.ts refuses the summary turn by name. */
 	summaryTurnMode?: AcpSummaryTurnMode;
 
+	/** OPTIONAL (#171 L18): what this backend needs between the text blocks of one prompt. agy hands
+	 *  its model the blocks joined with nothing between them — measured in its own transcript, where
+	 *  "…reply with only DONE." and "What does…" touch — so two user messages, or the augment and
+	 *  the transcript, read as one sentence. backend.ts ends every block but the last with this
+	 *  string, on the wire only.
+	 *
+	 *  ABSENT means the blocks go as built. Claude must stay absent: it reads a command such as
+	 *  `/compact` from the first block alone, and a block is a boundary for it already. */
+	textBlockSeparator?: string;
+
 	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
 	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
 	 *  from `errorMessage` alone, and a vendor's "Internal error" reads as transient
@@ -1126,6 +1136,9 @@ export const agyAdapter: AcpBackendAdapter = {
 	// Every prompt-phase failure is non-replayable (readAgyPromptRejection): agy's own rejection
 	// vocabulary is unmeasured, and its tools run with permission prompts bypassed.
 	readPromptRejection: readAgyPromptRejection,
+
+	// #171 L18: agy joins the text blocks of one prompt with no separator; a blank line keeps them apart.
+	textBlockSeparator: "\n\n",
 
 	// #168: the server that answered initialize must be agy's own ACP server at the measured floor or newer.
 	admitAgent: (answer) => admitAcpAgent(answer, "agy", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, "AGY_ACP_COMMAND"),

@@ -86,7 +86,7 @@ import {
 	type ResolvedAcpConfig,
 	resolveProviderConfig,
 } from "./config.js";
-import { type AcpTextBlock, buildAcpPrompt, latestUserDelta, userDeltaRange } from "./context.js";
+import { type AcpTextBlock, buildAcpPrompt, latestUserDelta, separateTextBlocks, userDeltaRange } from "./context.js";
 import {
 	type AcpPiStreamState,
 	applyAcpSessionUpdate,
@@ -1239,6 +1239,11 @@ function unrefRetainedChild(child: AcpChildLike): void {
 			// best-effort
 		}
 	}
+}
+
+/** #171 L18: the prompt as it goes on the wire — separated where the backend joins its blocks. */
+function wireTextBlocks(blocks: AcpTextBlock[], adapter: AcpBackendAdapter): AcpTextBlock[] {
+	return adapter.textBlockSeparator === undefined ? blocks : separateTextBlocks(blocks, adapter.textBlockSeparator);
 }
 
 /** Default (production) dependencies — real spawn + real ACP client connection. */
@@ -2473,7 +2478,7 @@ export function streamAcpTurn(
 			// gate ②). `new`-only → reuse turns stay clean (once-only). Entwurf-spawned
 			// prompts that already carry cwd/AGENTS.md get that one section de-duped.
 			// #163: a summary turn carries Pi's summarization instructions instead.
-			const prompt: AcpTextBlock[] = summary
+			const builtPrompt: AcpTextBlock[] = summary
 				? [...(summary.instructions ? [{ type: "text" as const, text: summary.instructions }] : []), ...basePrompt]
 				: prependNewPromptAugment(basePrompt, {
 						backend: adapter.backend,
@@ -2481,6 +2486,7 @@ export function streamAcpTurn(
 						mcpServerNames: mcpServerNames(config),
 						emacsAgentSocket: process.env.PI_EMACS_AGENT_SOCKET?.trim() || undefined,
 					});
+			const prompt = wireTextBlocks(builtPrompt, adapter);
 
 			// S2f visibility: about to send — say "sending" (not "sent") because the
 			// prompt could still sync-reject before the wire write; the next visible
@@ -2669,7 +2675,8 @@ export function streamAcpTurn(
 			// #63: same hook boundary as a new turn — the reuse delta is the wire
 			// params here. The recheck keeps an abort raised during a slow handler
 			// ahead of the wire write; the prompt driver then owns the abort surface.
-			const wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);
+			const built = { sessionId: session.acpSessionId, prompt: wireTextBlocks(prompt, adapter) };
+			const wireParams = await applyProviderPayloadHook(options, built, model);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
 			// #171 L16: the marker, immediately before the prompt. A reused session is always process-scoped.
 			// A failed write throws here: nothing is sent, and this session is dropped like any pre-prompt failure.

@@ -70,6 +70,28 @@
 			"signature": "[QK:ACP-D18-FLAG-REVOKED-AT-SHUTDOWN]",
 			"signatureSource": "pi-extensions/entwurf-control.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "ACP-L18-SEPARATE-BLOCKS",
+			"title": "the blocks of one prompt are sent with nothing between them",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": [": { ...block, text: `${block.text}${separator}` },"],
+			"replace": [": { ...block },"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L18-SEPARATE-BLOCKS]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-L18-AGY-WIRE-SEPARATED",
+			"title": "the agy adapter declares no block separator, so its prompts leave fused",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\ttextBlockSeparator: \"\\n\\n\",\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L18-AGY-WIRE-SEPARATED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
 		}
 	]
 }

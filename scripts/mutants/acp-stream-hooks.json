@@ -30,10 +30,8 @@
 			"claim": "ACPHOOK-REUSE-PARITY",
 			"title": "the reuse send site bypasses the hook, so resident-session requests become invisible to extensions while cold turns stay covered",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": [
-				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);"
-			],
-			"replace": ["\t\t\tconst wireParams = { sessionId: session.acpSessionId, prompt };"],
+			"find": ["\t\t\tconst wireParams = await applyProviderPayloadHook(options, built, model);"],
+			"replace": ["\t\t\tconst wireParams = built;"],
 			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACPHOOK-REUSE-PARITY]",
@@ -129,12 +127,10 @@
 			"title": "the REUSE call site's post-hook abort recheck is dropped, so an abort raised during a slow handler still sends a second prompt to the resident session",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);",
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, built, model);",
 				"\t\t\tif (signal?.aborted) throw new Error(\"aborted during payload hook\");"
 			],
-			"replace": [
-				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);"
-			],
+			"replace": ["\t\t\tconst wireParams = await applyProviderPayloadHook(options, built, model);"],
 			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACPHOOK-REUSE-ABORT-WINS]",

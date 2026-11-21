@@ -12,7 +12,7 @@
  */
 import { type AssistantMessage, type Message, normalizeContext, type Usage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { ABORTED_TURN_STATUS, buildAcpPrompt, latestUserDelta, userDeltaRange } from "./context.ts";
+import { ABORTED_TURN_STATUS, buildAcpPrompt, latestUserDelta, separateTextBlocks, userDeltaRange } from "./context.ts";
 
 const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
 
@@ -119,4 +119,24 @@ describe("the range a dispatch marker names (#171 L16)", () => {
 		const answered = normalizeContext({ tools: [], messages: [userRun, assistant("stop", [said("done")])] });
 		expect(userDeltaRange(answered)).toEqual({ start: 2, count: 0 });
 	});
+});
+
+it("[QK:ACP-L18-SEPARATE-BLOCKS] every block but the last ends with the separator, once, with count and order kept", () => {
+	const blocks = [
+		{ type: "text" as const, text: "reply with only DONE." },
+		{ type: "text" as const, text: "already apart\n\n" },
+		{ type: "text" as const, text: "What does effects.txt contain now?" },
+	];
+	const separated = separateTextBlocks(blocks, "\n\n");
+	expect(separated.map((b) => b.text)).toEqual([
+		"reply with only DONE.\n\n",
+		"already apart\n\n",
+		"What does effects.txt contain now?",
+	]);
+	// What the backend's model reads when the blocks are joined with nothing between them.
+	expect(separated.map((b) => b.text).join("")).toContain("DONE.\n\nalready");
+	expect(separateTextBlocks(separated, "\n\n")).toEqual(separated);
+	// The input is not changed in place: the marker and the delta proof read the built blocks.
+	expect(blocks[0].text).toBe("reply with only DONE.");
+	expect(separateTextBlocks([], "\n\n")).toEqual([]);
 });

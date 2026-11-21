@@ -222,6 +222,7 @@ type PromptScript = (io: PromptIo) => Promise<AcpPromptResponse>;
 
 /** One backend world: its own record dir, spawn log, and a queue of scripted prompts. */
 function makeWorld() {
+	const prompts: string[][] = [];
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
 	const children: FakeChild[] = [];
 	const scripts: PromptScript[] = [];
@@ -262,6 +263,7 @@ function makeWorld() {
 				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
 				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 				prompt: (params) => {
+					prompts.push(params.prompt.map((block) => (block as { text: string }).text));
 					const script = scripts.shift();
 					if (!script) return Promise.reject(new Error("fake: no scripted prompt left"));
 					const cancelled = new Promise<void>((resolve) => {
@@ -295,6 +297,8 @@ function makeWorld() {
 		deps,
 		children,
 		cancels,
+		/** The text blocks of every prompt that reached the wire, in order. */
+		prompts,
 		/** Queue the next prompt's behaviour. */
 		script(next: PromptScript) {
 			scripts.push(next);
@@ -646,6 +650,40 @@ describe("agy prompt-phase failure (#167)", () => {
 			await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash());
 			expect(world.children, row.label).toHaveLength(2);
 		}
+	});
+
+	it("[QK:ACP-L18-AGY-WIRE-SEPARATED] agy's prompt blocks leave separated on the new and the reuse path; Claude's leave as built", async () => {
+		const twoInputs = (): TranscriptContext => {
+			const base = transcript("first");
+			return {
+				...base,
+				messages: [
+					...base.messages,
+					assistantReply("reply 0"),
+					{ role: "user", content: "reply with only DONE.", timestamp: 1 },
+					{ role: "user", content: "What does effects.txt contain now?", timestamp: 2 },
+				],
+			};
+		};
+		const agy = makeWorld();
+		agy.script(endTurn);
+		await runTurn(agy, transcript("first"), "l18-agy", undefined, agyFlash());
+		agy.script(endTurn);
+		await runTurn(agy, twoInputs(), "l18-agy", undefined, agyFlash());
+		expect(agy.children).toHaveLength(1);
+		const [agyNew, agyReuse] = agy.prompts;
+		// New: the augment and the transcript are separate blocks; every one but the last ends apart.
+		expect(agyNew.length).toBeGreaterThan(1);
+		for (const text of agyNew.slice(0, -1)) expect(text.endsWith("\n\n")).toBe(true);
+		expect(agyReuse).toEqual(["reply with only DONE.\n\n", "What does effects.txt contain now?"]);
+
+		const claude = makeWorld();
+		claude.script(endTurn);
+		await runTurn(claude, transcript("first"), "l18-claude");
+		claude.script(endTurn);
+		await runTurn(claude, twoInputs(), "l18-claude");
+		// Claude reads a command from the first block alone; its blocks are not touched.
+		expect(claude.prompts[1]).toEqual(["reply with only DONE.", "What does effects.txt contain now?"]);
 	});
 
 	it("reuse path: a retained agy session's prompt failure seals the same verdict", async () => {
