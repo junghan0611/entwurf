@@ -14,15 +14,15 @@ is host-local; its decisive lines are pasted into #171 at close. The continuity 
 3. Done: the reuse delta that no longer drops user messages (L5).
 4. Done: initialize facts and the version guard (L1, V5), and this split of the document.
 5. Done: the L16 base, record v2 and the marker. Its stop and drop rules are replaced by decision 17.
-6. Now: the continuity design (decisions 15–18); this table follows it.
-7. A re-measurement command that compares fresh runs with R1–R10 and carries the continuity measurements; agy 1.5.13 and Claude 0.109.x move with it.
-8. L8 and L9 with the continuity rules, under the version guard, reviewed by GLG: L7, L11, L14, P1, Z3, Z4, V1, V2, V3, Z6; `decideBootstrap` moves after initialize.
-9. Close: a last live pass (U12 to U16, P2 with U4), the full gates, the receipts into #171.
+6. Done: the continuity design (decisions 15–18); this table follows it.
+7. Done: the re-measurement command and the pins (Claude 0.109.0, agy 1.5.13, SDK 2.8.0); LIVE measured U9, U12, U14, U15.
+8. Now: L8 and L9 with the continuity rules, under the version guard, reviewed by GLG: L7, L11, L14, P1, Z3, Z4, V1, V2, V3, Z6; `decideBootstrap` moves after initialize.
+9. Close: a last live pass (U13, U16, P2 with U4), the full gates, the receipts into #171.
 
 ## How to read the table
 
 Status is one of: `implemented` (shipped and covered; the QK column names the test), `not-wired` (decided, code to
-come), `declined` (a recorded choice), `deferred` (waiting for a decision), `unmeasured` (nobody has observed it).
+come), `declined` (a recorded choice), `deferred` (waiting for a decision), `unmeasured` (nobody has observed it), `measured` (U rows: observed).
 A scope rule: protocol features that add a harness mode, such as plan mode or todo updates, are declined on
 purpose; not supporting them is the Pi style (GLG, 2026-11-21).
 
@@ -30,25 +30,26 @@ purpose; not supporting them is the Pi style (GLG, 2026-11-21).
 
 What a Pi session does with a vendor ACP child, in the order it happens.
 
-| Row | Name                              | Status      | Note                                                                                                                        | QK |
-|-----|-----------------------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------|---|
-| L1  | initialize, keep agent facts      | implemented | Each child's version and capabilities are read once at start.                                                               | [QK:ACP-L1-FACTS-READ] |
-| L2  | authenticate                      | declined    | Vendor login is the vendor's job; Entwurf never handles credentials.                                                        | — |
-| L3  | session/new                       | implemented | A first turn opens one new vendor session; new happens only at birth or by human choice (17).                               | [QK:ACP-ORACLE-L3-NEW] |
-| L4  | session/prompt and updates        | implemented | A prompt streams back as text, thinking and tool events, then a named stop reason.                                          | [QK:ACP-ORACLE-L4-PROMPT] |
-| L5  | in-process reuse                  | implemented | Later turns reuse the session; the delta starts after the last assistant that is not error or aborted (U13, U14, U15, U16). | [QK:ACP-ORACLE-L5-REUSE] |
-| L6  | session/cancel                    | implemented | Abort sends a cancel, waits a grace period, then ends the child.                                                            | [QK:ACP-ORACLE-L6-CANCEL] |
-| L7  | session/close                     | not-wired   | Dispose still kills the child; it will send close first when the agent offers it.                                           | — |
-| L8  | session/resume                    | not-wired   | A restarted Pi resumes the same id; a refused or unclear resume is an error stop, never new (17).                           | — |
-| L9  | session/load                      | not-wired   | Load is the fallback when resume is absent; its replay is never recorded; a refusal is an error stop (17).                  | — |
-| L10 | session/list                      | declined    | Pi owns the session list, so list is not used (U1).                                                                         | — |
-| L11 | model and effort after attach     | not-wired   | After resume or load the vendor answers defaults; both must be set again (U2).                                              | — |
-| L12 | request_permission                | implemented | Every permission request is approved; narrowing that is later work.                                                         | [QK:ACP-ORACLE-L12-PERMISSION] |
-| L13 | child death and teardown          | implemented | Teardown closes the connection, then ends the child's whole process group.                                                  | [QK:ACP-ORACLE-L13-TEARDOWN] [QK:ACP-ORACLE-L13-PROCESS-GROUP] |
-| L14 | compaction across attach          | not-wired   | Pi compaction keeps the vendor session (16-1; #163 changes); a load replay is never recorded as one (U3).                   | — |
-| L15 | session record store              | implemented | The record is v2; an old v1 record is resumed, not dropped (17). Read never deletes; write is atomic.                       | [QK:ACP-ORACLE-L15-INVALID] [QK:ACP-ORACLE-L15-UNREADABLE] [QK:ACP-ORACLE-L15-ATOMIC] [QK:ACP-ORACLE-L15-AGENT-DIR] [QK:ACP-ORACLE-L15-DEGRADED-NEW] [QK:ACP-ORACLE-L15-DEGRADED-REUSE] |
-| L16 | record currency (pendingDispatch) | implemented | Marker and v2 record landed. Its stop and drop are replaced by 17; the code follows in step 8 (U12).                        | [QK:ACP-L16-STANDING-ZERO-SENDS] |
-| L17 | birth record before session/new   | not-wired   | An intent is written before session/new and the id the moment it answers; a lost id is an error stop (17).                  | — |
+| Row | Name                              | Status      | Note                                                                                                       | QK |
+|-----|-----------------------------------|-------------|------------------------------------------------------------------------------------------------------------|---|
+| L1  | initialize, keep agent facts      | implemented | Each child's version and capabilities are read once at start.                                              | [QK:ACP-L1-FACTS-READ] |
+| L2  | authenticate                      | declined    | Vendor login is the vendor's job; Entwurf never handles credentials.                                       | — |
+| L3  | session/new                       | implemented | A first turn opens one new vendor session; new happens only at birth or by human choice (17).              | [QK:ACP-ORACLE-L3-NEW] |
+| L4  | session/prompt and updates        | implemented | A prompt streams back as text, thinking and tool events, then a named stop reason.                         | [QK:ACP-ORACLE-L4-PROMPT] |
+| L5  | in-process reuse                  | implemented | Later turns reuse the session; delta after the last assistant, per vendor in step 8 (U13, U14, U15, U16). | [QK:ACP-ORACLE-L5-REUSE] |
+| L6  | session/cancel                    | implemented | Abort sends a cancel, waits a grace period, then ends the child.                                           | [QK:ACP-ORACLE-L6-CANCEL] |
+| L7  | session/close                     | not-wired   | Dispose still kills the child; it will send close first when the agent offers it.                          | — |
+| L8  | session/resume                    | not-wired   | A restarted Pi resumes the same id; a refused or unclear resume is an error stop, never new (17).          | — |
+| L9  | session/load                      | not-wired   | Load is the fallback when resume is absent; its replay is never recorded; a refusal is an error stop (17). | — |
+| L10 | session/list                      | declined    | Pi owns the session list, so list is not used (U1).                                                        | — |
+| L11 | model and effort after attach     | not-wired   | After resume or load the vendor answers defaults; both must be set again (U2).                             | — |
+| L12 | request_permission                | implemented | Every permission request is approved; narrowing that is later work.                                        | [QK:ACP-ORACLE-L12-PERMISSION] |
+| L13 | child death and teardown          | implemented | Teardown closes the connection, then ends the child's whole process group.                                 | [QK:ACP-ORACLE-L13-TEARDOWN] [QK:ACP-ORACLE-L13-PROCESS-GROUP] |
+| L14 | compaction across attach          | not-wired   | Pi compaction keeps the vendor session (16-1; #163 changes); a load replay is never recorded as one (U3).  | — |
+| L15 | session record store              | implemented | The record is v2; an old v1 record is resumed, not dropped (17). Read never deletes; write is atomic.      | [QK:ACP-ORACLE-L15-INVALID] [QK:ACP-ORACLE-L15-UNREADABLE] [QK:ACP-ORACLE-L15-ATOMIC] [QK:ACP-ORACLE-L15-AGENT-DIR] [QK:ACP-ORACLE-L15-DEGRADED-NEW] [QK:ACP-ORACLE-L15-DEGRADED-REUSE] |
+| L16 | record currency (pendingDispatch) | implemented | Marker and v2 record landed. Its stop and drop are replaced by 17; the code follows in step 8 (U12).       | [QK:ACP-L16-STANDING-ZERO-SENDS] |
+| L17 | birth record before session/new   | not-wired   | An intent is written before session/new and the id the moment it answers; a lost id is an error stop (17). | — |
+| L18 | block separator in a prompt       | not-wired   | agy joins several text blocks with no separator; the prompt needs one (step 8).                            | — |
 
 ## Pi exits
 
@@ -93,23 +94,23 @@ Measured on claude-agent-acp and agy; the client must absorb them.
 
 Not observed yet. Each row names its parent and says whether it blocks the close.
 
-| Row | Name                                               | Status     | Note                                                                                       | QK |
-|-----|----------------------------------------------------|------------|--------------------------------------------------------------------------------------------|---|
-| U1  | agy list for a prompted session                    | unmeasured | Parent L10. Is a prompted agy session listed? stays: L10 is declined.                      | — |
-| U2  | effect of the re-applied effort                    | unmeasured | Parent L11. Does the effort set again change behaviour? stays: behaviour, not correctness. | — |
-| U3  | agy compaction                                     | unmeasured | Parent L14. Does agy compact across attach? stays: no trigger exists.                      | — |
-| U4  | /renew transition on an ACP row                    | unmeasured | Parent P2. Does /renew work as it stands? blocks close: step 9.                            | — |
-| U5  | an agent calling fs read                           | unmeasured | Parent Z1. Does any agent call fs read? stays: the capability is not offered.              | — |
-| U6  | a V1 discriminator as a detector                   | unmeasured | Parent V1. Can a phantom load be detected? stays: resume-first closes V1.                  | — |
-| U7  | an agent with load but no resume                   | unmeasured | Parent V1. Do load-only agents exist? stays: no such vendor.                               | — |
-| U8  | resume of the agy orphan                           | unmeasured | Parent V4. Does an orphan session resume? stays: V4 is declined.                           | — |
-| U9  | two holders both prompting                         | unmeasured | Parent V3. What happens when both holders prompt (with Z6)? blocks close: step 8.          | — |
-| U10 | a v2-shaped initialize                             | unmeasured | Parent Z2. How does a v2-shaped initialize fare? stays: Z2 is declined.                    | — |
-| U12 | vendor state after a cut prompt                    | unmeasured | Parent L16. What did the vendor run when a prompt was cut? blocks close: step 9.           | — |
-| U13 | record-relative delta and the max_tokens duplicate | unmeasured | Parent L5. Does a record-relative delta remove the duplicate? blocks close: step 9.        | — |
-| U14 | vendor compacts on a multi-block /compact          | unmeasured | Parent L5. Does the vendor compact on a multi-block prompt? blocks close: step 9.          | — |
-| U15 | /compact on a new turn                             | unmeasured | Parent L5. Does /compact on a new turn compact anything? blocks close: step 9.             | — |
-| U16 | usage on a real length stop                        | unmeasured | Parent L5. What usage does a real length stop report? blocks close: step 9.                | — |
+| Row | Name                                               | Status     | Note                                                                                    | QK |
+|-----|----------------------------------------------------|------------|-----------------------------------------------------------------------------------------|---|
+| U1  | agy list for a prompted session                    | unmeasured | Parent L10. Is a prompted agy session listed? stays: L10 is declined.                   | — |
+| U2  | effect of the re-applied effort                    | unmeasured | Parent L11. Does the effort set again change behaviour? stays: not a correctness issue. | — |
+| U3  | agy compaction                                     | unmeasured | Parent L14. Does agy compact across attach? stays: no trigger exists.                   | — |
+| U4  | /renew transition on an ACP row                    | unmeasured | Parent P2. Does /renew work as it stands? blocks close: step 9.                         | — |
+| U5  | an agent calling fs read                           | unmeasured | Parent Z1. Does any agent call fs read? stays: the capability is not offered.           | — |
+| U6  | a V1 discriminator as a detector                   | unmeasured | Parent V1. Can a phantom load be detected? stays: resume-first closes V1.               | — |
+| U7  | an agent with load but no resume                   | unmeasured | Parent V1. Do load-only agents exist? stays: no such vendor.                            | — |
+| U8  | resume of the agy orphan                           | unmeasured | Parent V4. Does an orphan session resume? stays: V4 is declined.                        | — |
+| U9  | two holders both prompting                         | measured   | Parent V3. Both holders answered (Claude, agy); no vendor guard, so Z6 is needed.       | — |
+| U10 | a v2-shaped initialize                             | unmeasured | Parent Z2. How does a v2-shaped initialize fare? stays: Z2 is declined.                 | — |
+| U12 | vendor state after a cut prompt                    | measured   | Parent L16. A cut turn stays in the vendor session and resumes on both; re-send: 16-9.  | — |
+| U13 | record-relative delta and the max_tokens duplicate | unmeasured | Parent L5. Does a record-relative delta remove the duplicate? blocks close: step 9.     | — |
+| U14 | vendor compacts on a multi-block /compact          | measured   | Parent L5. A multi-block prompt does not compact; /compact must be alone.               | — |
+| U15 | /compact on a new turn                             | measured   | Parent L5. /compact on a fresh session compacts nothing on both.                        | — |
+| U16 | usage on a real length stop                        | unmeasured | Parent L5. What usage does a real length stop report? blocks close: step 9.             | — |
 
 ## Decisions (GLG, 2026-11-20 and 2026-11-21)
 
@@ -121,14 +122,14 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 6. Version guard: attach that leans on measurement needs the reported version to equal the measured one (V5).
 7. Reuse delta: send every user message after the last assistant that is not error or aborted (16-9); `/compact` is read from the first block.
 8. (Replaced by 17.) pendingDispatch: write a marker before each prompt and clear it at seal; a standing marker stops once, drops the record, then new. Every named stop does the same. With no marker, a user followed by an assistant after the record's prefix means new; else the users are sent in order.
-9. (Replaced by 17.) If the marker cannot be written, the record cannot be read, or a stop's drop fails, nothing is sent and the turn is refused with its reason.
+9. (Replaced by 17: a failed marker write, an unreadable record or a failed drop is an error stop before any send.)
 10. Claude gets the same version guard, because the command override is checked only against the floor.
 11. Z5 and V4 are declined (measured in R10).
-12. Re-measurement comes before L8 and L9: one command compares fresh runs with R1–R10, and only a changed line needs a person.
+12. Re-measurement came before L8 and L9: one command compares fresh runs with R1–R10; only a changed line needs a person.
 13. P2 is closed by the final live run (U4); Z7 is declined, since Pi resume is the recovery path.
 14. This page is the short table; the full document with evidence lives in `.agent-reports/`, and its receipts go to #171 at close.
 15. Continuity: alive, keep the session; disconnected, resume the same id; outcome unknown, keep the record and stop only that turn. New is for birth or a human choice. (G5: a turn of unknown outcome ends with a fixed text, and the next human turn re-sends the input.)
-16. Compaction keeps the vendor session; /renew is a new chapter; a model change happens inside the session or is refused; an unmeasured version or an ambiguous resume error is never read as absence; an explicit `pi -p` stays one-shot; config drift resumes the same id with the new config; a failed turn's input is re-sent next turn.
+16. Compaction keeps the vendor session; /renew is a new chapter; a model change stays inside the session or is refused; an unmeasured version or an ambiguous resume error is never absence; an explicit `pi -p` stays one-shot; config drift resumes the same id; a failed turn's input is re-sent, except a range Claude already got (a re-send repeats the work); agy re-sends (a lost message is worse than a duplicate).
 17. No internal new: every other path to `session/new` is an error stop that keeps the record and names the cause; G2 and decisions 8 and 9 are replaced by this, and a v1 record is read and resumed.
 18. ACP runs only under `entwurf pi`; the summary helper is allowed.
 

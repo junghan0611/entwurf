@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const EXPECTED = [
-	...Array.from({ length: 17 }, (_, i) => `L${i + 1}`),
+	...Array.from({ length: 18 }, (_, i) => `L${i + 1}`),
 	"P1",
 	"P2",
 	"P3",
@@ -19,7 +19,7 @@ const EXPECTED = [
 	...Array.from({ length: 10 }, (_, i) => `U${i + 1}`),
 	...Array.from({ length: 5 }, (_, i) => `U${i + 12}`),
 ];
-const STATES = new Set(["implemented", "declined", "deferred", "not-wired", "unmeasured"]);
+const STATES = new Set(["implemented", "declined", "deferred", "not-wired", "unmeasured", "measured"]);
 
 function testFiles(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -110,15 +110,17 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 		expect(evidence.replace(/[\s\-–—]/g, ""), `${id}:${number}: evidence or reason is empty`).toBeTruthy();
 		expect(evidence.length, `${id}:${number}: a note is one short sentence`).toBeLessThanOrEqual(140);
 		expect(evidence, `${id}:${number}: no file:line inside a table cell`).not.toMatch(/\.(?:ts|mjs|js|md):\d/);
+		if (!id.startsWith("U")) expect(state, `${id}:${number}: only a U row is measured`).not.toBe("measured");
 		if (id.startsWith("U")) {
-			expect(state, `${id}:${number}: a U row is unmeasured`).toBe("unmeasured");
+			expect(["unmeasured", "measured"], `${id}:${number}: a U row is unmeasured or measured`).toContain(state);
 			const parent = /\b[LPZV]\d+\b/.exec(evidence)?.[0];
 			expect(parent && ids.includes(parent), `${id}:${number}: names a parent row`).toBe(true);
 			expect(
 				noteOf.get(parent ?? "")?.match(new RegExp(`\\b${id}\\b`)),
 				`${id}:${number}: parent ${parent} must point back to ${id}`,
 			).toBeTruthy();
-			expect(evidence, `${id}:${number}: ends with its close line`).toMatch(/(?:blocks close: step \d|stays: .+)\.$/);
+			if (state === "unmeasured")
+				expect(evidence, `${id}:${number}: ends with its close line`).toMatch(/(?:blocks close: step \d|stays: .+)\.$/);
 		}
 		const tokens = [...qk.matchAll(/\[QK:[^\]\r\n]+\]/g)].map((match) => match[0]);
 		if (state === "implemented") {
