@@ -354,13 +354,13 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
  *  each `measured` to the version the Receipts paragraph names (receipt-versions.ts). */
 export const CLAUDE_ACP_AGENT = Object.freeze({
 	name: "@agentclientprotocol/claude-agent-acp",
-	floor: "0.107.3",
-	measured: "0.107.3",
+	floor: "0.109.0",
+	measured: "0.109.0",
 });
 export const AGY_ACP_AGENT = Object.freeze({
 	name: "Antigravity ACP Server",
 	floor: "1.5.9",
-	measured: "1.5.12",
+	measured: "1.5.13",
 });
 
 function parseReleaseVersion(value: unknown): [number, number, number] | undefined {

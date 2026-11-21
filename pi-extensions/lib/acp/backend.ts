@@ -1485,9 +1485,9 @@ export function streamAcpTurn(
 				// Scope is decided HERE, at collection (S8 v5.1 §3): Pi's summary turn and a key with no
 				// Pi session (`cwd:`) record nothing, so nothing of theirs waits in backend memory.
 				collect: !summaryTurnActive && session.key.startsWith("pi:"),
-				// Claude ACP reads a command from the first text block (claude-agent-acp 0.107.3
-				// prompt-to-claude.js:36-39, v1/acp-agent.js:1146-1147). Whether the vendor compacts
-				// on a multi-block prompt that starts with /compact is unmeasured.
+				// Claude ACP reads a command from the first text block (claude-agent-acp 0.109.0 prompt-to-claude.js:31,36-39,
+				// v1/acp-agent.js:1147,1152-1153). #171 U14: /compact as the first of two blocks gave 0 compactions on 0.107.3,
+				// 0.109.0 and agy 1.5.13 (step-7 continuity-claude-20261121T064907Z, -T070856Z, continuity-agy-20261121T071729Z).
 				promptWasCompactCommand: isCompactCommand(delta[0]?.text),
 				carried: session.contextOccupancyTokens,
 				now: Date.now,

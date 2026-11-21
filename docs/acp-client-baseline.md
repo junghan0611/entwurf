@@ -134,6 +134,6 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 
 ## Receipts
 
-Receipts R1–R10 were measured on 2026-11-20, once each, on claude-agent-acp 0.107.3 (`claude-sonnet-5-5`, effort `low`) and agy 1.5.12 (`gemini-3.8-flash`, `thought_level low`). The versions here change only with a re-measurement through `scripts/raw-acp-session-measure/`.
+Receipts R1–R10 were measured on 2026-11-20, once each, and re-measured on 2026-11-21 with `scripts/raw-acp-session-measure/run.sh all`, once each, on claude-agent-acp 0.109.0 (`claude-sonnet-5-5`, effort `low`) and agy 1.5.13 (`gemini-3.8-flash`, `thought_level low`): no key differed from the stored values, and on Claude R10's S-kill rows were inconclusive (the kill landed after `session/new` answered). The versions here change only with a re-measurement through `scripts/raw-acp-session-measure/`.
 
 R11 and R12 (2026-11-21) are offline checks, not vendor runs. The full receipts live in the full document and are pasted into #171 at close.

@@ -102,8 +102,8 @@
 		"claudeCodeFloor": ">=2.1.306"
 	},
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.107.3",
-		"@agentclientprotocol/sdk": "2.7.0",
+		"@agentclientprotocol/claude-agent-acp": "0.109.0",
+		"@agentclientprotocol/sdk": "2.8.0",
 		"@anthropic-ai/sdk": "0.100.1",
 		"@earendil-works/chord": "1.5.2",
 		"@earendil-works/pi-agent-core": "1.5.2",

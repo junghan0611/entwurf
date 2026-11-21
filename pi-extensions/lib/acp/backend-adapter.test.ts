@@ -297,14 +297,15 @@ describe("the shared admission rule (#168)", () => {
 });
 
 /**
- * #171 L1 and V5. The two answers below are the `initialize` results the vendors gave on 2026-11-20
- * (receipt run-exp-20261120T223305: claude-02-l11-new.wire-in.ndjson and agy-13-z2.wire-in.ndjson,
- * protocolVersion and promptCapabilities left out), copied as literals so the reader cannot move its own
- * oracle. The judgement is checked against those facts with the shipped pins.
+ * #171 L1 and V5. The two answers below are the `initialize` results the vendors gave on 2026-11-21
+ * (receipts all-claude-20261121T065930Z/experiments-claude-20261121T070023Z/claude-02-l11-new.wire-in.ndjson
+ * and all-agy-20261121T071252Z/experiments-agy-20261121T071413Z/agy-01-z2.wire-in.ndjson; protocolVersion,
+ * promptCapabilities and the fields the reader does not read left out), copied as literals so the reader
+ * cannot move its own oracle. The judgement is checked against those facts with the shipped pins.
  */
 const CLAUDE_R1 = {
 	protocolVersion: 1,
-	agentInfo: { name: "@agentclientprotocol/claude-agent-acp", title: "Claude Agent", version: "0.107.3" },
+	agentInfo: { name: "@agentclientprotocol/claude-agent-acp", title: "Claude Agent", version: "0.109.0" },
 	agentCapabilities: {
 		loadSession: true,
 		sessionCapabilities: {
@@ -325,7 +326,7 @@ const CLAUDE_R1 = {
 };
 const AGY_R1 = {
 	protocolVersion: 1,
-	agentInfo: { name: "Antigravity ACP Server", version: "1.5.12" },
+	agentInfo: { name: "Antigravity ACP Server", version: "1.5.13" },
 	agentCapabilities: {
 		loadSession: true,
 		sessionCapabilities: { resume: {}, close: {}, load: {}, list: {}, additionalDirectories: {} },
@@ -339,7 +340,7 @@ const at = (answer: { agentInfo: { name: string } }, version: string): AcpAgentF
 describe("the child's initialize facts and the attach judgement (#171 L1, V5)", () => {
 	it("[QK:ACP-L1-FACTS-READ] reads name, version, loadSession, session capabilities and auth method ids as answered, and nothing it was not told", () => {
 		expect(readAgentFacts(CLAUDE_R1)).toEqual({
-			agent: { name: "@agentclientprotocol/claude-agent-acp", version: "0.107.3" },
+			agent: { name: "@agentclientprotocol/claude-agent-acp", version: "0.109.0" },
 			loadSession: true,
 			sessionCapabilities: [
 				"additionalDirectories",
@@ -356,7 +357,7 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 			authMethods: [],
 		});
 		expect(readAgentFacts(AGY_R1)).toEqual({
-			agent: { name: "Antigravity ACP Server", version: "1.5.12" },
+			agent: { name: "Antigravity ACP Server", version: "1.5.13" },
 			loadSession: true,
 			sessionCapabilities: ["additionalDirectories", "close", "list", "load", "resume"],
 			authMethods: ["oauth-personal", "oauth-business", "gemini-api-key", "agent-platform"],
@@ -385,15 +386,15 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 		}
 	});
 
-	it("[QK:ACP-V5-ATTACH-UNMEASURED] an admitted server at any other version may not attach — installed agy 1.5.13, the agy floor, a newer Claude behind CLAUDE_AGENT_ACP_COMMAND", () => {
+	it("[QK:ACP-V5-ATTACH-UNMEASURED] an admitted server at any other version may not attach — the previously measured agy 1.5.12, the agy floor, a newer Claude behind CLAUDE_AGENT_ACP_COMMAND", () => {
 		const saved = process.env.CLAUDE_AGENT_ACP_COMMAND;
 		try {
-			process.env.CLAUDE_AGENT_ACP_COMMAND = "/opt/claude-agent-acp-0.109.0";
+			process.env.CLAUDE_AGENT_ACP_COMMAND = "/opt/claude-agent-acp-0.110.0";
 			const cells = [
-				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "1.5.13" },
+				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "1.5.12" },
 				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: AGY_ACP_AGENT.floor },
-				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.109.0" },
-				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.107.4" },
+				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.110.0" },
+				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.109.1" },
 			];
 			for (const cell of cells) {
 				const answer = { ...cell.answer, agentInfo: { ...cell.answer.agentInfo, version: cell.version } };
@@ -404,7 +405,7 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 						reason: "version-unmeasured",
 					});
 			}
-			for (const version of ["1.5.12-beta.1", "1.5.12+b", "v1.5.12", " 1.5.12"])
+			for (const version of ["1.5.13-beta.1", "1.5.13+b", "v1.5.13", " 1.5.13"])
 				expect(attachAllowed(at(AGY_R1, version), AGY_ACP_AGENT, "resume"), version).toEqual({
 					allowed: false,
 					reason: "version-unmeasured",
@@ -448,7 +449,7 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 		expect(bootstrapCapabilities(resumeOnly, CLAUDE_ACP_AGENT)).toEqual({ resumeSession: true, loadSession: false });
 		const loadOnly = readAgentFacts({ ...AGY_R1, agentCapabilities: { loadSession: true } });
 		expect(bootstrapCapabilities(loadOnly, AGY_ACP_AGENT)).toEqual({ resumeSession: false, loadSession: true });
-		expect(bootstrapCapabilities(at(AGY_R1, "1.5.13"), AGY_ACP_AGENT)).toEqual({
+		expect(bootstrapCapabilities(at(AGY_R1, "1.5.12"), AGY_ACP_AGENT)).toEqual({
 			resumeSession: false,
 			loadSession: false,
 		});
