@@ -1383,19 +1383,22 @@ async function proveChildGone(
 	ms: number,
 	groupGone: (child: AcpChildLike) => boolean = childGroupGone,
 ): Promise<boolean> {
-	if (!session.childEnd.settled) {
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		await Promise.race([
-			session.childEnd.promise,
-			new Promise<void>((resolve) => {
-				timer = setTimeout(resolve, ms);
-				timer.unref?.();
-			}),
-		]);
-		if (timer) clearTimeout(timer);
-	}
+	const deadline = Date.now() + ms;
+	const pause = (wait: number): Promise<void> =>
+		new Promise((resolve) => {
+			setTimeout(resolve, wait).unref?.();
+		});
+	if (!session.childEnd.settled) await Promise.race([session.childEnd.promise, pause(ms)]);
 	const ended = session.exit !== undefined || (session.spawnFailed === true && session.child.pid == null);
-	return ended && groupGone(session.child);
+	if (!ended) return false;
+	// The agent's own exit comes first; what it started (the vendor's `claude` process, measured
+	// 2026-11-22) leaves the group a moment later, or at the group SIGKILL. The group is asked until
+	// the same deadline.
+	while (!groupGone(session.child)) {
+		if (Date.now() >= deadline) return false;
+		await pause(Math.min(50, Math.max(1, deadline - Date.now())));
+	}
+	return true;
 }
 
 /** Prove every tracked agent of `key` gone and forget the proven ones. `false`: one is not proven. */
@@ -1446,13 +1449,22 @@ export async function releaseAcpSessions(
 	let released = 0;
 	await Promise.all(
 		[...keys].map(async (key) => {
-			if (inFlightKeys.has(key)) return;
+			// A lease that stays is said on stderr with its reason: the next Pi to open the session stops on it.
+			const kept = (why: string): void => {
+				if (heldLeases.has(key)) process.stderr.write(`[acp] holder lease kept: ${why}\n`);
+			};
+			if (inFlightKeys.has(key)) return kept("a turn is in flight");
 			const live = bridgeSessions.get(key);
 			if (live) {
-				if (live.busy) return;
+				if (live.busy) return kept("the session is busy");
 				abandonRetainedSession(live);
 			}
-			if (!(await proveAgentsGone(key, waitMs, groupGone))) return;
+			if (!(await proveAgentsGone(key, waitMs, groupGone))) {
+				const seen = [...(sessionAgents.get(key) ?? [])]
+					.map((agent) => `pid ${agent.child.pid ?? "?"} exit ${agent.exit ? "seen" : "not seen"}`)
+					.join(", ");
+				return kept(`its agent was not proven gone within ${waitMs}ms (${seen})`);
+			}
 			// A turn that began while this waited owns the key now.
 			if (inFlightKeys.has(key) || bridgeSessions.has(key) || sessionAgents.has(key)) return;
 			try {

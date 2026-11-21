@@ -5,7 +5,7 @@
 #
 #   LIVE=1 scripts/raw-acp-session-measure/run.sh <scenario> <out-dir> [claude|agy]
 #
-#   scenario  rail0 | agy | resume-unknown | experiments | z5 | continuity | all
+#   scenario  rail0 | agy | resume-unknown | experiments | z5 | continuity | pi-smoke | all
 #   out-dir   an EXISTING directory outside this repository; each run gets a new subdirectory
 #   claude|agy  optional backend filter: experiments, z5, continuity and all
 #
@@ -45,7 +45,7 @@ die() {
 	exit 2
 }
 
-SCENARIOS="rail0|agy|resume-unknown|experiments|z5|continuity|all"
+SCENARIOS="rail0|agy|resume-unknown|experiments|z5|continuity|pi-smoke|all"
 [ "${LIVE:-}" = "1" ] || die "set LIVE=1 to drive real vendor ACP agents (spends subscription turns)."
 [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: LIVE=1 $0 <$SCENARIOS> <out-dir> [claude|agy]"
 
@@ -56,15 +56,15 @@ OUT_ARG="$2"
 ONLY="${3:-}"
 
 case "$SCENARIO" in
-rail0 | agy | resume-unknown | experiments | z5 | continuity | all) ;;
+rail0 | agy | resume-unknown | experiments | z5 | continuity | pi-smoke | all) ;;
 *) die "unknown scenario: $SCENARIO" ;;
 esac
 case "$ONLY" in
 "") ;;
 claude | agy)
 	case "$SCENARIO" in
-	experiments | z5 | continuity | all) ;;
-	*) die "only experiments, z5, continuity and all take a backend filter" ;;
+	experiments | z5 | continuity | pi-smoke | all) ;;
+	*) die "only experiments, z5, continuity, pi-smoke and all take a backend filter" ;;
 	esac
 	;;
 *) die "backend filter must be claude or agy: $ONLY" ;;
@@ -97,6 +97,7 @@ child_env=(
 if [ -n "${PROBE_MODEL:-}" ]; then child_env+=(PROBE_MODEL="$PROBE_MODEL"); fi
 if [ -n "${PROBE_EFFORT:-}" ]; then child_env+=(PROBE_EFFORT="$PROBE_EFFORT"); fi
 if [ -n "${ENTWURF_RAW_AGY_MODEL:-}" ]; then child_env+=(ENTWURF_RAW_AGY_MODEL="$ENTWURF_RAW_AGY_MODEL"); fi
+if [ -n "${ENTWURF_RAW_PI_MODEL:-}" ]; then child_env+=(ENTWURF_RAW_PI_MODEL="$ENTWURF_RAW_PI_MODEL"); fi
 if [ -n "${ENTWURF_RAW_ROWS:-}" ]; then child_env+=(ENTWURF_RAW_ROWS="$ENTWURF_RAW_ROWS"); fi
 if [ -n "${ENTWURF_RAW_CLAUDE_ACP_PREFIX:-}" ]; then
 	case "$ENTWURF_RAW_CLAUDE_ACP_PREFIX" in

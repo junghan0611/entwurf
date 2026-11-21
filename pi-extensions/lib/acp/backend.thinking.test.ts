@@ -2218,6 +2218,17 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(world.children).toHaveLength(2);
 	});
 
+	it("[QK:ACP-LEASE-RELEASE-WAITS-FOR-GROUP] an agent's process group that empties a moment after its exit is waited for: the hold is released within the wait", async () => {
+		const world = makeWorld();
+		const id = "release-waits";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		// Measured on a real quit (2026-11-22): the agent exits first, the vendor process it started later.
+		let asked = 0;
+		expect(await backend.releaseAcpSessions(id, undefined, 2_000, () => ++asked > 3)).toBe(1);
+		expect(asked).toBe(4);
+		expect(existsSync(leaseOf(world))).toBe(false);
+	});
+
 	it("[QK:ACP-ATTACH-TEXT-CHANGE-STOPS] a stored session is not resumed under a setup text other than the one it was opened with", async () => {
 		const world = makeWorld();
 		const id = "attach-text";
