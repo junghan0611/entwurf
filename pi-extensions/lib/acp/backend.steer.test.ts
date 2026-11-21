@@ -154,6 +154,7 @@ function makeWorld(initializeAnswer: unknown) {
 			}),
 		now: () => "2026-11-15T00:00:00Z",
 		sessionDir,
+		birthDir: `${sessionDir}-births`,
 		abortGraceMs: 40,
 	};
 	/**

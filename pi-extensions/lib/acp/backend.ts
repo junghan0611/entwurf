@@ -76,6 +76,7 @@ import {
 	readAgentFacts,
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
+import { birthReserved, publishBirthReservation } from "./birth-reservation.js";
 import { ACP_TURN_ID_PREFIX, reuseBranchVerdict } from "./branch-gate.js";
 import {
 	AcpCompactionCollector,
@@ -102,24 +103,25 @@ import {
 	applyAcpSessionUpdate,
 	createAcpStreamState,
 	finalizeAcpStreamState,
+	LIFECYCLE_NOTICE_SIGNATURE,
 	pushAcpLifecycleNotice,
 	pushPermissionNotice,
 } from "./event-mapper.js";
 import {
-	type BootstrapDecision,
 	type BootstrapParams,
 	bridgeConfigSignature,
 	buildSessionRecord,
 	contextMessageSignatures,
-	decideBootstrap,
-	deleteSessionRecord,
+	decideResident,
 	type ExistingSession,
+	type FirstPromptState,
 	type HostLifecycle,
+	hasAcpTrace,
 	type PendingDispatch,
+	type RecordWriter,
 	readSessionRecord,
 	resolveLifecyclePolicy,
 	sessionRecordPath,
-	standingRecordVerdict,
 	writeSessionRecord,
 } from "./session-store.js";
 import { ACP_STOPS, type AcpStopId, acpStopExitNotice } from "./stop-texts.js";
@@ -288,6 +290,8 @@ export interface AcpTurnDeps {
 	now(): string;
 	/** Record dir override (tests). Defaults to the real session cache dir. */
 	sessionDir?: string;
+	/** Birth reservation dir override (tests). Defaults to the HOME-based dir (birth-reservation.ts). */
+	birthDir?: string;
 	/**
 	 * Post-abort cleanup grace (gates). Defaults to ABORT_CANCEL_GRACE_MS. This is
 	 * the ONLY injectable clock left on the turn path and it bounds cleanup after
@@ -350,6 +354,10 @@ interface BridgeSession {
 	/** #171 step 8: the turn id (`responseId`) of the last turn this session sealed; the branch gate
 	 *  allows a reuse turn only when that exact answer is the last one on Pi's branch. */
 	sealedTurnId?: string;
+	/** #171 step 8: the agent that answered `initialize` for this session, as the record names it. */
+	writer: RecordWriter;
+	/** #171 step 8: where this session's first prompt stands, as the record states it. */
+	firstPrompt: FirstPromptState;
 	/** The backend thinking value the driver last read back on this session (#142); a fact about the
 	 *  live session, never part of the reuse signature. Undefined until one is set. */
 	thinkingValue?: string;
@@ -989,21 +997,57 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promis
 // continues this live ACP session or opens a new one. Said only after the turn
 // settled, and only about the live session — not about any private transcript.
 export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
-export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
+export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; the ACP process was closed";
 /** #171 step 8: an abort before a reuse turn's prompt went out. Nothing ran and the live session is kept. */
 export const ACP_CANCEL_UNSENT_NOTICE = "stopped before the prompt was sent — nothing ran; the ACP session is kept";
 export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — future continuation may require a new session";
 // #171 L16 — the dispatch marker. Pi's retry classifier reads `errorMessage` alone, and a retried turn after a
 // stop would be an automatic send, so these error texts are fixed and carry no number, id or path (a bare
 // 500 or 503 there reads as transient). The range and the store's code ride the notices and stderr instead.
-export const ACP_DISPATCH_STOP_MESSAGE =
-	"entwurf: the last prompt to this ACP session has no sealed answer, so nothing was sent this turn";
 // Decision 17: a stop never asks the operator to remove a record — deleting it can erase the only binding.
 export const ACP_RECORD_UNREADABLE_MESSAGE = ACP_STOPS.unreadable.text;
 export const ACP_DISPATCH_MARKER_NOT_SAVED =
 	"entwurf: the dispatch marker was not saved, so nothing was sent this turn";
-export const ACP_RECORD_DROPPED_NOTICE = "session record dropped — the next turn starts a new session";
-export const ACP_RECORD_NOT_DROPPED_NOTICE = "session record not dropped — the next turn stops again";
+/** #171 step 8 (decision 17): a turn that failed after its marker leaves the record, marker included. */
+/**
+ * #171 step 8: the stops made where no vendor session can have been reached by this turn — no
+ * control, no readable Pi session, a store that could not be looked at, a birth that could not be
+ * reserved. Each stamps its answer with `ACP_NO_SESSION_NOTICE`.
+ */
+const PRE_SESSION_STOPS: ReadonlySet<AcpStopId> = new Set(["mode", "host", "unreadable", "reserve"]);
+
+/**
+ * Shown, and so stored by Pi in the answer, when a turn ended where it cannot have reached a vendor
+ * session: one of `PRE_SESSION_STOPS`, or a birth turn that failed before its reservation (the agent
+ * could not be started, was refused, or the turn was aborted first). No `session/new` was called.
+ */
+export const ACP_NO_SESSION_NOTICE = "no ACP session was started this turn";
+
+/**
+ * Whether a stored Entwurf answer that failed or was aborted is proven not to be ACP activity: it
+ * carries the notice above as a block this provider stamped. Its error text proves nothing — a
+ * vendor's raw error can read like anything, and an earlier build sealed such text unchanged.
+ */
+export function provenPreBirthAnswer(message: unknown): boolean {
+	const m = message as { content?: unknown } | null;
+	if (typeof m !== "object" || m === null) return false;
+	const notice = `\n[acp: ${ACP_NO_SESSION_NOTICE}]\n`;
+	return (
+		Array.isArray(m.content) &&
+		m.content.some((block) => {
+			const b = block as { type?: unknown; text?: unknown; textSignature?: unknown } | null;
+			return (
+				typeof b === "object" &&
+				b !== null &&
+				b.type === "text" &&
+				b.textSignature === LIFECYCLE_NOTICE_SIGNATURE &&
+				b.text === notice
+			);
+		})
+	);
+}
+
+export const ACP_RECORD_KEPT_NOTICE = "session record kept — it names the session and the prompt that may have run";
 /** #163: Pi's summary turn ended as `cancelled` with no abort from Pi. Kept non-transient for pi's retry classifier. */
 export const ACP_SUMMARY_CANCELLED_MESSAGE =
 	"ACP backend ended the summary turn as cancelled although Pi did not abort it; the summary is incomplete and is not kept";
@@ -1312,6 +1356,8 @@ function writeRecordFor(session: BridgeSession, deps: AcpTurnDeps, pendingDispat
 		{
 			sessionKey: session.key,
 			acpSessionId: session.acpSessionId,
+			writer: session.writer,
+			firstPrompt: session.firstPrompt,
 			cwd: session.cwd,
 			modelId: session.modelId,
 			bridgeConfigSignature: session.bridgeConfigSignature,
@@ -1330,6 +1376,7 @@ function writeRecordFor(session: BridgeSession, deps: AcpTurnDeps, pendingDispat
  */
 function persistRecord(session: BridgeSession, deps: AcpTurnDeps): boolean {
 	try {
+		session.firstPrompt = "sealed";
 		writeRecordFor(session, deps, null);
 		return true;
 	} catch (error) {
@@ -1346,18 +1393,6 @@ function persistRecord(session: BridgeSession, deps: AcpTurnDeps): boolean {
  */
 export function acpStoreRefusal(message: string, what: string, code: string): { errorMessage: string; notice: string } {
 	return { errorMessage: message, notice: `${what} (code=${code})` };
-}
-
-/** #171 L16: drop the record after a stop. Returns the failure code, or undefined once it is gone. */
-function dropRecord(sessionKey: string, deps: AcpTurnDeps): string | undefined {
-	try {
-		deleteSessionRecord(sessionKey, deps.sessionDir);
-		return undefined;
-	} catch (error) {
-		const code = storeErrorCode(error);
-		process.stderr.write(`[acp] session record drop failed: code=${code}\n`);
-		return code;
-	}
 }
 
 /** The range a marker names, as positions and a count over its own context — never the text (#171 L16). */
@@ -1886,9 +1921,12 @@ export function streamAcpTurn(
 		range: { start: number; count: number } = userDeltaRange(context),
 	): PendingDispatch {
 		const marker: PendingDispatch = { ...range, contextMessageSignatures: [...ctxSigs] };
+		const before = session.firstPrompt;
 		try {
+			if (before === "pending") session.firstPrompt = "dispatched";
 			writeRecordFor(session, deps, marker);
 		} catch (error) {
+			session.firstPrompt = before;
 			const code = storeErrorCode(error);
 			process.stderr.write(`[acp] dispatch marker write failed: code=${code}\n`);
 			const refusal = acpStoreRefusal(ACP_DISPATCH_MARKER_NOT_SAVED, "dispatch marker not saved", code);
@@ -1908,26 +1946,15 @@ export function streamAcpTurn(
 	function finishStop(id: AcpStopId, cause: string): void {
 		pushAcpLifecycleNotice(state, cause);
 		pushStopExit(id);
+		if (PRE_SESSION_STOPS.has(id)) pushAcpLifecycleNotice(state, ACP_NO_SESSION_NOTICE);
 		finishError(new Error(ACP_STOPS[id].text), false);
 	}
 
-	/** #171 L16: say what a drop did. A failed drop keeps the marker, so the next turn stops on it again. */
-	function reportRecordDrop(failureCode: string | undefined): void {
-		pushAcpLifecycleNotice(
-			state,
-			failureCode ? `${ACP_RECORD_NOT_DROPPED_NOTICE} (code=${failureCode})` : ACP_RECORD_DROPPED_NOTICE,
-		);
-	}
-
-	/** #171 L16 stop (decision 8a, G2): name the range the marker held, then drop the record. */
-	function dropAfterStop(sessionKey: string, marker: PendingDispatch): void {
+	/** #171 step 8: a turn that failed after its marker names the range and says the record stays. Nothing is dropped. */
+	function noteUnsealed(marker: PendingDispatch | undefined): void {
+		if (!marker) return;
 		pushAcpLifecycleNotice(state, `${describeDispatchRange(marker)} may have run`);
-		reportRecordDrop(dropRecord(sessionKey, deps));
-	}
-
-	/** #171 L16 G2: a turn that failed after its marker was written is a named stop; one before it ran nothing. */
-	function stopAfterFailure(sessionKey: string, marker: PendingDispatch | undefined): void {
-		if (marker) dropAfterStop(sessionKey, marker);
+		pushAcpLifecycleNotice(state, ACP_RECORD_KEPT_NOTICE);
 	}
 
 	function finishError(
@@ -2092,9 +2119,7 @@ export function streamAcpTurn(
 		const policy = deps.lifecyclePolicy();
 		if (policy === "unhosted") {
 			// Decision 18: neither a resident nor an explicit one-shot. Nothing is spawned.
-			pushAcpLifecycleNotice(state, "this Pi has no entwurf control and is not an explicit one-shot");
-			pushStopExit("mode");
-			finishError(new Error(ACP_STOPS.mode.text), false);
+			finishStop("mode", "this Pi has no entwurf control and is not an explicit one-shot");
 			return;
 		}
 		// #171 step 8: a resident's key is the native id of the Pi session it can read. No reader, or a
@@ -2179,33 +2204,6 @@ export function streamAcpTurn(
 			return;
 		}
 
-		// #171 L16 — reconnect. With no live session for this key, a record left by an earlier process, or by
-		// an earlier turn of this one, is read for its dispatch marker only, before anything is spawned or sent.
-		// Attach stays off: the record never reaches decideBootstrap below (L8 wires that). Read and drop are
-		// synchronous, so nothing can claim the key in between.
-		if (policy === "process-scoped" && !existing?.alive) {
-			const verdict = standingRecordVerdict(readSessionRecord(sessionKey, deps.sessionDir));
-			if (verdict.kind === "refuse") {
-				const code = verdict.code ?? "UNKNOWN";
-				process.stderr.write(
-					`[acp] session record unreadable: code=${code} path=${sessionRecordPath(sessionKey, deps.sessionDir)}\n`,
-				);
-				const refusal = acpStoreRefusal(ACP_RECORD_UNREADABLE_MESSAGE, "session record unreadable", code);
-				pushAcpLifecycleNotice(state, refusal.notice);
-				pushStopExit("unreadable");
-				finishError(new Error(refusal.errorMessage), false);
-				return;
-			}
-			if (verdict.kind === "stop") {
-				// Stop once (decision 8a): say what may have run, drop the record, send nothing — neither to the
-				// recorded session nor to a new one. The next turn finds no record and starts a new session.
-				process.stderr.write(`[acp] dispatch stop: acpSessionId=${verdict.acpSessionId}\n`);
-				dropAfterStop(sessionKey, verdict.marker);
-				finishError(new Error(ACP_DISPATCH_STOP_MESSAGE), false);
-				return;
-			}
-		}
-
 		const existingFacts: ExistingSession | undefined = existing
 			? {
 					cwd: existing.cwd,
@@ -2216,25 +2214,72 @@ export function streamAcpTurn(
 				}
 			: undefined;
 
-		let decision: BootstrapDecision;
-		try {
-			// Attach is OFF until L8: no persisted record and no resume/load
-			// capability passed, so decideBootstrap returns only "new" or "reuse".
-			// The record was read above for its dispatch marker only (#171 L16).
-			decision = decideBootstrap(params, { existing: existingFacts });
-		} catch (err) {
-			// Model lock (live alive child, different model): surface as a stream
-			// error. Do NOT close the live child or drop it from the map — a
-			// mismatch means "not reusable for THIS turn", not "dead" (GPT ③).
-			finishError(err, false);
-			return;
+		// #171 step 8 (decision 17) — the one guard. A resident's turn reaches `session/new` only as a birth:
+		// no live session, no record, no birth reservation and no ACP history in the Pi session. Everything
+		// else is the live session, or a named stop that keeps what it found. A one-shot is always new.
+		let path: "new" | "reuse" = "new";
+		/** A resident birth's prompt and marker range, taken with `ctxSigs` from one view of the context. */
+		let birth: { prompt: AcpTextBlock[]; range: { start: number; count: number } } | undefined;
+		if (policy === "process-scoped") {
+			let verdict: ReturnType<typeof decideResident>;
+			// Which of the two reads failed, when one does: neither failure may read as "absent".
+			let reading: "reservation" | "entries" | undefined;
+			try {
+				verdict = decideResident(params, {
+					existing: existingFacts,
+					record: existing?.alive ? { status: "missing" } : readSessionRecord(sessionKey, deps.sessionDir),
+					reserved: () => {
+						reading = "reservation";
+						return birthReserved(sessionKey, deps.birthDir);
+					},
+					hasTrace: () => {
+						reading = "entries";
+						return hasAcpTrace(piSession?.getEntries() ?? [], provenPreBirthAnswer);
+					},
+				});
+			} catch (error) {
+				if (reading === "reservation") {
+					// The reservation could not be looked at: a birth cannot be told from a second one.
+					const code = storeErrorCode(error);
+					process.stderr.write(`[acp] birth reservation unreadable: code=${code}\n`);
+					finishStop("unreadable", `birth reservation unreadable (code=${code})`);
+				} else {
+					process.stderr.write(
+						`[acp] Pi session entries unreadable: ${error instanceof Error ? error.message : error}\n`,
+					);
+					finishStop("host", "the Pi session's entries could not be read");
+				}
+				return;
+			}
+			if (verdict.kind === "stop") {
+				// A session that died between turns is said once, here: the stop below is what follows from it,
+				// and without this line it reads as if the session had never been there.
+				const priorEnd = existing?.alive ? undefined : takeUnreportedChildEnd(sessionKey);
+				if (priorEnd) {
+					pushAcpLifecycleNotice(
+						state,
+						`previous ${adapter.backend} session ended between turns (${describeChildEnd(priorEnd)})`,
+					);
+				}
+				if (verdict.stop === "unreadable") {
+					const code = verdict.code ?? "UNKNOWN";
+					process.stderr.write(
+						`[acp] session record unreadable: code=${code} path=${sessionRecordPath(sessionKey, deps.sessionDir)}\n`,
+					);
+					finishStop("unreadable", `${verdict.why} (code=${code})`);
+					return;
+				}
+				finishStop(verdict.stop, verdict.why);
+				return;
+			}
+			if (verdict.kind === "reuse") path = "reuse";
+			else {
+				// A dead session object for this key holds nothing a birth could continue.
+				if (existing) abandonRetainedSession(existing);
+				birth = { prompt: buildAcpPrompt(context, "new"), range: userDeltaRange(context) };
+			}
 		}
-
-		// A "new" decision WITH an existing session means we are ABANDONING that
-		// session (incompatible drift / stale-dead) — the model-lock throw already
-		// returned above, so this is never a "leave it alone" case. Close the old
-		// connection + child so it is not orphaned in retainedChildren (GPT blocker 2).
-		if (decision.path === "new" && existing) abandonRetainedSession(existing);
+		const decision = { path };
 
 		// #171 step 8: equal content is not proof. The live session is sent a delta only when the last answer
 		// on Pi's branch is the exact one it sealed last; otherwise this turn stops and the session is kept.
@@ -2284,7 +2329,7 @@ export function streamAcpTurn(
 				if (!checkedReuse) throw new Error("entwurf: a reuse turn has no checked delta");
 				await runReuseTurn(existing, ctxSigs, adapter, thinkingValue, checkedReuse);
 			} else {
-				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId, thinkingValue);
+				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId, thinkingValue, undefined, birth);
 			}
 		} finally {
 			inFlightKeys.delete(sessionKey);
@@ -2365,6 +2410,8 @@ export function streamAcpTurn(
 		thinkingValue: string | undefined,
 		/** #163: set only by runSummaryTurn — relay these instructions, add no augment. */
 		summary?: { instructions: string },
+		/** #171 step 8: a resident birth's prompt and range as the guard took them; absent for a one-shot. */
+		birth?: { prompt: AcpTextBlock[]; range: { start: number; count: number } },
 	): Promise<void> {
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
@@ -2373,6 +2420,8 @@ export function streamAcpTurn(
 		let summarySucceeded = false;
 		/** #171 L16: set once this turn's dispatch marker is in the record. */
 		let marker: PendingDispatch | undefined;
+		/** #171 step 8: set just before the birth reservation is attempted; until then no session can exist. */
+		let birthAttempted = false;
 		/** Which phase a failure belongs to — flipped once the prompt is on the wire. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		const stderrTail: string[] = [];
@@ -2482,6 +2531,9 @@ export function streamAcpTurn(
 				acpSessionId: "",
 				bridgeConfigSignature: params.bridgeConfigSignature,
 				contextMessageSignatures: ctxSigs,
+				// Named from the adapter until `initialize` answers; nothing is recorded before that.
+				writer: { name: adapter.backend, version: "unknown" },
+				firstPrompt: "pending",
 				alive: true,
 				busy: true,
 				activePromptHandler: undefined,
@@ -2519,6 +2571,7 @@ export function streamAcpTurn(
 			adapter.admitAgent?.(initialized);
 			// #171 L1: keep what this child said about itself (version, capabilities, auth methods).
 			session.agentFacts = readAgentFacts(initialized);
+			if (session.agentFacts.agent) session.writer = { ...session.agentFacts.agent };
 
 			// Tool-narrowed session meta (S2b) + the billing carrier (S2d-1c). The
 			// carrier is the SAME rendered engraving folded into configSig above;
@@ -2541,10 +2594,41 @@ export function streamAcpTurn(
 				sessionMeta === undefined
 					? { cwd: effectiveCwd, mcpServers: wireMcpServers }
 					: { cwd: effectiveCwd, mcpServers: wireMcpServers, _meta: sessionMeta };
+			// #171 step 8: a resident is born once. The reservation is made durable before `session/new`, so a
+			// lost answer or a lost record can never be followed by a second `session/new` for this Pi session.
+			if (birth) {
+				// `initialize` was awaited since the guard ran: the abort and the Pi session are read again
+				// here, at the last point before a session can exist.
+				if (signal?.aborted) throw new Error("aborted before session/new");
+				if (deps.sessionReader()?.getSessionId() !== opts?.sessionId?.trim()) {
+					throw new AcpStopSignal("host", "the Pi session changed while the agent was starting");
+				}
+				birthAttempted = true;
+				try {
+					publishBirthReservation({ sessionKey, backend: adapter.backend, at: deps.now() }, deps.birthDir);
+				} catch (error) {
+					const code = storeErrorCode(error);
+					process.stderr.write(`[acp] birth reservation not published: code=${code}\n`);
+					throw new AcpStopSignal(
+						code === "EEXIST" ? "intent" : "reserve",
+						code === "EEXIST" ? "a birth was already attempted" : `birth reservation not saved (code=${code})`,
+					);
+				}
+			}
 			const created = await withTimeout("newSession", connection.newSession(newSessionArgs), NEW_SESSION_TIMEOUT_MS);
 			const acpSessionId = created?.sessionId;
 			if (!acpSessionId) throw new Error("newSession returned no sessionId");
 			session.acpSessionId = acpSessionId;
+			// The id exists only in that answer: it is recorded before anything else is asked of the session.
+			if (birth) {
+				try {
+					writeRecordFor(session, deps, null);
+				} catch (error) {
+					const code = storeErrorCode(error);
+					process.stderr.write(`[acp] session id not saved: code=${code}\n`);
+					throw new AcpStopSignal("idSave", `session id not saved (code=${code})`);
+				}
+			}
 
 			// Enforce the requested model — a silent default would lie about which
 			// model answered. pi 0.50/sdk 0.29: model selection moved from the removed
@@ -2575,7 +2659,7 @@ export function streamAcpTurn(
 
 			session.activePromptHandler = makePromptHandler(session);
 			// new session holds NO history → the full transcript is the only carrier.
-			const basePrompt = buildAcpPrompt(context, "new");
+			const basePrompt = birth?.prompt ?? buildAcpPrompt(context, "new");
 			if (basePrompt.length === 0) throw new Error("empty pi context — nothing to prompt");
 			// S2d-1c: prepend the rich first-user augment (bridge identity + ~/AGENTS.md
 			// + cwd/AGENTS.md + pi base + tool surface) on the WIRE only — never into
@@ -2607,7 +2691,7 @@ export function streamAcpTurn(
 			// #171 L16: the marker, immediately before the prompt, for a process-scoped session only — a
 			// turn-scoped Pi (and a summary turn) never writes a record. A failed write throws here, before
 			// the prompt, so nothing is sent (decision 9).
-			if (params.lifecyclePolicy === "process-scoped") marker = markDispatch(session, ctxSigs);
+			if (params.lifecyclePolicy === "process-scoped") marker = markDispatch(session, ctxSigs, birth?.range);
 			// Hand the abort window over to the prompt driver: from here on an abort
 			// is a protocol `session/cancel` first, teardown only after the grace.
 			if (signal && onAbort) {
@@ -2626,10 +2710,11 @@ export function streamAcpTurn(
 			session.activePromptHandler = undefined;
 			session.busy = false;
 
-			// Retain ONLY a long-lived process-scoped session that survived the turn
-			// alive and un-aborted. A turn-scoped one-shot (and any aborted/dead
-			// turn) tears down so its stdio handle cannot pin pi's exit (S2c hang).
-			const retain = params.lifecyclePolicy === "process-scoped" && !signal?.aborted && session.alive;
+			// Retain a long-lived process-scoped session that survived the turn alive. A turn-scoped
+			// one-shot (and any dead turn) tears down so its stdio handle cannot pin pi's exit (S2c hang).
+			// #171 step 8: a cancel the agent answered itself keeps a first turn's session as it keeps a
+			// later one's — the session is this conversation's only one, and closing it would strand it.
+			const retain = params.lifecyclePolicy === "process-scoped" && session.alive;
 
 			// DISCOVERABILITY BEFORE THE SEAL. `finishSuccess` ends the stream, and
 			// ending the stream is what releases the caller — which may start the next
@@ -2660,18 +2745,12 @@ export function streamAcpTurn(
 			if (summary && !signal?.aborted && mapPromptStopReason(promptResult?.stopReason).stopReason === "stop") {
 				summarySucceeded = true;
 			}
-			if (retain && !persistRecord(session, deps)) {
+			// #171 step 8: the turn sealed, so its marker is cleared whether or not the session is kept (an
+			// answered abort, a child gone right after its answer). The record stays: it is the only binding.
+			if (marker && !persistRecord(session, deps)) {
 				pushAcpLifecycleNotice(state, ACP_RECORD_DEGRADED_NOTICE);
 			}
-			// #171 L16: a marked turn that sealed but is not kept (an abort, a child gone after its answer) leaves
-			// no session to continue. Its record is dropped, or the next turn would stop on a marker for a turn
-			// whose end was already shown.
-			if (!retain && marker) {
-				const dropFailure = dropRecord(sessionKey, deps);
-				if (dropFailure) reportRecordDrop(dropFailure);
-				// Handled: a teardown that throws below must not reach the catch as a second, later stop.
-				marker = undefined;
-			}
+			marker = undefined;
 			finishSuccess(adapter, session, promptResult);
 
 			if (!retain) {
@@ -2693,11 +2772,15 @@ export function streamAcpTurn(
 			// touches the stderr pipe.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
 			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
+			// A reservation that could not be made is the last of these; one that exists stops the next turn anyway.
+			if (birth && (!birthAttempted || (err instanceof AcpStopSignal && PRE_SESSION_STOPS.has(err.stop)))) {
+				pushAcpLifecycleNotice(state, ACP_NO_SESSION_NOTICE);
+			}
 			if (err instanceof AcpStopSignal) {
 				pushAcpLifecycleNotice(state, err.why);
 				pushStopExit(err.stop);
 			}
-			stopAfterFailure(sessionKey, marker);
+			noteUnsealed(marker);
 			finishError(
 				err,
 				aborted,
@@ -2847,7 +2930,7 @@ export function streamAcpTurn(
 			// child's own exit status with our SIGTERM.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
 			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
-			stopAfterFailure(session.key, marker);
+			noteUnsealed(marker);
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.

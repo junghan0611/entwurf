@@ -24,8 +24,8 @@
 // what makes delta-only SAFE — a mismatch falls back to `new` + full transcript.
 
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Message, ToolResultMessage, TranscriptContext } from "@earendil-works/pi-ai";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { AcpHostFacts } from "../acp-host-facts.js";
@@ -124,12 +124,29 @@ export interface PendingDispatch {
 	contextMessageSignatures: string[];
 }
 
+/**
+ * #171 step 8 — where the session's first prompt stands. `pending`: the session was created and
+ * nothing was sent to it. `dispatched`: its first prompt may have run. `sealed`: a turn was answered.
+ */
+export type FirstPromptState = "pending" | "dispatched" | "sealed";
+
+const FIRST_PROMPT_STATES: readonly string[] = ["pending", "dispatched", "sealed"];
+
+/** The agent that answered `initialize` for the session a record names (#171 step 8). */
+export interface RecordWriter {
+	name: string;
+	version: string;
+}
+
 /** A persisted ACP session record (one file per sessionKey). */
 export interface SessionRecord {
 	version: number;
 	provider: typeof SESSION_RECORD_PROVIDER;
 	sessionKey: string;
 	acpSessionId: string;
+	/** Who created the vendor session; a resume is decided against measured writer and reader pairs. */
+	writer: RecordWriter;
+	firstPrompt: FirstPromptState;
 	cwd: string;
 	modelId: string;
 	bridgeConfigSignature: string;
@@ -391,7 +408,13 @@ export function decideBootstrap(
 
 /** Build a record from compat facts. `now` is injected so the build is pure. */
 export function buildSessionRecord(
-	input: { sessionKey: string; acpSessionId: string; pendingDispatch?: PendingDispatch | null } & SessionCompatFacts,
+	input: {
+		sessionKey: string;
+		acpSessionId: string;
+		writer: RecordWriter;
+		firstPrompt: FirstPromptState;
+		pendingDispatch?: PendingDispatch | null;
+	} & SessionCompatFacts,
 	now: string,
 ): SessionRecord {
 	return {
@@ -399,6 +422,8 @@ export function buildSessionRecord(
 		provider: SESSION_RECORD_PROVIDER,
 		sessionKey: input.sessionKey,
 		acpSessionId: input.acpSessionId,
+		writer: { name: input.writer.name, version: input.writer.version },
+		firstPrompt: input.firstPrompt,
 		cwd: input.cwd,
 		modelId: input.modelId,
 		bridgeConfigSignature: input.bridgeConfigSignature,
@@ -444,6 +469,10 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 	if (r.provider !== SESSION_RECORD_PROVIDER) return undefined;
 	if (r.sessionKey !== sessionKey) return undefined;
 	if (!isNonEmptyString(r.acpSessionId)) return undefined;
+	const writer = r.writer as { name?: unknown; version?: unknown } | null | undefined;
+	if (typeof writer !== "object" || writer === null) return undefined;
+	if (!isNonEmptyString(writer.name) || !isNonEmptyString(writer.version)) return undefined;
+	if (typeof r.firstPrompt !== "string" || !FIRST_PROMPT_STATES.includes(r.firstPrompt)) return undefined;
 	if (!isNonEmptyString(r.cwd)) return undefined;
 	if (!isNonEmptyString(r.modelId)) return undefined;
 	if (!isNonEmptyString(r.bridgeConfigSignature)) return undefined;
@@ -458,6 +487,8 @@ export function parseSessionRecord(raw: unknown, sessionKey: string): SessionRec
 		provider: SESSION_RECORD_PROVIDER,
 		sessionKey,
 		acpSessionId: r.acpSessionId,
+		writer: { name: writer.name, version: writer.version },
+		firstPrompt: r.firstPrompt as FirstPromptState,
 		cwd: r.cwd,
 		modelId: r.modelId,
 		bridgeConfigSignature: r.bridgeConfigSignature,
@@ -503,7 +534,40 @@ export function readSessionRecord(sessionKey: string, dir: string = sessionCache
 	return record ? { status: "found", record } : { status: "invalid" };
 }
 
-export function writeSessionRecord(record: SessionRecord, dir: string = sessionCacheDir()): void {
+/** The two durability calls of a record write, injectable so a test can see each one and make one fail. */
+export interface RecordSync {
+	file(fd: number): void;
+	directory(path: string): void;
+}
+
+const REAL_RECORD_SYNC: RecordSync = {
+	file: (fd) => fsyncSync(fd),
+	directory: (path) => {
+		const fd = openSync(path, "r");
+		try {
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+	},
+};
+
+/** Record directories whose whole chain of entries this process has synced, up to the filesystem root. */
+const CERTIFIED_RECORD_DIRS = new Set<string>();
+
+/**
+ * Replace the record atomically and durably (#171 step 8): the record is the only place a vendor
+ * session id and a dispatch marker live, so a write that returns has reached the disk — the new
+ * bytes before the rename, the rename in its directory after it, and once per process and
+ * directory every entry above it. A failure throws; the caller sends nothing on the strength of a
+ * write that threw. A failed file sync leaves the previous record in place.
+ */
+export function writeSessionRecord(
+	record: SessionRecord,
+	dir: string = sessionCacheDir(),
+	sync: RecordSync = REAL_RECORD_SYNC,
+	certified: Set<string> = CERTIFIED_RECORD_DIRS,
+): void {
 	mkdirSync(dir, { recursive: true });
 	const target = sessionRecordPath(record.sessionKey, dir);
 	const temp = `${target}.${randomBytes(16).toString("hex")}.tmp`;
@@ -511,6 +575,7 @@ export function writeSessionRecord(record: SessionRecord, dir: string = sessionC
 	try {
 		try {
 			writeFileSync(fd, `${JSON.stringify(record, null, 2)}\n`);
+			sync.file(fd);
 		} finally {
 			closeSync(fd);
 		}
@@ -518,27 +583,116 @@ export function writeSessionRecord(record: SessionRecord, dir: string = sessionC
 	} finally {
 		rmSync(temp, { force: true });
 	}
+	sync.directory(dir);
+	if (!certified.has(dir)) {
+		for (let at = dirname(dir); ; at = dirname(at)) {
+			sync.directory(at);
+			if (at === dirname(at)) break;
+		}
+		certified.add(dir);
+	}
 }
 
-export function deleteSessionRecord(sessionKey: string, dir: string = sessionCacheDir()): void {
-	rmSync(sessionRecordPath(sessionKey, dir), { force: true });
+// ---------------------------------------------------------------------------
+// 5) the resident guard (#171 step 8, decision 17)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a resident's turn may do. `birth` is the only verdict that reaches `session/new`, and it
+ * needs every sign of an earlier ACP session to be absent: no live session, no record, no birth
+ * reservation, and no completed Entwurf answer or ACP entry anywhere in the Pi session file.
+ */
+export type ResidentVerdict =
+	| { kind: "reuse" }
+	| { kind: "birth" }
+	| {
+			kind: "stop";
+			stop: "model" | "cwd" | "config" | "changed" | "unreadable" | "invalid" | "interim" | "intent" | "noRecord";
+			why: string;
+			code?: string;
+	  };
+
+/**
+ * Pure. `reserved` and `hasTrace` are read only when there is neither a live session nor a record,
+ * so they are thunks: a store error in one of them is the caller's to turn into a stop.
+ */
+export function decideResident(
+	params: SessionCompatFacts,
+	sources: { existing?: ExistingSession; record: SessionRecordRead; reserved: () => boolean; hasTrace: () => boolean },
+): ResidentVerdict {
+	const { existing, record } = sources;
+	if (existing?.alive) {
+		// A live session is never abandoned for another: what it cannot take stops the turn, and it stays.
+		if (existing.modelId !== params.modelId)
+			return { kind: "stop", stop: "model", why: "the live session has another model" };
+		if (existing.cwd !== params.cwd)
+			return { kind: "stop", stop: "cwd", why: "the live session has another directory" };
+		if (existing.bridgeConfigSignature !== params.bridgeConfigSignature) {
+			return { kind: "stop", stop: "config", why: "the session configuration changed" };
+		}
+		if (!hasPrefix(existing.contextMessageSignatures, params.contextMessageSignatures)) {
+			return {
+				kind: "stop",
+				stop: "changed",
+				why: "the conversation no longer starts with what this session answered",
+			};
+		}
+		return { kind: "reuse" };
+	}
+	if (record.status === "unreadable") {
+		return { kind: "stop", stop: "unreadable", why: "session record unreadable", code: record.code };
+	}
+	if (record.status === "invalid") return { kind: "stop", stop: "invalid", why: "session record not valid" };
+	// Attach is not enabled yet: a stored session is neither resumed nor replaced.
+	if (record.status === "found" || record.status === "outdated") {
+		return { kind: "stop", stop: "interim", why: "a stored ACP session exists for this conversation" };
+	}
+	if (sources.reserved()) return { kind: "stop", stop: "intent", why: "a birth was attempted and left no record" };
+	if (sources.hasTrace()) return { kind: "stop", stop: "noRecord", why: "the Pi session holds ACP history" };
+	return { kind: "birth" };
+}
+
+/** The type names Entwurf's ACP rail writes into a Pi session: `entwurf.acp…`, `entwurf-acp…`, `entwurf_acp…`. */
+const ACP_TYPE_NAME = /^entwurf[._-]acp/;
+
+function entryField(value: unknown, key: string): unknown {
+	return typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 }
 
 /**
- * #171 L16 — what a turn with no live session does with the record it finds, before anything is sent.
- * A standing marker stops the turn; a record that cannot be read refuses it, because a marker in it
- * could not be seen (decision 9's class: a store problem before sending sends nothing). Everything
- * else continues: a sealed, outdated, invalid or missing record says nothing ran unanswered.
+ * Whether a Pi session file shows ACP activity: any Entwurf answer, an assistant carrying an
+ * Entwurf diagnostic, or an `entwurf.acp` custom entry. A turn that failed or was aborted counts:
+ * it may have reached a vendor session and left partial output. Only a failed or aborted answer
+ * that `provenPreBirth` accepts does not — the caller names what it proves ended before any session.
  */
-export type StandingRecordVerdict =
-	| { kind: "continue" }
-	| { kind: "stop"; acpSessionId: string; marker: PendingDispatch }
-	| { kind: "refuse"; code?: string };
-
-export function standingRecordVerdict(read: SessionRecordRead): StandingRecordVerdict {
-	if (read.status === "unreadable") return { kind: "refuse", code: read.code };
-	if (read.status === "found" && read.record.pendingDispatch) {
-		return { kind: "stop", acpSessionId: read.record.acpSessionId, marker: read.record.pendingDispatch };
-	}
-	return { kind: "continue" };
+export function hasAcpTrace(
+	entries: readonly unknown[],
+	provenPreBirth: (message: unknown) => boolean = () => false,
+): boolean {
+	return entries.some((entry) => {
+		const type = entryField(entry, "type");
+		if (type === "custom") {
+			const customType = entryField(entry, "customType");
+			return typeof customType === "string" && ACP_TYPE_NAME.test(customType);
+		}
+		if (type !== "message") return false;
+		const message = entryField(entry, "message");
+		if (entryField(message, "role") !== "assistant") return false;
+		const diagnostics = entryField(message, "diagnostics");
+		if (
+			Array.isArray(diagnostics) &&
+			diagnostics.some((d) => {
+				const t = entryField(d, "type");
+				return typeof t === "string" && ACP_TYPE_NAME.test(t);
+			})
+		) {
+			return true;
+		}
+		if (entryField(message, "provider") !== "entwurf") return false;
+		// An Entwurf answer is history whatever way it ended: a turn that failed or was cut may have
+		// reached a vendor session first. The one exception is an answer the caller proves ended before
+		// any session could exist, and never one that completed.
+		const stopReason = entryField(message, "stopReason");
+		return !((stopReason === "error" || stopReason === "aborted") && provenPreBirth(message));
+	});
 }

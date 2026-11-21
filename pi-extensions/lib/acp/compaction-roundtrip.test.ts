@@ -167,6 +167,7 @@ function turnDriver(frames: unknown[]) {
 			}),
 		now: () => "2026-11-15T00:00:00Z",
 		sessionDir: mkdtempSync(join(SANDBOX, "records-")),
+		birthDir: mkdtempSync(join(SANDBOX, "births-")),
 		abortGraceMs: 40,
 	};
 	return async (sessionId: string): Promise<AssistantMessage> => {

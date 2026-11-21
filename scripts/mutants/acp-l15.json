@@ -8,7 +8,7 @@
 			"subject": "pi-extensions/lib/acp/session-store.ts",
 			"find": ["raw = JSON.parse(text);\n\t} catch {\n\t\treturn { status: \"invalid\" };"],
 			"replace": [
-				"raw = JSON.parse(text);\n\t} catch {\n\t\tdeleteSessionRecord(sessionKey, dir);\n\t\treturn { status: \"invalid\" };"
+				"raw = JSON.parse(text);\n\t} catch {\n\t\trmSync(sessionRecordPath(sessionKey, dir), { force: true });\n\t\treturn { status: \"invalid\" };"
 			],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
@@ -65,8 +65,8 @@
 			"claim": "ACP-ORACLE-L15-DEGRADED-NEW",
 			"title": "failed persistence on a new retained turn is swallowed without the visible notice",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["if (retain && !persistRecord(session, deps)) {"],
-			"replace": ["if (retain && (persistRecord(session, deps), false)) {"],
+			"find": ["if (marker && !persistRecord(session, deps)) {"],
+			"replace": ["if (marker && (persistRecord(session, deps), false)) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-ORACLE-L15-DEGRADED-NEW]",

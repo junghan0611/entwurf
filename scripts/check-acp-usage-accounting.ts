@@ -228,6 +228,7 @@ function makeHarness(recordDir: string, scripts: TurnScript[]) {
 			loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 			now: () => "2026-09-01T00:00:00Z",
 			sessionDir: recordDir,
+			birthDir: `${recordDir}-births`,
 		},
 	};
 }

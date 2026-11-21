@@ -143,14 +143,14 @@
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		},
 		{
-			"claim": "ACP-CANCEL-NOTICE-NEW-CLOSED",
-			"title": "a cancelled first turn claims the live session was kept although it was closed — the next message silently opens a new conversation",
+			"claim": "ACP-CANCEL-NOTICE-NEW-KEPT",
+			"title": "a cancelled first turn the agent answered closes its session — the conversation's only session is gone and every later turn stops",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\t\t\tpushAcpLifecycleNotice(state, retain ? ACP_CANCEL_KEPT_NOTICE : ACP_CANCEL_CLOSED_NOTICE);"],
-			"replace": ["\t\t\t\tpushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);"],
+			"find": ["const retain = params.lifecyclePolicy === \"process-scoped\" && session.alive;"],
+			"replace": ["const retain = params.lifecyclePolicy === \"process-scoped\" && !signal?.aborted && session.alive;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:ACP-CANCEL-NOTICE-NEW-CLOSED]",
+			"signature": "[QK:ACP-CANCEL-NOTICE-NEW-KEPT]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		},
 		{

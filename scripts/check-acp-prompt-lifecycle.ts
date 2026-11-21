@@ -232,6 +232,7 @@ function makeHarness(recordDir: string) {
 			loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 			now: () => "2026-07-30T00:00:00Z",
 			sessionDir: recordDir,
+			birthDir: `${recordDir}-births`,
 			abortGraceMs: TEST_ABORT_GRACE_MS,
 		},
 	};
@@ -528,20 +529,25 @@ try {
 			"[QK:IDLE-DEATH-ANNOUNCED] a backend session that died BETWEEN turns must be announced by the next turn, with " +
 				`how it ended — a silent respawn hides that the session the operator was talking to is gone. Saw: ${JSON.stringify(notices.slice(0, 400))}`,
 		);
+		// #171 step 8 (decision 17): the dead session's record stays and no second session is opened for the
+		// conversation. Until a stored session can be resumed the turn stops; the announcement says why.
+		await t2.done;
 		assert.ok(
 			notices.indexOf("previous claude session ended between turns") <
-				notices.indexOf("[acp: preparing claude session]"),
-			"the death is announced BEFORE the bootstrap notice — otherwise it reads as an ordinary cold start",
+				notices.indexOf("a stored ACP session exists for this conversation"),
+			"the death is announced BEFORE the stop's cause — otherwise the stop reads as if no session had been there",
 		);
+		assert.equal(sealed(t2.events)[0].type, "error", "the turn stops: a dead session is not replaced by a new one");
+		assert.equal(h.children.length, 1, "no second child is spawned for this conversation");
 
-		h.settle("end_turn");
-		await t2.done;
-		assert.equal(sealed(t2.events)[0].type, "done", "the announcement does not fail the turn — it explains it");
-
-		// Announced ONCE: a third turn is a plain cold start again.
-		const t3 = startTurn(backend, userCtx("third NONCE-D3"), { sessionId: "life-idle-death" }, h.deps);
+		// Announced ONCE: a third turn stops the same way and says nothing about the death again.
+		const t3 = startTurn(
+			backend,
+			reuseCtx("first NONCE-D1", "third NONCE-D3"),
+			{ sessionId: "life-idle-death" },
+			h.deps,
+		);
 		await delay(20);
-		h.settle("end_turn");
 		await t3.done;
 		const laterNotices = t3.events
 			.filter((e: any) => e.type === "text" || e.type === "text_start" || e.type === "text_delta")

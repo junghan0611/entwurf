@@ -146,8 +146,8 @@ A session's first effort is the pi thinking level in force when it starts: `defa
 
 ESC sends ACP `session/cancel`; the agent ends its own turn, and only after a bounded grace does process cleanup follow. After an ESC the turn carries one of two notices, defined as `ACP_CANCEL_KEPT_NOTICE` / `ACP_CANCEL_CLOSED_NOTICE` in `backend.ts`; `pushAcpLifecycleNotice` in `event-mapper.ts` wraps them as `[acp: …]` on screen:
 
-- `stopped — changes already made stay; next message continues this session` — a reuse turn the agent closed on cancel;
-- `stopped — changes already made stay; next message opens a new session` — a cancelled first turn, an escalation, or an abort before the prompt was sent.
+- `stopped — changes already made stay; next message continues this session` — a turn the agent closed on cancel;
+- `stopped — changes already made stay; the ACP process was closed` — an escalation, or an abort before a first prompt was sent.
 
 When the next turn rebuilds the transcript, an aborted assistant turn is followed by `[turn status: aborted — actions this turn had started may already have taken effect; cancellation is not rollback]` (`context.ts`). The reuse delta carries no such line.
 

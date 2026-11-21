@@ -161,6 +161,7 @@ function makeHarness(recordDir: string, wireReason: string | null) {
 		loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 		now: () => "2026-07-30T00:00:00Z",
 		sessionDir: recordDir,
+		birthDir: `${recordDir}-births`,
 	};
 }
 

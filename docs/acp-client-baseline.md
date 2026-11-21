@@ -47,7 +47,7 @@ What a Pi session does with a vendor ACP child, in the order it happens.
 | L13 | child death and teardown          | implemented | Teardown closes the connection, then ends the child's whole process group.                                 | [QK:ACP-ORACLE-L13-TEARDOWN] [QK:ACP-ORACLE-L13-PROCESS-GROUP] |
 | L14 | compaction across attach          | not-wired   | Pi compaction keeps the vendor session (16-1; #163 changes); a load replay is never recorded as one (U3).  | — |
 | L15 | session record store              | implemented | The record is v2; an old v1 record is resumed, not dropped (17). Read never deletes; write is atomic.      | [QK:ACP-ORACLE-L15-INVALID] [QK:ACP-ORACLE-L15-UNREADABLE] [QK:ACP-ORACLE-L15-ATOMIC] [QK:ACP-ORACLE-L15-AGENT-DIR] [QK:ACP-ORACLE-L15-DEGRADED-NEW] [QK:ACP-ORACLE-L15-DEGRADED-REUSE] |
-| L16 | record currency (pendingDispatch) | implemented | Marker and v2 record landed. Its stop and drop are replaced by 17; the code follows in step 8 (U12).       | [QK:ACP-L16-STANDING-ZERO-SENDS] |
+| L16 | record currency (pendingDispatch) | implemented | Marker and v2 record landed. No record is dropped (17); a stored session stops until resume lands (U12).    | [QK:ACP-STORED-SESSION-NO-SECOND-NEW] |
 | L17 | birth record before session/new   | not-wired   | An intent is written before session/new and the id the moment it answers; a lost id is an error stop (17). | — |
 | L18 | block separator in a prompt       | not-wired   | agy joins several text blocks with no separator; the prompt needs one (step 8).                            | — |
 

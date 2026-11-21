@@ -18,9 +18,9 @@
 // marker only and NOT attached, even by a child that advertises resume and load
 // at the measured version (#171 L16; attach is L8);
 // a concurrent prompt fails loud BOTH on a retained busy session AND on a same-key
-// first-turn race (GPT blocker 1); an incompatible existing → new closes the old
-// child so it is not orphaned, while a model-lock throw leaves the live child
-// alone (GPT blocker 2); plus source-shape locks.
+// first-turn race (GPT blocker 1); a live session that cannot take a turn (another
+// directory, another model) stops it by name and stays, never replaced by a new
+// one (#171 step 8); plus source-shape locks.
 //
 // backend.ts imports its siblings with `.js` suffixes (the root/jiti runtime
 // convention), so — like check-acp-backend-preflight — we tsc-emit the project
@@ -226,6 +226,7 @@ function makeHarness(
 		loadConfig: () => config,
 		now: () => "2026-06-18T00:00:00Z",
 		sessionDir: recordDir,
+		birthDir: `${recordDir}-births`,
 	};
 
 	return {
@@ -341,17 +342,20 @@ try {
 	// ----------------------------------------------------------------------
 	{
 		const h = makeHarness(recordDir, DEFAULT_RESOLVED_CONFIG, false, true);
-		const sessionKey = "pi:gate-A";
+		const sessionKey = "pi:gate-A0";
 
 		// Pre-write a COMPATIBLE, sealed (no marker) persisted record at a DIFFERENT
-		// acp id — if the backend (wrongly) attached it, turn 1 would prompt
-		// "OLD-RESUME-ID"; a marker would have stopped the turn instead.
+		// acp id, for another Pi session. If the backend (wrongly) attached it, that
+		// session's turn would prompt "OLD-RESUME-ID"; if it (wrongly) ignored it, the
+		// turn would open a second session for a conversation that already has one.
 		const turn1Ctx = tctx([{ role: "user", content: "remember NONCE-AAA", timestamp: 0 }]);
 		store.writeSessionRecord(
 			store.buildSessionRecord(
 				{
 					sessionKey,
 					acpSessionId: "OLD-RESUME-ID",
+					writer: { name: "earlier-agent", version: "0.0.1" },
+					firstPrompt: "sealed",
 					cwd: process.cwd(),
 					modelId: sonnet.id,
 					bridgeConfigSignature: sigFor(store, sonnet.id, h.config),
@@ -362,14 +366,31 @@ try {
 			recordDir,
 		);
 
-		// --- turn 1: new ---
+		// #171 step 8 (decision 17): a stored session is neither attached nor replaced. Until resume lands
+		// (L8) its turn stops with nothing spawned and nothing sent.
+		const stored = await collect(
+			backend.streamAcpTurn(
+				sonnet,
+				reuseCtx("remember NONCE-AAA", "recall NONCE-BBB"),
+				{ sessionId: "gate-A0" },
+				h.deps,
+			) as Stream,
+		);
+		assert.ok(
+			stored.some((e) => e.type === "error"),
+			"a turn whose Pi session has a stored ACP session stops",
+		);
+		assert.equal(h.children.length, 0, "the stored session's turn spawns nothing: no attach, and no second session");
+		assert.equal(h.promptCalls.length, 0, "the stored session's turn sends nothing");
+
+		// --- turn 1: new (a Pi session with no record: a birth) ---
 		const t1 = await collect(backend.streamAcpTurn(sonnet, turn1Ctx, { sessionId: "gate-A" }, h.deps) as Stream);
 		assert.equal(h.children.length, 1, "turn 1 spawns exactly one child");
 		assert.equal(h.promptCalls.length, 1, "turn 1 issued one prompt");
 		assert.equal(
 			h.promptCalls[0].sessionId,
 			"ACP-1",
-			"turn 1 uses the FRESH newSession id — NOT the persisted id: the record is read for its marker only (#171 L16) and attach stays off until L8, though this child advertises resume and load",
+			"turn 1 uses the id its own session/new answered: attach stays off until L8, though this child advertises resume and load",
 		);
 		assert.match(
 			h.promptCalls[0].text,
@@ -472,11 +493,11 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
-	// Section E — incompatible existing → new closes the old child (no orphan);
-	//             model-lock throw leaves the live child alone (GPT blocker 2)
+	// Section E — a live session that cannot take a turn stops it and stays
+	//             (#171 step 8, decision 17): never abandoned for a new one.
 	// ----------------------------------------------------------------------
 	{
-		// E1: cwd drift → incompatible → new spawns childB + closes childA.
+		// E1: cwd drift → the turn stops by name; childA stays and still serves its own directory.
 		const h = makeHarness(recordDir);
 		await collect(
 			backend.streamAcpTurn(
@@ -488,19 +509,17 @@ try {
 		);
 		assert.equal(h.children.length, 1, "E1 turn 1 spawned childA");
 		const childA = h.children[0];
-		// same key (sessionId), DIFFERENT cwd → existing incompatible → new.
-		await collect(
-			backend.streamAcpTurn(
-				sonnet,
-				tctx([{ role: "user", content: "y", timestamp: 0 }]),
-				{ sessionId: "gate-E1", cwd: "/w2" },
-				h.deps,
-			) as Stream,
+		// same key (sessionId), DIFFERENT cwd → the live session cannot take it.
+		const drifted = await collect(
+			backend.streamAcpTurn(sonnet, reuseCtx("x", "y"), { sessionId: "gate-E1", cwd: "/w2" }, h.deps) as Stream,
 		);
-		assert.equal(h.children.length, 2, "E1 incompatible existing → a NEW child spawned");
-		assert.ok(childA.killed > 0, "E1 the abandoned incompatible child is CLOSED (not orphaned in retainedChildren)");
+		assert.match(String(errorOf(drifted) ?? ""), /another directory/, "E1 a cwd drift stops the turn by name");
+		assert.equal(h.children.length, 1, "E1 no second child is spawned for a conversation that has a live session");
+		assert.equal(childA.killed, 0, "E1 the live child is NOT torn down by a turn it could not take");
+		assert.equal(h.promptCalls.length, 1, "E1 the stopped turn sent nothing");
+		// Continuing past a refused turn (its error answer now sits on the branch) is the resume delta's work.
 
-		// E2: model-lock throw → live child NOT killed, NOT dropped (survives reuse).
+		// E2: another model → the turn stops by name; the live child is NOT killed and NOT replaced.
 		const h2 = makeHarness(recordDir);
 		await collect(
 			backend.streamAcpTurn(
@@ -514,12 +533,16 @@ try {
 		const lockEvents = await collect(
 			backend.streamAcpTurn(opus, reuseCtx("x", "y"), { sessionId: "gate-E2" }, h2.deps) as Stream,
 		);
-		assert.match(String(errorOf(lockEvents) ?? ""), /locked/, "E2 model mismatch surfaces a model-lock error");
-		assert.equal(lockChild.killed, 0, "E2 model-lock throw does NOT kill the live child");
-		assert.equal(h2.children.length, 1, "E2 model-lock throw does NOT spawn a replacement");
+		assert.match(
+			String(errorOf(lockEvents) ?? ""),
+			/cannot switch to that model/,
+			"E2 a model mismatch stops the turn by name",
+		);
+		assert.equal(lockChild.killed, 0, "E2 the model stop does NOT kill the live child");
+		assert.equal(h2.children.length, 1, "E2 the model stop does NOT spawn a replacement");
 		// the locked child still serves a subsequent COMPATIBLE (same-model) reuse.
 		await collect(backend.streamAcpTurn(sonnet, reuseCtx("x", "z"), { sessionId: "gate-E2" }, h2.deps) as Stream);
-		assert.equal(h2.children.length, 1, "E2 the live child survived the lock throw and was reused (no respawn)");
+		assert.equal(h2.children.length, 1, "E2 the live child survived the stop (no respawn)");
 	}
 
 	// ----------------------------------------------------------------------
@@ -874,10 +897,10 @@ try {
 console.log(
 	"[check-acp-session-reuse] ok — captured prompts prove new=full transcript / reuse=DELTA-ONLY (turn-2 carries the " +
 		"new nonce, never the turn-1 history) with no respawn; mutable activePromptHandler routes each turn's notices to " +
-		"its own stream; retained child is unref'd (no exit pin) yet never torn down between turns; persisted record is read for its marker only and NOT " +
+		"its own stream; retained child is unref'd (no exit pin) yet never torn down between turns; a stored record stops its turn and is NOT " +
 		"attached until L8, even with resume and load advertised; concurrent prompts fail loud BOTH on a retained busy session AND on a same-key first-turn race " +
-		"(no double spawn); incompatible existing → new closes the old child (no orphan) while a model-lock throw leaves " +
-		"the live child alive + reusable; source locks buildAcpPrompt wiring + single-site applyAcpSessionUpdate + unref + " +
+		"(no double spawn); a live session that cannot take a turn (cwd, model) stops it by name and stays, and a stored " +
+		"session is neither attached nor replaced; source locks buildAcpPrompt wiring + single-site applyAcpSessionUpdate + unref + " +
 		"in-flight claim; S2f progress notices emit in order (new: preparing→ready→sending prompt / reuse: reusing→sending " +
 		"prompt), are display-only (never on the ACP wire, dropped from a `new` rebuild, signature-invariant); S2g config " +
 		"passthrough: resolved operator mcpServers/tools/skillPlugins reach newSession, the entwurf envelope is injected into " +

@@ -25,7 +25,10 @@ export interface FakePiHost {
 	lastTurnId(sessionId: string): string | undefined;
 }
 
-export function entriesOf(messages: readonly unknown[], lastAnswer?: { responseId: string }): unknown[] {
+export function entriesOf(
+	messages: readonly unknown[],
+	lastAnswer?: { responseId: string; stopReason?: unknown; errorMessage?: unknown; content?: unknown },
+): unknown[] {
 	let lastAssistant = -1;
 	messages.forEach((m, i) => {
 		if ((m as { role?: unknown })?.role === "assistant") lastAssistant = i;
@@ -38,9 +41,12 @@ export function entriesOf(messages: readonly unknown[], lastAnswer?: { responseI
 	if (lastAssistant === -1 && lastAnswer && stamped.length > 0) {
 		stamped.splice(stamped.length - 1, 0, {
 			role: "assistant",
-			content: [],
+			content: lastAnswer.content ?? [],
 			provider: "entwurf",
 			responseId: lastAnswer.responseId,
+			// As Pi stored it: how the turn ended, and the text it ended with when it failed.
+			stopReason: lastAnswer.stopReason ?? "stop",
+			...(lastAnswer.errorMessage === undefined ? {} : { errorMessage: lastAnswer.errorMessage }),
 		});
 	}
 	return stamped.map((message, i) => ({
@@ -52,19 +58,31 @@ export function entriesOf(messages: readonly unknown[], lastAnswer?: { responseI
 }
 
 export function fakePiHost(): FakePiHost {
-	const lastTurn = new Map<string, string>();
+	const lastTurn = new Map<
+		string,
+		{ responseId: string; stopReason?: unknown; errorMessage?: unknown; content?: unknown }
+	>();
 	const fixed = new Map<string, unknown[]>();
 	let current: AcpSessionReader | undefined;
 
 	function record(sessionId: string, message: unknown): void {
-		const id = (message as { responseId?: unknown } | undefined)?.responseId;
-		if (typeof id === "string") lastTurn.set(sessionId, id);
+		const final = message as
+			| { responseId?: unknown; stopReason?: unknown; errorMessage?: unknown; content?: unknown }
+			| undefined;
+		if (typeof final?.responseId === "string") {
+			lastTurn.set(sessionId, {
+				responseId: final.responseId,
+				stopReason: final.stopReason,
+				errorMessage: final.errorMessage,
+				content: final.content,
+			});
+		}
 	}
 
 	return {
 		sessionReader: () => current,
 		setBranch: (sessionId, branch) => void fixed.set(sessionId, branch),
-		lastTurnId: (sessionId) => lastTurn.get(sessionId),
+		lastTurnId: (sessionId) => lastTurn.get(sessionId)?.responseId,
 		wrap<T extends { streamAcpTurn: (...args: never[]) => unknown }>(backend: T): T {
 			const inner = backend.streamAcpTurn as unknown as Turn;
 			const streamAcpTurn: Turn = (model, context, options, deps) => {
@@ -74,7 +92,7 @@ export function fakePiHost(): FakePiHost {
 				} else {
 					const messages = (context as { messages?: unknown[] }).messages ?? [];
 					const answered = lastTurn.get(sessionId);
-					const branch = fixed.get(sessionId) ?? entriesOf(messages, answered ? { responseId: answered } : undefined);
+					const branch = fixed.get(sessionId) ?? entriesOf(messages, answered);
 					fixed.delete(sessionId);
 					current = { getSessionId: () => sessionId, getBranch: () => branch, getEntries: () => branch };
 				}

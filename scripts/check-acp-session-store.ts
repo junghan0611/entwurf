@@ -25,7 +25,6 @@ import {
 	buildSessionRecord,
 	contextMessageSignatures,
 	decideBootstrap,
-	deleteSessionRecord,
 	type ExistingSession,
 	hasPrefix,
 	isCompatible,
@@ -236,7 +235,16 @@ const baseInput = (): BridgeConfigInput => ({
 	});
 	const aliveCompat: ExistingSession = { ...compatFacts, alive: true };
 	const persistedCompat: SealedSessionRecord = {
-		...buildSessionRecord({ sessionKey: "k", acpSessionId: "acp-123", ...compatFacts }, "2026-06-18T00:00:00Z"),
+		...buildSessionRecord(
+			{
+				sessionKey: "k",
+				acpSessionId: "acp-123",
+				writer: { name: "fixture-agent", version: "1.2.3" },
+				firstPrompt: "sealed",
+				...compatFacts,
+			},
+			"2026-06-18T00:00:00Z",
+		),
 		pendingDispatch: null,
 	};
 
@@ -333,7 +341,16 @@ const baseInput = (): BridgeConfigInput => ({
 		bridgeConfigSignature: bridgeConfigSignature(baseInput()),
 		contextMessageSignatures: ["user:text:a"],
 	};
-	const rec = buildSessionRecord({ sessionKey: "sess/key 1", acpSessionId: "acp-9", ...facts }, "2026-06-18T01:02:03Z");
+	const rec = buildSessionRecord(
+		{
+			sessionKey: "sess/key 1",
+			acpSessionId: "acp-9",
+			writer: { name: "fixture-agent", version: "1.2.3" },
+			firstPrompt: "sealed",
+			...facts,
+		},
+		"2026-06-18T01:02:03Z",
+	);
 	assert.equal(rec.version, SESSION_RECORD_VERSION);
 	assert.equal(rec.provider, SESSION_RECORD_PROVIDER);
 	assert.equal(rec.updatedAt, "2026-06-18T01:02:03Z", "updatedAt is the injected clock (pure build)");
@@ -370,11 +387,7 @@ const baseInput = (): BridgeConfigInput => ({
 			"empty acpSessionId rejected",
 		);
 
-		// delete removes the file.
-		deleteSessionRecord("sess/key 1", dir);
-		assert.deepEqual(readSessionRecord("sess/key 1", dir), { status: "missing" }, "deleted record is missing");
 		// On-disk JSON is pretty + has a provider field (sanity that it really wrote).
-		writeSessionRecord(rec, dir);
 		assert.match(readFileSync(sessionRecordPath("sess/key 1", dir), "utf8"), /"provider": "entwurf"/, "json written");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });

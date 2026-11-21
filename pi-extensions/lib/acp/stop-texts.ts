@@ -48,8 +48,12 @@ export const ACP_STOPS = {
 		exit: "make the record file readable, then send again",
 	},
 	intent: {
-		text: "entwurf: an ACP session was started for this conversation and its id is not available here, so nothing was sent",
+		text: "entwurf: an ACP session birth was attempted for this conversation and no id is recorded here, so nothing was sent",
 		exit: NEW_SESSION,
+	},
+	reserve: {
+		text: "entwurf: the birth of an ACP session could not be reserved, so nothing was sent",
+		exit: "make the ACP birth directory writable, then send again",
 	},
 	idSave: {
 		text: "entwurf: the ACP session id could not be saved, so no prompt was sent this turn",

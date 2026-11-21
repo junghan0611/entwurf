@@ -44,6 +44,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vites
 import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpClientHandlers, AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+import { ACP_STOPS } from "./stop-texts.ts";
 
 // #171 step 8: the Pi session a resident turn reads, kept in step with each call.
 const piHost = fakePiHost();
@@ -295,6 +296,7 @@ function makeWorld() {
 			}),
 		now: () => "2026-10-03T00:00:00Z",
 		sessionDir,
+		birthDir: `${sessionDir}-births`,
 		abortGraceMs: 40,
 	};
 
@@ -410,10 +412,11 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		);
 		expect(failedNotice).toBeGreaterThanOrEqual(0);
 		expect(failedNotice).toBeLessThan(events.indexOf(event));
-		// Dropped: the same session id spawns a fresh child next turn.
+		// The record keeps its marker; no later turn opens a second session for this conversation.
 		world.script(endTurn);
-		await runTurn(world, transcript("run the build", "again"), "cell-new");
-		expect(world.children).toHaveLength(2);
+		const after = sealedOf(await runTurn(world, transcript("run the build", "again"), "cell-new"));
+		expect(after.message.errorMessage).toBe(ACP_STOPS.interim.text);
+		expect(world.children).toHaveLength(1);
 	});
 
 	it("[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE] the raw vendor rejection survives verbatim in diagnostics, never in errorMessage", async () => {
@@ -436,7 +439,7 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		expect(message.errorMessage ?? "").not.toContain(TOOL_ID);
 	});
 
-	it("[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-REUSE] reuse path: the retained session's rejection is sealed non-transient and the session is dropped", async () => {
+	it("[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-REUSE] reuse path: the retained session's rejection is sealed non-transient and no second session follows", async () => {
 		const world = makeWorld();
 		world.script(endTurn);
 		await runTurn(world, transcript("first"), "cell-reuse");
@@ -447,8 +450,9 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		if (event.type === "error") expect(event.reason).toBe("error");
 		assertNoReplay(message);
 		world.script(endTurn);
-		await runTurn(world, transcript("first", "second", "third"), "cell-reuse");
-		expect(world.children).toHaveLength(2);
+		const after = sealedOf(await runTurn(world, transcript("first", "second", "third"), "cell-reuse"));
+		expect(after.message.errorMessage).toBe(ACP_STOPS.interim.text);
+		expect(world.children).toHaveLength(1);
 	});
 
 	it("[QK:ACP-VENDOR-REJECTION-OTHERS-UNCHANGED] every other rejection keeps today's verbatim-first errorMessage and gains no diagnostic", async () => {
@@ -518,8 +522,9 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 			expect(diagnostic?.details?.dataJson, form.label).toBe("[unserializable: TypeError]");
 			expect(diagnostic?.error?.message, form.label).toBe(VENDOR_TEXT);
 			world.script(endTurn);
-			await runTurn(world, transcript("go", "again"), sessionId);
-			expect(world.children, form.label).toHaveLength(2);
+			const after = sealedOf(await runTurn(world, transcript("go", "again"), sessionId));
+			expect(after.message.errorMessage, form.label).toBe(ACP_STOPS.interim.text);
+			expect(world.children, form.label).toHaveLength(1);
 		}
 	});
 
@@ -643,7 +648,7 @@ describe("agy prompt-phase failure (#167)", () => {
 		}
 	});
 
-	it("[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY] new path: after a completed tool, every sweep row seals the fixed verdict, keeps the raw failure, and drops the child", async () => {
+	it("[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY] new path: after a completed tool, every sweep row seals the fixed verdict, keeps the raw failure, and opens no second session", async () => {
 		for (const [i, row] of SWEEP.entries()) {
 			const world = makeWorld();
 			const raw = row.make();
@@ -652,8 +657,9 @@ describe("agy prompt-phase failure (#167)", () => {
 			const { message } = sealedOf(await runTurn(world, transcript("build it"), sessionId, undefined, agyFlash()));
 			assertAgyNoReplay(message, raw, row.label);
 			world.script(endTurn);
-			await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash());
-			expect(world.children, row.label).toHaveLength(2);
+			const after = sealedOf(await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash()));
+			expect(after.message.errorMessage, row.label).toBe(ACP_STOPS.interim.text);
+			expect(world.children, row.label).toHaveLength(1);
 		}
 	});
 

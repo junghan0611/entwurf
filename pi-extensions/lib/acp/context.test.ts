@@ -55,7 +55,7 @@ describe("aborted assistant turns in a rebuilt transcript (#142)", () => {
 		const cut = assistant("aborted", [
 			notice("\n[acp: sending prompt]\n"),
 			said("[tool:start] Terminal\n\n[tool:failed] echo start >> count.log — The tool use was rejected"),
-			notice("\n[acp: stopped — changes already made stay; next message opens a new session]\n"),
+			notice("\n[acp: stopped — changes already made stay; the ACP process was closed]\n"),
 		]);
 		const text = rebuild(userRun, cut, userNext);
 		expect(text).toBe(

@@ -231,6 +231,159 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:ACP-REUSE-SENDS-CHECKED-DELTA]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-BIRTH-RESERVED-BEFORE-NEW",
+			"title": "session/new is called with no reservation on disk — a lost answer is followed by a second session/new",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["publishBirthReservation({ sessionKey, backend: adapter.backend, at: deps.now() }, deps.birthDir);"],
+			"replace": ["void publishBirthReservation;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-BIRTH-RESERVED-BEFORE-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-BIRTH-ONE-SNAPSHOT",
+			"title": "a birth renders its prompt again after bootstrapping — the marker and the signatures name another context than the one sent",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const basePrompt = birth?.prompt ?? buildAcpPrompt(context, \"new\");"],
+			"replace": ["const basePrompt = buildAcpPrompt(context, \"new\");"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-BIRTH-ONE-SNAPSHOT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-LIVE-INCOMPATIBLE-KEPT",
+			"title": "a live session whose prefix no longer matches is abandoned for a new one",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\t\t\treturn {\n\t\t\t\tkind: \"stop\",\n\t\t\t\tstop: \"changed\",\n\t\t\t\twhy: \"the conversation no longer starts with what this session answered\",\n\t\t\t};"
+			],
+			"replace": ["\t\t\treturn { kind: \"birth\" };"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-LIVE-INCOMPATIBLE-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-RESIDENT-GUARD",
+			"title": "a record that is not valid is passed over, and the turn may be a birth",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\tif (record.status === \"invalid\") return { kind: \"stop\", stop: \"invalid\", why: \"session record not valid\" };"
+			],
+			"replace": ["\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RESIDENT-GUARD]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-RESIDENT-RESERVED-STOPS",
+			"title": "the guard never reads the birth reservation",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\tif (sources.reserved()) return { kind: \"stop\", stop: \"intent\", why: \"a birth was attempted and left no record\" };"
+			],
+			"replace": ["\tvoid sources.reserved;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RESIDENT-RESERVED-STOPS]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-RESIDENT-HISTORY-STOPS",
+			"title": "the guard never asks whether the Pi session holds ACP history",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\tif (sources.hasTrace()) return { kind: \"stop\", stop: \"noRecord\", why: \"the Pi session holds ACP history\" };"
+			],
+			"replace": ["\tvoid sources.hasTrace;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RESIDENT-HISTORY-STOPS]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-RESIDENT-LIVE-KEPT",
+			"title": "a live session asked for another model is not stopped by the guard",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\t\tif (existing.modelId !== params.modelId)\n\t\t\treturn { kind: \"stop\", stop: \"model\", why: \"the live session has another model\" };"
+			],
+			"replace": ["\t\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RESIDENT-LIVE-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-TRACE-ANY-ANSWER",
+			"title": "an Entwurf turn that failed or was aborted is never ACP history — partial output of an earlier vendor session is passed over and a second session is born",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["return !((stopReason === \"error\" || stopReason === \"aborted\") && provenPreBirth(message));"],
+			"replace": ["return stopReason !== \"error\" && stopReason !== \"aborted\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-TRACE-ANY-ANSWER]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-BIRTH-RESERVATION-EXCLUSIVE",
+			"title": "a reservation is opened for writing whether or not it exists — a second birth succeeds and rewrites the first",
+			"subject": "pi-extensions/lib/acp/birth-reservation.ts",
+			"find": ["\"wx\", 0o600);"],
+			"replace": ["\"w\", 0o600);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-BIRTH-RESERVATION-EXCLUSIVE]",
+			"signatureSource": "pi-extensions/lib/acp/birth-reservation.test.ts"
+		},
+		{
+			"claim": "ACP-BIRTH-RESERVATION-DURABLE",
+			"title": "a directory created for the reservation is not synced in its parent",
+			"subject": "pi-extensions/lib/acp/birth-reservation.ts",
+			"find": ["\t\t\tsync.directory(at);"],
+			"replace": ["\t\t\tvoid at;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-BIRTH-RESERVATION-DURABLE]",
+			"signatureSource": "pi-extensions/lib/acp/birth-reservation.test.ts"
+		},
+		{
+			"claim": "ACP-RECORD-DURABLE",
+			"title": "a record is renamed into place before its bytes are synced — a crash can leave the id or the marker missing though the write returned",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\t\t\tsync.file(fd);"],
+			"replace": ["\t\t\tvoid sync;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECORD-DURABLE]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-PRE-BIRTH-PROVEN",
+			"title": "any text block that reads like the no-session notice proves an answer pre-birth, whoever wrote it",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["b.textSignature === LIFECYCLE_NOTICE_SIGNATURE &&"],
+			"replace": ["b.textSignature !== 0 &&"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-PRE-BIRTH-PROVEN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-BIRTH-RECHECKED-AT-NEW",
+			"title": "a birth goes on to session/new for a Pi session that is no longer the one the provider reads",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (deps.sessionReader()?.getSessionId() !== opts?.sessionId?.trim()) {"],
+			"replace": ["if (Date.now() < 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-BIRTH-RECHECKED-AT-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }
