@@ -78,7 +78,9 @@ function scriptCounts(): Map<string, number> {
 
 it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs name exactly one test title", () => {
 	const document = readFileSync(join(ROOT, "docs/acp-client-baseline.md"), "utf8");
-	expect(document).toContain("| Row | Name | Status | Evidence | QK |");
+	expect(document).toMatch(/^\|\s*Row\s*\|\s*Name\s*\|\s*Status\s*\|\s*Note\s*\|\s*QK\s*\|/m);
+	// The page is a short comparison table; the evidence lives in the full document (decision 14).
+	expect(document.length, "the short page must stay short").toBeLessThan(24_000);
 	const rows = document
 		.split(/\r?\n/)
 		.flatMap((line, index) =>
@@ -94,16 +96,28 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 	});
 	const ids = parsed.map(({ cells }) => cells[0]);
 	expect(ids).toEqual(EXPECTED);
+	const noteOf = new Map(parsed.map(({ cells }) => [cells[0], cells[3]]));
 	const titles = oracleCounts();
 	const scripts = scriptCounts();
 	const rowClaims = new Map<string, string>();
-	const referenced = new Set<string>();
 	for (const {
 		cells: [id, , state, evidence, qk],
 		number,
 	} of parsed) {
 		expect(STATES.has(state), `${id}:${number}: unknown state ${state}`).toBe(true);
 		expect(evidence.replace(/[\s\-–—]/g, ""), `${id}:${number}: evidence or reason is empty`).toBeTruthy();
+		expect(evidence.length, `${id}:${number}: a note is one short sentence`).toBeLessThanOrEqual(140);
+		expect(evidence, `${id}:${number}: no file:line inside a table cell`).not.toMatch(/\.(?:ts|mjs|js|md):\d/);
+		if (id.startsWith("U")) {
+			expect(state, `${id}:${number}: a U row is unmeasured`).toBe("unmeasured");
+			const parent = /\b[LPZV]\d+\b/.exec(evidence)?.[0];
+			expect(parent && ids.includes(parent), `${id}:${number}: names a parent row`).toBe(true);
+			expect(
+				noteOf.get(parent ?? "")?.match(new RegExp(`\\b${id}\\b`)),
+				`${id}:${number}: parent ${parent} must point back to ${id}`,
+			).toBeTruthy();
+			expect(evidence, `${id}:${number}: ends with its close line`).toMatch(/(?:blocks close: step \d|stays: .+)\.$/);
+		}
 		const tokens = [...qk.matchAll(/\[QK:[^\]\r\n]+\]/g)].map((match) => match[0]);
 		if (state === "implemented") {
 			expect(tokens.length, `${id}:${number}: implemented row needs QK`).toBeGreaterThan(0);
@@ -119,7 +133,6 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 		}
 		for (const match of evidence.matchAll(/\bU\d+\b/g)) {
 			expect(ids.includes(match[0]), `${id}:${number}: unknown evidence pointer ${match[0]}`).toBe(true);
-			if (!id.startsWith("U")) referenced.add(match[0]);
 		}
 		for (const match of evidence.matchAll(/\[QK:[^\]\r\n]+\]/g)) {
 			const token = match[0];
@@ -128,8 +141,5 @@ it("[QK:ACP-ORACLE-ROW-COVERAGE] baseline rows are complete and implemented QKs 
 				`${id}:${number}: evidence ${token} must occur in exactly one test title or script string`,
 			).toBe(1);
 		}
-	}
-	for (const id of EXPECTED.filter((row) => row.startsWith("U"))) {
-		expect(referenced.has(id), `${id}: no non-U row references this unmeasured cell`).toBe(true);
 	}
 });

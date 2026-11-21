@@ -1,7 +1,8 @@
 # raw-acp-session-measure — what the vendor ACP agents do with session/load, resume, close and new
 
-The probes behind receipts R1–R10 of [docs/acp-client-baseline.md](../../docs/acp-client-baseline.md)
-(#171). Not a gate; nothing here runs in any check tier. Each probe drives the real
+The probes behind receipts R1–R10 of the ACP client baseline (#171). The short table is
+[docs/acp-client-baseline.md](../../docs/acp-client-baseline.md); the full receipts are pasted into #171 at
+close. Not a gate; nothing here runs in any check tier. Each probe drives the real
 `claude-agent-acp` and `agy` over raw JSON-RPC, imports the production overlay, adapter and enforce
 functions from the compiled bridge dist, and writes one run directory of wire logs and a
 `summary.json`. The code is kept as it produced the receipts; only host paths were replaced by the

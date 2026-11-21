@@ -1,262 +1,131 @@
 # ACP client baseline
 
-This page fixes what a complete ACP client must decide, row by row, and the state of each row in Entwurf
-today. It is the single table behind #171: an ACP issue is opened for a symptom the table already names only
-by naming its row, and a row is closed when its cell says how.
+The aim is not the whole ACP specification. It is the core a Pi session uses with a vendor ACP agent (initialize, new,
+prompt, cancel, reuse, resume, load, close, the record), each row backed by a check that can fail. This table is that
+list: #171 closes inside it, and no follow-up ACP issue is opened (GLG, 2026-11-21). The adapter contract stays in
+[acp-backend-rail.md](./acp-backend-rail.md). Evidence, `file:line` and the receipts are in the full document, which
+is host-local; its decisive lines are pasted into #171 at close.
 
-The adapter and turn-loop contract stays in [acp-backend-rail.md](./acp-backend-rail.md). This page owns the
-row list, the cell states, the decisions and the failure contract. Entwurf speaks ACP protocol v1. `session/load`,
-`session/resume`, `session/close` and the record store are rows here, not shipped behaviour, unless a cell says
-`implemented`.
+## Steps
 
-## Scope
-
-The table covers only the core capabilities a Pi row uses. Protocol features that add a harness mode, such as plan
-mode or todo and plan updates, are not core, so they are declined on purpose: not supporting them is the Pi style
-(GLG, 2026-11-21, in the coordinating session; recorded on #171 with this checkpoint). Rows that name such a feature cite this principle as their reason (Z1).
-
-## Where this stands (2026-11-21)
-
-The aim is not the whole ACP specification. It is the core a Pi row uses (initialize, new, prompt, cancel, reuse,
-resume, load, close, the record), each backed by a check that can fail. The table below is the single list of what
-that takes. Work proceeds in this order, and #171 closes inside it with no follow-up ACP issue (GLG, 2026-11-21):
-
-1. Done: this table and its oracle (`ACP-ORACLE-*`), the record-store repair (L15), and the reuse delta that no longer
-   drops user messages (L5).
-2. Next: capture `initialize` (L1) together with the version guard (V5), for both vendors.
-3. Then the pending-dispatch marker (L16). It is not neutral when it lands: it applies to retained, process-scoped sessions, and from here a store that cannot be written turns a turn that works today into a refusal (decision 9), before any resume exists.
-4. Then everything that attaches to a vendor session, reviewed by GLG, under the guard: `session/close` (L7), `session/resume` (L8), `session/load` (L9, with the ordering boundary Z4 and the typed load error with stderr tail Z3), re-enforcing model and effort after attach (L11, V2), compaction across attach (L14), `entwurf_resume_call` (P1), the resume-first rule (V1) and the one-holder guard across Pi processes (Z6, V3, decided with U9). `decideBootstrap` must move after `initialize` (spawn, initialize, then decide) so that it sees the capabilities. Every not-wired row appears in exactly one of steps 2 to 4.
-5. Then a vendor re-measurement: Claude to 0.109.x and agy to 1.5.13, through `scripts/raw-acp-session-measure/`.
-6. Then every row is implemented or declined; every unmeasured row either blocks the close and has been measured, or is marked as staying open with its reason; P2 and Z7 have a GLG decision. The full gates run and #171 closes.
+0. Done: measured the vendors into receipts R1–R12.
+1. Done: this table and its oracle.
+2. Done: the record store repair (L15) and the version guard decision (V5).
+3. Done: the reuse delta that no longer drops user messages (L5).
+4. Now: initialize facts and the version guard (L1, V5), and this split of the document.
+5. L16: the pendingDispatch marker. From here a store that cannot be written refuses the turn.
+6. A re-measurement command that compares fresh runs with R1–R10; agy 1.5.13 and Claude 0.109.x move with it.
+7. L7, L8, L9, L11, L14, P1, Z3, Z4, V1, V2, V3, Z6 under the version guard, reviewed by GLG; `decideBootstrap` moves after initialize.
+8. Close: a last live pass (U12 to U16, P2 with U4), the full gates, the receipts into #171.
 
 ## How to read the table
 
-One row per line; columns `Row | Name | Status | Evidence | QK`. Status is one of:
+Status is one of: `implemented` (shipped and covered; the QK column names the test), `not-wired` (decided, code to
+come), `declined` (a recorded choice), `deferred` (waiting for a decision), `unmeasured` (nobody has observed it).
+A scope rule: protocol features that add a harness mode, such as plan mode or todo updates, are declined on
+purpose; not supporting them is the Pi style (GLG, 2026-11-21).
 
-- `implemented` — shipped and covered; the QK column names a test title that exists today.
-- `not-wired` — the decision is made and the code is the work to come; Evidence is the measured vendor behaviour it
-  must follow and the `file:line` that has to change.
-- `declined` — a decision with its reason. "Not supported" is a recorded choice, never an absence.
-- `deferred` — decided to wait; the condition for resuming is stated. It is not a closing state: a deferred row needs a GLG decision before the close.
-- `unmeasured` — nobody has observed it; Evidence says what would measure it and ends with "Blocks close: <step>" or "Stays open at close: <reason>".
+## Lifecycle
 
-Every row other than `implemented` carries `—` in the QK column and its reason in Evidence. Line numbers drift as code
-moves, so the named symbol is the stable pointer; they were taken on branch `acp-session-load-171`. Paths without a directory are under
-`pi-extensions/lib/acp/`. Receipts `R1`–`R12` are below the table. A row whose remainder nobody has observed splits that remainder into its own `U` row with Status `unmeasured`; an unmeasured remainder never shares a cell; it gets a U row. A row may be partly implemented and partly not-wired when its cell says which part is which (L11, L14).
+What a Pi session does with a vendor ACP child, in the order it happens.
 
-## The table
+| Row | Name                              | Status      | Note                                                                                               | QK |
+|-----|-----------------------------------|-------------|----------------------------------------------------------------------------------------------------|---|
+| L1  | initialize, keep agent facts      | implemented | Each child's version and capabilities are read once at start.                                      | [QK:ACP-L1-FACTS-READ] |
+| L2  | authenticate                      | declined    | Vendor login is the vendor's job; Entwurf never handles credentials.                               | — |
+| L3  | session/new                       | implemented | A first turn opens one new vendor session.                                                         | [QK:ACP-ORACLE-L3-NEW] |
+| L4  | session/prompt and updates        | implemented | A prompt streams back as text, thinking and tool events, then a named stop reason.                 | [QK:ACP-ORACLE-L4-PROMPT] |
+| L5  | in-process reuse                  | implemented | Later turns in one live Pi reuse the session and send every new user message (U13, U14, U15, U16). | [QK:ACP-ORACLE-L5-REUSE] |
+| L6  | session/cancel                    | implemented | Abort sends a cancel, waits a grace period, then ends the child.                                   | [QK:ACP-ORACLE-L6-CANCEL] |
+| L7  | session/close                     | not-wired   | Dispose still kills the child; it will send close first when the agent offers it.                  | — |
+| L8  | session/resume                    | not-wired   | A restarted Pi cannot resume the vendor session yet; its first turn is new.                        | — |
+| L9  | session/load                      | not-wired   | Load is the fallback when resume is absent; its replay must never be recorded.                     | — |
+| L10 | session/list                      | declined    | Pi owns the session list, so list is not used (U1).                                                | — |
+| L11 | model and effort after attach     | not-wired   | After resume or load the vendor answers defaults; both must be set again (U2).                     | — |
+| L12 | request_permission                | implemented | Every permission request is approved; narrowing that is later work.                                | [QK:ACP-ORACLE-L12-PERMISSION] |
+| L13 | child death and teardown          | implemented | Teardown closes the connection, then ends the child's whole process group.                         | [QK:ACP-ORACLE-L13-TEARDOWN] [QK:ACP-ORACLE-L13-PROCESS-GROUP] |
+| L14 | compaction across attach          | not-wired   | A load replay must not be recorded as a new compaction (U3).                                       | — |
+| L15 | session record store              | implemented | The record is read without deleting, written atomically, and a failed write is shown.              | [QK:ACP-ORACLE-L15-INVALID] [QK:ACP-ORACLE-L15-UNREADABLE] [QK:ACP-ORACLE-L15-ATOMIC] [QK:ACP-ORACLE-L15-AGENT-DIR] [QK:ACP-ORACLE-L15-DEGRADED-NEW] [QK:ACP-ORACLE-L15-DEGRADED-REUSE] |
+| L16 | record currency (pendingDispatch) | not-wired   | A marker before each prompt makes a restart stop once, then start new (U12).                       | — |
 
-| Row | Name | Status | Evidence | QK |
-|---|---|---|---|---|
-| L1 | initialize, record agent capabilities | implemented | The answer of each child's `initialize` is read once, after vendor admission and before `session/new`, into the session's `agentFacts`: agent name and version, `loadSession`, the keys of `sessionCapabilities` that hold an object, and the auth method ids; a field that is absent or of the wrong type reads as absent (`readAgentFacts`, `backend-adapter.ts:427`; stored at `backend.ts:2269`; the reuse turn keeps the same facts and does not initialize again) [QK:ACP-L1-FACTS-STORED]. `bootstrapCapabilities` (`backend-adapter.ts:478`) turns the facts into the `capabilities` input of `decideBootstrap`, counting a capability only when the V5 attach judgement admits it [QK:ACP-L1-BOOTSTRAP-CAPABILITIES]; nothing calls it yet. Using the facts in the bootstrap decision waits for L8, which must decide after `initialize` (today `decideBootstrap` is called before the child exists, `backend.ts:2015`, and still gets no capabilities). The client declares only `session.compaction` (`backend.ts:2259`). The two answers in the checks are the vendors' own `initialize` results (R1) copied as literals. | [QK:ACP-L1-FACTS-READ] |
-| L2 | authenticate | declined | Vendor login is the vendor CLI's own; Entwurf never mediates credentials (AGENTS.md, ACP Boundary). No `authenticate` call in `AcpConnectionLike` (`acp-client.ts`). Unauthenticated Claude fails by itself: `-32603 "Could not resolve authentication method"` when a model is set (`docs/acp-backend-rail.md`, "an auth fact, not support"). | — |
-| L3 | session/new | implemented | `backend.ts:2265-2271`; throws when the answer has no `sessionId`. The first turn gets the fresh id in `scripts/check-acp-session-reuse.ts`; also covered by [QK:ACP-OVERLAY-SESSIONKEY-WIRED]. | [QK:ACP-ORACLE-L3-NEW] |
-| L4 | session/prompt and update mapping | implemented | `awaitAcpPromptTurn` (`backend.ts:986`); the terminal reasons are a closed set (`backend.ts:1072-1090`); mapping in `event-mapper.ts`; checks `scripts/check-acp-event-mapper.ts`, `check-acp-stop-reason.ts`, `check-acp-stream-hooks.ts`, `check-acp-usage-accounting.ts`; also covered by [QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE] and [QK:ACP-TURN-ACCOUNTING-ATTACHED]. | [QK:ACP-ORACLE-L4-PROMPT] |
-| L5 | in-process reuse | implemented | Process-scoped only (`--entwurf-control`): reuse branch `session-store.ts:301-303`, `runReuseTurn` `backend.ts:2014`, retention `backend.ts:2351-2370`. A turn-scoped pi is always `new` (`session-store.ts:295-298`); also covered by [QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT]. The reuse delta carries every nonempty user-role block after the last assistant, in order (batched steer/follow-up and bash output included); Pi custom messages such as session-info lose their type at projection, so their text rides along (GLG 2026-11-21: noise over loss; kind filtering deferred). After a vendor `max_tokens`, Pi 1.5.2 omits the cut answer with a `context_edit` (zero usage makes every length stop recoverable, pi-ai `overflow.js:177-178`; `agent-session.js:2533`, `:2564`), so the cut prompt is sent again with the next one: a duplicate, no longer a loss; whether a record-relative delta removes it is U13, and the usage a real vendor reports on a length stop is U16. `/compact` is attributed from the first block only, where claude-agent-acp 0.107.3 reads a command (`prompt-to-claude.js:36-39`, `v1/acp-agent.js:1146-1147`); whether the vendor compacts on a multi-block prompt that starts with `/compact` is U14, and the same attribution on a `new` turn, where the vendor sees one flattened block, is U15. Wire checks: [QK:ACP-DELTA-STEER-ALL] [QK:ACP-DELTA-FOLLOWUP-ALL] [QK:ACP-DELTA-BASH-NEXT] [QK:ACP-DELTA-MAX-TOKENS] [QK:ACP-COMPACT-FIRST-USER-BLOCK]. | [QK:ACP-ORACLE-L5-REUSE] |
-| L6 | session/cancel | implemented | A notification; the agent ends the pending prompt `cancelled`; after a 5 s grace Entwurf escalates to SIGTERM and a connection close (`backend.ts:132`, `:999-1043`); also covered by [QK:ACP-CANCEL-NOTICE-REUSE-KEPT], [QK:ACP-CANCEL-NOTICE-NEW-CLOSED] and [QK:ACP-REUSE-COOPERATIVE-CANCEL]. | [QK:ACP-ORACLE-L6-CANCEL] |
-| L7 | session/close on dispose | not-wired | Decision 2: send it when the agent advertises it. Today the child is killed and no protocol close is sent (`teardownChild` `backend.ts:1150`, `abandonRetainedSession` `:598`). Measured safe on both vendors, resume still works afterwards (R3). Zed sends close and treats `-32002` on close as success. | — |
-| L8 | session/resume | not-wired | Decision 1 and the order note below. No wire call exists; the decision branch is unreachable (`session-store.ts:313-315`, `backend.ts:1994`; a turn-scoped pi short-circuits at `session-store.ts:295`; no resume branch at `backend.ts:2014-2018`). Measured on both vendors: zero replay, recall intact; unknown id: Claude `-32002`, agy generic `-32603` (R2). `scripts/check-acp-session-reuse.ts:320-351` pins "record not used" and must be reversed with the code. On agy it is used only under the V5 version guard. | — |
-| L9 | session/load when resume is absent | not-wired | The same unreachable branch (`session-store.ts:316-318`). Rule to implement: updates received before the load response are replayed history and are not recorded; on a failed load the pending updates are dropped. Measured replays: Claude 3,058 ms, agy 4,644 ms (R4). Order against resume is the decided divergence in the notes below. On agy it is used only under the V5 version guard. | — |
-| L10 | session/list | declined | Decision 5, for now: Pi owns the session list. No call exists. Both vendors advertise `list`; agy `session/list` does not report a session that was never prompted, even one that exists and resumes (R10), so using `list` as the V1 discriminator first needs a measurement of its behaviour for a prompted session (U1). | — |
-| L11 | model and effort set and readback, including after resume or load | not-wired | New and reuse are implemented (`backend.ts:2279-2300`, `backend-adapter.ts:659`; [QK:ACP-THINKING-NEW-SET], [QK:ACP-THINKING-REUSE-SET], [QK:ACP-AGY-SET-MODEL-READBACK], mutant `scripts/mutants/acp-set-model-readback.json`). After resume or load nothing re-applies them and both vendors answer the vendor default (V2, R5). Rule to implement: re-enforce both with readback. The behavioural effect of the re-applied effort is split out as U2. | — |
-| L12 | session/request_permission | implemented | Decision 4: approve-all is the baseline. `resolvePermissionResponse` (`backend.ts:1051-1058`): `allow_once` or `allow_always` wins, else the first option, an empty list is `cancelled`; one handler for every backend (`backend.ts:2190`). Unit-tested by [QK:ACP-ORACLE-L12-PERMISSION]; agy's hook policy is also covered by [QK:ACP-AGY-HOOK-DECISION]. Narrowing the policy is separate work. | [QK:ACP-ORACLE-L12-PERMISSION] |
-| L13 | child death, teardown, no orphans | implemented | `onChildGone` (`backend.ts:642`), exit hook SIGKILLing retained groups (`:628`), group SIGTERM then SIGKILL after 2 s (`:1150`), transport diagnosis (`:895`). Measured: 26 children exited 0, grandchildren clear within 3 s, a 500 ms check sees a survivor about half the time (R6). QK ACP-ORACLE-L13-TEARDOWN pins order and delay, and ACP-ORACLE-L13-PROCESS-GROUP pins the negative-pid process-group SIGTERM/SIGKILL branch. No regression test pins the grandchild behaviour; also covered by [QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD] and [QK:ACP-REPLACED-SESSION-CLOSES-CHILD]. | [QK:ACP-ORACLE-L13-TEARDOWN] [QK:ACP-ORACLE-L13-PROCESS-GROUP] |
-| L14 | compaction, including across resume or load | not-wired | Claude across load: the rule that a load replay is never recorded is not implemented. The agy half is U3. In-session compaction is implemented (collector `backend.ts:1399`, `session_compact` closes the retained child `acp-provider.ts:80`, the `ACP-COMPACT-*` family in `backend.compaction.test.ts`, `compaction-roundtrip.test.ts`). Across load: a Claude replay carries the pre-compaction history plus a re-emitted `compaction_update` under a new id, so a load replay is never recorded; resume replays nothing (R4). agy: no compacted session could be built (R4, U3). | — |
-| L15 | session record store: read, persist, path | implemented | Read classifies found, missing, invalid or unreadable and never deletes the file (`readSessionRecord`, `session-store.ts:403-418`). Write goes to a same-directory temporary file the writer owns (`openSync` with `wx`) and is renamed over the target (`writeSessionRecord`, `session-store.ts:421-436`). The path follows Pi's `getAgentDir()` (`session-store.ts:151`). A persist failure is checked just before the seal and shown as a visible `pushAcpLifecycleNotice` (`ACP_RECORD_DEGRADED_NOTICE`, `backend.ts:960`); the turn then seals normally (decision 3; `persistRecord` `backend.ts:1246`, new turn `:2392`, reuse turn `:2527`). Visibility is atomic only: no fsync, no writer serialization, and a crash between open and rename leaves an ignored `*.tmp`. When L16 is wired, decision 9 changes the failure path here. Production still does not read the record (L8), so the user-visible behaviour is unchanged except that notice. Also covered by `scripts/check-acp-session-store.ts` (parse, path and decision tests). | [QK:ACP-ORACLE-L15-INVALID] [QK:ACP-ORACLE-L15-UNREADABLE] [QK:ACP-ORACLE-L15-ATOMIC] [QK:ACP-ORACLE-L15-AGENT-DIR] [QK:ACP-ORACLE-L15-DEGRADED-NEW] [QK:ACP-ORACLE-L15-DEGRADED-REUSE] |
-| L16 | record currency — what may have run since the record (`pendingDispatch`) | not-wired | Scope: the marker applies only to retained, process-scoped sessions (`--entwurf-control`); a turn-scoped Pi never persists a record (`session-store.ts:295-298`) and must not start writing one per turn. Activation: it can land before L8 and L9 because nothing reads the record yet, but it is not behaviour-neutral. The refusal of decision 9 is active from the step that lands L16, on whatever checkout runs it, so a record store that cannot be written turns a turn that works today into a refusal. The problem: the prefix check `hasPrefix` (`session-store.ts:246-252`) proves the record has not diverged from the transcript, not that it is current. Measured by B (R11): a record of 1 turn against a transcript of 4 turns with `resume: true` gave path resume and a prompt holding only the turn-4 question; turns 2 and 3 were lost and nothing was shown. A counting rule ("exactly one user turn after the record's prefix") was withdrawn: 13% of multi-message tails in 4,975 local Pi sessions hold more than one user message (#171 comment 7053506860), and R12 shows ordinary steering and follow-up tails that such a rule would send to `new`. The contract (decisions 8 and 9): (1) immediately before `session/prompt`, write a `pendingDispatch` marker into the record atomically; it means "this range may have executed". The marker holds positions, a count and the existing `contextMessageSignatures`, never prompt text; where the range is shown, that means positions and count, and the text is read from Pi's transcript. (2) The write that seals the turn and advances the record clears it. (3) On reconnect a standing marker means stop, even when an assistant message follows it; nothing is sent automatically, neither to the recorded session id nor to a new one. (4) The stop happens once: the reason is shown with the range the marker held (positions and count), the record is dropped, and the next turn is `new`; this is what an in-process child death does today (R12). (5) A record written before this field existed is not used for resume and goes to `new`. (6) A current record without a marker: when the tail after the record's prefix holds no assistant message, its user messages are sent in order (the L5 delta); when it holds one, `new`. (7) If the marker cannot be written, nothing is sent and the turn is refused with the reason (decision 9). Measured, offline: R11 for the old failure and R12 for the transcript shapes around steering, follow-ups, bash and failed turns. What a real vendor session holds after a cut prompt is U12. Oracles to add, on a fake agent (four): several unsent inputs are sent in order; a standing marker gives zero sends to both ids; a failed marker write gives zero sends; one stop is followed by `new`. Persist-before-seal in the current code (`backend.ts:2392`, `:2527`) is the L15 order and is replaced by this contract. | — |
-| P1 | entwurf_resume_call to resume or load | not-wired | Pi reopens with `--entwurf-control --session <file>` (`pi-extensions/lib/entwurf-v2-visible-resume.test.ts:639`), so it is process-scoped and keeps the same Pi session id, hence the same `pi:<id>` record key. Nothing reads the record, so the first ACP turn is a `new` that replays the transcript (`backend.ts:1994`). | — |
-| P2 | /renew on an ACP row | deferred | GLG, 2026-11-20: not now; it resumes when the ACP basics are complete and mature. Today `/renew` rides Pi `newSession`, `session_shutdown` closes the retained child (`acp-provider.ts:42`, `:94-97`), and the new chapter is a new Pi session id and a `new` ACP session with the outline as first message. No ACP-specific code blocks it; the transition on an ACP row has no observation (U4; `docs/renew-memory-outline.md`). Whether it sends `session/close` follows L7. GLG decision pending (NEXT): deferred is not a closing state. | — |
-| Z1 | declared client capabilities | declined | Entwurf declares `session.compaction` only (`backend.ts:2238`). fs write and terminal: declined, `writeTextFile` throws (`backend.ts:2197-2199`), Pi owns tools. fs read: a handler exists (`backend.ts:2196`) but the capability is not advertised, so no agent should call it; whether any does is U5. Notices, elicitation, subagents, config options: no Pi surface. Plan mode and todo or plan updates add a harness mode and are declined by the scope principle (GLG, 2026-11-21, in the coordinating session; recorded on #171 with this checkpoint). Enforcement: a vendor may send plan updates even though Entwurf does not advertise them, and `event-mapper.ts:613-614` (the `default` case) drops them. Zed declares all of these (`crates/agent_servers/src/acp/v1.rs:500-532`). | — |
-| Z2 | protocol version negotiation | declined | Decision 5: stay on v1. Zed tries v2 behind a beta flag and falls back on `-32022`. Measured (R7): Claude rejects a v1-shaped v2 `initialize` with `-32602`; agy downgrades to v1. A properly v2-shaped request was not sent (U10). | — |
-| Z3 | agent exit as a typed load error with stderr tail | not-wired | Matches the failure contract (child death during resume or load is a named stop with the tail). Entwurf already keeps a stderr tail and diagnoses a closed transport for prompt turns (`backend.ts:895`); applying it to a resume or load request is the work. Zed drains pipes for at most 250 ms after exit. | — |
-| Z4 | ordering boundary at the load response | not-wired | Same rule as L9. Zed registers the thread before sending load and treats the response as the boundary, draining on failure (`crates/agent_servers/src/acp/v1.rs:193-226`, `:1011-1026`, `:1050-1054`). | — |
-| Z5 | close a session/new whose caller left | declined | Measured (R10): sending `close` to an abandoned `session/new` changes neither vendor's state, so there is nothing to gain. Claude leaves no file or list entry; of the two aborts after the response (kill without `close`, `close` first) resume answered `-32002`, and for the kill before the response no id was received, so no resume was tried and no new state file appeared; agy creates a conversation database at `session/new` and keeps it whether or not `close` is sent. Zed closes it when close is advertised (`crates/agent_servers/src/acp/v1.rs:1360-1395`). Entwurf kills a booting child on abort (`backend.ts:2166-2176`). See V4. Declined on measurement (R10); GLG confirmation pending. | — |
-| Z6 | concurrent open of one id inside Entwurf | not-wired | Only one Pi process is guarded: a busy or in-flight key fails loud (`backend.ts:1974-1977`). Two Pi processes resuming the same record are not covered, and V3 shows the vendor will not refuse the second. Needs an Entwurf one-holder rule; the same guard closes V3 and Z6 together in one change. | — |
-| Z7 | connection-loss recovery by load | deferred | Pi resume is the recovery path (P1). Zed keeps the draft and reattaches by load (`crates/agent_ui/src/conversation_view.rs:1166-1173`). Resumes when L8 and L9 are wired and a lost-connection case is observed. GLG decision pending (NEXT): deferred is not a closing state. | — |
-| Z8 | optional verbs: delete, set_title, truncate, retry, cancel_tool_call, cancel_terminal, logout | declined | Decision 5. Capability-gated in Zed (`crates/acp_thread/src/connection.rs:206-330`); Entwurf has no surface that needs them. | — |
-| Z9 | subagent sessions are never loaded or resumed | declined | Entwurf advertises no subagent capability, so none is announced (Zed: `crates/acp_thread/src/connection.rs:136-142`). | — |
-| V1 | agy session/load of an unknown id answers success | not-wired | Decision 1 closes it by rule (never load after a failed resume; code is the work). The deviation is measured (R8): success with zero replay and no session file; the failure appears only on the first prompt. The discriminator that would let core name it (no replay for a record that had turns, record and cwd match, first usage, or `session/list`) is a proposal, not measured as a detector (U6). Resume-first closes V1 only for an agent that advertises resume; an agent advertising load alone leaves the path open (U7). The handling of V1 on agy depends on the V5 version guard. | — |
-| V2 | load and resume answer the vendor default configuration | not-wired | Both vendors, measured (R5). Core must re-enforce model and effort after resume or load (L11). | — |
-| V3 | vendors do not refuse a second live holder of one id | not-wired | Measured on both (R9; both holders prompting is U9). Entwurf's own guard is in-process only (Z6); one one-holder guard across Pi processes closes V3 and Z6 together, in the same change. | — |
-| V4 | agy persists every session/new as a resumable empty conversation, invisible to session/list; a kill during session/new leaves an orphan the client never received an id for | declined | Measured (R10): the conversation database was stored in 3 of 3 aborts, and a new child resumed it in the 2 of 2 that had received the id; whether the orphan from the kill before the response resumes is U8. Vendor storage hygiene, not an Entwurf session: Entwurf neither mediates nor cleans vendor storage (AGENTS.md Hard Rule 9). agy advertises no `delete`. Declined on measurement (R10); GLG confirmation pending. | — |
-| V5 | agy version is opaque and self-updating | implemented | agy changes version by running or by `agy update`, and the operator may not know the current one (GLG, 2026-11-21). Decision 6: a three-layer guard. (1) Start is refused below the floor, existing (`AGY_ACP_AGENT.floor`, `backend-adapter.ts:362`). (2) A measured-version constant `AGY_ACP_AGENT.measured` is in code and must equal the agy version in the Receipts header, enforced by a gate [QK:ACP-RECEIPT-AGY-MEASURED]. (3) `attachAllowed` (`backend-adapter.ts:467`) judges it: behaviour that leans on measurement (agy's L8 and L9 resume and load, the V1 handling, load-replay suppression) is used only when the version `initialize` reports equals `measured`; otherwise the reason is shown and the path is `new`. Default behaviour (new, prompt, cancel) rests on the floor alone. The only way to lift the guard is a re-measurement through `scripts/raw-acp-session-measure/`, updating the constant and the receipts together. The judgement needs the agent name to equal the pin [QK:ACP-V5-ATTACH-NAME], the reported version to equal `measured` exactly [QK:ACP-V5-ATTACH-EQUAL], and the capability to be advertised (resume needs `sessionCapabilities.resume`, load needs `loadSession`) [QK:ACP-V5-ATTACH-CAPABILITY-ABSENT]; a newer admitted server is refused [QK:ACP-V5-ATTACH-UNMEASURED]. No attach path calls it yet; L8 wires it, so nothing in the default path (new, prompt, cancel, reuse) changed. It needs the `initialize` answer of L1. Decision 10 gives Claude the same guard: resume and load open only when the reported version equals the measured one, because `CLAUDE_AGENT_ACP_COMMAND` replaces the bundled adapter and is checked against the floor only; with the bundled install behaviour does not change. `measured` is 0.107.3 for Claude and 1.5.12 for agy (`backend-adapter.ts:355-364`), each bound to the Receipts header by a gate [QK:ACP-RECEIPT-CLAUDE-MEASURED]. `agy --version` on the operator host reported 1.5.13 on 2026-11-21 (coordinator; no ACP behaviour measured on it), so once wired agy attach shows the reason and takes `new` until re-measurement; that is the guard working. The checks for the 1.5.13 and the Claude 0.109.0 cells feed synthetic `initialize` answers to the judgement; they are not runs of those versions. A bump of the Claude pin to 0.109 comes with a re-measurement (GLG). | [QK:ACP-V5-ATTACH-UNMEASURED] |
-| U1 | agy `session/list` for a prompted session | unmeasured | Would measure whether a prompted agy session appears in `session/list` (L10, V1). R10 observed only a never-prompted session, which is absent. Stays open at close: L10 is declined. | — |
-| U2 | behavioural effect of the re-applied effort | unmeasured | R5 read the values back but its question was too easy to produce thinking in any condition. Would measure: a question that thinks at the default effort, asked after resume at the default and at the re-applied level (L11). Stays open at close: a behavioural effect, not correctness. | — |
-| U3 | agy compaction | unmeasured | No trigger produced a compacted agy session: `/compact` ended `end_turn` with no notification and no drop in `used` (R4). Would measure: any trigger that makes agy emit a compaction fact, then load and resume across it (L14). Stays open at close: no trigger exists. | — |
-| U4 | `/renew` transition on an ACP row | unmeasured | P2 is deferred, so no ACP-row transition has been run. Would measure: `/renew confirm` on an ACP row, then the new chapter's first ACP turn and the close of the old child (P2). Blocks close: the /renew live run, unless GLG declines P2. | — |
-| U5 | an agent calling fs read | unmeasured | The handler exists (`backend.ts:2196`) but the capability is not advertised. Would measure: any agent that sends `readTextFile` to this client (Z1). Stays open at close: the capability is not advertised. | — |
-| U6 | a V1 discriminator as a detector | unmeasured | The candidates are no replay for a record that had turns, record and cwd match, first usage, or `session/list`. None was run as a detector against a phantom load (V1, U1). Would measure: run each candidate discriminator against a phantom load and a real load. Stays open at close: V1 is closed by the resume-first rule. | — |
-| U7 | an agent advertising load without resume | unmeasured | No such vendor is known. Would measure: any such agent, to see whether resume-first leaves V1 open there (V1). Stays open at close: no such vendor exists. | — |
-| U8 | resume of the agy orphan from a kill before the `session/new` response | unmeasured | The orphan database exists but the client never received its id, so no resume was tried (R10, V4). Would measure: resume the id named by the orphan's database filename. Stays open at close: V4 is declined. | — |
-| U9 | two holders both prompting one id | unmeasured | R9 had zero prompts. Would measure: two children resuming one id and both sending a prompt; what the transcript or database holds afterwards (V3, Z6). Blocks close: decided with the Z6/V3 one-holder guard in the L8/L9 step. | — |
-| U10 | a properly v2-shaped `initialize` | unmeasured | R7 sent `protocolVersion: 2` with v1-shaped params only (Z2). Would measure: `initialize` with v2-shaped params. Stays open at close: Z2 is declined. | — |
-| U12 | what a real vendor session holds after a prompt cut by child death, abort or timeout | unmeasured | The marker's meaning ("this range may have executed") rests on it. R12 shows Pi's side with a fake child only: whether a real Claude or agy session ran the cut prompt, in part or whole, was not observed (L16). Would measure: with a real vendor child, send a prompt that runs a tool, kill the child or abort mid-prompt, resume the id in a new child with zero prompts, and ask what it recalls. Blocks close: the final live run after L8 and L9. | — |
-| U13 | whether a record-relative delta removes the `max_tokens` duplicate | unmeasured | After a vendor `max_tokens`, Pi omits the cut answer, so the cut prompt is sent once more with the next one: a duplicate where there was a loss (L5, R12). A delta taken relative to the record's prefix, instead of the last assistant, would not resend it; that needs the record to be read, which is L8 and L9. Would measure: the cell of R12 run against the wired resume path. Blocks close: the final live run after L8 and L9. | — |
-| U14 | whether the vendor compacts on a multi-block prompt that starts with `/compact` | unmeasured | The delta can now carry several blocks (L5). Entwurf attributes `/compact` from the first block, where claude-agent-acp 0.107.3 reads a command; whether the vendor then compacts on the whole multi-block prompt was not run. Would measure: a live Claude child, a prompt of two text blocks, the first `/compact`, then read whether a compaction update arrives. Blocks close: the final live run after L8 and L9. | — |
-| U15 | whether `/compact` on a `new` turn compacts anything | unmeasured | On a `new` turn the vendor receives the whole transcript as one flattened block, so a typed `/compact` is plain text to it, yet the compaction record still marks that turn "after /compact" because attribution reads the first delta block on every path (L5). The record is observability only and the code had this property before. Would measure: a live Claude child, a `new` turn whose transcript ends in `/compact`. Blocks close: the final live run after L8 and L9. | — |
-| U16 | the usage a real vendor reports on a length stop | unmeasured | The `max_tokens` check relies on a fake agent's zero usage, which Pi 1.5.2 treats as a recoverable length stop (`overflow.js:177-178`); what Claude or agy report on a real length stop was not observed (L5). Would measure: a live child with a very small output cap, read the usage on the stop. Blocks close: the final live run after L8 and L9. | — |
+## Pi exits
+
+Where Pi itself reopens or renews a session.
+
+| Row | Name                 | Status      | Note                                                                                      | QK |
+|-----|----------------------|-------------|-------------------------------------------------------------------------------------------|---|
+| P1  | entwurf_resume_call  | not-wired   | Reopening a Pi session keeps its record key, but its first ACP turn is still new.         | — |
+| P2  | /renew on an ACP row | deferred    | /renew starts a new Pi session and a new ACP session; the final live run decides it (U4). | — |
+
+## Found in Zed
+
+Read from Zed's client (zed at ad1058d78d); each row asks whether Pi needs it.
+
+| Row | Name                           | Status      | Note                                                                                    | QK |
+|-----|--------------------------------|-------------|-----------------------------------------------------------------------------------------|---|
+| Z1  | declared client capabilities   | declined    | Only compaction is declared; fs, terminal and plan modes are Pi's or not Pi style (U5). | — |
+| Z2  | protocol version               | declined    | Stay on protocol v1 (U10).                                                              | — |
+| Z3  | agent exit as a typed error    | not-wired   | A child dying during resume or load is a named stop with its stderr tail.               | — |
+| Z4  | load response boundary         | not-wired   | Updates before the load response are replayed history, not new output.                  | — |
+| Z5  | close an abandoned session/new | declined    | Close changes nothing on either vendor, so it is skipped.                               | — |
+| Z6  | one holder inside Entwurf      | not-wired   | Only one Pi process is guarded today; a second Pi could take the same id (V3).          | — |
+| Z7  | recovery by load               | declined    | Pi resume is the recovery path, so Entwurf does not reattach by load.                   | — |
+| Z8  | optional verbs                 | declined    | Delete, title, retry and the rest have no Pi surface.                                   | — |
+| Z9  | subagent sessions              | declined    | Entwurf announces no subagents, so none are loaded.                                     | — |
+
+## Vendor deviations
+
+Measured on claude-agent-acp and agy; the client must absorb them.
+
+| Row | Name                               | Status      | Note                                                                    | QK |
+|-----|------------------------------------|-------------|-------------------------------------------------------------------------|---|
+| V1  | agy load of an unknown id succeeds | not-wired   | Never load after a failed resume; resume first closes this (U6, U7).    | — |
+| V2  | attach answers vendor defaults     | not-wired   | Both vendors forget model and effort on attach; set them again (L11).   | — |
+| V3  | no vendor refuses a second holder  | not-wired   | Two Pi processes can hold one id; Entwurf needs its own guard (Z6, U9). | — |
+| V4  | agy keeps every session/new        | declined    | Vendor storage is not ours to clean; Entwurf does not delete it (U8).   | — |
+| V5  | version guard                      | implemented | Attach opens only when the agent reports exactly the measured version.  | [QK:ACP-V5-ATTACH-UNMEASURED] |
+
+## Unmeasured
+
+Not observed yet. Each row names its parent and says whether it blocks the close.
+
+| Row | Name                                               | Status      | Note                                                                                       | QK |
+|-----|----------------------------------------------------|-------------|--------------------------------------------------------------------------------------------|---|
+| U1  | agy list for a prompted session                    | unmeasured  | Parent L10. Is a prompted agy session listed? stays: L10 is declined.                      | — |
+| U2  | effect of the re-applied effort                    | unmeasured  | Parent L11. Does the effort set again change behaviour? stays: behaviour, not correctness. | — |
+| U3  | agy compaction                                     | unmeasured  | Parent L14. Does agy compact across attach? stays: no trigger exists.                      | — |
+| U4  | /renew transition on an ACP row                    | unmeasured  | Parent P2. Does /renew work as it stands? blocks close: step 8.                            | — |
+| U5  | an agent calling fs read                           | unmeasured  | Parent Z1. Does any agent call fs read? stays: the capability is not offered.              | — |
+| U6  | a V1 discriminator as a detector                   | unmeasured  | Parent V1. Can a phantom load be detected? stays: resume-first closes V1.                  | — |
+| U7  | an agent with load but no resume                   | unmeasured  | Parent V1. Do load-only agents exist? stays: no such vendor.                               | — |
+| U8  | resume of the agy orphan                           | unmeasured  | Parent V4. Does an orphan session resume? stays: V4 is declined.                           | — |
+| U9  | two holders both prompting                         | unmeasured  | Parent V3. What happens when both holders prompt (with Z6)? blocks close: step 7.           | — |
+| U10 | a v2-shaped initialize                             | unmeasured  | Parent Z2. How does a v2-shaped initialize fare? stays: Z2 is declined.                    | — |
+| U12 | vendor state after a cut prompt                    | unmeasured  | Parent L16. What did the vendor run when a prompt was cut? blocks close: step 8.           | — |
+| U13 | record-relative delta and the max_tokens duplicate | unmeasured  | Parent L5. Does a record-relative delta remove the duplicate? blocks close: step 8.        | — |
+| U14 | vendor compacts on a multi-block /compact          | unmeasured  | Parent L5. Does the vendor compact on a multi-block prompt? blocks close: step 8.          | — |
+| U15 | /compact on a new turn                             | unmeasured  | Parent L5. Does /compact on a new turn compact anything? blocks close: step 8.             | — |
+| U16 | usage on a real length stop                        | unmeasured  | Parent L5. What usage does a real length stop report? blocks close: step 8.                | — |
 
 ## Decisions (GLG, 2026-11-20 and 2026-11-21)
 
-1. **Failure contract.** A `session/resume` rejected with a JSON-RPC error (nothing has been prompted yet) shows
-   the reason and takes `session/new`, which is today's behaviour, so nothing regresses; Pi owns the transcript,
-   unlike Zed. A failed resume never falls back to `session/load` on the same record, which closes V1 where the
-   agent advertises resume. If resume or load answered success and the first prompt then fails, or the request
-   times out, or the child dies during it, the result is a named stop: no automatic new session and no retry.
-2. **`session/close`** is sent on dispose when the agent advertises it. Measured safe on both vendors; resume
-   still works afterwards (L7, R3).
-3. **Record persist failure.** The turn continues with a visible degraded notice; only the next resume falls back
-   to `new` (L15). Decision 9 changes this once L16 is wired: a store that keeps failing refuses the next turn with its reason instead of continuing.
-4. **`session/request_permission`.** Today's approve-all policy is the baseline row; narrowing it is separate, later
-   work (L12).
-5. **Declined rows**, each with its reason: L2 `authenticate` (vendor login; Entwurf never mediates credentials),
-   Z2 protocol v2 (stay on v1), client fs write and terminal (Pi owns tools), and the optional verbs (delete,
-   title, truncate, retry, logout). L10 `session/list` is declined for now with one note: it is the only protocol
-   way to ask whether a session exists, so it may serve as a V1 discriminator later; agy's list omits never-prompted
-   sessions (R10) and its behaviour for a prompted session is U1.
-6. **agy version guard (V5).** agy's version is opaque and self-updating, so measurement-dependent behaviour is gated on the reported version equalling the measured one, and only a re-measurement lifts the guard (GLG, 2026-11-21).
-
-7. **Reuse delta (2026-11-21).** The reuse prompt carries every nonempty user message after the last assistant, in order.
-   The old rule that skipped all but the first user message is dropped: noise (a device and time line) is chosen over
-   loss. `/compact` is attributed from the first block (L5).
-8. **`pendingDispatch` (2026-11-21, agreed by B and the pair).** The L16 contract above: a marker written atomically
-   before `session/prompt`, cleared by the sealing write, a stop on reconnect when it stands, old records without the
-   field go to `new`. (a) The stop happens once: the reason is shown with the range the marker held, the record is
-   dropped, and the next turn is `new`, as with an in-process child death today.
-9. **Marker write failure sends nothing (2026-11-21).** If the marker cannot be written, no prompt is sent and the
-   turn is refused with the reason. This changes decision 3, and it takes effect from the step that lands L16 (scope: retained, process-scoped sessions).
-10. **The measured-version guard covers Claude too (2026-11-21).** Resume and load open only when the reported version
-    equals the measured one; the `CLAUDE_AGENT_ACP_COMMAND` override is otherwise checked only against the floor (V5).
-
-`/renew` on an ACP row (P2) is deferred by GLG until the ACP basics are complete and mature.
-
-## Failure contract
-
-The same rule applies to every vendor; only the evidence differs.
-
-- `session/resume` answered a JSON-RPC error, before any prompt: show the reason and take `session/new` with Pi's
-  transcript. Nothing ran on the backend, and Pi, not the backend, holds the history.
-- The reason shown preserves the JSON-RPC code and message. `-32002` means the session does not exist. agy's resume
-  answers a generic `-32603` ("Failed to read session ...; retry, or load it with session/load"), which is not
-  evidence of absence, and its advice to load must not be followed after a failed resume. Core keys on "JSON-RPC
-  error before any prompt", not on a specific code.
-- `session/load` answered a JSON-RPC error (resume absent): the same, visible reason then `session/new`.
-- The same record is never offered to `session/load` after a failed resume (V1).
-- Resume or load answered success and the first prompt fails: named stop, no new session, no retry. The state is
-  unknown and a retry could run a turn twice.
-- The request timed out, or the child died during it: named stop, with the stderr tail (Z3).
-- The record cannot be read (L15), or predates the `pendingDispatch` field, or its tail holds an assistant message with no marker (L16): `session/new`, visible, with its own reason. The record is a hint, not an authority.
-- A `pendingDispatch` marker stands (L16): stop once, name the range (positions and count), drop the record; the next turn is `new`. If the marker cannot be written before a prompt: send nothing and refuse the turn with the reason.
-
-Zed stops on any load or resume error and never opens a new session. Entwurf differs on the first and third
-points only, and only because Pi owns the transcript: a new session loses no history and Entwurf does not
-reconstruct a prompt to replace it (AGENTS.md Hard Rule 9).
-
-## Notes on divergence from Zed
-
-Zed (`zed-industries/zed` at `ad1058d78d`, 2026-11-20, `agent-client-protocol =5.4.0`) was read, not run. Its
-protocol-v1 client is `crates/agent_servers/src/acp/v1.rs`; every Zed path below is under that tree at `ad1058d78d`.
-
-- **Resume before load.** `decideBootstrap` prefers resume, then load (`session-store.ts:313-318`). Zed prefers load
-  because it holds no transcript and shows the replay as its history. Pi owns the transcript here, so a replay is
-  redundant and resume-first follows from who owns it, not from the protocol. This is a decided divergence.
-- **Re-enforcing model and effort.** Zed does not re-apply defaults after load or resume (only `new_session` does,
-  `crates/agent_servers/src/acp/v1.rs:1465`). Entwurf re-enforces both after resume or load because the vendor answers its defaults (V2).
-- **Teardown.** Zed kills the process group with SIGKILL and no grace (`crates/util/src/process.rs:31-53`); Entwurf sends
-  SIGTERM, then SIGKILL after 2 s (`backend.ts:1150`).
-- **No session record in Zed.** Its thread store keeps id, title and work dirs; vendor history comes from load or
-  list. Entwurf's record (L15) exists only to find the vendor session id again.
+1. Failure contract: a rejected resume shows its reason and starts new; a prompt that fails after an attach succeeded is a named stop, with no retry.
+2. `session/close` is sent on dispose when the agent offers it.
+3. A record write failure shows a notice and the turn goes on; decision 9 changes this once L16 lands.
+4. Permission: approve-all stays the baseline; narrowing it is later work.
+5. Declined: authenticate, protocol v2, client fs write and terminal, the optional verbs; `session/list` for now.
+6. Version guard: attach that leans on measurement needs the reported version to equal the measured one (V5).
+7. Reuse delta: send every user message after the last assistant; `/compact` is read from the first block.
+8. pendingDispatch: write a marker before each prompt and clear it at seal; a standing marker stops once, drops the record, then new. Every named stop does the same.
+9. If the marker cannot be written, nothing is sent and the turn is refused with its reason.
+10. Claude gets the same version guard, because the command override is checked only against the floor.
+11. Z5 and V4 are declined (measured in R10).
+12. Re-measurement comes before L8 and L9: one command compares fresh runs with R1–R10, and only a changed line needs a person.
+13. P2 is closed by the final live run (U4); Z7 is declined, since Pi resume is the recovery path.
+14. This page is the short table; the full document with evidence lives in `.agent-reports/`, and its receipts go to #171 at close.
 
 ## Receipts
 
-R1–R10 are all dated 2026-11-20 (R11 and R12 are dated 2026-11-21 and are offline, not vendor live runs), n=1 per cell, repository `ddd78246`, claude-agent-acp 0.107.3 (`claude-sonnet-5-5`, effort
-`low`) and agy 1.5.12 (`gemini-3.8-flash`, `thought_level low`), in an isolated HOME / XDG /
-`PI_CODING_AGENT_DIR` under `env -i` with a scratch cwd outside the repository. `initialize` used the production
-`clientCapabilities` `{ session: { compaction: {} } }` except where R1 notes otherwise. Vendor credentials were
-reached through the production overlay symlink, never read or copied, and their modification times were unchanged
-across the runs. Model and effort were set through the production `enforceModel` and `enforceThinking`, with every
-answer captured as readback. The raw artifacts are host-local; the decisive lines are below. The versions here change only with a re-measurement through `scripts/raw-acp-session-measure/`. The live probes are in `scripts/raw-acp-session-measure/` (`LIVE=1 run.sh <scenario> <out-dir>`, README maps scenarios to R1–R10).
+Receipts R1–R10 were measured on 2026-11-20, once each, on claude-agent-acp 0.107.3 (`claude-sonnet-5-5`, effort `low`) and agy 1.5.12 (`gemini-3.8-flash`, `thought_level low`). The versions here change only with a re-measurement through `scripts/raw-acp-session-measure/`.
 
-- **R1 initialize.** Both agents answered `loadSession: true`; agy `sessionCapabilities` were `resume, close, load,
-  list, additionalDirectories`; Claude 0.107.3 advertised `additionalDirectories, close, delete, fork, list, options,
-  resume, status, systemPrompt, title` (measured). An earlier probe of the load replay sent `clientCapabilities:
-  {}` instead of the production value; its replay is therefore for a client without the compaction capability and
-  is not used here (R4 was repeated with the production value).
-- **R2 resume.** Claude, new child: zero replay updates, recall of an earlier fact correct. agy: answered in
-  2,126 ms, zero updates in the request window, `available_commands_update` and `session_info_update` after it,
-  recall correct, `used` continuous (9,833). Unknown id, zero prompts: Claude `-32002 "Resource not found"` with
-  `data.sessionId`, 4,292 ms, no update; agy `-32603 "Failed to read session <id>; retry, or load it with
-  session/load"`, no `data`, 1,707 ms, no update, no file created. agy fails loud on resume and silent on load
-  (R8).
-- **R2b production capabilities.** Repeated with the production `clientCapabilities`: Claude `session/resume` replayed zero updates and recalled the earlier fact (`QUARTZ-88`) after a compacted session, and zero replay also held for the resumes in the L11 and L7 runs.
-- **R3 close.** Both vendors advertise `close`. After a resume in the same child, `session/close` answers `{}` with
-  no update. The vendor session files remain. In the same child afterwards `session/resume` and `session/load` both
-  succeed (load replays 4 user and 4 agent chunks), and a new child resumes too. Close releases the live session;
-  it does not end resumability.
-- **R4 load replay and compaction.** Claude: build was a fact, a `echo TOOLPROBE-171` tool call, a filler turn and
-  `/compact` (3 `compaction_update`: in_progress, then completed with the `summary`, then completed; `usage_update` 875). `session/load`, 3,058 ms,
-  inside the request window: `user, agent, user, tool_call, tool_call_update, agent, user, agent,
-  compaction_update`; the tool call appears once pending and once completed; the compaction appears once, completed
-  with the summary, under a new id (`bb742ad0-…`, live was `e5bd5943-…`); the `/compact` prompt is not replayed;
-  no `usage_update`. `session/resume`: zero updates, recall correct. agy: `/compact` produced `end_turn`, no
-  compaction notification, no tool lifecycle, `used` 9,432 to 10,693 with no drop, so no compacted agy session
-  could be built. agy `session/load`, 4,644 ms: `user, agent, user, tool_call (completed), agent, user, agent,
-  user(/compact), usage_update(10,693)` (a trailing `usage_update` is not stable: a load after `close` in the same child had none, so a scenario must not require one). agy `resume`: zero updates, recall correct. Compaction on agy by another
-  trigger was not found.
-- **R5 model and effort after resume or load.** Session set to model and effort low, then three new children on it,
-  each asked the same arithmetic question. Claude resume and load answered `model sonnet, effort default`; agy
-  both answered `gemini-4-neon, thought_level high`. Re-enforcing both read back the session's values (Claude effort
-  `low`, agy model `gemini-3.8-flash` and thought level `low`); re-enforcing the model alone left effort at `default`
-  (Claude) and `high` (agy). All answers were correct (391). The question produced no thinking in any condition,
-  so the behavioural effect of the re-applied effort is not discriminated; weak signal: agy recall turns at
-  default `high` reported `thoughtTokens` 82 and 38, turns at `low` reported 0.
-- **R6 teardown.** 12 Claude children, all exited 0 on group SIGTERM; at +0.5 s 6 of 12 groups still held a vendor
-  process (1 alive, 5 defunct), at +3 s and +10 s 0; no descendant left its group. 14 agy children, 0 left at
-  +0.5 s and +3 s. A final sweep found 0 processes under the run directory.
-- **R7 protocol v2.** `initialize` with `protocolVersion: 2` and v1-shaped params, zero prompts: Claude answered
-  `-32602 "Invalid params"` (it parsed the v2 schema and found no `info` field; no downgrade and no `-32022`); agy
-  answered `protocolVersion: 1` and `loadSession: true`.
-- **R8 agy phantom load.** `session/load` of a random uuid, and of a real id from another overlay, both answered
-  success `{ sessionId, models, modes, configOptions, _meta }` with zero replay and no session file (the uuid load took 6,389 ms; the other load's time was not recorded);
-  agy's own log said `LoadTrajectory … not found in any store`, which never reaches the wire. The production
-  `enforceModel` and `enforceThinking` were both accepted on the phantom. The first prompt then failed with
-  JSON-RPC `-32603 "Failed to send user message: not_found: trajectory not found: <uuid>"`, no stop reason, no tool
-  or text update. A following `session/resume` of that id in a new child answered `-32603`. Entwurf's agy
-  prompt-failure verdict `AGY_PROMPT_FAILURE_VERDICT` ("replay unsafe") would fire on that prompt.
-- **R9 second holder.** Two children resuming one id with zero prompts: Claude both succeeded (3,109 and 3,129 ms),
-  same session id, zero replay, and the transcript grew from 50,384 to 52,066 bytes with no prompt; agy both
-  succeeded (4,550 and 4,319 ms), the conversation database kept its size and a `-shm`/`-wal` pair appeared during
-  the run. Neither vendor refuses a second live holder. What happens when both prompt was not tested.
-
-- **R10 abandoned `session/new`.** 2026-11-20 22:52–22:55 KST, n=1, zero prompts, production `clientCapabilities`, claude-agent-acp 0.107.3 and agy 1.5.12. Three aborts of `session/new`: kill after the response without `close`, `close` after the response, and SIGTERM before the response. Claude: after every one, no session file and no `session/list` entry; `session/resume` answered `-32002` for the two aborts after the response, and was not tried for the kill before the response, which never received an id (no new state file appeared). agy: `session/new` writes `conversations/<id>.db` at once; it stays whether or not `close` was sent, and a new child resumes it successfully with zero updates; after the kill before the response agy answered `-32603 "Failed to start Antigravity conversation"` and an orphan database remained for an id the client never received. `session/list` returned `[]` for an existing, resumable, never-prompted agy session. agy does not advertise `delete`.
-
-- **R11 record behind the transcript.** Dated 2026-11-21, B's measurement of the production functions only, not a vendor live run; it is the old first-user prompt (since changed by decision 7). B, `e330d472`, `decideBootstrap` and `buildAcpPrompt` imported unchanged, capabilities `resume: true`: a record with 1 signature against a transcript with 7 (turn 4) gave `{"path":"resume","acpSessionId":"S-OLD","reason":"persisted_compatible_resume"}` and the prompt `[{"type":"text","text":"turn 4: what is the codeword?"}]`. It exercises the two functions only; production does not read the record yet. Source: B's review comment on #171, comment 7046273922.
-
-- **R12 Pi transcript shapes (steering, follow-ups, bash, failed turns).** Dated 2026-11-21, commit `b87340a1`, Pi SDK 1.5.2, Node 24.18.1, OFFLINE: the production `streamAcpTurn` driven by `createAgentSession` and a file-backed `SessionManager` against a scripted fake ACP child, process-scoped lifecycle, no vendor ran; the probe and its 216-line output are host-local (`~/.local/share/entwurf-lab/171/probe/transcript-shape.mjs`). Columns: `rec` is the record on disk (session id / number of signatures); `tail` is the transcript after the record's prefix, `A(x)` an assistant message with stop reason x, `U:` a user message; `wire` is what the fake session received (cut at 16 characters). The prompt shown is the old first-user prompt, before decision 7.
-  - Steering all at once: `U11-steer-all call2 rec=ACP-1/2 tail=[A(stop) U:STEER-A-q7 U:STEER-B-q7] delta=["STEER-A-q7"] lost=["STEER-B-q7"]`; the same for follow-ups. This is the loss decision 7 repaired, and a tail that a one-user-turn rule would send to `new`.
-  - One at a time: `U11-steer-one-at-a-time call2 rec=ACP-1/2 tail=[A(stop) U:STEER-A-q7] lost=[] dup=[]`, then calls 3 and 4 the same, `wire ACP-1=["User: ALPHA-q71","STEER-A-q7","STEER-B-q7","NEXT-U11-steer-o"]`.
-  - Bash then prompt: the cell `U11-bash-then-prompt call2` had `tail=[A(stop) U:Ran echo BASH… U:NEXT-U11-bash-]`, `lost=["NEXT-U11-bash-"]` (the bash output was sent, the human prompt after it was not).
-  - Child death after the tool phase: `U12-child-death-after-tool-phase-same-process call3 rec=ACP-1/2 tail=[A(stop) U:BRAVO-q72 A(error) U:NEXT-U12-child]` went `new`, `wire ACP-1=["User: ALPHA-q71","BRAVO-q72"] ; ACP-2=["User: ALPHA-q71 "]`. An abort the agent never answered went `new` the same way; one it answered `cancelled` kept the session (`rec=ACP-1/4 tail=[A(aborted) U:NEXT-U12-abort]` resume). The restart variants matched.
-  - Effort set on reuse, timeout: `U12-timeout-effort-set-on-reuse-same-process call4 rec=ACP-2/4 tail=[A(stop) U:NEXT-U12-timeo]` resume on the second session; with retries exhausted, `call6 rec=ACP-1/2 tail=[A(stop) U:BRAVO-q72 A(error) U:NEXT-U12-timeo]` went `new`.
-  - Vendor stops: after a refusal `call3 rec=ACP-1/4 tail=[A(error) U:NEXT-U12-vendo]` resume (the record advanced); after `max_tokens` `call3 rec=ACP-1/4 tail=[U:NEXT-U12-vendo] delta=["BRAVO-q72"] lost=["NEXT-U12-vendo"] dup=["BRAVO-q72"]`, a tail with no assistant message.
-
-Everything not yet observed is a `U` row above with Status `unmeasured`. U11 was measured as R12 and is retired; its number is not reused.
-
-## The oracle
-
-The table is the baseline; the oracle is what makes a cell true. One scenario list runs against three agents.
-
-1. A fake ACP agent that implements the whole protocol, deterministic, in the ordinary gate. It extends the existing
-   fake-backend harness of `pi-extensions/lib/acp/backend.*.test.ts` instead of adding another.
-2. Claude ACP, live.
-3. agy, live.
-
-Each scenario states the wire observations that decide it: order, counts, session ids, which updates arrived before
-or after a response, and the prompt count (zero on every failure path that must not prompt). Live runs are repeated
-when a vendor version changes; drift then shows as a changed cell. Until the fake scenarios exist the receipts above
-are evidence, not the baseline. A cell that moves from `not-wired` to `implemented` names the test or QK that now
-certifies it, in the same change as the code.
-
-Order from here is the list under "Where this stands". The oracle gate has landed. Resume, load and close are wired
-only under the version guard (V5), and no new ACP issue is opened: #171 closes inside this rail, once every row is in
-a final state.
+R11 and R12 (2026-11-21) are offline checks, not vendor runs. The full receipts live in the full document and are pasted into #171 at close.

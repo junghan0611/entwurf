@@ -349,7 +349,7 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
  *  agy: the one measured version (#167, 2026-11-16).
  *
  *  `floor` admits a server to run at all (#168). `measured` is the one version whose session
- *  resume/load the receipts of docs/acp-client-baseline.md measured (#171 V5, decision 10,
+ *  resume/load the receipts named in docs/acp-client-baseline.md measured (#171 V5, decision 10,
  *  GLG 2026-11-21); only that exact version may attach a stored session (`attachAllowed`). A gate binds
  *  each `measured` to the version the Receipts paragraph names (receipt-versions.ts). */
 export const CLAUDE_ACP_AGENT = Object.freeze({
