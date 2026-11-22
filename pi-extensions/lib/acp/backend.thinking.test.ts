@@ -749,6 +749,8 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 		piHost.setBranch("delta-length", session.getBranch());
 		const stopped = await runTurn(world, context, "delta-length", "high");
 		expect(errorText(stopped)).toBe(ACP_STOPS.changed.text);
+		// What stops it is the edit itself: an entry after the last answer that is neither an input nor a turn.
+		expect(sealedNotices(stopped).join("\n")).toContain("a context_edit entry after the last answer");
 		expect(world.children).toHaveLength(1);
 		expect(world.prompts).toHaveLength(2);
 		expect(world.lifecycle).toEqual([]);
