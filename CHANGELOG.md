@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.22-herdr.0.61.0 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.61.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.60.0 (`v2026.11.20-herdr.0.60.0`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `3bfe8a5534071151324f6f50fc76323a0f5beb6c74484feced53c40052fbfe1a` matches the accepted core artifact byte for byte; independently computed sha512 matches the npm integrity and this lock. The publication moved `latest` to 0.61.0 and left `repair` at the value recorded before publication (`0.12.8-repair.1`, U0 receipt `publish-u0.zCQRO0` beside the candidate). Core `v0.61.0` is `e1e43354` (exact-SHA CI run 45003209370, Windows preview run 45004229146).
+- In a private sandbox (private HOME, XDG roots and agent directory), `pi install npm:@junghanacs/entwurf@0.61.0` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the three Claude rows and the three agy rows with no provider error; the install printed the same peerDependencies warning as 0.60.0.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.61.0, a source swap, a real Herdr registration, public-ref installation, a vendor model turn, an operating-host upgrade, or 0.61.0 inside Orca.
+- Mutant `VERSION-MENTIONS-HERDR-LOCK` (`scripts/mutants/pi-floor.json`) returns to its npm form: it finds `"version": "0.61.0"` in the lock and plants 0.60.0, the previous pin, against a README that names 0.61.0. The 0.61.0 guides name no current release, so no setup or durable doc anchor moved. PARTIAL `["bash","run.sh","check-dep-versions"]` 12/12 killed, control ok (head e1e4335453e9 surface 850380fca8cd receipt 5d73d2e88355). On the same uncommitted tree the nine Herdr gates, `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` and lint were green. Exact pushed-SHA CI requires its own receipt.
+
 ## 0.61.0 — 2026-11-22
 
 ### What an npm user gets

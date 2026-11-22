@@ -1,22 +1,17 @@
-# NEXT — 0.61.0 prepare: #171 ACP session continuity on main
+# NEXT — 0.61.0 shipped: #171 ACP session continuity
 
-**현재 (2026-11-22):** #171(ACP 세션 연속성)이 main에 병합됐다(`0d8c22d9`, exact-SHA CI run 44978371312 4/4, #171 닫힘, 닫는 댓글 7073374796). GLG는 손으로 ACP 턴을 돌리는 대신 테스트로 확인하기로 했다(2026-11-22). 그래서 커밋된 main에서 Opus `20261120T213316-793499`가 sandbox LIVE를 다시 쟀다(Claude·agy 각 pi-smoke 15/15, pi-unknown 12/12, n=1, `~/.local/share/entwurf-lab/171/main-cover/`). 지금은 0.61.0 문서 검토를 마치고 prepare로 간다. npm `latest`는 0.60.0이다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, 문서 리뷰 Sol `20261121T135110-09fa15`(코드 대조)·Sonnet `20261120T204416-ad4dae`(가독성·수정 묶음 작성), 설계 대기 Fable `20261121T180949-b6d8f7`.
+**현재 (2026-11-22):** 0.61.0을 npm `latest`로 출하했다(GLG publish). 내용은 #171 ACP 세션 연속성(Pi 대화당 vendor 세션 하나, 기록된 id의 resume, 이름 있는 stop, Claude ACP 0.109.0)과 죽은 holder lease 인계(결정 19, GLG 2026-11-22)다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, prepare 실무 Opus `20261120T213316-793499`, 설계·수정 Fable `20261121T180949-b6d8f7`, 리뷰 Sol `20261121T135110-09fa15`.
 
 # RAIL — 현재 좌표
 
-- [x] **1. 문서 검토.** `5839be8a`: Sol(b3c436)·Terra(4677a7) 두 차례 리뷰, #151 거짓 성공 Blocker 해소. PARTIAL acp-vendor-rejection 8/8, readback 101/101, provider-surface 2/2, session-reuse 1/1.
-- [x] **2. prepare 0.60.0.** `c2f15ced`: P4 FULL 1078s(seal `7f32b505ebf5d8ea`; 첫 FULL은 Herdr lock 미전환으로 red), P5 `release-gate --cut` MUST 25/0/0 BEHAVIOR 1/0/0, OpenClaw home receipt 새 실측(GLG 승인, `~/.local/share/entwurf-lab/160/receipt-0.60.0-5839be8a/`). 증거는 CHANGELOG 0.60.0 Release evidence.
-- [x] **3. make → publish.** exact-SHA CI run 44685553830, Windows preview run 44687247725, candidate sha256 `85b4d7fc…1427`(container 수용), tag `v0.60.0`, GitHub release. GLG npm publish; U2 latest=0.60.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패, GLG 결정으로 생략.
-- [x] **4. Herdr re-pin.** `3d4d5f55`(exact-SHA CI run 44691169782): `runtime-lock.json` npm 0.60.0(registry sha512 = integrity, sha256 = 수용 후보), setup/durable 문서 현재 버전 0.60.0(배포된 tarball 문서는 0.55.1 표기 그대로), `PI-FLOOR-PUBLISHED-SCOPE` 앵커 이동(PARTIAL dep-versions 5/5). snapshot tag + GitHub release `v2026.11.20-herdr.0.60.0`(Latest는 v0.60.0 유지).
-- [x] **5. 이슈.** #151(이미 닫힘)·#168·#169에 출하 댓글, #168·#169 닫음(2026-11-20). #171은 열림.
-- [x] **6. #171 병합.** `0d8c22d9`(`--no-ff`, 브랜치 끝 `74691366`). 무엇이 바뀌고 무엇을 재지 않았는지는 CHANGELOG `## Unreleased`의 #171 항목, 결정은 `docs/acp-client-baseline.md`, 영수증은 #171 닫는 댓글에 있다. 브랜치의 FULL·PARTIAL은 상속하지 않는다. U4·U16은 #156으로 미뤘다(댓글 7069232824).
-- [ ] **7. 0.61.0 준비.** ← CURRENT
-  - 문서 검토(GLG: 형제 전체가 문서부터): Sonnet #S15 가독성 목록과 Sol 코드 대조 D1–D6을 한 수정 묶음으로 반영했다. 수정 묶음에는 `backend.ts`의 낡은 notice 문구(`ACP_RECORD_DEGRADED_NOTICE`)와 주석 한 줄도 들어간다. 그다음 Sol이 재검토하고, 영향받는 gate를 돌린 뒤 커밋한다.
-  - 그다음 prepare 0.61.0: 문서 버전 문구(`docs/setup-clean-host.md`, `docs/durable-native-support.md`, `PI-FLOOR-PUBLISHED-SCOPE` 앵커), Herdr lock 전환 확인, P4 FULL, P5 `release-gate --cut`, P9 회수.
-  - ACP 사용 안내: ACP는 `entwurf pi`로 띄운 Pi에서만 돈다. 플래그 없는 tui·rpc의 ACP 턴은 `mode`로 멈춘다(결정 18). 0.60.0 이하의 ACP 세션은 v1 record라 `version`으로 멈춘다(record는 남는다). `/new`나 새 Pi 세션에서 시작한다. 이 host의 운영 ACP 행은 아직 돌지 않았다. 사용감은 아래 "사용감 기록"의 네 칸으로 적는다.
-  - publish 뒤 Herdr re-pin(npm 0.61.0) 때 `scripts/mutants/pi-floor.json`의 `VERSION-MENTIONS-HERDR-LOCK`을 npm 버전 형태로 되돌린다(find `"version": "0.61.0"`). 0.61.0 cut 동안은 checkout lock 두 줄을 가리키고 published npm 0.60.0 lock을 심는다(`2c6df36e`, PARTIAL check-dep-versions 12/12, receipt `a6f433ae2532`).
-  - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
-  - 그다음 레일: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
+- [x] **1. #171 병합.** `0d8c22d9`(exact-SHA CI run 44978371312 4/4, #171 닫힘). U4·U16은 #156으로 미뤘다(댓글 7069232824). 커밋된 main sandbox LIVE: Claude·agy 각 pi-smoke 15/15, pi-unknown 12/12(n=1, `~/.local/share/entwurf-lab/171/main-cover/`).
+- [x] **2. 문서 검토.** `d40a8779`(Sonnet 가독성 + Sol 코드 대조 D1–D6), Herdr checkout carrier `2c6df36e`.
+- [x] **3. prepare 0.61.0.** 첫 후보 `2c6df36e`는 P5 MUST 23/2/0으로 red(`smoke-mux-lifecycle-live` pi-acp 행: 턴 중 창을 닫으면 죽은 holder lease로 재부팅 전까지 STOP / S2d smoke가 #171 host 계약 이전). Fable 수정 `12e54b5c`(증명된 죽은 holder·agent·process group이면 lease 인계, 같은 machine·boot·pidNs)·`2b31b8c6`·`bc88aa91`·`213be3a3`(lane inventory 66→69), Sol 수락. 재후보 `e1e43354`: FULL 1156s, P5 MUST 25/0/0 BEHAVIOR 1/0/0, OpenClaw home receipt `receipt-0.61.0-213be3a3`, GLG 사용 시나리오 LIVE n=1(`171/f12/f15-two-send.log`). 증거는 CHANGELOG 0.61.0 Release evidence.
+- [x] **4. make → publish.** exact-SHA CI run 45003209370, Windows preview run 45004229146, candidate sha256 `3bfe8a55…fbfe1a`(container 수용), tag `v0.61.0`, GitHub release. GLG npm publish; U2 latest=0.61.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
+- [ ] **5. Herdr re-pin.** ← CURRENT: `runtime-lock.json` npm 0.61.0(registry sha512 = integrity, sha256 = 수용 후보), `VERSION-MENTIONS-HERDR-LOCK` npm 버전 형태 복귀. 남은 것: push → exact-SHA CI → snapshot tag `v2026.11.22-herdr.0.61.0` + GitHub release.
+- [ ] **6. 다음 레일.** 0.62.0에서 Pi SDK 1.6.0에 맞춘다. 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
+
+**0.61.0 cut 관찰:** 턴 중에 창을 닫은 LIVE 실행 두 번이 operator HOME에 fixture holder lease를 남겼다(`~/.pi/agent/entwurf-acp-holders/claude/` `e505…`·`f531…`, 지우지 않음; `e505…`는 pidNs 없는 옛 형식이라 재부팅 전까지 인계되지 않는다). 두 P5가 각각 `/tmp/entwurf-s2b-overlay-*` 한 개를 남겼다(P9에서 회수). PARTIAL은 공유 checkout에 mutant를 실제로 심는다(`mutation-qualify.ts:921-944`) — 도는 동안 FULL·LIVE·OpenClaw 실측을 같이 돌리지 않는다.
 
 **0.60.0 cut 관찰:** `pi-extensions/lib/acp/agy-adapter.test.ts:320`이 `/tmp/acp-agy-thinking-*` sandbox를 지우지 않는다(P9에서 112개). prepare 체크리스트에서 Herdr lock 전환과 `docs/setup-clean-host.md`·`docs/durable-native-support.md` 버전 문구가 빠지기 쉽다(이번에 둘 다 놓침; 후자는 `PI-FLOOR-PUBLISHED-SCOPE` mutant 앵커와 묶여 있다).
 
