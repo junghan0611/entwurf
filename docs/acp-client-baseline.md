@@ -112,7 +112,7 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 | U15 | /compact on a new turn                             | measured   | Parent L5. /compact on a fresh session compacts nothing on both.                        | — |
 | U16 | usage on a real length stop                        | unmeasured | Parent L5. Usage on a real length stop? stays: deferred to #156 (GLG 2026-11-22).       | — |
 
-## Decisions (GLG, 2026-11-20 and 2026-11-21)
+## Decisions (GLG, 2026-11-20 to 2026-11-22)
 
 1. (Replaced by 15–17 for resume.) Failure contract: a rejected resume is an error stop, not new; a prompt that fails after an attach succeeded is a named stop, with no retry.
 2. `session/close` is sent on dispose when the agent offers it.
@@ -130,7 +130,7 @@ Not observed yet. Each row names its parent and says whether it blocks the close
 14. This page is the short table; the full document with evidence lives in `.agent-reports/`, and its receipts go to #171 at close.
 15. Continuity: alive, keep the session; disconnected, resume the same id; outcome unknown, keep the record and stop only that turn. New is for birth or a human choice. (G5: a turn of unknown outcome ends with a fixed text, and the next human turn re-sends the input.)
 16. Compaction keeps the vendor session; /renew is a new chapter; a model change stays inside the session or is refused; an unmeasured version or an ambiguous resume error is never absence; an explicit `pi -p` stays one-shot; config drift resumes the same id; a failed turn's input is re-sent, except a range Claude already got (a re-send repeats the work); agy re-sends (a lost message is worse than a duplicate).
-17. No internal new: every other path to `session/new` is an error stop that keeps the record and names the cause; G2 and decisions 8 and 9 are replaced by this, and a v1 record is read and resumed.
+17. No internal new: every other path to `session/new` is an error stop that keeps the record and names the cause; G2 and decisions 8 and 9 are replaced by this. A v1 record is not resumed: it stops its turn and is kept (GLG 2026-11-22, L15).
 18. ACP runs only under `entwurf pi`; the summary helper is allowed.
 
 ## Receipts
