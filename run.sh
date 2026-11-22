@@ -1749,13 +1749,12 @@ smoke_acp_provider_live() {
 
 smoke_acp_session_reuse_live() {
   # S2d-1b-2b acceptance smoke (in-memory session reuse) — OUT of pnpm check,
-  # needs LIVE=1. Forces process-scoped (pushes --entwurf-control into argv) and
-  # drives TWO real ACP turns over ONE reused claude-agent-acp child via the real
-  # streamShellAcp: turn 1 introduces a codeword (full transcript), turn 2 sends
-  # ONLY the latest user delta. The REUSE lifecycle notice, with no new bootstrap,
-  # is the verdict; codeword recall is supporting only (a rebuilt full transcript
-  # could recall it too). The one-shot exit0 half is owned by
-  # smoke-acp-provider-live.
+  # needs LIVE=1. Drives a REAL resident (`pi --entwurf-control --mode rpc` on an
+  # ACP model, so the turn reads a real Pi session: #171) through TWO turns in one
+  # process: turn 1 introduces a codeword, turn 2 asks for it. The REUSE lifecycle
+  # notice on turn 2, with no new bootstrap, is the verdict; codeword recall is
+  # supporting only (a rebuilt or resumed session could recall it too). The
+  # one-shot exit0 half is owned by smoke-acp-provider-live.
   # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-session-reuse-live
   run_ts scripts/smoke-acp-session-reuse-live.ts
