@@ -14,6 +14,7 @@
   - 문서 검토(GLG: 형제 전체가 문서부터): Sonnet #S15 가독성 목록과 Sol 코드 대조 D1–D6을 한 수정 묶음으로 반영했다. 수정 묶음에는 `backend.ts`의 낡은 notice 문구(`ACP_RECORD_DEGRADED_NOTICE`)와 주석 한 줄도 들어간다. 그다음 Sol이 재검토하고, 영향받는 gate를 돌린 뒤 커밋한다.
   - 그다음 prepare 0.61.0: 문서 버전 문구(`docs/setup-clean-host.md`, `docs/durable-native-support.md`, `PI-FLOOR-PUBLISHED-SCOPE` 앵커), Herdr lock 전환 확인, P4 FULL, P5 `release-gate --cut`, P9 회수.
   - ACP 사용 안내: ACP는 `entwurf pi`로 띄운 Pi에서만 돈다. 플래그 없는 tui·rpc의 ACP 턴은 `mode`로 멈춘다(결정 18). 0.60.0 이하의 ACP 세션은 v1 record라 `version`으로 멈춘다(record는 남는다). `/new`나 새 Pi 세션에서 시작한다. 이 host의 운영 ACP 행은 아직 돌지 않았다. 사용감은 아래 "사용감 기록"의 네 칸으로 적는다.
+  - publish 뒤 Herdr re-pin(npm 0.61.0) 때 `scripts/mutants/pi-floor.json`의 `VERSION-MENTIONS-HERDR-LOCK`을 npm 버전 형태로 되돌린다(find `"version": "0.61.0"`). 0.61.0 cut 동안은 checkout lock 두 줄을 가리키고 published npm 0.60.0 lock을 심는다(`2c6df36e`, PARTIAL check-dep-versions 12/12, receipt `a6f433ae2532`).
   - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
   - 그다음 레일: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
 
