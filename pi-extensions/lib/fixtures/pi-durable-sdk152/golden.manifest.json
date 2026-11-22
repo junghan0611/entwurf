@@ -1,0 +1,495 @@
+{
+	"schemaVersion": 1,
+	"subject": "pi-durable SQLite storage written by SDK 1.5.2 mid-run (pi.live version 3, pi.generation version 2, pi.tool version 3), restored by pi-durable-sdk152-migration.test.ts and opened by the root SDK 1.6",
+	"generator": "generate.mjs (run it with --sdk152-root, --sdk160-root and --out; see its header)",
+	"sdk": {
+		"package": "@earendil-works/pi-durable",
+		"version": "1.5.2",
+		"siblings": {
+			"@earendil-works/chord": "1.5.2",
+			"@earendil-works/pi-ai": "1.5.2"
+		},
+		"distDigest": {
+			"files": 396,
+			"sha256": "edce9a6c6d397dd373f789960556063e2d9457501190410c0ce4a07267378a01"
+		}
+	},
+	"rollbackSdk": {
+		"package": "@earendil-works/pi-durable",
+		"version": "1.6.0",
+		"siblings": {
+			"@earendil-works/chord": "1.6.0",
+			"@earendil-works/pi-ai": "1.6.0"
+		},
+		"distDigest": {
+			"files": 408,
+			"sha256": "b6ce0bcf8958f3f08c96099cd2c835ed95fad68354faa0f0a5a70dd601dca187"
+		}
+	},
+	"scenarios": {
+		"close": {
+			"file": "sdk152-close.sql",
+			"sha256": "0f09bea5c030a651648678a89a250048c54c0be6f8a471c747250b44979163b8",
+			"stored": {
+				"schemaVersion": 2,
+				"documents": {
+					"pi.agent": [1],
+					"pi.inbox": [1],
+					"pi.live": [3],
+					"pi.provider": [1],
+					"pi.usage": [1]
+				},
+				"tasks": [
+					{
+						"kind": "pi.generation",
+						"version": 2,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.generation",
+						"version": 2,
+						"status": "waiting"
+					},
+					{
+						"kind": "pi.tool",
+						"version": 3,
+						"status": "pending"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "pending"
+					}
+				]
+			},
+			"live152": {
+				"compactionFailure": {
+					"taskId": 12,
+					"trigger": "manual",
+					"error": "Summarization failed: SDK152-COMPACTION-REFUSED"
+				},
+				"run": {
+					"taskId": 15,
+					"inputs": [14],
+					"turns": 1,
+					"first": 13
+				},
+				"tools": [
+					{
+						"callId": "sdk152-call",
+						"name": "sdk152_hold",
+						"taskId": 17,
+						"status": "running"
+					}
+				],
+				"compactions": [
+					{
+						"taskId": 18,
+						"trigger": "manual",
+						"blocking": false,
+						"attempt": 1
+					}
+				]
+			},
+			"tasks152": [
+				{
+					"kind": "pi.tool",
+					"version": 3,
+					"state": "pending",
+					"migrates": false
+				},
+				{
+					"kind": "pi.compaction",
+					"version": 1,
+					"state": "pending",
+					"migrates": false
+				},
+				{
+					"kind": "pi.generation",
+					"version": 2,
+					"state": "waiting"
+				}
+			],
+			"rollback": {
+				"pristineReopenedBy152": {
+					"changedTables": []
+				},
+				"readOnly160": {
+					"changedTables": [],
+					"reopenedBy152": {
+						"tasks": [
+							{
+								"kind": "pi.tool",
+								"version": 3,
+								"state": "pending",
+								"migrates": false
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"state": "pending",
+								"migrates": false
+							},
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"state": "waiting"
+							}
+						]
+					}
+				},
+				"abort160": {
+					"storedAfter": {
+						"schemaVersion": 2,
+						"documents": {
+							"pi.agent": [1],
+							"pi.inbox": [1],
+							"pi.live": [3],
+							"pi.provider": [1],
+							"pi.usage": [1]
+						},
+						"tasks": [
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.tool",
+								"version": 4,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							}
+						]
+					},
+					"reopenedBy152": {
+						"tasks": []
+					}
+				},
+				"resume160": {
+					"tasksAfter": [
+						{
+							"kind": "pi.compaction",
+							"version": 1,
+							"state": "running"
+						},
+						{
+							"kind": "pi.generation",
+							"version": 3,
+							"state": "running"
+						}
+					],
+					"storedAfter": {
+						"schemaVersion": 2,
+						"documents": {
+							"pi.agent": [1],
+							"pi.inbox": [1],
+							"pi.live": [3],
+							"pi.provider": [1],
+							"pi.usage": [1]
+						},
+						"tasks": [
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.tool",
+								"version": 4,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "pending"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"status": "pending"
+							}
+						]
+					},
+					"reopenedBy152": {
+						"tasks": [
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"state": "pending",
+								"migrates": false
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"state": "blocked",
+								"reason": "task_too_old"
+							}
+						]
+					}
+				}
+			}
+		},
+		"kill": {
+			"file": "sdk152-kill.sql",
+			"sha256": "e19d6524f35e741664aba3819c97e69a4e8561015b664af588902c7a0b88ba43",
+			"stored": {
+				"schemaVersion": 2,
+				"documents": {
+					"pi.agent": [1],
+					"pi.inbox": [1],
+					"pi.live": [3],
+					"pi.provider": [1],
+					"pi.usage": [1]
+				},
+				"tasks": [
+					{
+						"kind": "pi.generation",
+						"version": 2,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.generation",
+						"version": 2,
+						"status": "waiting"
+					},
+					{
+						"kind": "pi.tool",
+						"version": 3,
+						"status": "running"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "running"
+					}
+				]
+			},
+			"live152": {
+				"compactionFailure": {
+					"taskId": 12,
+					"trigger": "manual",
+					"error": "Summarization failed: SDK152-COMPACTION-REFUSED"
+				},
+				"run": {
+					"taskId": 15,
+					"inputs": [14],
+					"turns": 1,
+					"first": 13
+				},
+				"tools": [
+					{
+						"callId": "sdk152-call",
+						"name": "sdk152_hold",
+						"taskId": 17,
+						"status": "running"
+					}
+				],
+				"compactions": [
+					{
+						"taskId": 18,
+						"trigger": "manual",
+						"blocking": false,
+						"attempt": 1
+					}
+				]
+			},
+			"tasks152": [
+				{
+					"kind": "pi.tool",
+					"version": 3,
+					"state": "pending",
+					"migrates": false
+				},
+				{
+					"kind": "pi.compaction",
+					"version": 1,
+					"state": "pending",
+					"migrates": false
+				},
+				{
+					"kind": "pi.generation",
+					"version": 2,
+					"state": "waiting"
+				}
+			],
+			"rollback": {
+				"pristineReopenedBy152": {
+					"changedTables": ["durable_metadata", "tasks"]
+				},
+				"readOnly160": {
+					"changedTables": ["durable_metadata", "tasks"],
+					"reopenedBy152": {
+						"tasks": [
+							{
+								"kind": "pi.tool",
+								"version": 3,
+								"state": "pending",
+								"migrates": false
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"state": "pending",
+								"migrates": false
+							},
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"state": "waiting"
+							}
+						]
+					}
+				},
+				"abort160": {
+					"storedAfter": {
+						"schemaVersion": 2,
+						"documents": {
+							"pi.agent": [1],
+							"pi.inbox": [1],
+							"pi.live": [3],
+							"pi.provider": [1],
+							"pi.usage": [1]
+						},
+						"tasks": [
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.tool",
+								"version": 4,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							}
+						]
+					},
+					"reopenedBy152": {
+						"tasks": []
+					}
+				},
+				"resume160": {
+					"tasksAfter": [
+						{
+							"kind": "pi.compaction",
+							"version": 1,
+							"state": "running"
+						},
+						{
+							"kind": "pi.generation",
+							"version": 3,
+							"state": "running"
+						}
+					],
+					"storedAfter": {
+						"schemaVersion": 2,
+						"documents": {
+							"pi.agent": [1],
+							"pi.inbox": [1],
+							"pi.live": [3],
+							"pi.provider": [1],
+							"pi.usage": [1]
+						},
+						"tasks": [
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.tool",
+								"version": 4,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "pending"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"status": "pending"
+							}
+						]
+					},
+					"reopenedBy152": {
+						"tasks": [
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"state": "pending",
+								"migrates": false
+							},
+							{
+								"kind": "pi.generation",
+								"version": 3,
+								"state": "blocked",
+								"reason": "task_too_old"
+							}
+						]
+					}
+				}
+			}
+		}
+	}
+}

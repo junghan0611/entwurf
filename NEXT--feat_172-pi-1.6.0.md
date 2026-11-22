@@ -9,8 +9,8 @@
 - [x] **H4 리뷰·amendment.** Sol 리뷰 두 번. `2c59d4a0`: one-shot 대화 turn의 prompt 실패는 항상 고정 문구(재시도·overflow 어느 쪽으로도 읽히지 않음). `3dfd0ead`: SDK 1.6.0 Harness가 close 때 provider session을 정리하므로 carrier의 호출과 mutant를 뺌.
 - [x] **PARTIAL.** `2c59d4a0`: check-dep-versions 12/12, check-pack-pin-matcher 2/2, check-acp-prompt-lifecycle 15/15, check-acp-set-model-readback 206/206. `3dfd0ead`의 work surface(`8508192d…`): check-pi-durable-carrier 65/65.
 - [x] **frozen FULL.** `3dfd0ead`에서 `pnpm check:full` exit 0, 1161s (`full2-status.txt`; 첫 실행은 낡은 bridge dist로 `check-bridge-delivery`에서 멈춰 `build-bridge` 뒤 다시 돌림).
-- [ ] **M1 · durable.** ← CURRENT. 1.5.2가 남긴 fixture를 1.6.0으로 열기. 설계는 Opus(793499)와.
-- [ ] **H5 · 운영 창 2부 (GLG).** host Pi 1.6.0, 같은 identity 재오픈, 실제 turn·왕복. 첫 1.6.0 run 뒤 0.61.0은 non-terminal task를 `task_too_old`로 막는다(되돌릴 수 없음).
+- [x] **M1 · durable.** 합성 fixture(`fixtures/pi-durable-sdk152/`, faux 모델, close·kill)와 `pi-durable-sdk152-migration.test.ts` 11개. 읽기 전용 open은 새 버전을 쓰지 않고, abort 뒤에는 1.5.2가 다시 열며, 1.6.0이 이어 달린 뒤 남은 `pi.generation` v3은 1.5.2가 `task_too_old`로 막는다.
+- [ ] **H5 · 운영 창 2부 (GLG).** host Pi 1.6.0, 같은 identity 재오픈, 실제 turn·왕복. 1.6.0이 높은 버전으로 다시 저장했고 아직 끝나지 않은 task(`pi.generation` v3·`pi.tool` v4)는 0.61.0이 `task_too_old`로 막는다(task 단위, 되돌릴 수 없음).
 
 # 미측정
 
