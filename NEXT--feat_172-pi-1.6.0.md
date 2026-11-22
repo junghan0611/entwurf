@@ -1,16 +1,24 @@
 # NEXT — feat/172-pi-1.6.0: Pi SDK 1.6.0 + pi-durable carrier (#172)
 
-**현재 (2026-11-22 21:05 KST):** R0 끝, 구현 시작 전. 이슈 #172가 계약이다(R0 보고서 원본: `/tmp/entwurf-062-r0/F-core.md`·`O-durable.md`, 결정적 줄은 이슈 본문에 옮김). GLG는 0.61.0 publish 24시간 뒤 0.62.0을 낸다. GLG는 자는 중이고 새벽 1–2시에 깬다.
+**현재 (2026-11-23 01:35 KST):** 구현·리뷰·PARTIAL·FULL이 `3dfd0ead`에서 끝났다. 남은 것은 durable M1과 GLG의 운영 창 2부다. push 없음. 이슈 #172가 계약이다(R0 원본: `/tmp/entwurf-062-r0/F-core.md`·`O-durable.md`). 영수증은 `~/.local/share/entwurf-lab/172/`.
 
 # RAIL
 
-- [x] **R0.** 코어(b6d8f7)·durable(793499) 읽기 전용 분석 → #172.
-- [x] **운영 창 1부.** 운영 pi-durable(pid 2743504, 68bd94) 정상 종료(owner fence closed 11:52:02Z), durable-sessions 전체 백업 `~/.local/share/entwurf-lab/062/durable-backup-20261122T205410`(243 files, WAL/SHM 136, manifest 3개 동일 `3bff6531ece1260b`). GLG가 checkout 설치 승인.
-- [ ] **H1 · coherent bump.** ← CURRENT. 10종 1.6.0·lockfile·`minimumReleaseAgeExclude` +1.6.0·`upstream-pin.json` sdk members를 한 커밋. checkout에 설치(`TMPDIR=/tmp`, `pnpm_config_verify_deps_before_run=error`·`npm_config_verify_deps_before_run=error` 유지).
-- [ ] **H2 · 첫 측정.** `pnpm check`, 분류기 oracle 다섯(`stop-texts.test`, `backend.vendor-rejection.test`, `agy-adapter.test`, `backend.summary-turn.test`, `check-acp-prompt-lifecycle`), durable fence typecheck, `check-pi-durable-carrier`.
-- [ ] **H3 · 고침.** A1(기존 불변식: 우리가 쓴 실패가 맹목 재시도를 부르지 않는다 — 문구와 stderr tail 경로), D1(`tui.ts:661` + carrier 재방출 + mutant find), D2(sdk14 golden), A2(`resident-rpc-drive` 재측정), B(literal·workflow·docs).
-- [ ] **H4 · 검수.** Sol(09fa15) 독립 리뷰 → amendment 한 묶음 → 영향 PARTIAL → frozen FULL. durable M1(1.5.2가 남긴 fixture를 1.6.0으로 열기).
+- [x] **R0 · 운영 창 1부.** 분석 → #172. 운영 pi-durable 정상 종료, durable-sessions 백업 `~/.local/share/entwurf-lab/062/durable-backup-20261122T205410`.
+- [x] **H1–H3.** `9e697733` SDK 10종 1.6.0·lockfile·pin·literal·workflow·docs, lifecycle 문구 `transport closed`, D1(`until a signal`), D2(sdk14 golden).
+- [x] **H4 리뷰·amendment.** Sol 리뷰 두 번. `2c59d4a0`: one-shot 대화 turn의 prompt 실패는 항상 고정 문구(재시도·overflow 어느 쪽으로도 읽히지 않음). `3dfd0ead`: SDK 1.6.0 Harness가 close 때 provider session을 정리하므로 carrier의 호출과 mutant를 뺌.
+- [x] **PARTIAL.** `2c59d4a0`: check-dep-versions 12/12, check-pack-pin-matcher 2/2, check-acp-prompt-lifecycle 15/15, check-acp-set-model-readback 206/206. `3dfd0ead`의 work surface(`8508192d…`): check-pi-durable-carrier 65/65.
+- [x] **frozen FULL.** `3dfd0ead`에서 `pnpm check:full` exit 0, 1161s (`full2-status.txt`; 첫 실행은 낡은 bridge dist로 `check-bridge-delivery`에서 멈춰 `build-bridge` 뒤 다시 돌림).
+- [ ] **M1 · durable.** ← CURRENT. 1.5.2가 남긴 fixture를 1.6.0으로 열기. 설계는 Opus(793499)와.
 - [ ] **H5 · 운영 창 2부 (GLG).** host Pi 1.6.0, 같은 identity 재오픈, 실제 turn·왕복. 첫 1.6.0 run 뒤 0.61.0은 non-terminal task를 `task_too_old`로 막는다(되돌릴 수 없음).
+
+# 미측정
+
+- SDK 1.6.0 위의 모델 turn, host Pi 1.6.0, installed-consumer LIVE.
+- RPC 세션 교체: 0-token n=1만 쟀다(`new_session` 뒤 `session_start`가 1.5.2 두 번, 1.6.0 한 번; `a2-*.{json,log}`). socket 수, switch/fork, 실제 host는 재지 않았다.
+- Pi의 summary 요청이 실패할 때 원문을 유지한다는 예외를 고정하는 테스트는 없다.
+- 소켓 해제 테스트는 정상 close에서 받은 Codex 소켓만 본다. 다른 provider와 갑작스러운 종료는 아니다.
+- kill-power는 위 다섯 그룹만 다시 쟀다. 전체 qualification body는 돌리지 않는다.
 
 # 역할 — 공유 checkout, 파일 writer 한 명
 
