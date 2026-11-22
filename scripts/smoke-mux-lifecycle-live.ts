@@ -918,6 +918,30 @@ async function main(): Promise<void> {
 				),
 				`--- transcript ---\n${transcript}`,
 			);
+			// The window is closed BETWEEN turns. A close while this turn still runs leaves a prompt whose
+			// outcome nobody knows, and an ACP citizen then stops its first turn after the resume by rule
+			// (#171: such an input is named and not sent to Claude twice). That rule is certified where it
+			// can be driven on purpose ([QK:ACP-DELTA-UNKNOWN-BY-ENTRY-ID], the raw `pi-unknown` LIVE);
+			// here it would only make the recall depend on how fast the model answered.
+			ok(
+				`${cell}: the sibling ANSWERED the live send before its window is closed — the close falls between turns, so the resume is judged on the conversation and not on a prompt in flight`,
+				await waitFor("a completed answer after the sent message", RECALL_MS, () => {
+					const text = fs.readFileSync(transcript, "utf8");
+					return text
+						.slice(text.lastIndexOf(liveNeedle))
+						.split("\n")
+						.slice(1)
+						.some((line) => {
+							try {
+								const message = (JSON.parse(line) as { message?: { role?: unknown; stopReason?: unknown } }).message;
+								return message?.role === "assistant" && message.stopReason === "stop";
+							} catch {
+								return false;
+							}
+						});
+				}),
+				`--- transcript ---\n${transcript}`,
+			);
 
 			// ── a resume aimed at a LIVE citizen is refused, and mutates nothing ──
 			const windowsBefore = windowCount(srv.socket, srv.env);
