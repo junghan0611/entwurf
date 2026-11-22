@@ -226,6 +226,28 @@ Product guidance and CLI help each have one editable source: [ENTWURF.json](./EN
 the MCP tool descriptions and the hints extracted there, [ENTWURF-CLI.json](./ENTWURF-CLI.json) for
 `entwurf --help`. [AGENTS](./AGENTS.md#architecture) lists exactly what each carries.
 
+## How Entwurf approaches ACP
+
+In pi-shell-acp, this package's predecessor, the question was whether an ACP turn could run at all.
+The question now is whether an ACP conversation can pick up where it left off, the way a native Pi
+conversation does, and stop by name when it cannot. The bar is the continuity of a native Pi
+conversation. Carrying an ACP model into a durable Pi host (pi-durable) is where this leads; it
+waits until ACP holds up in everyday Pi use.
+
+- **No throwaway vendor sessions.** A resident conversation in `entwurf pi` opens one vendor session
+  at its birth and reuses it across turns. After a reopen, an agent exit or a Pi compaction, Entwurf
+  resumes the recorded session id; where that session cannot be attached safely, the turn stops with
+  a named reason and keeps the record instead of silently starting a new one. A one-shot `pi -p` run
+  is the stated exception: it rebuilds from the Pi transcript.
+- **One continuity contract for Claude and Antigravity.** Claude's ACP server is the reference, and
+  Antigravity (`agy acp`) is held to the same continuity contract; that work is still under way.
+  Where the two servers behave differently, or a row is not yet measured, the
+  [ACP rail](./docs/acp-backend-rail.md) says so.
+- **Start from what Pi needs.** Entwurf does not try to use all of ACP. It starts from the Pi surface
+  as Entwurf reads it and uses only the parts of ACP that carry that surface, to the level a Pi user
+  expects from a native model. Where a backend cannot provide a required behavior, the limit is made
+  visible, as a named stop or a limit recorded in the rail, never emulated.
+
 ## Operation guides
 
 - [Settings and backend keys](./docs/setup-clean-host.md#settings-reference-and-backend-specific-keys)
