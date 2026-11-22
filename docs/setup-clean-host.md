@@ -1226,9 +1226,8 @@ MCP only when schema-visible). Claude uses `_meta.systemPrompt` for its engravin
 
 ### Session reuse and compaction
 
-Current process-scoped turns reuse a live ACP session; persisted records are
-written/validated for a future resume/load path, not consumed as today's live
-continuation mechanism. The `pi:<sessionId>` mapping lives under
+Resident turns reuse a live ACP session, and a restarted resident resumes the
+recorded id (`session/resume`, version-guarded; `session/load` is never sent). The `pi:<sessionId>` mapping lives under
 `~/.pi/agent/cache/entwurf/sessions/`; it never hydrates backend transcripts into
 pi history. Backend stores such as `~/.claude/` and `~/.codex/` are interoperability
 side effects, never Entwurf identity authority.

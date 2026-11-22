@@ -79,7 +79,7 @@ Also: (a) if asked to commit something to memory, how do you handle it; (b) can 
 **Q-B0-CARRIER — which surface each fact came from**
 
 - **PASS** — Each cited fact is placed on the surface it came from, or honestly marked as unknown or inferred. A model may not see the wire roles directly, so it should keep "I see this", "the source says this" and "I infer this" apart. The surfaces:
-  - the system prompt (on Claude ACP: the SDK's one-line identity prefix, measured on the 0.64.0 adapter and not re-measured on the current 0.107.3, plus the engraving when one is configured; the shipped default is `pi-extensions/lib/acp/prompts/engraving.md`, and an emptied file is a deliberate opt-out);
+  - the system prompt (on Claude ACP: the SDK's one-line identity prefix, measured on the 0.64.0 adapter and not re-measured since, plus the engraving when one is configured; the shipped default is `pi-extensions/lib/acp/prompts/engraving.md`, and an emptied file is a deliberate opt-out);
   - the first-user prepend (the bridge identity line, the tool-truth rule, and `~/AGENTS.md` / the cwd `AGENTS.md` when present, subject to the 50 KiB cut and duplicate-cwd rule; VERIFY.md §1A.0);
   - the tool schema (native tools and `mcp__<server>__<tool>` entries);
   - separate system-reminder blocks, if any.

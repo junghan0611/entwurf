@@ -1069,7 +1069,7 @@ export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; ne
 export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; the ACP process was closed";
 /** #171 step 8: an abort before a reuse turn's prompt went out. Nothing ran and the live session is kept. */
 export const ACP_CANCEL_UNSENT_NOTICE = "stopped before the prompt was sent — nothing ran; the ACP session is kept";
-export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — future continuation may require a new session";
+export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — live reuse waits for a successful retry";
 // #171 L16 — the dispatch marker. Pi's retry classifier reads `errorMessage` alone, and a retried turn after a
 // stop would be an automatic send, so these error texts are fixed and carry no number, id or path (a bare
 // 500 or 503 there reads as transient). The range and the store's code ride the notices and stderr instead.
@@ -3572,7 +3572,8 @@ export function streamAcpTurn(
 				phase === "prompt" ? adapter : undefined,
 				marker,
 			);
-			// error/abort on a reused session → drop it and close the child (GPT ④).
+			// error/abort after the prompt went out → close this connection and child. The record is kept (decision
+			// 17); the next resident turn resumes the recorded id or stops by name.
 			session.retiring = true;
 			retainedChildren.delete(session.child);
 			session.connection.close?.(err);

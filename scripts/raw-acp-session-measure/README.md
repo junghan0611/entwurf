@@ -1,8 +1,9 @@
 # raw-acp-session-measure — what the vendor ACP agents do with session/load, resume, close and new
 
-The probes behind receipts R1–R10 of the ACP client baseline (#171). The short table is
-[docs/acp-client-baseline.md](../../docs/acp-client-baseline.md); the full receipts are pasted into #171 at
-close. Not a gate; nothing here runs in any check tier. Each probe drives the real
+The probes behind receipts R1–R10 of the ACP client baseline (#171), plus two scripts that drive a real Pi
+(`pi-smoke`, `pi-unknown`; they launch Pi with this checkout, `pi-host.mjs`). The short table is
+[docs/acp-client-baseline.md](../../docs/acp-client-baseline.md); the full receipts are pasted into #171.
+Not a gate; nothing here runs in any check tier. Each raw probe drives the real
 `claude-agent-acp` and `agy` over raw JSON-RPC, imports the production overlay, adapter and enforce
 functions from the compiled bridge dist, and writes one run directory of wire logs and a
 `summary.json`. The code is kept as it produced the receipts; only host paths were replaced by the
@@ -57,7 +58,7 @@ claude-agent-acp 0.107.3 and agy 1.5.12; those versions describe that run, not t
   below. The vendor's own writes through the overlay links reach the operator's real directories and
   are recorded by mtime. Nothing contains them.
 - `ENTWURF_RAW_CLAUDE_ACP_PREFIX` (optional) names a directory outside the repository holding
-  `node_modules/@agentclientprotocol/claude-agent-acp`; Claude then runs that version. A copy of
+  `node_modules/@agentclientprotocol/claude-agent-acp`; Claude then runs that version in the raw probes (`claudeLauncherArg`); `pi-smoke` and `pi-unknown` launch the checkout's own launcher, so their provenance is not the prefix. A copy of
   `claude-acp-launch.js` is written to the prefix root (opened without following a symlink, refused
   unless it is a regular file you own): the one place, besides the run directory, a probe itself writes.
   Every run records `provenance.json`: the claude-agent-acp version launched and the ACP SDK it
@@ -73,16 +74,16 @@ claude-agent-acp 0.107.3 and agy 1.5.12; those versions describe that run, not t
   re-send did not end its turn). A complete sample may say "no"; that is a result. `continuity` exits
   1 for a cleanup failure (a fatal row, an unverified reap, a surviving process, an interrupt) and 4
   when it was clean but a mandatory sample is inconclusive or missing (`run.incomplete`); compare
-  checks `RUN.incomplete` as well. After every probe, `sweep.mjs` kills what still carries the run's
+  checks `RUN.incomplete` as well. After every probe, `run.sh` runs `sweep.mjs`, which kills what still carries the run's
   token and reports anything else under the run directory (`sweep.json`); a survivor makes `run.sh`
-  exit 5.
+  exit 5. That sweep is the shared evidence; a Pi run has no per-run `ps` group report of its own.
 - The agy executable is `ENTWURF_AGY_BIN`, else `agy` on `PATH`. The two files the bridge dist does
   not carry (`claude-acp-launch.js`, `agy-acp-hook.mjs`) and the engraving prompt are taken from
   `pi-extensions/lib/acp/` in this checkout.
-- Nothing is written into the repository. The launcher records `git rev-parse HEAD` and
+- Nothing is written into the repository by a live probe (the offline `pi-unknown-judge` self-test writes temporary copies under the system temp directory). The launcher records `git rev-parse HEAD` and
   `git status --porcelain` in the run directory. Build the dist from the HEAD you measure
   (`pnpm run build-bridge`); the launcher refuses when it is missing but cannot tell whether it is stale.
-- Children are spawned detached and killed by process group (SIGTERM, then SIGKILL), and every probe
+- Children are spawned detached and killed by process group (SIGTERM, then SIGKILL), and every raw probe
   lists what is left of that group with `ps`. `experiments` and `z5` also read `/proc/<pid>/cwd`
   (Linux only) at the end and report any process whose cwd is inside the run directory.
 

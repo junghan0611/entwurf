@@ -1,6 +1,6 @@
-# NEXT — 0.60.0 shipped: #151 /renew + #168 ACP parity + #169 Herdr App guide
+# NEXT — 0.61.0 prepare: #171 ACP session continuity on main
 
-**현재 (2026-11-22):** #171(ACP 세션 연속성)을 main에 병합한다(GLG 2026-11-22, 실무 Opus `20261120T213316-793499`; 설계 물음은 조율자를 거쳐 Fable `20261121T180949-b6d8f7`). 병합 뒤 #171을 닫고, 다음은 0.61.0 prepare다. npm `latest`는 0.60.0이다(#151 `/renew`, #168 ACP parity, #169 Herdr App·core 안내). 역할: 운영코디 `20261014T212756-68bd94`, main writer·릴리스 실무 `20261113T043350-ff08d4`.
+**현재 (2026-11-22):** #171(ACP 세션 연속성)이 main에 병합됐다(`0d8c22d9`, exact-SHA CI run 44978371312 4/4, #171 닫힘, 닫는 댓글 7073374796). GLG는 손으로 ACP 턴을 돌리는 대신 테스트로 확인하기로 했다(2026-11-22). 그래서 커밋된 main에서 Opus `20261120T213316-793499`가 sandbox LIVE를 다시 쟀다(Claude·agy 각 pi-smoke 15/15, pi-unknown 12/12, n=1, `~/.local/share/entwurf-lab/171/main-cover/`). 지금은 0.61.0 문서 검토를 마치고 prepare로 간다. npm `latest`는 0.60.0이다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, 문서 리뷰 Sol `20261121T135110-09fa15`(코드 대조)·Sonnet `20261120T204416-ad4dae`(가독성·수정 묶음 작성), 설계 대기 Fable `20261121T180949-b6d8f7`.
 
 # RAIL — 현재 좌표
 
@@ -9,14 +9,12 @@
 - [x] **3. make → publish.** exact-SHA CI run 44685553830, Windows preview run 44687247725, candidate sha256 `85b4d7fc…1427`(container 수용), tag `v0.60.0`, GitHub release. GLG npm publish; U2 latest=0.60.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패, GLG 결정으로 생략.
 - [x] **4. Herdr re-pin.** `3d4d5f55`(exact-SHA CI run 44691169782): `runtime-lock.json` npm 0.60.0(registry sha512 = integrity, sha256 = 수용 후보), setup/durable 문서 현재 버전 0.60.0(배포된 tarball 문서는 0.55.1 표기 그대로), `PI-FLOOR-PUBLISHED-SCOPE` 앵커 이동(PARTIAL dep-versions 5/5). snapshot tag + GitHub release `v2026.11.20-herdr.0.60.0`(Latest는 v0.60.0 유지).
 - [x] **5. 이슈.** #151(이미 닫힘)·#168·#169에 출하 댓글, #168·#169 닫음(2026-11-20). #171은 열림.
-- [ ] **6. #171 병합과 0.61.0 준비.** ← CURRENT
-  - #171을 main에 병합한다(`acp-session-load-171`, `--no-ff`). 무엇이 바뀌고 무엇을 재지 않았는지는 CHANGELOG `## Unreleased`의 #171 항목, 결정은 `docs/acp-client-baseline.md`의 Decisions, 영수증은 #171 닫는 댓글에 있다. 브랜치의 FULL·PARTIAL은 브랜치 SHA의 것이고 병합 커밋으로 상속하지 않는다.
-  - 다음: 0.61.0 prepare. 그 전에 형제 전체가 문서부터 검토한다(GLG). 0.61.0에서 Entwurf ACP의 방향도 이야기한다.
-  - GLG가 main에서 ACP 턴을 직접 돌려 본다. 이 checkout이 운영 Pi의 package다(#165).
-    - ACP는 `entwurf pi`로 띄운 Pi에서만 돈다. 플래그 없는 tui·rpc의 ACP 턴은 `mode`로 멈춘다(결정 18).
-    - 0.60.0 이전에 ACP를 쓴 Pi 세션은 v1 record라 `version`으로 멈춘다(record는 남는다). `/new`나 새 Pi 세션에서 시작한다.
-    - LIVE는 sandbox HOME에서만 쟀고 이 host의 운영 ACP 행은 아직 돌지 않았다. 사용감은 아래 "사용감 기록"의 네 칸으로 적는다.
-  - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수, prepare 체크리스트에 Herdr lock 전환·문서 버전 문구 넣기.
+- [x] **6. #171 병합.** `0d8c22d9`(`--no-ff`, 브랜치 끝 `74691366`). 무엇이 바뀌고 무엇을 재지 않았는지는 CHANGELOG `## Unreleased`의 #171 항목, 결정은 `docs/acp-client-baseline.md`, 영수증은 #171 닫는 댓글에 있다. 브랜치의 FULL·PARTIAL은 상속하지 않는다. U4·U16은 #156으로 미뤘다(댓글 7069232824).
+- [ ] **7. 0.61.0 준비.** ← CURRENT
+  - 문서 검토(GLG: 형제 전체가 문서부터): Sonnet #S15 가독성 목록과 Sol 코드 대조 D1–D6을 한 수정 묶음으로 반영했다. 수정 묶음에는 `backend.ts`의 낡은 notice 문구(`ACP_RECORD_DEGRADED_NOTICE`)와 주석 한 줄도 들어간다. 그다음 Sol이 재검토하고, 영향받는 gate를 돌린 뒤 커밋한다.
+  - 그다음 prepare 0.61.0: 문서 버전 문구(`docs/setup-clean-host.md`, `docs/durable-native-support.md`, `PI-FLOOR-PUBLISHED-SCOPE` 앵커), Herdr lock 전환 확인, P4 FULL, P5 `release-gate --cut`, P9 회수.
+  - ACP 사용 안내: ACP는 `entwurf pi`로 띄운 Pi에서만 돈다. 플래그 없는 tui·rpc의 ACP 턴은 `mode`로 멈춘다(결정 18). 0.60.0 이하의 ACP 세션은 v1 record라 `version`으로 멈춘다(record는 남는다). `/new`나 새 Pi 세션에서 시작한다. 이 host의 운영 ACP 행은 아직 돌지 않았다. 사용감은 아래 "사용감 기록"의 네 칸으로 적는다.
+  - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
   - 그다음 레일: 0.62.0에서 Pi SDK 1.6.0에 맞춘다.
 
 **0.60.0 cut 관찰:** `pi-extensions/lib/acp/agy-adapter.test.ts:320`이 `/tmp/acp-agy-thinking-*` sandbox를 지우지 않는다(P9에서 112개). prepare 체크리스트에서 Herdr lock 전환과 `docs/setup-clean-host.md`·`docs/durable-native-support.md` 버전 문구가 빠지기 쉽다(이번에 둘 다 놓침; 후자는 `PI-FLOOR-PUBLISHED-SCOPE` mutant 앵커와 묶여 있다).

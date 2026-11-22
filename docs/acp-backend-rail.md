@@ -18,7 +18,7 @@ What a complete ACP client must decide, and the state of each row in Entwurf, is
 | Layer | Owns |
 |---|---|
 | entwurf core | identity, facts, dispatch, rail choice, delivery evidence |
-| ACP common loop | spawn, initialize, new session, model enforcement, prompt, event mapping, teardown |
+| ACP common loop | spawn, initialize, new session at birth or resume of the recorded id, model enforcement, prompt, event mapping, teardown |
 | backend adapter | model routing, launch, overlay, carrier, backend settings, model enforcement details |
 | backend runtime | credentials, subscription, transcript, native tools, native configuration semantics |
 
@@ -28,7 +28,7 @@ The common sequence is invariant:
 resolve adapter once
 → load backend settings and carrier
 → materialize backend overlay
-→ spawn → initialize → newSession → enforceModel
+→ spawn → initialize → newSession (birth) or resume → enforceModel
 → prompt → event map → retain-or-teardown
 ```
 
@@ -55,7 +55,7 @@ Source of truth: `pi-extensions/lib/acp/backend-adapter.ts`.
 | `configSignatureFields` | Return a stable primitive map whose changes invalidate reuse. |
 | `sealsTurnAccounting?` | Declare measured `usage_update` cost semantics so the common loop seals occupancy, per-turn cost and the turn aggregate (#93). Absent means nothing is sealed. |
 | `summaryTurnMode?` | Declare how Pi's summary request runs (`"toolless"` — no tool surface in fact; `"execution-denied"` — tool schemas remain visible, isolated per-turn `v1:deny-all` hook blocks execution). Only modes in `ALLOWED_SUMMARY_TURN_MODES` are dispatched; absent or unknown refuses (`acp-summary-turn-unsupported`). |
-| `readPromptRejection?` | Name a backend-owned typed prompt rejection and its fixed app-policy verdict; absent means the existing verbatim-first failure path. |
+| `readPromptRejection?` | Name a backend-owned typed prompt rejection and its fixed app-policy verdict; absent means no typed verdict: a resident's failed prompt still ends with the fixed unknown stop, a one-shot keeps the verbatim path. |
 | `admitAgent?` | Admit the server that answered `initialize`, before any session (#168): its `agentInfo` must name the adapter's vendor at or above the adapter's floor; anything else — an absent `agentInfo` included — is a named refusal. Absent admits every server. |
 
 `backend.ts` resolves the adapter once at turn entry. Common config never branches on
@@ -110,12 +110,14 @@ none.** A turn ends only on a lifecycle event:
 | the operator aborts | ACP `session/cancel` first — the agent closes its own turn (`cancelled → aborted`); process-group teardown only after a bounded grace, so an abort always returns |
 | the child dies / stdio ends | the turn fails naming the exit status and the session-scoped stderr tail — or an honest bounded absence when transport EOF wins the race — on both the new and the reuse path |
 
-**What an abort leaves (#142).** After the turn has settled, the operator is told one of two
+**What an abort leaves (#142).** After the turn has settled, the operator is told one of three
 things: `[acp: stopped — changes already made stay; next message continues this session]` when
 the agent closed the turn on `session/cancel`, a first turn included (#171 step 8), so the live
-ACP session stays and the next message is a delta; or `[acp: stopped — changes already made stay;
-the ACP process was closed]` after an escalation teardown or an abort before a first prompt was
-sent. A resident's record stays either way, and no second session is opened for the conversation.
+ACP session stays and the next message is a delta; `[acp: stopped — changes already made stay;
+the ACP process was closed]` after an escalation teardown, which keeps the record, so a later
+resident turn resumes the recorded id or stops by name; or `[acp: stopped before the prompt was
+sent — nothing ran; the ACP session is kept]` after an abort before a reuse turn's prompt. No second
+session is opened for the conversation.
 A one-shot rebuilds from the pi transcript, and that rebuild states the cut to the new session: an
 assistant turn pi recorded as `aborted` is followed by one harness line, `[turn status: aborted —
 actions this turn had started may already have taken effect; cancellation is
@@ -158,9 +160,9 @@ and not proof the vendor can do nothing).
 | A background subagent keeps running past a foreground cancel ([incomplete-tools:822](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L822-L833), [:974](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/incomplete-tools.test.ts#L974)) | Claude | background tasks are off at launch (`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, foreground-only lane) | not exposed |
 | A queued prompt cancelled before insertion is removed from Claude Code's queue and never runs ([turn-events:312](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/turn-events.test.ts#L312-L418)) | common | one prompt per session at a time (`inFlightKeys`); queueing is pi's (`PI-QUEUE-ABORT-DROPS-QUEUED`) | not exposed |
 | A force-cancel while an update is being sent still ends the turn ([turn-events:419](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/turn-events.test.ts#L419-L450)) | common | our own bound: `session/cancel` first, teardown after the grace (`ABORT-SENDS-PROTOCOL-CANCEL`, `ABORT-ESCALATION-BOUNDED`); a reuse turn the agent closes keeps its session (`ACP-REUSE-COOPERATIVE-CANCEL`, `ACP-CANCEL-NOTICE-REUSE-KEPT`) | covered for our own bound (fake), not upstream's internal force-cancel; n=1 settle 25–65 ms |
-| Effort applies through flag settings, the answer carries `currentValue`, a rejected selection keeps the old state, `default` is `null`, no update notification ([session-config-options:552](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/session-config-options.test.ts#L552-L655)) | Claude | set + read back, refusal fails before the prompt and drops a reused session (`ACP-CLAUDE-EFFORT-READBACK`); an abort while the answer is pending settles at once (`ACP-THINKING-REUSE-ABORT`, `-LATE` — beyond upstream). We never send `default`: no level refuses | covered (fake) + readback n=1 |
+| Effort applies through flag settings, the answer carries `currentValue`, a rejected selection keeps the old state, `default` is `null`, no update notification ([session-config-options:552](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/session-config-options.test.ts#L552-L655)) | Claude | set + read back, refusal fails before the prompt and keeps a reused session (`ACP-CLAUDE-EFFORT-READBACK`); an abort while the answer is pending settles at once (`ACP-THINKING-REUSE-ABORT`, `-LATE` — beyond upstream). We never send `default`: no level refuses | covered (fake) + readback n=1 |
 | A real Bash turn cancelled mid-sleep settles every announced tool call ([live-capability-session-audit:367](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/live-capability-session-audit.test.ts#L367); opt-in `RUN_LIVE_CAPABILITY_AUDIT`) | Claude | our private ESC runs (reuse and first turn) also observe the file effect, the next input and the session kept/closed | open (LIVE n=1 each, #142; no fake QK) |
-| Session load/resume lifecycle ([session-load:21](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/session-load.test.ts#L21); opt-in `RUN_INTEGRATION_TESTS`) | common | persisted resume/load is off — bootstrap decides only `new`/`reuse` | not exposed (canonical resume after restart is separate design) |
+| Session load/resume lifecycle ([session-load:21](https://github.com/agentclientprotocol/claude-agent-acp/blob/51f514d73c8bfd786979c84adb7a8517dbc22695/src/tests/v1/session-load.test.ts#L21); opt-in `RUN_INTEGRATION_TESTS`) | common | `session/resume` of the recorded id; load is never sent — bootstrap decides birth, reuse, attach or a named stop | resume implemented (#171), load declined |
 
 ### Typed Claude prompt rejection — no automatic whole-prompt replay (#127)
 
@@ -176,9 +178,13 @@ The Claude adapter reads one typed kind; the agy adapter (#167) reads every prom
 failure (§Antigravity, Known limits). The common loop passes the once-resolved adapter at
 the two turn catches only once the prompt is on the wire (`phase === "prompt"`), never for a
 bootstrap failure, and skips this reader when the operator's abort wins. A recognized rejection seals once as
-`error/error`, drops the new or reused session under the existing policy, and sets a
+`error/error`, keeps the record (a resident's retained child closes), and sets a
 fixed semantic `errorMessage` which pi's real retry **and** overflow classifiers must
-reject. No global retry disable, substring sanitizer, or new failure ledger is added.
+reject. No global retry disable, substring sanitizer, or new failure ledger is added. Any other failure
+of a resident's prompt with its dispatch marker standing ends with the fixed unknown stop and the raw
+failure in a diagnostic; an abort stays `aborted`. Where continuation is eligible the next turn skips the input on Claude
+(stopping once if no stored answer told the operator) and re-sends it on agy (16-9); a first prompt of
+unknown outcome stops on reopen (`firstUnknown`).
 
 The first raw failure remains in pi's existing `AssistantMessage.diagnostics`: original
 name/message/stack/code, serialized data, and applicable stderr tail, lifecycle, launch
@@ -632,7 +638,7 @@ proof is shared and only the wire facts differ per backend.
 | `readPromptRejection` | **provided** for one kind — `-32603` `incomplete_tool_call` seals a fixed verdict (`[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW]`, `-REUSE`, `[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE]`); every other failure of a resident's prompt seals the fixed `unknown` stop with the raw failure in an `entwurf_acp_prompt_unknown` diagnostic (`[QK:ACP-UNKNOWN-FIXED-TEXT]`, #171 step 8); **recorded limit**: a one-shot keeps the verbatim path, whose text or stderr tail can read as transient to pi (§Support contract, 0.79.0 → 0.85.1) | **provided** as one verdict for every failure after the prompt is sent (`[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`); bootstrap keeps the verbatim path (`[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]`). **recorded limit**: overflow, quota and login are not told apart — the raw failure and any overflow hint ride only `diagnostics` (`backend.ts:1754-1767`), so pi neither retries nor compacts. An empty, garbage or fake-expired token file fails at `session/new` with `-32000 Authentication required`, before any prompt — a bootstrap failure (#168, agy 1.5.9, 2026-11-17, n=1 each). **unmeasured**: agy's `session/prompt` wording for an exhausted quota, a login that expires mid-session, or an overflow |
 | `admitAgent` | **provided** — `initialize.agentInfo` must name `@agentclientprotocol/claude-agent-acp` at or above the bundled pin `0.109.0`, an override launch included; otherwise `acp-claude-version-unsupported` (`[QK:ACP-CLAUDE-ADMIT-FLOOR]`, `[QK:ACP-CLAUDE-ADMIT-NAME]`; the floor equals the `package.json` pin, `[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]`) | **provided** — `initialize.agentInfo` must name `Antigravity ACP Server` at or above `1.5.9`, an `AGY_ACP_COMMAND` launch included; otherwise `acp-agy-version-unsupported` (`[QK:ACP-AGY-ADMIT-FLOOR]`, `[QK:ACP-AGY-ADMIT-NAME]`). LIVE n=1, 2026-11-17: the live 0.107.3 and 1.5.9 answers admitted, the live 0.107.3 answer with its version set to 0.107.2 refused (BASELINE). Both: refused after `initialize` and before `session/new` — no session, no set, no prompt, the child not kept — with text pi reads as neither transient nor overflow (`[QK:ACP-AGENT-ADMIT-BEFORE-SESSION]`, `[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]`) |
 
-Admission is a floor. Attaching a stored session (`session/resume` or `session/load`) is a stricter, separate judgement: `attachAllowed` admits only the exact `measured` version of each pin, so a newer admitted server, an operator override included, stops the turn of a stored session by name until it is re-measured (V5 in [acp-client-baseline.md](./acp-client-baseline.md), #171). A resident resumes its recorded session under the same id with `session/resume` (`resumeAllowed`: the measured reader, and a writer version that reader was measured on), under a holder lease that a second Pi stops on (`holder-lease.ts`), and sends it only the inputs the Pi session's branch shows after the session's last answer (`branch-gate.ts`). An input of a prompt whose outcome is unknown is not sent to Claude twice and is sent to agy again, each as measured; `session/new` happens only as a birth (`[QK:ACP-ATTACH-SAME-ID-DELTA]`, `[QK:ACP-ATTACH-REFUSAL-KEEPS-RECORD]`, `[QK:ACP-ATTACH-HOLDER-STOPS]`, `[QK:ACP-DELTA-UNKNOWN-BY-ENTRY-ID]`).
+Admission is a floor. Attaching a stored session (`session/resume`; load is never sent) is a stricter, separate judgement: `attachAllowed` admits only the exact `measured` version of each pin, so a newer admitted server, an operator override included, stops the turn of a stored session by name until it is re-measured (V5 in [acp-client-baseline.md](./acp-client-baseline.md), #171). A resident resumes its recorded session under the same id with `session/resume` (`resumeAllowed`: the measured reader, and a writer version that reader was measured on), under a holder lease that a second Pi stops on (`holder-lease.ts`), and sends it only the inputs the Pi session's branch shows after the session's last answer (`branch-gate.ts`). An input of a prompt whose outcome is unknown is not sent to Claude twice and is sent to agy again, each as measured; `session/new` happens only as a birth (`[QK:ACP-ATTACH-SAME-ID-DELTA]`, `[QK:ACP-ATTACH-REFUSAL-KEEPS-RECORD]`, `[QK:ACP-ATTACH-HOLDER-STOPS]`, `[QK:ACP-DELTA-UNKNOWN-BY-ENTRY-ID]`).
 
 In the thinking row: `medium` is offered on every Claude and agy row (`claudeAcpThinkingLevelMap` and
 `agyThinkingLevelMap` in `models.ts`; `[QK:ACP-CLAUDE-THINKING-MENU]`, `[QK:ACP-AGY-THINKING-MENU]`), and agy's own
@@ -740,8 +746,7 @@ A new session sets effort right after set-model; a reused session sets it again 
 level changed since the value it last read back. The level is not part of the reuse signature, so
 changing it keeps the live conversation. The answer must read the value back as the `effort`
 option's `currentValue`; a refused set (`-32602` for an unoffered value), a missing option or
-another value fails the turn before the prompt, and a reused session is dropped, so the next turn
-opens a new session and resends the transcript. The text we author reads as neither transient nor
+another value fails the turn before the prompt, and a reused session is kept. The text we author reads as neither transient nor
 overflow to pi; the sealed message still appends the session's stderr tail like any other
 pre-prompt failure, and a bootstrap timeout keeps its `timed out` wording, so either can classify as
 transient. A replay of that turn re-dispatches no prompt that ran. Each accepted set shows the operator a lifecycle notice `[acp: effort <value> read back]` (a new
@@ -1372,4 +1377,4 @@ andenken is not changed from here.
 ## Open work
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
-- persisted ACP resume/load, which is not implemented by today's in-memory reuse.
+- `session/load` is declined (L9): resume is the only attach.

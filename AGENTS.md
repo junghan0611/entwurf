@@ -57,9 +57,9 @@ History and incident detail belong in [CHANGELOG.md](./CHANGELOG.md), issue thre
 | **ACP does not own** | citizen registration, socket registry, peer protocol, memory/planner, transcript, or auth |
 
 - One provider; resolve its adapter once per turn. Backend settings remain opaque behind the adapter.
-- Common sequence is spawn → initialize → newSession → model enforcement → prompt → event map. Callable schema is tool truth; prose grants no tool.
+- Common sequence is spawn → initialize → newSession at birth or resume of the recorded id → model enforcement → prompt → event map. Callable schema is tool truth; prose grants no tool.
 - Rich context rides the first user-message augment, not a large system prompt. Carrier/backend differences stay inside the adapter.
-- Start streaming assistant messages as pending; explicitly map every terminal reason. Refusal, exhausted budget, unknown, or absent reason is an error and preserves the raw reason.
+- Start streaming assistant messages as pending; explicitly map every terminal reason. Refusal, an exhausted request budget (`max_turn_requests`), unknown, or absent reason is an error and preserves the raw reason; `max_tokens` is `length`.
 - Bootstrap has bounded wall-clock steps; a running prompt has no elapsed-time success/failure inference. Cancel through ACP first, then bounded cleanup. A failure we author must not invite blind whole-prompt replay.
 - Entwurf never provides, copies, proxies, decrypts, or bypasses vendor credentials/subscriptions.
 - Adapter/overlay contracts and backend-specific evidence: [docs/acp-backend-rail.md](./docs/acp-backend-rail.md).
