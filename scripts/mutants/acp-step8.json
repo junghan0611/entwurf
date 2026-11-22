@@ -528,7 +528,7 @@
 			"title": "a live holder of another process is reported as a holder that did not release",
 			"subject": "pi-extensions/lib/acp/holder-lease.ts",
 			"find": [
-				"\tif (holder === \"live\") return { ok: false, stop: \"holder\", why: `process ${found.holder.pid} holds this session` };"
+				"\tif (holder === \"live\" && relation === \"same\") {\n\t\treturn { ok: false, stop: \"holder\", why: `process ${found.holder.pid} holds this session` };\n\t}"
 			],
 			"replace": ["\tvoid 0;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
@@ -538,10 +538,10 @@
 		},
 		{
 			"claim": "ACP-LEASE-DEAD-HOLDER-STOPS",
-			"title": "a holder seen dead on this boot is taken over without a reboot",
+			"title": "a holder seen dead on this boot is taken over with no proof about its agent",
 			"subject": "pi-extensions/lib/acp/holder-lease.ts",
-			"find": ["\tif (!rebooted) {"],
-			"replace": ["\tif (!rebooted && holder !== \"dead\") {"],
+			"find": ["\tif (!proven) {"],
+			"replace": ["\tif (!proven && holder !== \"dead\") {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-LEASE-DEAD-HOLDER-STOPS]",
@@ -551,11 +551,44 @@
 			"claim": "ACP-LEASE-REBOOT-TAKEOVER",
 			"title": "a lease written on another machine is taken over as if this machine had rebooted",
 			"subject": "pi-extensions/lib/acp/holder-lease.ts",
-			"find": ["\t\tfound.scope.machine === probe.scope.machine &&\n"],
-			"replace": [""],
+			"find": [" || lease.machine !== reader.machine) return null;"],
+			"replace": [") return null;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-LEASE-REBOOT-TAKEOVER]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-GONE-TAKEOVER",
+			"title": "a holder that cannot be judged is taken over on this boot once its agent is seen dead",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": ["\tif (relation === \"same\" && holder === \"dead\" && found.child !== null) {"],
+			"replace": ["\tif (relation === \"same\" && found.child !== null) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-GONE-TAKEOVER]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-PID-NAMESPACE",
+			"title": "a same-boot lease is taken over on pid facts read in another PID namespace, or with no namespace named",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": ["\treturn lease.pidNs !== undefined && lease.pidNs === reader.pidNs ? \"same\" : null;"],
+			"replace": ["\treturn \"same\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-PID-NAMESPACE]",
+			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-LIVE-ORPHAN-STOPS",
+			"title": "a lease is taken over while a process its dead agent started still runs in that agent's group",
+			"subject": "pi-extensions/lib/acp/holder-lease.ts",
+			"find": ["\t\t\tif (!probe.groupGone(found.child.pid)) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-LIVE-ORPHAN-STOPS]",
 			"signatureSource": "pi-extensions/lib/acp/holder-lease.test.ts"
 		},
 		{

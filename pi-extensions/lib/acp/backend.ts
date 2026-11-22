@@ -1342,22 +1342,27 @@ function defaultLeaseProbe(): LeaseProbe {
 				currentStartKey: processStartKey(identity.pid),
 				pidExists: probePidExistence(identity.pid),
 			}),
+		groupGone: processGroupGone,
 	};
 	return cachedLeaseProbe;
 }
 
-/**
- * Is the process group of a child we started empty? `true` only on the kernel's own "no such process".
- * A child with no pid is a fake with no OS process behind it; its observed exit is all there is.
- */
-function childGroupGone(child: AcpChildLike): boolean {
-	if (child.pid == null) return true;
+/** Is the process group `pgid` empty? `true` only on the kernel's own "no such process". */
+function processGroupGone(pgid: number): boolean {
 	try {
-		process.kill(-child.pid, 0);
+		process.kill(-pgid, 0);
 		return false;
 	} catch (error) {
 		return (error as NodeJS.ErrnoException).code === "ESRCH";
 	}
+}
+
+/**
+ * Is the process group of a child we started empty? A child with no pid is a fake with no OS
+ * process behind it; its observed exit is all there is.
+ */
+function childGroupGone(child: AcpChildLike): boolean {
+	return child.pid == null ? true : processGroupGone(child.pid);
 }
 
 /**

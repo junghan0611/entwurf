@@ -10,10 +10,19 @@
 // signal that was sent is not that proof, so the process exit hook releases nothing. A holder that
 // died without releasing leaves its lease standing, and the next owner stops on it.
 //
-// One takeover exists: after a host reboot no process of the previous boot can be alive. It is taken
-// only when both the lease and this process name a well-formed scope (the machine id and the boot
-// id), the machine is the same and the boot differs; under an exclusive takeover marker; and only
-// if the lease is still the generation that was read. Anything missing, malformed or foreign stops.
+// A lease left standing is taken over on proof, never on a guess. Both the lease and this process
+// must name a well-formed scope (the machine id and the boot id) of the same machine. Then:
+//  - another boot: no process of the previous boot can be alive;
+//  - the same boot, and the same PID namespace named by both (a pid is a number of one namespace;
+//    a lease that names none, as one written before this did, proves nothing here): the holder is
+//    dead by its pid and start, the agent it published is dead by its pid and start, and that
+//    agent's process group is empty. An agent that still runs is a holder, named by its pid. A
+//    group that is not proven empty stops without naming anyone. A lease that names no agent proves
+//    nothing about one, and stops (GLG 2026-11-22: a Pi that died must not cost its session until
+//    the next reboot).
+// A process the agent started that left its group (its own session) is not seen by this proof.
+// Either way it is taken under an exclusive takeover marker, and only if the lease is still the
+// generation that was read. Anything missing, malformed, foreign or unproven stops.
 //
 // Scope, stated: exclusivity holds for one local store with working `O_EXCL`, `rename` and `fsync`.
 // A HOME shared by two hosts is covered only as far as the machine id tells them apart: a lease of
@@ -26,6 +35,7 @@ import {
 	mkdirSync,
 	openSync,
 	readFileSync,
+	readlinkSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
@@ -44,6 +54,13 @@ export interface ProcessIdentity {
 export interface LeaseScope {
 	machine: string;
 	bootId: string;
+	/**
+	 * The PID namespace the writer's pids are numbers of (`readlink /proc/self/ns/pid`). Two
+	 * processes of one machine and boot can still be in different namespaces, where the other's
+	 * pid reads as "no such process". Absent where it cannot be read, and in a lease written before
+	 * it existed.
+	 */
+	pidNs?: string;
 }
 
 export interface HolderLease {
@@ -66,14 +83,20 @@ export interface LeaseProbe {
 	scope: LeaseScope | null;
 	/** `live`: that very process runs. `dead`: proven gone. `uncertain`: anything else. */
 	classify(identity: ProcessIdentity): "live" | "dead" | "uncertain";
+	/**
+	 * Is the process group `pgid` empty? `true` only on the kernel's own "no such process"; `false`
+	 * is "not proven", not "a process of it runs".
+	 */
+	groupGone(pgid: number): boolean;
 }
 
 export type LeaseVerdict =
 	| { ok: true; lease: HolderLease; path: string; how: "created" | "held" | "taken-over" }
-	| { ok: false; stop: "holder" | "holderStale" | "reload"; why: string };
+	| { ok: false; stop: "holder" | "holderStale" | "reload" | "resume"; why: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MACHINE_ID = /^[0-9a-f]{32}$/;
+const PID_NS = /^pid:\[[0-9]+\]$/;
 
 export function holderLeaseDir(): string {
 	return join(homedir(), ".pi", "agent", "entwurf-acp-holders");
@@ -84,7 +107,7 @@ export function holderLeasePath(backend: string, acpSessionId: string, dir: stri
 	return join(dir, backend.replace(/[^a-z0-9_-]/gi, "_"), `${name}.json`);
 }
 
-/** A scope is usable only when both of its ids have their kernel-issued shape. */
+/** A scope is usable only when its ids have their kernel-issued shape; the PID namespace may be absent. */
 export function wellFormedScope(scope: unknown): scope is LeaseScope {
 	const s = scope as Partial<LeaseScope> | null;
 	return (
@@ -93,23 +116,43 @@ export function wellFormedScope(scope: unknown): scope is LeaseScope {
 		typeof s.machine === "string" &&
 		MACHINE_ID.test(s.machine) &&
 		typeof s.bootId === "string" &&
-		UUID.test(s.bootId)
+		UUID.test(s.bootId) &&
+		(s.pidNs === undefined || (typeof s.pidNs === "string" && PID_NS.test(s.pidNs)))
 	);
 }
 
 /** This kernel's scope, or `null` where it cannot be read whole (no takeover is possible there). */
 export function readLeaseScope(
 	read: (path: string) => string = (path) => readFileSync(path, "utf8"),
+	link: (path: string) => string = (path) => readlinkSync(path),
 ): LeaseScope | null {
 	try {
-		const scope = {
+		const scope: LeaseScope = {
 			machine: read("/etc/machine-id").trim(),
 			bootId: read("/proc/sys/kernel/random/boot_id").trim(),
 		};
-		return wellFormedScope(scope) ? scope : null;
+		if (!wellFormedScope(scope)) return null;
+		// Without a readable namespace the scope still tells a reboot; it proves nothing on the same boot.
+		try {
+			const pidNs = link("/proc/self/ns/pid");
+			if (PID_NS.test(pidNs)) scope.pidNs = pidNs;
+		} catch {
+			// no procfs namespace link here
+		}
+		return scope;
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * Two scopes of one machine: a `rebooted` one, or the `same` boot and PID namespace, where the
+ * lease's pids are this process's pids. `null`: not comparable.
+ */
+function bootRelation(lease: unknown, reader: unknown): "same" | "rebooted" | null {
+	if (!wellFormedScope(lease) || !wellFormedScope(reader) || lease.machine !== reader.machine) return null;
+	if (lease.bootId !== reader.bootId) return "rebooted";
+	return lease.pidNs !== undefined && lease.pidNs === reader.pidNs ? "same" : null;
 }
 
 function isIdentity(value: unknown): value is ProcessIdentity {
@@ -138,7 +181,14 @@ export function parseHolderLease(raw: unknown): HolderLease | undefined {
 		gen: r.gen as number,
 		holder: { pid: r.holder.pid, startKey: r.holder.startKey },
 		nonce: r.nonce,
-		scope: r.scope === null ? null : { machine: r.scope.machine, bootId: r.scope.bootId },
+		scope:
+			r.scope === null
+				? null
+				: {
+						machine: r.scope.machine,
+						bootId: r.scope.bootId,
+						...(r.scope.pidNs === undefined ? {} : { pidNs: r.scope.pidNs }),
+					},
 		child: r.child === null ? null : { pid: r.child.pid, startKey: r.child.startKey },
 		at: r.at,
 	};
@@ -182,8 +232,20 @@ function publish(path: string, lease: HolderLease, exclusive: boolean): void {
 	syncDirectory(dirname(path));
 }
 
+/** Do two scopes name different kernels or PID namespaces? Only what both state can differ. */
+function foreignScope(lease: LeaseScope | null, reader: LeaseScope | null): boolean {
+	if (!wellFormedScope(lease) || !wellFormedScope(reader)) return false;
+	if (lease.machine !== reader.machine || lease.bootId !== reader.bootId) return true;
+	return lease.pidNs !== undefined && reader.pidNs !== undefined && lease.pidNs !== reader.pidNs;
+}
+
+/** The lease names this very process: its pid and start, in a scope that is not another one. */
 function mine(lease: HolderLease, probe: LeaseProbe): boolean {
-	return lease.holder.pid === probe.self.pid && lease.holder.startKey === probe.self.startKey;
+	return (
+		lease.holder.pid === probe.self.pid &&
+		lease.holder.startKey === probe.self.startKey &&
+		!foreignScope(lease.scope, probe.scope)
+	);
 }
 
 /**
@@ -226,22 +288,51 @@ export function acquireHolderLease(
 		if (found.nonce === probe.nonce) return { ok: true, lease: found, path, how: "held" };
 		return { ok: false, stop: "reload", why: "the lease belongs to this process before a reload" };
 	}
+	// A pid is a number of one boot and one PID namespace. Only where the lease's are this process's
+	// (`same`) does a probe of one say anything about the lease's process, and only there is a
+	// process named to the operator.
+	const relation = bootRelation(found.scope, probe.scope);
 	const holder = probe.classify(found.holder);
-	if (holder === "live") return { ok: false, stop: "holder", why: `process ${found.holder.pid} holds this session` };
-	// A previous boot's holder cannot be alive, whatever a pid of this boot looks like.
-	const rebooted =
-		wellFormedScope(found.scope) &&
-		wellFormedScope(probe.scope) &&
-		found.scope.machine === probe.scope.machine &&
-		found.scope.bootId !== probe.scope.bootId;
-	if (!rebooted) {
+	if (holder === "live" && relation === "same") {
+		return { ok: false, stop: "holder", why: `process ${found.holder.pid} holds this session` };
+	}
+	// A previous boot's holder cannot be alive. A holder that reads as alive is still never taken over.
+	let proven = relation === "rebooted" && holder !== "live";
+	// On this boot: the holder is dead by pid and start, the agent it published is dead by pid and
+	// start, and nothing is left in that agent's process group (the agent is spawned as its leader,
+	// and what it starts stays in the group).
+	if (relation === "same" && holder === "dead" && found.child !== null) {
+		const agent = probe.classify(found.child);
+		if (agent === "live") {
+			return {
+				ok: false,
+				stop: "holder",
+				why: `agent process ${found.child.pid} of the previous holder still runs`,
+			};
+		}
+		if (agent === "dead") {
+			// Not proven empty: what the agent started may still be leaving, the group id may have been
+			// reused, or it cannot be asked. None of these names a process to end, so this is no `holder`.
+			if (!probe.groupGone(found.child.pid)) {
+				return {
+					ok: false,
+					stop: "resume",
+					why: `process group ${found.child.pid} of the previous agent is not proven empty`,
+				};
+			}
+			proven = true;
+		}
+	}
+	if (!proven) {
 		return {
 			ok: false,
 			stop: "holderStale",
 			why:
-				holder === "dead"
-					? `process ${found.holder.pid} held this session and did not release it`
-					: `whether process ${found.holder.pid} still holds this session cannot be told`,
+				relation !== "same"
+					? "the lease's process ids cannot be compared from this process"
+					: holder === "dead"
+						? `process ${found.holder.pid} held this session, and the end of its agent cannot be proven`
+						: `whether process ${found.holder.pid} still holds this session cannot be told`,
 		};
 	}
 	const marker = `${path}.takeover`;

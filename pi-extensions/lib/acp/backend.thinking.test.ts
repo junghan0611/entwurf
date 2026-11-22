@@ -1984,8 +1984,10 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		const probe = (pid: number, nonce = "module-1"): LeaseProbe => ({
 			self: { pid, startKey: `start-${pid}` },
 			nonce,
-			scope: null,
+			// One boot and one PID namespace: only there is a holder named.
+			scope: { machine: "0".repeat(32), bootId: "11111111-2222-3333-4444-555555555555", pidNs: "pid:[1]" },
 			classify: (identity) => others[identity.pid] ?? "uncertain",
+			groupGone: () => false,
 		});
 		const rows: Array<[string, keyof typeof ACP_STOPS, LeaseProbe, "live" | "dead" | "uncertain"]> = [
 			["another live process", "holder", probe(2), "live"],

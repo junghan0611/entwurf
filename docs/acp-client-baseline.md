@@ -73,7 +73,7 @@ Read from Zed's client (zed at ad1058d78d); each row asks whether Pi needs it.
 | Z3  | agent exit as a typed error              | implemented | A child dying during resume is a named stop; the record is kept.                         | [QK:ACP-ATTACH-AGENT-DIES] |
 | Z4  | load response boundary                   | declined    | Load is never sent (L9), so there is no load response to bound.                          | — |
 | Z5  | close an abandoned session/new           | declined    | Close changes nothing on either vendor, so it is skipped.                                | — |
-| Z6  | one holder inside Entwurf (holder lease) | implemented | A second Pi stops while a holder lease stands; it is released on the agent's proven end. | [QK:ACP-ATTACH-HOLDER-STOPS] |
+| Z6  | one holder inside Entwurf (holder lease) | implemented | A second Pi stops while a holder lease stands; it is released on the agent's proven end, and taken over on proof that both are gone (19). | [QK:ACP-ATTACH-HOLDER-STOPS], [QK:ACP-LEASE-GONE-TAKEOVER], [QK:ACP-LEASE-PID-NAMESPACE], [QK:ACP-LEASE-LIVE-ORPHAN-STOPS] |
 | Z7  | recovery by load                         | declined    | Pi resume is the recovery path, so Entwurf does not reattach by load.                    | — |
 | Z8  | optional verbs                           | declined    | Delete, title, retry and the rest have no Pi surface.                                    | — |
 | Z9  | subagent sessions                        | declined    | Entwurf announces no subagents, so none are loaded.                                      | — |
@@ -142,6 +142,7 @@ Observed once, or not yet. Each row names its parent; an unmeasured row says why
     9. A failed turn's input is re-sent, except a range Claude already got (a re-send repeats the work); agy re-sends (a lost message is worse than a duplicate).
 17. No internal new: every other path to `session/new` is a named stop that keeps the record and names the cause. A v1 record is not resumed: it stops its turn and is kept (GLG 2026-11-22, L15).
 18. ACP runs only in a resident Pi (`entwurf pi`; the parsed control flag is read first). An explicit `pi -p` or json run is a one-shot; any other tui or rpc turn stops and names `entwurf pi`. Pi's own summary request is a separate stateless exception.
+19. A holder lease left by a Pi that died is taken over on the same machine and boot and in the same PID namespace, once its holder and its published agent are each dead by pid and start and the agent's process group is empty (GLG 2026-11-22; it replaces "a dead holder on the same boot stops", which cost the session until a reboot). An agent that still runs stops as a holder, named by its pid; a group not proven empty stops and says to send again later; anything else unproven, a lease written before the namespace was recorded included, stops and names `/new`.
 
 ## Receipts
 

@@ -110,11 +110,11 @@ export const ACP_STOPS = {
 	},
 	holder: {
 		text: "entwurf: another process holds this ACP session, so nothing was sent",
-		exit: "close the other process that holds this session",
+		exit: "close the process the notice above names, then send again",
 	},
 	holderStale: {
 		text: "entwurf: this ACP session's previous holder did not release it, so nothing was sent",
-		exit: "send again once the previous holder and its agent have exited",
+		exit: NEW_SESSION,
 	},
 	reload: {
 		text: "entwurf: this ACP session is held by the module before /reload, so nothing was sent",
