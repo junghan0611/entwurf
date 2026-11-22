@@ -439,7 +439,7 @@
 			"claim": "ACP-L1-RESUME-ALLOWED",
 			"title": "a stored session is resumed whatever version of the agent wrote it",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": ["\tif (writer.name !== resume.agent.name || !resume.writers.includes(writer.version)) {"],
+			"find": ["\tif (writer.name !== resume.agent.name || !inAttachRange(writer.version, resume.agent)) {"],
 			"replace": ["\tif (writer.name !== resume.agent.name) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
@@ -447,33 +447,27 @@
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		},
 		{
-			"claim": "ACP-V5-ATTACH-EQUAL",
-			"title": "attach compares the reported version to the admission floor instead of the measured version",
+			"claim": "ACP-V5-ATTACH-IN-RANGE",
+			"title": "attach goes back to the measured version alone, so an agy that updated itself on the 1.5 line stops every resume",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": [
-				"\tif (facts.agent.version !== agent.measured) return { allowed: false, reason: \"version-unmeasured\" };"
-			],
+			"find": ["\tif (!inRange) return { allowed: false, reason: \"version-out-of-range\" };"],
 			"replace": [
-				"\tif (facts.agent.version !== agent.floor) return { allowed: false, reason: \"version-unmeasured\" };"
+				"\tif (facts.agent.version !== agent.measured) return { allowed: false, reason: \"version-out-of-range\" };"
 			],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:ACP-V5-ATTACH-EQUAL]",
+			"signature": "[QK:ACP-V5-ATTACH-IN-RANGE]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		},
 		{
-			"claim": "ACP-V5-ATTACH-UNMEASURED",
-			"title": "the measured version is read as a floor, so a newer admitted server may attach",
+			"claim": "ACP-V5-ATTACH-OUT-OF-RANGE",
+			"title": "the attach range loses its upper bound, so agy 1.6.0 attaches a stored session unreviewed",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": [
-				"\tif (facts.agent.version !== agent.measured) return { allowed: false, reason: \"version-unmeasured\" };"
-			],
-			"replace": [
-				"\tif (!versionAtLeast(parseReleaseVersion(facts.agent.version) ?? [0, 0, 0], parseReleaseVersion(agent.measured) ?? [0, 0, 0])) return { allowed: false, reason: \"version-unmeasured\" };"
-			],
+			"find": ["\treturn have !== undefined && versionAtLeast(have, floor) && !versionAtLeast(have, below);"],
+			"replace": ["\treturn have !== undefined && versionAtLeast(have, floor);"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:ACP-V5-ATTACH-UNMEASURED]",
+			"signature": "[QK:ACP-V5-ATTACH-OUT-OF-RANGE]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		},
 		{

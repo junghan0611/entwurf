@@ -88,7 +88,7 @@ Measured on claude-agent-acp and agy; the client must absorb them.
 | V2  | attach answers vendor defaults         | implemented | Both vendors forget model and effort on attach; they are set again (L11).                           | [QK:ACP-ATTACH-SETS-EFFORT-AGAIN] |
 | V3  | no vendor refuses a second holder      | implemented | Two Pi processes could hold one id; Entwurf's own guard is the holder lease (Z6, U9).               | [QK:ACP-LEASE-ONE-HOLDER] |
 | V4  | agy keeps every session/new            | declined    | Vendor storage is not ours to clean; Entwurf does not delete it (U8).                               | — |
-| V5  | version guard                          | implemented | Attach opens only on the measured version; an unmeasured one stops with a reason, never new (16-5). | [QK:ACP-V5-ATTACH-UNMEASURED] |
+| V5  | version guard                          | implemented | Attach opens only inside the pinned range; outside it stops with a reason, never new (16-5).        | [QK:ACP-V5-ATTACH-OUT-OF-RANGE] |
 | V6  | Pi retries a failed turn on error text | implemented | A turn of unknown outcome ends with a fixed text Pi does not retry on; the next turn follows 16-9.  | [QK:ACP-UNKNOWN-FIXED-TEXT] |
 
 ## Probes
@@ -120,7 +120,7 @@ Observed once, or not yet. Each row names its parent; an unmeasured row says why
 3. A birth id or a dispatch marker that cannot be saved stops the turn before the send (17); a failed save after an answer keeps the turn and owes the seal; live reuse retries it first.
 4. Permission: the first allow option, else the first option, else cancel; narrowing it is later work.
 5. Declined: authenticate, protocol v2, client fs write and terminal, the optional verbs; `session/list` for now.
-6. Version guard: attach needs a measured pair of the stored session's writer version and the reader's (V5).
+6. Version guard: writer and reader in the pin's range, Claude 0.109.0, agy 1.5.9 to <1.6.0 (V5).
 7. Reuse delta: send the inputs after the last sealed answer, matched by turn id (a cancel or refusal the vendor answered counts), custom messages included; `/compact` is read from the first block.
 8. (Replaced by 17.)
 9. (Replaced by 17.)
@@ -135,7 +135,7 @@ Observed once, or not yet. Each row names its parent; an unmeasured row says why
     2. /renew is a new chapter.
     3. A model change stays inside the session or is refused.
     4. A context that diverged is a named stop.
-    5. An unmeasured version never drops a session.
+    5. An out-of-range version never drops a session.
     6. An ambiguous resume error is not absence.
     7. An explicit `pi -p` stays one-shot.
     8. Config drift: a changed MCP set resumes the same id; changed setup text keeps a live session and stops a stored one.

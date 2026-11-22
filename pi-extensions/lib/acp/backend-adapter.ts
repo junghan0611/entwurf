@@ -332,16 +332,15 @@ export interface AcpBackendAdapter {
 
 	/**
 	 * OPTIONAL capability (#171 step 8): this backend's stored sessions can be resumed under the same
-	 * id. ABSENT: a stored session of this backend stops. Every value is a measured fact, never a guess:
-	 * - `agent`: the pin whose `measured` version is the only reader that may attach (`attachAllowed`);
-	 * - `writers`: the versions whose sessions that reader was measured to resume;
+	 * id. ABSENT: a stored session of this backend stops.
+	 * - `agent`: the pin whose attach range `[floor, attachBelow)` holds both the reader that may attach
+	 *   and the writers whose sessions it may resume (`attachAllowed`, `resumeAllowed`);
 	 * - `unknownDispatch`: what to do with inputs of a prompt whose outcome is unknown. `skip`: never
 	 *   send them again (the agent may hold them). `resend`: send every input after the last answer
 	 *   again (the agent keeps nothing of an unanswered prompt).
 	 */
 	resume?: Readonly<{
 		agent: AcpAgentPin;
-		writers: readonly string[];
 		unknownDispatch: "skip" | "resend";
 	}>;
 }
@@ -373,19 +372,23 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
  *  package.json (`[측정 2026-11-17]` 0.107.0 and 0.107.3 answered this name and their own version).
  *  agy: the one measured version (#167, 2026-11-16).
  *
- *  `floor` admits a server to run at all (#168). `measured` is the one version whose session
- *  resume/load the receipts named in docs/acp-client-baseline.md measured (#171 V5, decision 10,
- *  GLG 2026-11-21); only that exact version may attach a stored session (`attachAllowed`). A gate binds
- *  each `measured` to the version the Receipts paragraph names (receipt-versions.ts). */
+ *  `floor` admits a server to run at all (#168). `measured` is the version whose session resume/load
+ *  the receipts named in docs/acp-client-baseline.md measured; a gate binds it to the version the
+ *  Receipts paragraph names (receipt-versions.ts). `[floor, attachBelow)` is the range whose readers
+ *  may attach a stored session and whose writers' sessions they may resume (#171 V5). Claude's range is
+ *  its bundled pin alone (decision 10, GLG 2026-11-21). agy updates itself often, so its range is the
+ *  1.5 line from the floor, measured or not; 1.6.0 waits for a review (GLG 2026-11-22). */
 export const CLAUDE_ACP_AGENT = Object.freeze({
 	name: "@agentclientprotocol/claude-agent-acp",
 	floor: "0.109.0",
 	measured: "0.109.0",
+	attachBelow: "0.109.1",
 });
 export const AGY_ACP_AGENT = Object.freeze({
 	name: "Antigravity ACP Server",
 	floor: "1.5.9",
 	measured: "1.5.13",
+	attachBelow: "1.6.0",
 });
 
 function parseReleaseVersion(value: unknown): [number, number, number] | undefined {
@@ -475,25 +478,38 @@ export function readAgentFacts(initializeAnswer: unknown): AcpAgentFacts {
 	});
 }
 
-/** An ACP agent as entwurf pins it: the name it answers, the admission floor and the measured version. */
-export type AcpAgentPin = Readonly<{ name: string; floor: string; measured: string }>;
+/** An ACP agent as entwurf pins it: the name it answers, the admission floor, the measured version and
+ *  the first version that may not attach a stored session. */
+export type AcpAgentPin = Readonly<{ name: string; floor: string; measured: string; attachBelow: string }>;
 
 /** Why a stored session may not be attached on a child. */
-export type AcpAttachRefusal = "agent-unnamed" | "version-unmeasured" | "capability-absent";
+export type AcpAttachRefusal = "agent-unnamed" | "version-out-of-range" | "capability-absent";
 export type AcpAttachJudgement = { allowed: true } | { allowed: false; reason: AcpAttachRefusal };
 
+/** Is `version` an X.Y.Z inside the pin's attach range `[floor, attachBelow)`? A prerelease or build
+ *  suffix is not X.Y.Z and is outside. Throws when the pin's own range is not two ascending X.Y.Z. */
+function inAttachRange(version: string, agent: AcpAgentPin): boolean {
+	const floor = parseReleaseVersion(agent.floor);
+	const below = parseReleaseVersion(agent.attachBelow);
+	if (!floor || !below || versionAtLeast(floor, below))
+		throw new Error(
+			`entwurf: the attach range [${jsonText(agent.floor)}, ${jsonText(agent.attachBelow)}) of ${agent.name} is not two ascending X.Y.Z versions`,
+		);
+	const have = parseReleaseVersion(version);
+	return have !== undefined && versionAtLeast(have, floor) && !versionAtLeast(have, below);
+}
+
 /**
- * May a stored ACP session be attached (`session/resume` or `session/load`) on this child (#171 V5,
- * decision 10)? Only the pinned agent, reporting exactly its `measured` version, advertising the
- * capability the attach needs: resume needs `sessionCapabilities.resume`, load needs `loadSession`.
- * Admission (`admitAcpAgent`) is a floor; this is not — a newer admitted server, an operator
- * override's included, is unmeasured and refused. Pure; no attach path calls it yet (L8).
+ * May a stored ACP session be attached (`session/resume` or `session/load`) on this child (#171 V5)?
+ * Only the pinned agent, reporting a version inside its attach range `[floor, attachBelow)`,
+ * advertising the capability the attach needs: resume needs `sessionCapabilities.resume`, load needs
+ * `loadSession`. Admission (`admitAcpAgent`) has no upper bound; this has — a newer admitted server,
+ * an operator override's included, is refused. Pure.
  */
 export function attachAllowed(facts: AcpAgentFacts, agent: AcpAgentPin, need: "resume" | "load"): AcpAttachJudgement {
-	if (!parseReleaseVersion(agent.measured))
-		throw new Error(`entwurf: the measured version ${jsonText(agent.measured)} of ${agent.name} is not X.Y.Z`);
+	const inRange = inAttachRange(facts.agent?.version ?? "", agent);
 	if (facts.agent?.name !== agent.name) return { allowed: false, reason: "agent-unnamed" };
-	if (facts.agent.version !== agent.measured) return { allowed: false, reason: "version-unmeasured" };
+	if (!inRange) return { allowed: false, reason: "version-out-of-range" };
 	const advertised = need === "resume" ? facts.sessionCapabilities.includes("resume") : facts.loadSession;
 	return advertised ? { allowed: true } : { allowed: false, reason: "capability-absent" };
 }
@@ -502,19 +518,19 @@ export function attachAllowed(facts: AcpAgentFacts, agent: AcpAgentPin, need: "r
 export const ACP_PROMPT_REJECTION_DIAGNOSTIC = "entwurf_acp_prompt_rejection";
 
 /**
- * May the session a record names be resumed on this child (#171 step 8)? The reader must be the
- * adapter's measured version advertising resume (`attachAllowed`), and the record's writer must be
- * one of the versions that reader was measured to resume. Pure.
+ * May the session a record names be resumed on this child (#171 step 8)? The reader must be inside the
+ * adapter's attach range advertising resume (`attachAllowed`), and the record's writer must be the
+ * same agent inside the same range. Pure.
  */
 export function resumeAllowed(
 	facts: AcpAgentFacts,
 	resume: NonNullable<AcpBackendAdapter["resume"]>,
 	writer: Readonly<{ name: string; version: string }>,
-): AcpAttachJudgement | { allowed: false; reason: "writer-unmeasured" } {
+): AcpAttachJudgement | { allowed: false; reason: "writer-out-of-range" } {
 	const reader = attachAllowed(facts, resume.agent, "resume");
 	if (!reader.allowed) return reader;
-	if (writer.name !== resume.agent.name || !resume.writers.includes(writer.version)) {
-		return { allowed: false, reason: "writer-unmeasured" };
+	if (writer.name !== resume.agent.name || !inAttachRange(writer.version, resume.agent)) {
+		return { allowed: false, reason: "writer-out-of-range" };
 	}
 	return { allowed: true };
 }
@@ -838,12 +854,12 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// #168: the server that answered initialize must be claude-agent-acp at the bundled pin or newer.
 	admitAgent: (answer) =>
 		admitAcpAgent(answer, "claude", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, "CLAUDE_AGENT_ACP_COMMAND"),
-	// #171 step 7 receipts: 0.109.0 resumes its own sessions. A record an earlier version wrote names no
-	// last answer and never reaches this judgement (GLG 2026-11-22). An input of an unanswered prompt
-	// may be in the session's history (G2a), so it is never sent twice.
+	// #171 step 7 receipts: 0.109.0 resumes its own sessions, and the attach range is that pin alone. A
+	// record an earlier version wrote names no last answer and never reaches this judgement (GLG
+	// 2026-11-22). An input of an unanswered prompt may be in the session's history (G2a), so it is
+	// never sent twice.
 	resume: Object.freeze({
 		agent: CLAUDE_ACP_AGENT,
-		writers: Object.freeze(["0.109.0"]),
 		unknownDispatch: "skip",
 	}),
 };
@@ -1172,10 +1188,10 @@ export const agyAdapter: AcpBackendAdapter = {
 	// #168: the server that answered initialize must be agy's own ACP server at the measured floor or newer.
 	admitAgent: (answer) => admitAcpAgent(answer, "agy", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, "AGY_ACP_COMMAND"),
 	// #171 step 7 receipts (U26, U17): 1.5.13 resumes its own sessions and 1.5.12's, and keeps nothing of
-	// a prompt it did not answer, so the inputs after the last answer are sent again.
+	// a prompt it did not answer, so the inputs after the last answer are sent again. The attach range is
+	// the whole 1.5 line from the floor (GLG 2026-11-22), so a self-update inside it keeps resume.
 	resume: Object.freeze({
 		agent: AGY_ACP_AGENT,
-		writers: Object.freeze(["1.5.13", "1.5.12"]),
 		unknownDispatch: "resend",
 	}),
 

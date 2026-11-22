@@ -3149,8 +3149,8 @@ export function streamAcpTurn(
 			}
 			let acpSessionId: string | undefined;
 			if (attach && adapter.resume && held) {
-				// The reader must be the measured version advertising resume, and the record's writer one whose
-				// sessions that reader was measured to resume. Anything else is not tried.
+				// The reader must be inside the adapter's attach range advertising resume, and the record's writer
+				// the same agent inside that range. Anything else is not tried.
 				const allowed = resumeAllowed(session.agentFacts, adapter.resume, attach.record.writer);
 				if (!allowed.allowed) {
 					throw new AcpStopSignal(

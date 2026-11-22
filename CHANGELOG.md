@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+- **agy resume follows its self-updates on the 1.5 line.** A stored ACP session was attached only on the exact measured version, so an agy that updated itself from 1.5.13 to 1.5.14 stopped every reopen with `version-unmeasured` (seen on a laptop, 2026-11-22). Each pin now carries an attach range `[floor, attachBelow)` that holds both the reader and the record's writer: agy 1.5.9 up to 1.6.0, which waits for a review, and Claude still 0.109.0 alone, since its version is the bundled pin (GLG 2026-11-22). The stops are renamed `version-out-of-range` and `writer-out-of-range`. Reported from a laptop (receipts host-local there, n=1): agy 1.5.14 resumed its own session and recalled it, and four regression groups matched 1.5.13 in 78 of 78 items. Not measured: a 1.5.13 session resumed by 1.5.14 (U26), 1.5.9–1.5.11, and 1.5.15 or later. A failed `session/resume` still stops the turn and keeps the record, and lost vendor history after an accepted resume would not be seen.
+
 ## v2026.11.22-herdr.0.61.0 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.61.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.60.0 (`v2026.11.20-herdr.0.60.0`) on the same Pi 1.5.2 SDK set. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.

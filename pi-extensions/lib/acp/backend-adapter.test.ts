@@ -374,25 +374,32 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 		).toEqual({ agent: null, loadSession: false, sessionCapabilities: ["list"], authMethods: ["kept"] });
 	});
 
-	it("[QK:ACP-V5-ATTACH-EQUAL] each pinned agent at exactly its measured version, advertising the capability, may resume and load", () => {
-		for (const [answer, agent] of [
-			[CLAUDE_R1, CLAUDE_ACP_AGENT],
-			[AGY_R1, AGY_ACP_AGENT],
-		] as const) {
-			const facts = readAgentFacts(answer);
-			expect(facts.agent?.version).toBe(agent.measured);
-			expect(attachAllowed(facts, agent, "resume")).toEqual({ allowed: true });
-			expect(attachAllowed(facts, agent, "load")).toEqual({ allowed: true });
+	it("[QK:ACP-V5-ATTACH-IN-RANGE] each pinned agent inside its attach range, advertising the capability, may resume and load — Claude at its pin, agy anywhere on the 1.5 line from the floor", () => {
+		const cells = [
+			{ answer: CLAUDE_R1, agent: CLAUDE_ACP_AGENT, version: CLAUDE_ACP_AGENT.measured },
+			// The floor, the measured writer and reader, and self-updates the receipts never saw.
+			...["1.5.9", "1.5.12", "1.5.13", "1.5.14", "1.5.17", "1.5.99"].map((version) => ({
+				answer: AGY_R1,
+				agent: AGY_ACP_AGENT,
+				version,
+			})),
+		];
+		for (const cell of cells) {
+			const facts = at(cell.answer, cell.version);
+			expect(facts.agent?.version).toBe(cell.version);
+			expect(attachAllowed(facts, cell.agent, "resume"), cell.version).toEqual({ allowed: true });
+			expect(attachAllowed(facts, cell.agent, "load"), cell.version).toEqual({ allowed: true });
 		}
 	});
 
-	it("[QK:ACP-V5-ATTACH-UNMEASURED] an admitted server at any other version may not attach — the previously measured agy 1.5.12, the agy floor, a newer Claude behind CLAUDE_AGENT_ACP_COMMAND", () => {
+	it("[QK:ACP-V5-ATTACH-OUT-OF-RANGE] an admitted server outside the attach range may not attach — agy 1.6.0 and later, a newer Claude behind CLAUDE_AGENT_ACP_COMMAND, any version that is not X.Y.Z", () => {
 		const saved = process.env.CLAUDE_AGENT_ACP_COMMAND;
 		try {
 			process.env.CLAUDE_AGENT_ACP_COMMAND = "/opt/claude-agent-acp-0.110.0";
 			const cells = [
-				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "1.5.12" },
-				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: AGY_ACP_AGENT.floor },
+				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: AGY_ACP_AGENT.attachBelow },
+				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "1.6.1" },
+				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "2.0.0" },
 				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.110.0" },
 				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.109.1" },
 			];
@@ -402,13 +409,13 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 				for (const need of ["resume", "load"] as const)
 					expect(attachAllowed(readAgentFacts(answer), cell.agent, need), `${cell.version} ${need}`).toEqual({
 						allowed: false,
-						reason: "version-unmeasured",
+						reason: "version-out-of-range",
 					});
 			}
-			for (const version of ["1.5.13-beta.1", "1.5.13+b", "v1.5.13", " 1.5.13"])
+			for (const version of ["1.5.8", "1.5.14-beta.1", "1.5.13+b", "v1.5.13", " 1.5.13", "1.6.0-rc.1"])
 				expect(attachAllowed(at(AGY_R1, version), AGY_ACP_AGENT, "resume"), version).toEqual({
 					allowed: false,
-					reason: "version-unmeasured",
+					reason: "version-out-of-range",
 				});
 		} finally {
 			if (saved === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
@@ -441,35 +448,49 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 			expect(attachAllowed(facts, agent, "load")).toEqual({ allowed: false, reason: "agent-unnamed" });
 	});
 
-	it("[QK:ACP-L1-RESUME-ALLOWED] a stored session is resumed only by the measured reader, and only when its writer is one that reader was measured on", () => {
+	it("[QK:ACP-L1-RESUME-ALLOWED] a stored session is resumed only by a reader inside the attach range, and only when its writer is the same agent inside that range", () => {
 		const claude = claudeAdapter.resume;
 		const agy = agyAdapter.resume;
-		if (!claude || !agy) throw new Error("both adapters carry measured resume data");
+		if (!claude || !agy) throw new Error("both adapters carry resume data");
 		// What is done with an unanswered prompt's inputs is the vendor's measured behaviour.
 		expect(claude.unknownDispatch).toBe("skip");
 		expect(agy.unknownDispatch).toBe("resend");
 		const own = (pin: { name: string; measured: string }) => ({ name: pin.name, version: pin.measured });
+		const agyAt = (version: string) => ({ name: AGY_ACP_AGENT.name, version });
 		expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, own(CLAUDE_ACP_AGENT))).toEqual({ allowed: true });
-		expect(resumeAllowed(readAgentFacts(AGY_R1), agy, own(AGY_ACP_AGENT))).toEqual({ allowed: true });
-		// The one cross-version pair a receipt measured, and no other writer.
-		expect(resumeAllowed(readAgentFacts(AGY_R1), agy, { name: AGY_ACP_AGENT.name, version: "1.5.12" })).toEqual({
-			allowed: true,
-		});
-		for (const writer of [
-			{ name: CLAUDE_ACP_AGENT.name, version: "0.107.3" },
-			{ name: CLAUDE_ACP_AGENT.name, version: "0.110.0" },
-			{ name: AGY_ACP_AGENT.name, version: CLAUDE_ACP_AGENT.measured },
-			{ name: "claude", version: "unknown" },
+		// agy writer → reader pairs on the 1.5 line: measured (1.5.12 → 1.5.13), self-updated, and back down.
+		for (const [writer, reader] of [
+			["1.5.13", "1.5.13"],
+			["1.5.12", "1.5.13"],
+			["1.5.13", "1.5.14"],
+			["1.5.14", "1.5.14"],
+			["1.5.9", "1.5.17"],
+			["1.5.14", "1.5.13"],
 		]) {
-			expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, writer), JSON.stringify(writer)).toEqual({
+			expect(resumeAllowed(at(AGY_R1, reader), agy, agyAt(writer)), `${writer} -> ${reader}`).toEqual({
+				allowed: true,
+			});
+		}
+		for (const [adapter, writer] of [
+			[claude, { name: CLAUDE_ACP_AGENT.name, version: "0.107.3" }],
+			[claude, { name: CLAUDE_ACP_AGENT.name, version: "0.110.0" }],
+			[claude, { name: AGY_ACP_AGENT.name, version: CLAUDE_ACP_AGENT.measured }],
+			[claude, { name: "claude", version: "unknown" }],
+			[agy, agyAt("1.6.0")],
+			[agy, agyAt("1.5.8")],
+			[agy, agyAt("1.5.14-beta.1")],
+			[agy, { name: CLAUDE_ACP_AGENT.name, version: AGY_ACP_AGENT.measured }],
+		] as const) {
+			const reader = adapter === claude ? readAgentFacts(CLAUDE_R1) : readAgentFacts(AGY_R1);
+			expect(resumeAllowed(reader, adapter, writer), JSON.stringify(writer)).toEqual({
 				allowed: false,
-				reason: "writer-unmeasured",
+				reason: "writer-out-of-range",
 			});
 		}
 		// The reader's own refusals come first and keep their names.
-		expect(resumeAllowed(at(AGY_R1, "1.5.12"), agy, own(AGY_ACP_AGENT))).toEqual({
+		expect(resumeAllowed(at(AGY_R1, "1.6.0"), agy, own(AGY_ACP_AGENT))).toEqual({
 			allowed: false,
-			reason: "version-unmeasured",
+			reason: "version-out-of-range",
 		});
 		const noResume = readAgentFacts({ ...CLAUDE_R1, agentCapabilities: { loadSession: true } });
 		expect(resumeAllowed(noResume, claude, own(CLAUDE_ACP_AGENT))).toEqual({
@@ -478,9 +499,15 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 		});
 	});
 
-	it("a pinned measured version that is not X.Y.Z crashes rather than judging", () => {
-		expect(() => attachAllowed(readAgentFacts(AGY_R1), { ...AGY_ACP_AGENT, measured: "1.5" }, "load")).toThrow(
-			/measured version "1\.5" of Antigravity ACP Server is not X\.Y\.Z/,
-		);
+	it("a pinned attach range that is not two ascending X.Y.Z versions crashes rather than judging", () => {
+		for (const bad of [
+			{ ...AGY_ACP_AGENT, attachBelow: "1.6" },
+			{ ...AGY_ACP_AGENT, floor: "v1.5.9" },
+			{ ...AGY_ACP_AGENT, attachBelow: AGY_ACP_AGENT.floor },
+			{ ...AGY_ACP_AGENT, attachBelow: "1.5.8" },
+		])
+			expect(() => attachAllowed(readAgentFacts(AGY_R1), bad, "load"), JSON.stringify(bad)).toThrow(
+				/attach range .* of Antigravity ACP Server is not two ascending X\.Y\.Z versions/,
+			);
 	});
 });

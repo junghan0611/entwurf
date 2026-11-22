@@ -101,7 +101,7 @@ export const ACP_STOPS = {
 		exit: "restore the earlier tools and permissions, or use /new",
 	},
 	version: {
-		text: "entwurf: this agent version is not measured for resume, so nothing was sent",
+		text: "entwurf: this agent version is outside the range accepted for resume, so nothing was sent",
 		exit: NEW_SESSION,
 	},
 	resume: {
