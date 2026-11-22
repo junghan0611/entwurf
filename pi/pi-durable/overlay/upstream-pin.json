@@ -70,8 +70,8 @@
 			{
 				"name": "runtime.js",
 				"source": "pi/pi-durable/src/experimental/durable/runtime.ts",
-				"blob": "00646b1b1fbd7e935fb3e66b7578a2befc01f3c8",
-				"sha256": "b47113364b7525abd3bf9286ecb0069f78ac96688b8a271bdbca3a54b9d864c5"
+				"blob": "6fdbcbd79e968c44aeb04efb25ace89774f5351a",
+				"sha256": "fd8c5959791e0588d15f430dde5dd9637baf31cfec20f151d2d5ff12e5f32f81"
 			},
 			{
 				"name": "tui.js",

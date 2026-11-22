@@ -525,7 +525,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"b47113364b7525abd3bf9286ecb0069f78ac96688b8a271bdbca3a54b9d864c5\""],
+			"find": ["\"sha256\": \"fd8c5959791e0588d15f430dde5dd9637baf31cfec20f151d2d5ff12e5f32f81\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
@@ -2467,18 +2467,6 @@
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PDR-ADOPT-BEFORE-LEASE]",
-			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
-		},
-		{
-			"claim": "PDF-CLOSE-RELEASES-PROVIDER-SOCKETS",
-			"title": "the owned close no longer releases the provider session resources, so a closed host keeps its Codex WebSocket and idle timer and stays alive after a normal close",
-			"subject": "pi/pi-durable/carrier/runtime.js",
-			"find": ["\t\t\t\t\t\t\tcleanupSessionResources();"],
-			"replace": ["\t\t\t\t\t\t\tvoid cleanupSessionResources;"],
-			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PDF-CLOSE-RELEASES-PROVIDER-SOCKETS]",
 			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},

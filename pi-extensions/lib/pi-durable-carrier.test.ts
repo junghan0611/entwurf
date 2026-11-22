@@ -3498,7 +3498,10 @@ try {
 	} finally {
 		await control.close();
 	}
-	// The closed citizen takes its provider connections with it (#157 S3 LIVE-R1): once close() resolved, the server
+	// The closed citizen takes its provider connections with it (#157 S3 LIVE-R1). Since SDK 1.6.0 the release is the
+	// upstream Harness's own: its beforeClose calls cleanupSessionResources(sessionId) for every provider session a
+	// task used (pi-durable dist/harness/harness.js:277; absent in 1.5.2, where this carrier made the call). This
+	// observation stays as the tripwire for an SDK that drops it (#172). Once close() resolved, the server
 	// itself observes the client close every connection it accepted for this citizen. Bounded; never observed is a red.
 	const ownConns = [...new Set(report.frames.filter((frame) => frame.phase === "websocket").map((frame) => frame.conn))];
 	report.closedWithCitizen = {
@@ -3740,7 +3743,7 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(userTextOf(delta?.input[0])).toContain("AFTER-RECONNECT-TWO");
 	});
 
-	it("[QK:PDF-CLOSE-RELEASES-PROVIDER-SOCKETS] a closed citizen takes its provider connections with it: once close() resolved, the server observed the client close every connection it accepted for that citizen, so the closed host holds no socket or idle timer that keeps it alive", () => {
+	it("a closed citizen takes its provider connections with it: once close() resolved, the server observed the client close every connection it accepted for that citizen, so the closed host holds no socket or idle timer that keeps it alive", () => {
 		expect(report?.closedWithCitizen?.conns.length ?? 0).toBeGreaterThan(0);
 		expect(report?.closedWithCitizen?.observed).toBe(true);
 	});
