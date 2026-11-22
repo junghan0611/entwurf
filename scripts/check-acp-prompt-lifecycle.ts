@@ -254,20 +254,14 @@ function startTurn(
 }
 
 /**
- * What a failed turn says. Since #171 step 8 a prompt that may have been dispatched and got no classified
- * terminal answer seals a fixed text
- * (Pi reads `errorMessage` alone to decide a retry), and the raw failure is kept whole in a diagnostic:
- * the first failure, the lifecycle line, the launch signal and the stderr tail. A turn with no standing
- * marker still carries them in `errorMessage`. Both are read here, in that order.
+ * What the retry claim is about, as separate texts. Pi's classifier reads `errorMessage` alone, so that is
+ * one text and is judged on its own. Each part this backend authored and keeps in the diagnostic is another:
+ * a wording of ours that reads as transient fails here before it can reach `errorMessage` again. They are
+ * never joined, because pi-ai tests its non-retryable limit patterns first and one such phrase would hide a
+ * transient one beside it. Two parts are not ours and Pi reads neither in a diagnostic: the ACP SDK's own
+ * "ACP connection closed" (transient to pi-ai 1.6, #172) and the vendor's stderr tail.
  */
-/**
- * What the retry claim is about. Pi's classifier reads `errorMessage` alone, so that is judged first; the
- * parts this backend authored and keeps in the diagnostic are judged with it, so a wording of ours that
- * reads as transient fails here before it can reach `errorMessage` again. Two parts are not ours and Pi
- * reads neither in a diagnostic: the ACP SDK's own "ACP connection closed" (transient to pi-ai 1.6, #172)
- * and the vendor's stderr tail.
- */
-function authoredText(error: any): string {
+function authoredParts(error: any): string[] {
 	const parts = [String(error?.errorMessage)];
 	for (const d of error?.diagnostics ?? []) {
 		if (d?.type !== "entwurf_acp_prompt_unknown") continue;
@@ -280,9 +274,16 @@ function authoredText(error: any): string {
 			if (typeof part === "string") parts.push(part);
 		}
 	}
-	return parts.join("\n");
+	return parts;
 }
 
+/**
+ * What a failed turn says. Since #171 step 8 a prompt that may have been dispatched and got no classified
+ * terminal answer seals a fixed text (Pi reads `errorMessage` alone to decide a retry), and the raw failure
+ * is kept whole in a diagnostic: the first failure, the lifecycle line, the launch signal and the stderr
+ * tail. Only a failure before the prompt attempt still carries them in `errorMessage` (#172 closed the
+ * one-shot's). Both are read here, in that order.
+ */
 function failureText(error: any): string {
 	const parts = [String(error?.errorMessage)];
 	for (const d of error?.diagnostics ?? []) {
@@ -482,7 +483,7 @@ try {
 	// and must not be worded in a way that makes pi replay the whole prompt.
 	// ----------------------------------------------------------------------
 	let childDeathMessage = "";
-	let childDeathAuthored = "";
+	let childDeathAuthored: string[] = [];
 	{
 		const h = makeHarness(recordDir);
 		const turn = startTurn(backend, userCtx("dies mid-turn"), { sessionId: "life-death" }, h.deps);
@@ -494,7 +495,7 @@ try {
 		const seal = sealed(turn.events);
 		assert.equal(seal[0].type, "error", "a child death seals as an error event");
 		childDeathMessage = failureText(seal[0].error);
-		childDeathAuthored = authoredText(seal[0].error);
+		childDeathAuthored = authoredParts(seal[0].error);
 		assert.ok(
 			childDeathMessage.includes("ended while the prompt was still in flight") &&
 				childDeathMessage.includes("exit code 1") &&
@@ -671,7 +672,7 @@ try {
 	// so the oracle must state it, not inherit it from the subject.
 	// ----------------------------------------------------------------------
 	let eofFirstMessage = "";
-	let eofFirstAuthored = "";
+	let eofFirstAuthored: string[] = [];
 	{
 		const h = makeHarness(recordDir);
 		const t1 = startTurn(backend, userCtx("first NONCE-E1"), { sessionId: "life-eof-first" }, h.deps);
@@ -701,7 +702,7 @@ try {
 		await t2.done;
 
 		eofFirstMessage = failureText(sealed(t2.events)[0].error);
-		eofFirstAuthored = authoredText(sealed(t2.events)[0].error);
+		eofFirstAuthored = authoredParts(sealed(t2.events)[0].error);
 		assert.ok(
 			eofFirstMessage.includes("ACP connection closed"),
 			"the backend's own first words are preserved verbatim, not swapped out for ours — " +
@@ -913,7 +914,7 @@ try {
 	// must be reported as silence.
 	// ----------------------------------------------------------------------
 	let noEndMessage = "";
-	let noEndAuthored = "";
+	let noEndAuthored: string[] = [];
 	{
 		const h = makeHarness(recordDir);
 		const turn = startTurn(backend, userCtx("transport closes, child lives"), { sessionId: "life-eof-noend" }, h.deps);
@@ -924,7 +925,7 @@ try {
 		const waited = Date.now() - closedAt;
 
 		noEndMessage = failureText(sealed(turn.events)[0].error);
-		noEndAuthored = authoredText(sealed(turn.events)[0].error);
+		noEndAuthored = authoredParts(sealed(turn.events)[0].error);
 		assert.ok(
 			noEndMessage.includes("reported no exit status within") &&
 				!noEndMessage.includes("exit code") &&
@@ -989,8 +990,13 @@ try {
 		["EOF-first child end", eofFirstAuthored],
 		["no child end within the bound", noEndAuthored],
 	] as const;
-	const transientlyWorded = authoredFailureTexts.filter(([, text]) =>
-		isRetryableAssistantError({ stopReason: "error", errorMessage: text } as any),
+	for (const [label, parts] of authoredFailureTexts) {
+		assert.ok(parts.length >= 2, `${label}: the sealed message and at least one authored diagnostic part were read`);
+	}
+	const transientlyWorded = authoredFailureTexts.flatMap(([label, parts]) =>
+		parts
+			.filter((text) => isRetryableAssistantError({ stopReason: "error", errorMessage: text } as any))
+			.map((text) => [label, text] as const),
 	);
 	assert.deepEqual(
 		transientlyWorded.map(([label]) => label),

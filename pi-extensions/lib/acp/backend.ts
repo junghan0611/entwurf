@@ -56,7 +56,6 @@ import {
 	createAssistantMessageEventStream,
 	getCurrentSystemPrompt,
 	getCurrentTools,
-	isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
 import { type AcpSessionReader, readAcpHostFacts, readAcpSessionReader } from "../acp-host-facts.js";
 import type { AcpSteerEffect, AcpSteerSeamV1 } from "../acp-steer-seam.js";
@@ -2360,11 +2359,14 @@ export function streamAcpTurn(
 			state.output.errorMessage = ACP_STOPS.unknown.text;
 		} else {
 			state.output.errorMessage = hint ? `${full}\n\n${hint}` : full;
-			// #172: a one-shot's prompt leaves no marker, so its failure kept the verbatim path, and Pi 1.6
-			// reads the ACP SDK's own "ACP connection closed" as transient: a replay of a prompt that was on
-			// the wire. Pi's classifier is asked about the very message it will read; when it would retry,
-			// the text is fixed and the raw failure rides a diagnostic and stderr, as for a resident.
-			if (adapter && !aborted && isRetryableAssistantError(state.output)) {
+			// #172: a one-shot's prompt leaves no marker, so its failure kept the verbatim path. Pi reads that
+			// text to decide a retry and an overflow recovery, and either one sends again a prompt that may
+			// have been dispatched: pi-ai 1.6 reads the ACP SDK's own "ACP connection closed" as transient, and
+			// a vendor's overflow wording in the error or the stderr tail compacts and asks again. So once the
+			// prompt attempt was entered (`adapter`), a conversation turn seals a fixed text and the raw failure
+			// rides a diagnostic and stderr, as for a resident. Pi's summary request is stateless and tool-less
+			// and keeps its own words; a failure before the attempt keeps the verbatim path.
+			if (adapter && !aborted && !summaryTurnActive) {
 				process.stderr.write(`[acp] one-shot prompt outcome unknown: ${full}\n`);
 				appendAssistantMessageDiagnostic(
 					state.output,

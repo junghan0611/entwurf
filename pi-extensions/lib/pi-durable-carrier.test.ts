@@ -3373,7 +3373,8 @@ wss.on("connection", (sock) => {
 				prev: body.previous_response_id ?? null,
 				// pi-ai 1.6 sends the Codex system prompt as the leading item of the input (role developer for a
 				// reasoning model, system otherwise), no longer as the top-level instructions field (upstream #12273).
-				summary: textOf({ ...input.find((item) => item?.role === "developer" || item?.role === "system"), role: "user" }).startsWith(
+				// Only that leading item counts: a later item with the same words is not the system prompt.
+				summary: textOf(input[0]?.role === "developer" || input[0]?.role === "system" ? { ...input[0], role: "user" } : undefined).startsWith(
 					"You are a context summarization assistant",
 				),
 				input: shorten(input),

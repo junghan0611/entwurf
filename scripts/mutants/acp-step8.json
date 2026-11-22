@@ -411,10 +411,10 @@
 		},
 		{
 			"claim": "ACP-ONE-SHOT-PROMPT-NO-REPLAY",
-			"title": "a one-shot's failed prompt keeps the transport's own words Pi reads as transient, so Pi sends the whole prompt again",
+			"title": "a one-shot's failed prompt keeps the agent's and the transport's own words, so a wording Pi reads as transient or as an overflow sends the whole prompt again",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["if (adapter && !aborted && isRetryableAssistantError(state.output)) {"],
-			"replace": ["if (adapter && aborted && isRetryableAssistantError(state.output)) {"],
+			"find": ["if (adapter && !aborted && !summaryTurnActive) {"],
+			"replace": ["if (adapter && !aborted && summaryTurnActive) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-ONE-SHOT-PROMPT-NO-REPLAY]",

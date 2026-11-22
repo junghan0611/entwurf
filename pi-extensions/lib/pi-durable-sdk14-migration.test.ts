@@ -1,5 +1,5 @@
 /**
- * pi-durable-sdk14-migration (#155) — a session SDK 1.4.0 left mid-run, opened by the root SDK 1.5.
+ * pi-durable-sdk14-migration (#155) — a session SDK 1.4.0 left mid-run, opened by the root SDK (1.6 since #172).
  *
  * SDK 1.5 keeps the SQLite schema at version 2 and versions documents and tasks instead: pi.live 1 → 3 (a
  * compaction's `reason` is now `trigger`; `run.turns` is new), pi.generation 1 → 2, pi.tool 2 → 3. It migrates an
@@ -267,7 +267,7 @@ describe("SDK 1.4 mid-run goldens", () => {
 	});
 });
 
-describe.each(SCENARIOS)("root SDK 1.5 on the SDK 1.4 %s golden", (name, scenario) => {
+describe.each(SCENARIOS)("the root SDK on the SDK 1.4 %s golden", (name, scenario) => {
 	it("SDK conformance: a storage open keeps schema version 2 and every row", async () => {
 		const file = materialize(scenario, name);
 		const before = rows(file);
