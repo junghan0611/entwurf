@@ -410,6 +410,17 @@
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		},
 		{
+			"claim": "ACP-ONE-SHOT-PROMPT-NO-REPLAY",
+			"title": "a one-shot's failed prompt keeps the transport's own words Pi reads as transient, so Pi sends the whole prompt again",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (adapter && !aborted && isRetryableAssistantError(state.output)) {"],
+			"replace": ["if (adapter && aborted && isRetryableAssistantError(state.output)) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ONE-SHOT-PROMPT-NO-REPLAY]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
 			"claim": "ACP-ANSWERED-STOP-KEEPS-SESSION",
 			"title": "a refusal is treated as no answer: the session that answered is closed and the conversation is stranded",
 			"subject": "pi-extensions/lib/acp/backend.ts",

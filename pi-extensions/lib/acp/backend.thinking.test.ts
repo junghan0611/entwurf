@@ -1573,6 +1573,35 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		}
 	});
 
+	it("[QK:ACP-ONE-SHOT-PROMPT-NO-REPLAY] a one-shot's failed prompt whose own words Pi would retry seals a fixed text, and the raw failure rides a diagnostic; other words stay verbatim", async () => {
+		quietStderr();
+		const oneShot = { lifecyclePolicy: () => "turn-scoped" as const };
+		// The ACP SDK's words for a transport that ended under a pending request. Pi 1.6 reads them as transient.
+		const said = "ACP connection closed";
+		expect(isRetryableAssistantError(errorProbe(said))).toBe(true);
+		const world = makeWorld();
+		world.hooks.onPrompt = () => {
+			throw new Error(said);
+		};
+		const cut = await runTurn(world, transcript("CUT"), "one-shot-cut", "high", { deps: oneShot });
+		if (cut.type !== "error") throw new Error("expected an error seal");
+		expect(cut.error.errorMessage).toBe(ACP_STOPS.oneShotUnknown.text);
+		expect(isRetryableAssistantError(cut.error)).toBe(false);
+		expect(cut.error.diagnostics?.[0]?.type).toBe(backend.ACP_ONE_SHOT_UNKNOWN_DIAGNOSTIC);
+		expect(cut.error.diagnostics?.[0]?.error?.message).toBe(said);
+		expect(world.prompts).toHaveLength(1);
+		expect(recordOf(world, "one-shot-cut")).toEqual({ status: "missing" });
+
+		// A failure Pi does not retry keeps the agent's own words, as before.
+		const plain = makeWorld();
+		plain.hooks.onPrompt = () => {
+			throw new Error("fake agent: the prompt failed");
+		};
+		const kept = await runTurn(plain, transcript("CUT"), "one-shot-plain", "high", { deps: oneShot });
+		expect(errorText(kept)).toContain("fake agent: the prompt failed");
+		if (kept.type === "error") expect(kept.error.diagnostics ?? []).toHaveLength(0);
+	});
+
 	it("[QK:ACP-ANSWERED-STOP-KEEPS-SESSION] a refusal or an exhausted budget is an answer: the marker is cleared, the session stays and takes the next input", async () => {
 		for (const reason of ["refusal", "max_turn_requests", "max_tokens"] as const) {
 			const sessionId = `answered-${reason}`;

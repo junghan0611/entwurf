@@ -56,6 +56,7 @@ import {
 	createAssistantMessageEventStream,
 	getCurrentSystemPrompt,
 	getCurrentTools,
+	isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
 import { type AcpSessionReader, readAcpHostFacts, readAcpSessionReader } from "../acp-host-facts.js";
 import type { AcpSteerEffect, AcpSteerSeamV1 } from "../acp-steer-seam.js";
@@ -976,8 +977,8 @@ function childEndLifecycleLine(opts: {
 }): string {
 	const where =
 		opts.phase === "prompt"
-			? "the ACP backend connection closed while the prompt was still in flight"
-			: "the ACP backend connection closed before this turn's prompt was sent";
+			? "the ACP backend transport closed while the prompt was still in flight"
+			: "the ACP backend transport closed before this turn's prompt was sent";
 	const how = opts.ended
 		? `the child ended (${describeChildEnd(opts.exit)})`
 		: "the child reported no exit status within the bounded post-mortem window";
@@ -1317,6 +1318,8 @@ export function thrownText(thrown: unknown): string {
 }
 
 export { ACP_PROMPT_UNKNOWN_DIAGNOSTIC, ACP_SKIP_NOTICE_DIAGNOSTIC };
+/** #172: the raw failure of a one-shot's prompt whose verbatim text Pi would have retried. No record reads it. */
+export const ACP_ONE_SHOT_UNKNOWN_DIAGNOSTIC = "entwurf_acp_one_shot_prompt_unknown";
 
 /** The notice a turn shows when it holds back inputs of a prompt whose outcome is unknown. */
 export function heldInputsNotice(held: number, fromExtensions: number): string {
@@ -2357,6 +2360,23 @@ export function streamAcpTurn(
 			state.output.errorMessage = ACP_STOPS.unknown.text;
 		} else {
 			state.output.errorMessage = hint ? `${full}\n\n${hint}` : full;
+			// #172: a one-shot's prompt leaves no marker, so its failure kept the verbatim path, and Pi 1.6
+			// reads the ACP SDK's own "ACP connection closed" as transient: a replay of a prompt that was on
+			// the wire. Pi's classifier is asked about the very message it will read; when it would retry,
+			// the text is fixed and the raw failure rides a diagnostic and stderr, as for a resident.
+			if (adapter && !aborted && isRetryableAssistantError(state.output)) {
+				process.stderr.write(`[acp] one-shot prompt outcome unknown: ${full}\n`);
+				appendAssistantMessageDiagnostic(
+					state.output,
+					createAssistantMessageDiagnostic(ACP_ONE_SHOT_UNKNOWN_DIAGNOSTIC, err, {
+						...(lifecycle ? { lifecycle } : {}),
+						...(observed ? { launchSignal: observed } : {}),
+						...(tail ? { stderrTail: tail } : {}),
+						...(hint ? { hint } : {}),
+					}),
+				);
+				state.output.errorMessage = ACP_STOPS.oneShotUnknown.text;
+			}
 		}
 		stream.push({ type: "error", reason: aborted ? "aborted" : "error", error: state.output });
 		sealed = true;

@@ -59,6 +59,10 @@ export const ACP_STOPS = {
 		text: "entwurf: the ACP prompt stopped without an answer, so its outcome is unknown; the session record is kept",
 		exit: NEXT_INPUT,
 	},
+	oneShotUnknown: {
+		text: "entwurf: this one-shot ACP prompt stopped without an answer, so its outcome is unknown; nothing was sent again",
+		exit: "run it again only if a second run is acceptable",
+	},
 	seal: {
 		text: "entwurf: the last answer of this ACP session could not be confirmed in its record, so nothing was sent",
 		// Until a turn can continue past a refused one, sending again stops on that refusal.

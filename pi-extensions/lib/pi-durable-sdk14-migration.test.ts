@@ -16,8 +16,9 @@
  *
  * CI never installs or imports SDK 1.4. The manifest's rollback receipts (SDK 1.4 reopened its pristine file and
  * the file a read-only 1.5 open left; it refused the file the first 1.5 write left, at its first pi.live read) are
- * generation-time measurements on the SDK pair the manifest names. This file certifies only that its own 1.5 run
- * leaves each file in the stored state those receipts were taken on.
+ * generation-time measurements on the SDK pair the manifest names. This file certifies only that its own run leaves
+ * each file's documents as those receipts were taken on, and its tasks as that state with the root SDK's own task
+ * versions where it wrote a task again (#172: the root SDK is 1.6.0, the receipts are 1.5.0's).
  *
  * Conformance of SDK-owned behavior against independent oracles, not a new Entwurf contract: there is no local
  * subject to mutate and no kill-power claim. What the carrier shows of a migrated session is the carrier test's.
@@ -69,6 +70,21 @@ const SCENARIOS = Object.entries(manifest.scenarios);
 const HELD = { close: "pending", kill: "running" } as const;
 /** SDK 1.5.0's definition versions (inherited: harness/{live,generation,tool,compaction}.ts of 1.5.0). */
 const VERSION_15: Record<string, number> = { "pi.live": 3, "pi.generation": 2, "pi.tool": 3, "pi.compaction": 1 };
+/**
+ * The root SDK's definition versions (#172). SDK 1.6.0 moved pi.generation to 3 and pi.tool to 4 (inherited:
+ * dist/harness/{generation,tool}.js of 1.6.0); a task the root SDK stores again carries its writer's version.
+ */
+const VERSION_ROOT: Record<string, number> = { ...VERSION_15, "pi.generation": 3, "pi.tool": 4 };
+/**
+ * The stored state a root-SDK write leaves, from the receipt SDK 1.5.0 left at generation: the same state, with each
+ * task that write stored again (its version differs from the pristine file's) at the root SDK's version.
+ */
+const asRootWrite = (after15: Stored, pristine: Stored): Stored => ({
+	...after15,
+	tasks: after15.tasks.map((task, i) =>
+		task.version === pristine.tasks[i]?.version ? task : { ...task, version: VERSION_ROOT[task.kind] },
+	),
+});
 const TOOL = "sdk14_hold";
 const sha256 = (data: string): string => createHash("sha256").update(data).digest("hex");
 
@@ -334,9 +350,13 @@ describe.each(SCENARIOS)("root SDK 1.5 on the SDK 1.4 %s golden", (name, scenari
 
 		const after = stored(file);
 		expect(after.documents["pi.live"]).toEqual([VERSION_15["pi.live"]]);
-		expect(after).toEqual(scenario.rollback.write15.storedAfter);
-		// Generation receipt, on this stored state: SDK 1.4 opened the Harness and refused the first pi.live read with
-		// its newer-version message for exactly this document and these two versions.
+		const after15 = scenario.rollback.write15.storedAfter;
+		expect(after15.documents).toEqual(after.documents);
+		expect(after).toEqual(asRootWrite(after15, scenario.stored));
+		// Generation receipt, taken on the state SDK 1.5.0 wrote: SDK 1.4 opened the Harness and refused the first
+		// pi.live read with its newer-version message for exactly this document and these two versions. The root SDK
+		// leaves the same documents, so that read meets the same pi.live; the task versions it wrote higher (#172) lie
+		// behind the refusal and were not re-measured against SDK 1.4.
 		const [version14] = scenario.stored.documents["pi.live"];
 		expect(scenario.rollback.write15.reopenedBy14).toEqual({
 			step: "snapshot",

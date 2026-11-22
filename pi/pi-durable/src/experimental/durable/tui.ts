@@ -658,7 +658,7 @@ export function describeTask(node: TaskGraphNode): string {
 			: state.status === "completing"
 				? `completing (${state.outcome})`
 				: state.status === "sleeping"
-					? `sleeping ${state.phase} until ${localTime(state.until)}`
+					? `sleeping ${state.phase} until ${state.until === undefined ? "a signal" : localTime(state.until)}`
 					: `${state.status} ${state.phase}`;
 	const flags = [
 		node.background ? "background" : "",

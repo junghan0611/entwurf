@@ -1235,7 +1235,9 @@
 			"claim": "PI-DURABLE-TASK-SLEEPING-SHOWN",
 			"title": "a sleeping task's panel line drops its wake time, so nothing on screen says when the sleeping work comes back",
 			"subject": "pi/pi-durable/carrier/tui.js",
-			"find": ["\t\t\t\t\t? `sleeping ${state.phase} until ${localTime(state.until)}`"],
+			"find": [
+				"\t\t\t\t\t? `sleeping ${state.phase} until ${state.until === undefined ? \"a signal\" : localTime(state.until)}`"
+			],
 			"replace": ["\t\t\t\t\t? `sleeping ${state.phase}`"],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,

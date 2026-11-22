@@ -260,6 +260,29 @@ function startTurn(
  * the first failure, the lifecycle line, the launch signal and the stderr tail. A turn with no standing
  * marker still carries them in `errorMessage`. Both are read here, in that order.
  */
+/**
+ * What the retry claim is about. Pi's classifier reads `errorMessage` alone, so that is judged first; the
+ * parts this backend authored and keeps in the diagnostic are judged with it, so a wording of ours that
+ * reads as transient fails here before it can reach `errorMessage` again. Two parts are not ours and Pi
+ * reads neither in a diagnostic: the ACP SDK's own "ACP connection closed" (transient to pi-ai 1.6, #172)
+ * and the vendor's stderr tail.
+ */
+function authoredText(error: any): string {
+	const parts = [String(error?.errorMessage)];
+	for (const d of error?.diagnostics ?? []) {
+		if (d?.type !== "entwurf_acp_prompt_unknown") continue;
+		const first = d.error?.message;
+		for (const part of [
+			first === "ACP connection closed" ? undefined : first,
+			d.details?.lifecycle,
+			d.details?.launchSignal,
+		]) {
+			if (typeof part === "string") parts.push(part);
+		}
+	}
+	return parts.join("\n");
+}
+
 function failureText(error: any): string {
 	const parts = [String(error?.errorMessage)];
 	for (const d of error?.diagnostics ?? []) {
@@ -459,6 +482,7 @@ try {
 	// and must not be worded in a way that makes pi replay the whole prompt.
 	// ----------------------------------------------------------------------
 	let childDeathMessage = "";
+	let childDeathAuthored = "";
 	{
 		const h = makeHarness(recordDir);
 		const turn = startTurn(backend, userCtx("dies mid-turn"), { sessionId: "life-death" }, h.deps);
@@ -470,6 +494,7 @@ try {
 		const seal = sealed(turn.events);
 		assert.equal(seal[0].type, "error", "a child death seals as an error event");
 		childDeathMessage = failureText(seal[0].error);
+		childDeathAuthored = authoredText(seal[0].error);
 		assert.ok(
 			childDeathMessage.includes("ended while the prompt was still in flight") &&
 				childDeathMessage.includes("exit code 1") &&
@@ -646,6 +671,7 @@ try {
 	// so the oracle must state it, not inherit it from the subject.
 	// ----------------------------------------------------------------------
 	let eofFirstMessage = "";
+	let eofFirstAuthored = "";
 	{
 		const h = makeHarness(recordDir);
 		const t1 = startTurn(backend, userCtx("first NONCE-E1"), { sessionId: "life-eof-first" }, h.deps);
@@ -675,6 +701,7 @@ try {
 		await t2.done;
 
 		eofFirstMessage = failureText(sealed(t2.events)[0].error);
+		eofFirstAuthored = authoredText(sealed(t2.events)[0].error);
 		assert.ok(
 			eofFirstMessage.includes("ACP connection closed"),
 			"the backend's own first words are preserved verbatim, not swapped out for ours — " +
@@ -886,6 +913,7 @@ try {
 	// must be reported as silence.
 	// ----------------------------------------------------------------------
 	let noEndMessage = "";
+	let noEndAuthored = "";
 	{
 		const h = makeHarness(recordDir);
 		const turn = startTurn(backend, userCtx("transport closes, child lives"), { sessionId: "life-eof-noend" }, h.deps);
@@ -896,6 +924,7 @@ try {
 		const waited = Date.now() - closedAt;
 
 		noEndMessage = failureText(sealed(turn.events)[0].error);
+		noEndAuthored = authoredText(sealed(turn.events)[0].error);
 		assert.ok(
 			noEndMessage.includes("reported no exit status within") &&
 				!noEndMessage.includes("exit code") &&
@@ -956,9 +985,9 @@ try {
 	// APPENDED to the SDK's own message, and the first draft said "within 500ms",
 	// which pi read as an HTTP 500 and classified as transient.
 	const authoredFailureTexts = [
-		["mid-prompt child death", childDeathMessage],
-		["EOF-first child end", eofFirstMessage],
-		["no child end within the bound", noEndMessage],
+		["mid-prompt child death", childDeathAuthored],
+		["EOF-first child end", eofFirstAuthored],
+		["no child end within the bound", noEndAuthored],
 	] as const;
 	const transientlyWorded = authoredFailureTexts.filter(([, text]) =>
 		isRetryableAssistantError({ stopReason: "error", errorMessage: text } as any),

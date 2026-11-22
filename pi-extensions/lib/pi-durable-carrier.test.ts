@@ -537,6 +537,7 @@ for (const [name, value] of Object.entries(cases)) {
 const parked = node(20, "x.parked", true, { status: "pending", phase: "p" });
 const panel = {
 	sleeping: describeTask(node(8, "pi.generation", false, asleep)),
+	signalOnly: describeTask(node(8, "pi.generation", false, { status: "sleeping", phase: "backoff" })),
 	blocked: Object.fromEntries(
 		// SDK 1.5's BlockedReason: the restart limit no longer parks a task, it ends it (#155).
 		["missing_task", "task_too_old", "migration_failed"].map((r) => [r, describeTask({ ...parked, blocked: r })]),
@@ -627,6 +628,9 @@ for (const rows of [1, 2, 3, 5]) {
 		const ui = screen({ rows, cols }, c.root);
 		for (const count of [2, 1, 0, 2]) {
 			c.badge.set(backgrounds(count));
+			// The app follows a changed component with requestRender() (tui.ts update), and pi-tui 1.6 reuses the
+			// previous frame's output unless that marked the content changed; doRender alone is a view-only frame.
+			ui.contentChanged = true;
 			const lines = draw(ui);
 			transitions.push({ rows, cols, count, marked: marked(lines), upstream: lines.join("\n") === upstream(rows, cols) });
 		}
@@ -656,7 +660,7 @@ interface FooterReport {
 		native: { databases: number; shown: NativeView; hidden: NativeView };
 	};
 	badge: Record<string, { count: number; widths: Record<string, string[]> }>;
-	panel: { sleeping: string; blocked: Record<string, string>; unblocked: string };
+	panel: { sleeping: string; signalOnly: string; blocked: Record<string, string>; unblocked: string };
 	notices: Record<"compaction" | "runFailed" | "runPlain" | "runAborted" | "stalled" | "healthy", string[]>;
 	cells: { count: number; rows: number; cols: number; marked: boolean; upstream: boolean }[];
 	transitions: { rows: number; cols: number; count: number; marked: boolean; upstream: boolean }[];
@@ -767,6 +771,8 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 		}).format(WAKE);
 		expect(wake).toBe("2027-03-04 05:06:07");
 		expect(report.panel.sleeping).toBe(`pi.generation #8: sleeping backoff until ${wake}`);
+		// SDK 1.6: a sleep may carry no wake time and end on a signal alone. The line says so, not a date of NaNs.
+		expect(report.panel.signalOnly).toBe("pi.generation #8: sleeping backoff until a signal");
 	});
 
 	it("[QK:PI-DURABLE-TASK-BLOCKED-SHOWN] a task that cannot run is marked blocked on its panel line, for each of the SDK's three reasons, and an unblocked one is not", () => {
@@ -3365,7 +3371,11 @@ wss.on("connection", (sock) => {
 				bytes: Buffer.byteLength(text, "utf8"),
 				type: body.type,
 				prev: body.previous_response_id ?? null,
-				summary: String(body.instructions ?? "").startsWith("You are a context summarization assistant"),
+				// pi-ai 1.6 sends the Codex system prompt as the leading item of the input (role developer for a
+				// reasoning model, system otherwise), no longer as the top-level instructions field (upstream #12273).
+				summary: textOf({ ...input.find((item) => item?.role === "developer" || item?.role === "system"), role: "user" }).startsWith(
+					"You are a context summarization assistant",
+				),
 				input: shorten(input),
 			};
 			if (frame.summary && phase === "policy-below") {
