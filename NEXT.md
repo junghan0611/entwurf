@@ -1,4 +1,4 @@
-# NEXT — 0.61.0 shipped: #171 ACP session continuity
+# NEXT — 0.61.0 shipped; 0.62.0 Pi SDK 1.6.0 next
 
 **현재 (2026-11-22):** 0.61.0을 npm `latest`로 출하했다(GLG publish). 내용은 #171 ACP 세션 연속성(Pi 대화당 vendor 세션 하나, 기록된 id의 resume, 이름 있는 stop, Claude ACP 0.109.0)과 죽은 holder lease 인계(결정 19, GLG 2026-11-22)다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, prepare 실무 Opus `20261120T213316-793499`, 설계·수정 Fable `20261121T180949-b6d8f7`, 리뷰 Sol `20261121T135110-09fa15`.
 
@@ -8,8 +8,8 @@
 - [x] **2. 문서 검토.** `d40a8779`(Sonnet 가독성 + Sol 코드 대조 D1–D6), Herdr checkout carrier `2c6df36e`.
 - [x] **3. prepare 0.61.0.** 첫 후보 `2c6df36e`는 P5 MUST 23/2/0으로 red(`smoke-mux-lifecycle-live` pi-acp 행: 턴 중 창을 닫으면 죽은 holder lease로 재부팅 전까지 STOP / S2d smoke가 #171 host 계약 이전). Fable 수정 `12e54b5c`(증명된 죽은 holder·agent·process group이면 lease 인계, 같은 machine·boot·pidNs)·`2b31b8c6`·`bc88aa91`·`213be3a3`(lane inventory 66→69), Sol 수락. 재후보 `e1e43354`: FULL 1156s, P5 MUST 25/0/0 BEHAVIOR 1/0/0, OpenClaw home receipt `receipt-0.61.0-213be3a3`, GLG 사용 시나리오 LIVE n=1(`171/f12/f15-two-send.log`). 증거는 CHANGELOG 0.61.0 Release evidence.
 - [x] **4. make → publish.** exact-SHA CI run 45003209370, Windows preview run 45004229146, candidate sha256 `3bfe8a55…fbfe1a`(container 수용), tag `v0.61.0`, GitHub release. GLG npm publish; U2 latest=0.61.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
-- [ ] **5. Herdr re-pin.** ← CURRENT: `runtime-lock.json` npm 0.61.0(registry sha512 = integrity, sha256 = 수용 후보), `VERSION-MENTIONS-HERDR-LOCK` npm 버전 형태 복귀. 남은 것: push → exact-SHA CI → snapshot tag `v2026.11.22-herdr.0.61.0` + GitHub release.
-- [ ] **6. 다음 레일.** 0.62.0에서 Pi SDK 1.6.0에 맞춘다. 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
+- [x] **5. Herdr re-pin.** `df92c155`(`runtime-lock.json` npm 0.61.0, registry sha512 = integrity), exact-SHA CI run 45007351262 4/4, snapshot `v2026.11.22-herdr.0.61.0` GitHub release(latest는 v0.61.0 유지).
+- [ ] **6. 0.62.0: Pi SDK 1.6.0 + pi-durable.** ← CURRENT. GLG는 0.61.0 publish 24시간 뒤 0.62.0을 낸다(2026-11-22). 그때까지 쓰면서 난 문제를 `## Unreleased`에 모은다: 첫 항목 `b5c26cc3` agy resume 범위 [1.5.9, 1.6.0)(1.5.13→1.5.14 U26 미측정). 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
 
 **0.61.0 cut 관찰:** 턴 중에 창을 닫은 LIVE 실행 두 번이 operator HOME에 fixture holder lease를 남겼다(`~/.pi/agent/entwurf-acp-holders/claude/` `e505…`·`f531…`, 지우지 않음; `e505…`는 pidNs 없는 옛 형식이라 재부팅 전까지 인계되지 않는다). 두 P5가 각각 `/tmp/entwurf-s2b-overlay-*` 한 개를 남겼다(P9에서 회수). PARTIAL은 공유 checkout에 mutant를 실제로 심는다(`mutation-qualify.ts:921-944`) — 도는 동안 FULL·LIVE·OpenClaw 실측을 같이 돌리지 않는다.
 
