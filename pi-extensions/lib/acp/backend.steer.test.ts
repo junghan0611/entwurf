@@ -17,9 +17,13 @@ import { join } from "node:path";
 import { type Api, type Model, normalizeContext } from "@earendil-works/pi-ai";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import { type AcpSteerSeamV1, lookupAcpSteerSeam, registerAcpSteerSeam } from "../acp-steer-seam.ts";
 import type { AcpPromptResponse, AcpSteerParams } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-steer-"));
 const SANDBOXED_ENV = [
@@ -54,7 +58,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	models = await import("./models.ts");
 	config = await import("./config.ts");
 });
@@ -83,8 +87,43 @@ const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 	parameters: obj({}, { open: true }),
 }));
 
-function context(text: string) {
-	return normalizeContext({ tools: PI_TOOLS, messages: [{ role: "user", content: text, timestamp: 0 }] });
+/** Each earlier turn of a Pi session as its context shows it: the input and a completed answer. */
+const earlierTurns = new Map<string, number>();
+function withEarlierTurns<M>(sessionId: string | undefined, input: string, now: M[]): M[] {
+	if (sessionId === undefined) return now;
+	const earlier = earlierTurns.get(sessionId) ?? 0;
+	earlierTurns.set(sessionId, earlier + 1);
+	const before: unknown[] = [];
+	for (let i = 0; i < earlier; i++) {
+		before.push(
+			{ role: "user", content: input, timestamp: 0 },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "ok" }],
+				api: "entwurf",
+				provider: "entwurf",
+				model: "claude-sonnet-5-5",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				timestamp: 0,
+			},
+		);
+	}
+	return [...(before as M[]), ...now];
+}
+
+function context(text: string, sessionId?: string) {
+	return normalizeContext({
+		tools: PI_TOOLS,
+		messages: withEarlierTurns(sessionId, text, [{ role: "user" as const, content: text, timestamp: 0 }]),
+	});
 }
 
 /** One backend world whose prompts wait at the wire until released; records steer requests. */
@@ -139,6 +178,7 @@ function makeWorld(initializeAnswer: unknown) {
 			};
 		},
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,
@@ -149,6 +189,7 @@ function makeWorld(initializeAnswer: unknown) {
 			}),
 		now: () => "2026-11-15T00:00:00Z",
 		sessionDir,
+		birthDir: `${sessionDir}-births`,
 		abortGraceMs: 40,
 	};
 	/**
@@ -160,7 +201,7 @@ function makeWorld(initializeAnswer: unknown) {
 		const opts = { sessionId: sid, reasoning: "medium", signal } as Parameters<typeof backend.streamAcpTurn>[2];
 		const events: unknown[] = [];
 		const done = (async () => {
-			for await (const e of backend.streamAcpTurn(sonnet(), context("hello"), opts, deps)) events.push(e);
+			for await (const e of backend.streamAcpTurn(sonnet(), context("hello", sid), opts, deps)) events.push(e);
 		})();
 		await Promise.race([
 			entered,

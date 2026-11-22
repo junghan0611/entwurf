@@ -77,6 +77,13 @@ export type AcpPromptResponse = {
 export interface AcpConnectionLike {
 	initialize(params: unknown): Promise<unknown>;
 	newSession(params: unknown): Promise<{ sessionId?: string }>;
+	/**
+	 * ACP `session/resume` (#171 step 8): attach the session a record names, under the same id, with no
+	 * history replay. Optional: a connection without it cannot attach, and the turn stops.
+	 */
+	resumeSession?(params: unknown): Promise<{ sessionId?: string } | null | undefined>;
+	/** ACP `session/close` (#171 L7): sent before a session's agent is disposed, where the agent offers it. */
+	closeSession?(params: { sessionId: string }): Promise<unknown>;
 	prompt(params: { sessionId: string; prompt: AcpTextBlock[] }): Promise<AcpPromptResponse>;
 	setSessionConfigOption?(params: unknown): Promise<unknown>;
 	/**
@@ -252,6 +259,9 @@ export function connectAcpClient(stream: Stream, handlers: AcpClientHandlers): A
 		initialize: (params) => agent.request(AGENT_METHODS.initialize, params as never),
 		newSession: (params) =>
 			agent.request(AGENT_METHODS.session_new, params as never) as Promise<{ sessionId?: string }>,
+		resumeSession: (params) =>
+			agent.request(AGENT_METHODS.session_resume, params as never) as Promise<{ sessionId?: string } | null>,
+		closeSession: (params) => agent.request(AGENT_METHODS.session_close, params as never),
 		prompt: (params) => agent.request(AGENT_METHODS.session_prompt, params as never) as Promise<AcpPromptResponse>,
 		setSessionConfigOption: (params) => agent.request(AGENT_METHODS.session_set_config_option, params as never),
 		cancel: (params) => {

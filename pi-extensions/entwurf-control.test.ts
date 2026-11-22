@@ -26,6 +26,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { resolveLifecyclePolicy } from "./lib/acp/session-store.ts";
+import { readAcpHostFacts, reportAcpHostMode, reportEntwurfControlFlag } from "./lib/acp-host-facts.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..");
@@ -47,6 +49,8 @@ interface HarnessOut {
 	afterFactory: Registration[];
 	afterStart: Registration[];
 	afterShutdown: Registration[];
+	controlFlagAfterStart: boolean | null;
+	controlFlagAfterShutdown: boolean | null;
 	envAfterStart: { PI_SESSION_ID: string | null; PI_AGENT_ID: string | null };
 	records: Array<{ gardenId: string; backend: string }>;
 	order: Array<{ what: string; envAtRegister?: string | null }>;
@@ -112,6 +116,17 @@ describe("entwurf-control registers the compiled bridge with the born identity",
 		expect(throwing.records).toHaveLength(1);
 		expect(throwing.afterStart[0]?.config.env?.PI_SESSION_ID).toBe(throwing.records[0]?.gardenId);
 		expect(throwing.envAfterStart.PI_SESSION_ID).toBe(throwing.records[0]?.gardenId);
+	});
+
+	it("[QK:ACP-D18-FLAG-REVOKED-AT-SHUTDOWN] the control flag is reported at session_start and taken back at session_shutdown, so a reload without this extension leaves no resident behind", () => {
+		expect(ok.controlFlagAfterStart).toBe(true);
+		expect(ok.controlFlagAfterShutdown).toBeNull();
+		// true → shutdown → a provider-only reload reports only the mode: not a resident.
+		const host = {};
+		reportEntwurfControlFlag(ok.controlFlagAfterStart ?? undefined, host);
+		reportEntwurfControlFlag(ok.controlFlagAfterShutdown ?? undefined, host);
+		reportAcpHostMode("tui", host);
+		expect(resolveLifecyclePolicy(readAcpHostFacts(host))).toBe("unhosted");
 	});
 
 	it("[QK:PI-MCP-EXPOSURE] the server runs the compiled bridge with pi's own node, declares the verbs directly, hides exactly the two host-irrelevant tools, and pins no cwd so Pi starts it in the session's own directory", () => {

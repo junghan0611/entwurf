@@ -107,10 +107,11 @@ test("a missing or mixed cwd, or no observed model, is a missing measurement, no
 	assert.equal(judgeClaudeNativeWork(noModel, SID, CWD, exp)[1]?.ok, false);
 });
 
-// A record in session-store's real shape (SessionRecord, session-store.ts:100-110).
+// A record in session-store's real shape (SessionRecord, session-store.ts:116-127): version 2 since
+// #171 L16, with no dispatch standing.
 function cacheRecord(key: string, over: Record<string, unknown> = {}) {
 	return {
-		version: 1,
+		version: 2,
 		provider: "entwurf",
 		sessionKey: key,
 		acpSessionId: SID,
@@ -118,6 +119,9 @@ function cacheRecord(key: string, over: Record<string, unknown> = {}) {
 		modelId: "claude-sonnet-5",
 		bridgeConfigSignature: "sig",
 		contextMessageSignatures: [],
+		pendingDispatch: null,
+		writer: { name: "claude-agent-acp", version: "0.0.0" },
+		firstPrompt: "sealed",
 		updatedAt: "2026-10-11T00:00:00.000Z",
 		...over,
 	};

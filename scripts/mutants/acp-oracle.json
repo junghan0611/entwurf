@@ -1,0 +1,94 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-oracle",
+	"mutants": [
+		{
+			"claim": "ACP-ORACLE-ROW-COVERAGE",
+			"title": "an implemented baseline row loses its executable test citation",
+			"subject": "docs/acp-client-baseline.md",
+			"find": ["| [QK:ACP-ORACLE-L3-NEW] |"],
+			"replace": ["| — |"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-ROW-COVERAGE]",
+			"signatureSource": "pi-extensions/lib/acp/client-baseline.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L3-NEW",
+			"title": "the backend invents a session id rather than sending session/new",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["connection.newSession(newSessionArgs)"],
+			"replace": ["Promise.resolve({ sessionId: 'ACP-1' })"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L3-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L4-PROMPT",
+			"title": "the backend drops agent updates before they reach the prompt stream",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["sessionUpdate: async (n) => {\n\t\t\t\t\tsession?.activePromptHandler?.({"],
+			"replace": ["sessionUpdate: async (n) => {\n\t\t\t\t\tif (false) session?.activePromptHandler?.({"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L4-PROMPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L5-REUSE",
+			"title": "a reused session receives the complete transcript instead of only the delta",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\t\tprompt: sent.flatMap((input) => input.blocks),"],
+			"replace": ["\t\t\t\t\tprompt: buildAcpPrompt(context, \"new\"),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L5-REUSE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L6-CANCEL",
+			"title": "an abort does not send the ACP cancellation notification",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["session.connection.cancel?.({ sessionId: promptArgs.sessionId });"],
+			"replace": ["void promptArgs.sessionId;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L6-CANCEL]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L12-PERMISSION",
+			"title": "the permission policy picks a deny option before a later allow",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["(allow ?? options[0]).optionId"],
+			"replace": ["options[0].optionId"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L12-PERMISSION]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L13-PROCESS-GROUP",
+			"title": "the teardown signals only the child process instead of its entire process group",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["process.kill(-child.pid, signal)"],
+			"replace": ["process.kill(child.pid, signal)"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L13-PROCESS-GROUP]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ORACLE-L13-TEARDOWN",
+			"title": "the retained child's termination is requested before the connection is closed",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["session.connection.close?.();\n\t\tteardownChild(session.child);"],
+			"replace": ["teardownChild(session.child);\n\t\tsession.connection.close?.();"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-ORACLE-L13-TEARDOWN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		}
+	]
+}

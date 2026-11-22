@@ -3,6 +3,39 @@
 	"lane": "pi-floor",
 	"mutants": [
 		{
+			"claim": "ACP-RECEIPT-AGY-NUMERIC",
+			"title": "agy version components are compared lexically, making 1.5.12 appear older than 1.5.9",
+			"subject": "pi-extensions/lib/acp/receipt-versions.ts",
+			"find": ["have[first] < floor[first]"],
+			"replace": ["String(have[first]) < String(floor[first])"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-AGY-NUMERIC]",
+			"signatureSource": "pi-extensions/lib/acp/receipt-versions.test.ts"
+		},
+		{
+			"claim": "ACP-RECEIPT-CLAUDE-PIN",
+			"title": "the receipt header remains on an older Claude adapter than the package pin",
+			"subject": "docs/acp-client-baseline.md",
+			"find": ["claude-agent-acp 0.109.0 (`claude-sonnet-5-5`, effort"],
+			"replace": ["claude-agent-acp 0.107.3 (`claude-sonnet-5-5`, effort"],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-CLAUDE-PIN]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
+			"claim": "ACP-RECEIPT-AGY-FLOOR",
+			"title": "the receipt header names an agy release below the admitted adapter floor",
+			"subject": "docs/acp-client-baseline.md",
+			"find": ["agy 1.5.13 (`gemini-3.8-flash`, `thought_level low`)"],
+			"replace": ["agy 1.5.8 (`gemini-3.8-flash`, `thought_level low`)"],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-AGY-FLOOR]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
 			"claim": "VERSION-MENTIONS-HERDR-LOCK",
 			"title": "the Herdr runtime lock moves without its README npm pin, leaving the installation description on the previous artifact",
 			"subject": "plugins/herdr/runtime-lock.json",
@@ -86,6 +119,28 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-FLOOR-PUBLISHED-SCOPE]",
 			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "ACP-RECEIPT-CLAUDE-MEASURED",
+			"title": "CLAUDE_ACP_AGENT.measured moves to a version the receipts never measured",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tmeasured: \"0.109.0\","],
+			"replace": ["\tmeasured: \"0.109.1\","],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-CLAUDE-MEASURED]",
+			"signatureSource": "scripts/version-mentions.ts"
+		},
+		{
+			"claim": "ACP-RECEIPT-AGY-MEASURED",
+			"title": "AGY_ACP_AGENT.measured moves to an agy 1.5.14 the receipts never measured",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tmeasured: \"1.5.13\","],
+			"replace": ["\tmeasured: \"1.5.14\","],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-RECEIPT-AGY-MEASURED]",
+			"signatureSource": "scripts/version-mentions.ts"
 		}
 	]
 }

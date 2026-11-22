@@ -46,8 +46,13 @@ import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { generateBranchSummary, generateSummary } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
+import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+import { ACP_STOPS } from "./stop-texts.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-summary-"));
 const SANDBOXED_ENV = [
@@ -82,7 +87,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	models = await import("./models.ts");
 	config = await import("./config.ts");
 });
@@ -218,6 +223,7 @@ function makeWorld(
 			};
 		},
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			decorate(
 				config.resolveProviderConfig({
@@ -230,6 +236,7 @@ function makeWorld(
 			),
 		now: () => "2026-11-14T00:00:00Z",
 		sessionDir,
+		birthDir: `${sessionDir}-births`,
 		abortGraceMs: 40,
 	};
 	const calls = (method: string) => wire.filter((c) => c.method === method).map((c) => c.params as any);
@@ -298,7 +305,7 @@ describe("Pi's summary request through the ACP turn driver (#163)", () => {
 	it("[QK:ACP-SUMMARY-TURN-TOOLLESS] Pi's /compact summary reaches a child with no tools, no MCP, no plugin and nothing pre-approved", async () => {
 		const world = makeWorld(summarizerSays, operatorSurface);
 		// The same world's ordinary turn carries the operator surface the summary must drop.
-		await ordinaryTurn(world, transcript("hello"), "S-ordinary");
+		await ordinaryTurn(world, transcript("hello"), "S-ordinary-1");
 		const [ordinary] = world.calls("newSession");
 		expect(ordinary.mcpServers.map((s: { name: string }) => s.name)).toContain("operator-probe");
 		expect(ordinary._meta.claudeCode.options.tools.length).toBeGreaterThan(0);
@@ -335,7 +342,7 @@ describe("Pi's summary request through the ACP turn driver (#163)", () => {
 	it("[QK:ACP-SUMMARY-INSTRUCTIONS-RELAYED] Pi's summarization instructions open the prompt; the conversation follows and no augment rides along", async () => {
 		const world = makeWorld(summarizerSays);
 		// In this cwd an ordinary first turn does carry the augment, so its absence below is a finding.
-		await ordinaryTurn(world, transcript("hello"), "S-ordinary");
+		await ordinaryTurn(world, transcript("hello"), "S-ordinary-2");
 		expect(JSON.stringify(world.calls("prompt")[0].prompt)).toContain("AGENTS.md");
 		const seen: { context?: TranscriptContext; options?: any } = {};
 		await generateSummary(
@@ -433,7 +440,7 @@ describe("Pi's summary request through the ACP turn driver (#163)", () => {
 
 	it("[QK:ACP-SUMMARY-TURN-NO-SETTING-SOURCES] the summary child reads none of the operator's Claude settings — no CLAUDE.md, hooks or plugins from disk", async () => {
 		const world = makeWorld(summarizerSays, operatorSurface);
-		await ordinaryTurn(world, transcript("hello"), "S-ordinary");
+		await ordinaryTurn(world, transcript("hello"), "S-ordinary-3");
 		expect(world.calls("newSession")[0]._meta.claudeCode.options.settingSources).toEqual(["user", "project"]);
 		await generateSummary(
 			conversation("first"),
@@ -835,7 +842,7 @@ describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11
 			handler({ type: "session_compact" }, { sessionManager: { getSessionId: () => sessionId } });
 	}
 
-	it("[QK:ACP-COMPACT-CLOSES-CHILD] after session_compact the retained child is gone, and the next turn opens a new one from the compacted transcript", async () => {
+	it("[QK:ACP-COMPACT-CLOSES-CHILD] after session_compact the retained child is gone, and the next turn opens no second session from the compacted transcript", async () => {
 		const world = makeWorld();
 		await ordinaryTurn(world, transcript("long work"), "S-compact");
 		await ordinaryTurn(world, transcript("long work", "more work"), "S-compact");
@@ -856,11 +863,18 @@ describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11
 				{ role: "user", content: "continue", timestamp: 1 },
 			],
 		});
+		// #171 step 8 (decision 17): the closed session's record stays, and no second session is opened for
+		// this conversation. This branch shows a compaction and an input but not the answer the session
+		// gave last, so nothing proves what to send: the turn stops with nothing sent. (A branch that does
+		// show it resumes the same session: [QK:ACP-COMPACT-KEEPS-SESSION].)
+		piHost.setBranch("S-compact", [
+			{ type: "compaction", id: "c1", summary: SUMMARY_BODY },
+			{ type: "message", id: "u1", message: { role: "user", content: "continue" } },
+		]);
 		const sealed = await ordinaryTurn(world, after, "S-compact");
-		expect(sealed.type).toBe("done");
-		expect(world.children).toHaveLength(2);
-		const prompts = world.calls("prompt");
-		expect(JSON.stringify(prompts.at(-1).prompt)).toContain("Keep the summary exactly as the model wrote it.");
+		expect(sealed.type === "error" && sealed.error.errorMessage).toBe(ACP_STOPS.changed.text);
+		expect(world.children).toHaveLength(1);
+		expect(world.calls("prompt")).toHaveLength(2);
 	});
 
 	it("[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT] a session whose turn is still running is not closed — neither a reused turn nor a first one", async () => {
@@ -927,22 +941,26 @@ describe("a session replaced in this process closes the child it leaves (#151, G
 			expect(world.killed.has(world.children[0])).toBe(true);
 			expect(backend.closeRetainedAcpSession(leaving)).toBe(false);
 
-			const sealed = await ordinaryTurn(world, transcript("outline", "hello"), `S-next-${reason}`);
+			// The session that replaces it starts empty (/new, or /renew whose outline is its first message).
+			const sealed = await ordinaryTurn(world, transcript("outline, then hello"), `S-next-${reason}`);
 			expect(sealed.type).toBe("done");
 			expect(world.children).toHaveLength(2);
 		}
 	});
 
-	it("[QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD] reload keeps the same session and quit is reaped by the exit hook — neither closes the retained child here", async () => {
+	it("[QK:ACP-SHUTDOWN-RELOAD-QUIT-KEEP-CHILD] reload keeps the same session and its child; quit closes every retained child so its session can be released", async () => {
 		const shutdown = await shutdownHandler();
-		for (const reason of ["reload", "quit"]) {
-			const world = makeWorld();
-			const staying = `S-stay-${reason}`;
-			await ordinaryTurn(world, transcript("one"), staying);
-			shutdown(reason, staying);
-			expect(world.killed.size).toBe(0);
-			await ordinaryTurn(world, transcript("one", "two"), staying);
-			expect(world.children).toHaveLength(1);
-		}
-	});
+		const world = makeWorld();
+		await ordinaryTurn(world, transcript("one"), "S-stay-reload");
+		await shutdown("reload", "S-stay-reload");
+		expect(world.killed.size).toBe(0);
+		await ordinaryTurn(world, transcript("one", "two"), "S-stay-reload");
+		expect(world.children).toHaveLength(1);
+		// quit: Pi awaits the handler. The agent is closed at once, whichever session Pi names.
+		const quitting = makeWorld();
+		await ordinaryTurn(quitting, transcript("one"), "S-stay-quit");
+		const left = shutdown("quit", "another-session");
+		expect(quitting.killed.has(quitting.children[0])).toBe(true);
+		await left;
+	}, 20_000);
 });

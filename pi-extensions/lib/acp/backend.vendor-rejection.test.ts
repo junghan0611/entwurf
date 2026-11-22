@@ -41,8 +41,13 @@ import {
 import { calculateContextTokens, getLastAssistantUsage, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
+import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpClientHandlers, AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
+import { ACP_STOPS } from "./stop-texts.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-vendor-rejection-"));
 const SANDBOXED_ENV = [
@@ -78,7 +83,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	adapters = await import("./backend-adapter.ts");
 	config = await import("./config.ts");
 	models = await import("./models.ts");
@@ -222,6 +227,7 @@ type PromptScript = (io: PromptIo) => Promise<AcpPromptResponse>;
 
 /** One backend world: its own record dir, spawn log, and a queue of scripted prompts. */
 function makeWorld() {
+	const prompts: string[][] = [];
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
 	const children: FakeChild[] = [];
 	const scripts: PromptScript[] = [];
@@ -262,6 +268,7 @@ function makeWorld() {
 				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
 				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 				prompt: (params) => {
+					prompts.push(params.prompt.map((block) => (block as { text: string }).text));
 					const script = scripts.shift();
 					if (!script) return Promise.reject(new Error("fake: no scripted prompt left"));
 					const cancelled = new Promise<void>((resolve) => {
@@ -278,6 +285,7 @@ function makeWorld() {
 			return connection;
 		},
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,
@@ -288,6 +296,7 @@ function makeWorld() {
 			}),
 		now: () => "2026-10-03T00:00:00Z",
 		sessionDir,
+		birthDir: `${sessionDir}-births`,
 		abortGraceMs: 40,
 	};
 
@@ -295,6 +304,8 @@ function makeWorld() {
 		deps,
 		children,
 		cancels,
+		/** The text blocks of every prompt that reached the wire, in order. */
+		prompts,
 		/** Queue the next prompt's behaviour. */
 		script(next: PromptScript) {
 			scripts.push(next);
@@ -314,13 +325,14 @@ async function runTurn(
 	sessionId: string,
 	signal?: AbortSignal,
 	model: Model<Api> = SONNET,
+	deps: Partial<AcpTurnDeps> = {},
 ): Promise<AssistantMessageEvent[]> {
 	const events: AssistantMessageEvent[] = [];
 	for await (const event of backend.streamAcpTurn(
 		model,
 		context,
 		{ sessionId, signal, reasoning: "medium" },
-		world.deps,
+		{ ...world.deps, ...deps },
 	)) {
 		events.push(event);
 	}
@@ -401,10 +413,11 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		);
 		expect(failedNotice).toBeGreaterThanOrEqual(0);
 		expect(failedNotice).toBeLessThan(events.indexOf(event));
-		// Dropped: the same session id spawns a fresh child next turn.
+		// The record keeps its marker; a first prompt with no confirmed answer stops every later turn.
 		world.script(endTurn);
-		await runTurn(world, transcript("run the build", "again"), "cell-new");
-		expect(world.children).toHaveLength(2);
+		const after = sealedOf(await runTurn(world, transcript("run the build", "again"), "cell-new"));
+		expect(after.message.errorMessage).toBe(ACP_STOPS.firstUnknown.text);
+		expect(world.children).toHaveLength(1);
 	});
 
 	it("[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE] the raw vendor rejection survives verbatim in diagnostics, never in errorMessage", async () => {
@@ -427,7 +440,7 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		expect(message.errorMessage ?? "").not.toContain(TOOL_ID);
 	});
 
-	it("[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-REUSE] reuse path: the retained session's rejection is sealed non-transient and the session is dropped", async () => {
+	it("[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-REUSE] reuse path: the retained session's rejection is sealed non-transient and no second session follows", async () => {
 		const world = makeWorld();
 		world.script(endTurn);
 		await runTurn(world, transcript("first"), "cell-reuse");
@@ -438,11 +451,18 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 		if (event.type === "error") expect(event.reason).toBe("error");
 		assertNoReplay(message);
 		world.script(endTurn);
-		await runTurn(world, transcript("first", "second", "third"), "cell-reuse");
-		expect(world.children).toHaveLength(2);
+		// The closed agent of this world never exits. A session is not resumed on a second agent while the
+		// first is not proven gone, so the turn stops: no second session, and no second agent either.
+		const after = sealedOf(
+			await runTurn(world, transcript("first", "second", "third"), "cell-reuse", undefined, SONNET, {
+				childExitTimeoutMs: 20,
+			}),
+		);
+		expect(after.message.errorMessage).toBe(ACP_STOPS.resume.text);
+		expect(world.children).toHaveLength(1);
 	});
 
-	it("[QK:ACP-VENDOR-REJECTION-OTHERS-UNCHANGED] every other rejection keeps today's verbatim-first errorMessage and gains no diagnostic", async () => {
+	it("[QK:ACP-VENDOR-REJECTION-OTHERS-UNCHANGED] every other rejection is not read as the vendor's: on a resident it seals as unknown, its raw text in a diagnostic of its own", async () => {
 		const others: Array<{ label: string; error: Error }> = [
 			{ label: "-32603 without data", error: new RequestError(-32603, "Internal error: no result") },
 			{
@@ -463,11 +483,15 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 			});
 			const { message } = sealedOf(await runTurn(world, transcript("go"), `cell-other-${i}`));
 			expect(message.stopReason, other.label).toBe("error");
-			// Today's composition, byte for byte: the raw text first, then the vendor tail.
-			expect(message.errorMessage, other.label).toBe(
-				`${other.error.message}\n--- backend stderr (tail) ---\n${LEGACY_STDERR}`,
-			);
-			expect(message.diagnostics, other.label).toBeUndefined();
+			// #171 step 8: the prompt may have been dispatched and no classified answer came back, so the sealed text is the fixed one
+			// (Pi reads it alone to decide a retry). What the agent said is kept whole, beside it.
+			expect(message.errorMessage, other.label).toBe(ACP_STOPS.unknown.text);
+			expect(message.diagnostics, other.label).toHaveLength(1);
+			const [diagnostic] = message.diagnostics ?? [];
+			expect(diagnostic?.type, other.label).toBe("entwurf_acp_prompt_unknown");
+			expect(diagnostic?.error?.message, other.label).toBe(other.error.message);
+			expect(diagnostic?.details?.stderrTail, other.label).toBe(LEGACY_STDERR);
+			expect(JSON.stringify(diagnostic), other.label).not.toContain(adapters.INCOMPLETE_TOOL_CALL_VERDICT);
 		}
 	});
 
@@ -509,8 +533,9 @@ describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
 			expect(diagnostic?.details?.dataJson, form.label).toBe("[unserializable: TypeError]");
 			expect(diagnostic?.error?.message, form.label).toBe(VENDOR_TEXT);
 			world.script(endTurn);
-			await runTurn(world, transcript("go", "again"), sessionId);
-			expect(world.children, form.label).toHaveLength(2);
+			const after = sealedOf(await runTurn(world, transcript("go", "again"), sessionId));
+			expect(after.message.errorMessage, form.label).toBe(ACP_STOPS.firstUnknown.text);
+			expect(world.children, form.label).toHaveLength(1);
 		}
 	});
 
@@ -634,7 +659,7 @@ describe("agy prompt-phase failure (#167)", () => {
 		}
 	});
 
-	it("[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY] new path: after a completed tool, every sweep row seals the fixed verdict, keeps the raw failure, and drops the child", async () => {
+	it("[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY] new path: after a completed tool, every sweep row seals the fixed verdict, keeps the raw failure, and opens no second session", async () => {
 		for (const [i, row] of SWEEP.entries()) {
 			const world = makeWorld();
 			const raw = row.make();
@@ -643,9 +668,44 @@ describe("agy prompt-phase failure (#167)", () => {
 			const { message } = sealedOf(await runTurn(world, transcript("build it"), sessionId, undefined, agyFlash()));
 			assertAgyNoReplay(message, raw, row.label);
 			world.script(endTurn);
-			await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash());
-			expect(world.children, row.label).toHaveLength(2);
+			const after = sealedOf(await runTurn(world, transcript("build it", "again"), sessionId, undefined, agyFlash()));
+			expect(after.message.errorMessage, row.label).toBe(ACP_STOPS.firstUnknown.text);
+			expect(world.children, row.label).toHaveLength(1);
 		}
+	});
+
+	it("[QK:ACP-L18-AGY-WIRE-SEPARATED] agy's prompt blocks leave separated on the new and the reuse path; Claude's leave as built", async () => {
+		const twoInputs = (): TranscriptContext => {
+			const base = transcript("first");
+			return {
+				...base,
+				messages: [
+					...base.messages,
+					assistantReply("reply 0"),
+					{ role: "user", content: "reply with only DONE.", timestamp: 1 },
+					{ role: "user", content: "What does effects.txt contain now?", timestamp: 2 },
+				],
+			};
+		};
+		const agy = makeWorld();
+		agy.script(endTurn);
+		await runTurn(agy, transcript("first"), "l18-agy", undefined, agyFlash());
+		agy.script(endTurn);
+		await runTurn(agy, twoInputs(), "l18-agy", undefined, agyFlash());
+		expect(agy.children).toHaveLength(1);
+		const [agyNew, agyReuse] = agy.prompts;
+		// New: the augment and the transcript are separate blocks; every one but the last ends apart.
+		expect(agyNew.length).toBeGreaterThan(1);
+		for (const text of agyNew.slice(0, -1)) expect(text.endsWith("\n\n")).toBe(true);
+		expect(agyReuse).toEqual(["reply with only DONE.\n\n", "What does effects.txt contain now?"]);
+
+		const claude = makeWorld();
+		claude.script(endTurn);
+		await runTurn(claude, transcript("first"), "l18-claude");
+		claude.script(endTurn);
+		await runTurn(claude, twoInputs(), "l18-claude");
+		// Claude reads a command from the first block alone; its blocks are not touched.
+		expect(claude.prompts[1]).toEqual(["reply with only DONE.", "What does effects.txt contain now?"]);
 	});
 
 	it("reuse path: a retained agy session's prompt failure seals the same verdict", async () => {

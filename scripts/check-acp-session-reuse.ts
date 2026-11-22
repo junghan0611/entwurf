@@ -14,11 +14,13 @@
 //
 // It also proves: the mutable activePromptHandler routes each turn's
 // notifications to THAT turn's stream; a retained child is unref'd (no exit pin)
-// but never torn down between turns; a persisted record is NOT resumed in 1b-2b;
+// but never torn down between turns; a persisted record that names no last answer
+// is neither resumed nor replaced, even by a child that advertises resume at the
+// measured version (#171 step 8; the resume itself is proven beside the backend);
 // a concurrent prompt fails loud BOTH on a retained busy session AND on a same-key
-// first-turn race (GPT blocker 1); an incompatible existing → new closes the old
-// child so it is not orphaned, while a model-lock throw leaves the live child
-// alone (GPT blocker 2); plus source-shape locks.
+// first-turn race (GPT blocker 1); a live session that cannot take a turn (another
+// directory, another model) stops it by name and stays, never replaced by a new
+// one (#171 step 8); plus source-shape locks.
 //
 // backend.ts imports its siblings with `.js` suffixes (the root/jiti runtime
 // convention), so — like check-acp-backend-preflight — we tsc-emit the project
@@ -32,7 +34,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Context, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { fakePiHost } from "./lib/acp-fake-pi-session.ts";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 // The pi built-ins the Claude child also exposes natively. pi declares its tool
 // surface on every turn; since 0.86 that declaration reaches a provider as the
@@ -154,7 +160,12 @@ const DEFAULT_RESOLVED_CONFIG: any = {
 	disallowedTools: [],
 };
 
-function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, emitToolCall = false) {
+function makeHarness(
+	recordDir: string,
+	config: any = DEFAULT_RESOLVED_CONFIG,
+	emitToolCall = false,
+	advertiseAttach = false,
+) {
 	const children: ReturnType<typeof makeFakeChild>[] = [];
 	const promptCalls: PromptCall[] = [];
 	const newSessionCalls: any[] = [];
@@ -168,7 +179,14 @@ function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, e
 			const { CLAUDE_ACP_AGENT: a } = await import(
 				pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend-adapter.js")).href
 			);
-			return { agentCapabilities: {}, agentInfo: { name: a.name, version: a.floor } };
+			// #171 step 8: a child that advertises everything a resume needs — the capability and the
+			// measured version — so section A's stop is the record's doing, not a missing capability's.
+			return advertiseAttach
+				? {
+						agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
+						agentInfo: { name: a.name, version: a.measured },
+					}
+				: { agentCapabilities: {}, agentInfo: { name: a.name, version: a.floor } };
 		},
 		newSession: async (params: any) => {
 			newSessionCalls.push(params);
@@ -203,9 +221,11 @@ function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, e
 		},
 		createConnection: (_child: any, handlers: any) => makeConnection(handlers),
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: () => config,
 		now: () => "2026-06-18T00:00:00Z",
 		sessionDir: recordDir,
+		birthDir: `${recordDir}-births`,
 	};
 
 	return {
@@ -303,11 +323,11 @@ try {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const storeUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/session-store.js")).href;
 	const backendModule = (await import(backendUrl)) as any;
-	const backend = {
+	const backend = piHost.wrap({
 		...backendModule,
 		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
 			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
-	};
+	});
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const store = (await import(storeUrl)) as any;
 	const configUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/config.js")).href;
@@ -317,20 +337,26 @@ try {
 
 	// ----------------------------------------------------------------------
 	// Section A — capture: new=full transcript, reuse=delta-only, no respawn,
-	//             mutable routing, retained child unref'd, persisted NOT used
+	//             mutable routing, retained child unref'd, an unanchored record stops
 	// ----------------------------------------------------------------------
 	{
-		const h = makeHarness(recordDir);
-		const sessionKey = "pi:gate-A";
+		const h = makeHarness(recordDir, DEFAULT_RESOLVED_CONFIG, false, true);
+		const sessionKey = "pi:gate-A0";
 
-		// Pre-write a COMPATIBLE persisted record at a DIFFERENT acp id — if the
-		// backend (wrongly) resumed it, turn 1 would prompt "OLD-RESUME-ID".
+		// Pre-write a COMPATIBLE, sealed (no marker) persisted record at a DIFFERENT
+		// acp id, for another Pi session. It names no last answer (no `sealedTurnId`),
+		// so nothing can show which inputs its session never received. If the backend
+		// (wrongly) resumed it, that session's turn would prompt "OLD-RESUME-ID"; if it
+		// (wrongly) ignored it, the turn would open a second session for a conversation
+		// that already has one.
 		const turn1Ctx = tctx([{ role: "user", content: "remember NONCE-AAA", timestamp: 0 }]);
 		store.writeSessionRecord(
 			store.buildSessionRecord(
 				{
 					sessionKey,
 					acpSessionId: "OLD-RESUME-ID",
+					writer: { name: "earlier-agent", version: "0.0.1" },
+					firstPrompt: "sealed",
 					cwd: process.cwd(),
 					modelId: sonnet.id,
 					bridgeConfigSignature: sigFor(store, sonnet.id, h.config),
@@ -341,19 +367,46 @@ try {
 			recordDir,
 		);
 
-		// --- turn 1: new ---
+		// #171 step 8 (decision 17): such a stored session is neither resumed nor replaced. Its turn stops
+		// with nothing spawned and nothing sent.
+		const stored = await collect(
+			backend.streamAcpTurn(
+				sonnet,
+				reuseCtx("remember NONCE-AAA", "recall NONCE-BBB"),
+				{ sessionId: "gate-A0" },
+				h.deps,
+			) as Stream,
+		);
+		assert.ok(
+			stored.some((e) => e.type === "error"),
+			"a turn whose Pi session has a stored ACP session stops",
+		);
+		assert.equal(h.children.length, 0, "the stored session's turn spawns nothing: no attach, and no second session");
+		assert.equal(h.promptCalls.length, 0, "the stored session's turn sends nothing");
+
+		// --- turn 1: new (a Pi session with no record: a birth) ---
 		const t1 = await collect(backend.streamAcpTurn(sonnet, turn1Ctx, { sessionId: "gate-A" }, h.deps) as Stream);
 		assert.equal(h.children.length, 1, "turn 1 spawns exactly one child");
 		assert.equal(h.promptCalls.length, 1, "turn 1 issued one prompt");
 		assert.equal(
 			h.promptCalls[0].sessionId,
 			"ACP-1",
-			"turn 1 uses the FRESH newSession id — NOT the persisted resume id (persisted resume/load is OFF in 1b-2b)",
+			"turn 1 uses the id its own session/new answered: another Pi session's record is not this one's",
 		);
 		assert.match(
 			h.promptCalls[0].text,
 			/NONCE-AAA/,
 			"turn 1 payload carries the turn-1 nonce (full transcript; false-positive guard)",
+		);
+		// The pin's precondition (#171 step 8): this child passes the resume judgement on the facts the
+		// backend kept from its initialize, so a record reaching the guard would be resumed, not ignored.
+		assert.deepEqual(
+			adapterMod.resumeAllowed(backend.readAcpAgentFacts("gate-A"), adapterMod.claudeAdapter.resume, {
+				name: adapterMod.CLAUDE_ACP_AGENT.name,
+				version: adapterMod.CLAUDE_ACP_AGENT.measured,
+			}),
+			{ allowed: true },
+			"section A's child advertises resume at the measured version (the pin is not vacuous)",
 		);
 		assert.match(deltaText(t1), /NOTICE-1/, "turn 1 notice routed to the turn-1 stream");
 		assert.ok(
@@ -444,11 +497,11 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
-	// Section E — incompatible existing → new closes the old child (no orphan);
-	//             model-lock throw leaves the live child alone (GPT blocker 2)
+	// Section E — a live session that cannot take a turn stops it and stays
+	//             (#171 step 8, decision 17): never abandoned for a new one.
 	// ----------------------------------------------------------------------
 	{
-		// E1: cwd drift → incompatible → new spawns childB + closes childA.
+		// E1: cwd drift → the turn stops by name; childA stays and still serves its own directory.
 		const h = makeHarness(recordDir);
 		await collect(
 			backend.streamAcpTurn(
@@ -460,19 +513,17 @@ try {
 		);
 		assert.equal(h.children.length, 1, "E1 turn 1 spawned childA");
 		const childA = h.children[0];
-		// same key (sessionId), DIFFERENT cwd → existing incompatible → new.
-		await collect(
-			backend.streamAcpTurn(
-				sonnet,
-				tctx([{ role: "user", content: "y", timestamp: 0 }]),
-				{ sessionId: "gate-E1", cwd: "/w2" },
-				h.deps,
-			) as Stream,
+		// same key (sessionId), DIFFERENT cwd → the live session cannot take it.
+		const drifted = await collect(
+			backend.streamAcpTurn(sonnet, reuseCtx("x", "y"), { sessionId: "gate-E1", cwd: "/w2" }, h.deps) as Stream,
 		);
-		assert.equal(h.children.length, 2, "E1 incompatible existing → a NEW child spawned");
-		assert.ok(childA.killed > 0, "E1 the abandoned incompatible child is CLOSED (not orphaned in retainedChildren)");
+		assert.match(String(errorOf(drifted) ?? ""), /another directory/, "E1 a cwd drift stops the turn by name");
+		assert.equal(h.children.length, 1, "E1 no second child is spawned for a conversation that has a live session");
+		assert.equal(childA.killed, 0, "E1 the live child is NOT torn down by a turn it could not take");
+		assert.equal(h.promptCalls.length, 1, "E1 the stopped turn sent nothing");
+		// Continuing past a refused turn (its error answer now sits on the branch) is the resume delta's work.
 
-		// E2: model-lock throw → live child NOT killed, NOT dropped (survives reuse).
+		// E2: another model → the turn stops by name; the live child is NOT killed and NOT replaced.
 		const h2 = makeHarness(recordDir);
 		await collect(
 			backend.streamAcpTurn(
@@ -486,12 +537,16 @@ try {
 		const lockEvents = await collect(
 			backend.streamAcpTurn(opus, reuseCtx("x", "y"), { sessionId: "gate-E2" }, h2.deps) as Stream,
 		);
-		assert.match(String(errorOf(lockEvents) ?? ""), /locked/, "E2 model mismatch surfaces a model-lock error");
-		assert.equal(lockChild.killed, 0, "E2 model-lock throw does NOT kill the live child");
-		assert.equal(h2.children.length, 1, "E2 model-lock throw does NOT spawn a replacement");
+		assert.match(
+			String(errorOf(lockEvents) ?? ""),
+			/cannot switch to that model/,
+			"E2 a model mismatch stops the turn by name",
+		);
+		assert.equal(lockChild.killed, 0, "E2 the model stop does NOT kill the live child");
+		assert.equal(h2.children.length, 1, "E2 the model stop does NOT spawn a replacement");
 		// the locked child still serves a subsequent COMPATIBLE (same-model) reuse.
 		await collect(backend.streamAcpTurn(sonnet, reuseCtx("x", "z"), { sessionId: "gate-E2" }, h2.deps) as Stream);
-		assert.equal(h2.children.length, 1, "E2 the live child survived the lock throw and was reused (no respawn)");
+		assert.equal(h2.children.length, 1, "E2 the live child survived the stop (no respawn)");
 	}
 
 	// ----------------------------------------------------------------------
@@ -596,7 +651,14 @@ try {
 			/buildAcpPrompt\(context,\s*"new"\)/,
 			"new turn must build the full transcript via buildAcpPrompt",
 		);
-		assert.match(src, /buildAcpPrompt\(context,\s*"reuse"\)/, "reuse turn must build the delta via buildAcpPrompt");
+		// #171 step 8: a turn for an existing session sends the inputs the branch proof selected, not a
+		// second reading of the context.
+		assert.match(
+			src,
+			/const sent = chosen\.send\s*\.map\([\s\S]{0,200}?prompt: sent\.flatMap\(/,
+			"an existing session's delta is built from the selected inputs",
+		);
+		assert.ok(!/buildAcpPrompt\(context,\s*"reuse"\)/.test(src), "the context is not read a second time for the delta");
 		assert.ok(
 			!/\bcontextToAcpPrompt\(/.test(src),
 			"backend must not hardcode contextToAcpPrompt — the prompt scope must follow bootstrapPath via buildAcpPrompt",
@@ -846,10 +908,10 @@ try {
 console.log(
 	"[check-acp-session-reuse] ok — captured prompts prove new=full transcript / reuse=DELTA-ONLY (turn-2 carries the " +
 		"new nonce, never the turn-1 history) with no respawn; mutable activePromptHandler routes each turn's notices to " +
-		"its own stream; retained child is unref'd (no exit pin) yet never torn down between turns; persisted record is NOT " +
-		"resumed in 1b-2b; concurrent prompts fail loud BOTH on a retained busy session AND on a same-key first-turn race " +
-		"(no double spawn); incompatible existing → new closes the old child (no orphan) while a model-lock throw leaves " +
-		"the live child alive + reusable; source locks buildAcpPrompt wiring + single-site applyAcpSessionUpdate + unref + " +
+		"its own stream; retained child is unref'd (no exit pin) yet never torn down between turns; a stored record that names no last answer stops its " +
+		"turn and is neither resumed nor replaced, even with resume advertised; concurrent prompts fail loud BOTH on a retained busy session AND on a same-key first-turn race " +
+		"(no double spawn); a live session that cannot take a turn (cwd, model) stops it by name and stays, and a stored " +
+		"session is neither attached nor replaced; source locks buildAcpPrompt wiring + single-site applyAcpSessionUpdate + unref + " +
 		"in-flight claim; S2f progress notices emit in order (new: preparing→ready→sending prompt / reuse: reusing→sending " +
 		"prompt), are display-only (never on the ACP wire, dropped from a `new` rebuild, signature-invariant); S2g config " +
 		"passthrough: resolved operator mcpServers/tools/skillPlugins reach newSession, the entwurf envelope is injected into " +

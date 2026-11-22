@@ -17,10 +17,14 @@ import { join } from "node:path";
 import { type Api, type Model, normalizeContext } from "@earendil-works/pi-ai";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
 import type { AcpClientHandlers, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
 import { AcpCompactionCollector } from "./compaction-record.ts";
 import * as mapper from "./event-mapper.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 const SANDBOX = mkdtempSync(join(tmpdir(), "acp-compaction-"));
 const SANDBOXED_ENV = [
@@ -55,7 +59,7 @@ beforeAll(async () => {
 	delete process.env.PI_AGENT_ID;
 	delete process.env.CLAUDE_AGENT_ACP_COMMAND;
 	delete process.env.PI_EMACS_AGENT_SOCKET;
-	backend = await import("./backend.ts");
+	backend = piHost.wrap(await import("./backend.ts"));
 	models = await import("./models.ts");
 	config = await import("./config.ts");
 });
@@ -96,6 +100,38 @@ const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 	description: "",
 	parameters: obj({}, { open: true }),
 }));
+
+/** Each earlier turn of a Pi session as its context shows it: the input and a completed answer. */
+const earlierTurns = new Map<string, number>();
+function withEarlierTurns<M>(sessionId: string | undefined, input: string, now: M[]): M[] {
+	if (sessionId === undefined) return now;
+	const earlier = earlierTurns.get(sessionId) ?? 0;
+	earlierTurns.set(sessionId, earlier + 1);
+	const before: unknown[] = [];
+	for (let i = 0; i < earlier; i++) {
+		before.push(
+			{ role: "user", content: input, timestamp: 0 },
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "ok" }],
+				api: "entwurf",
+				provider: "entwurf",
+				model: "claude-sonnet-5-5",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				timestamp: 0,
+			},
+		);
+	}
+	return [...(before as M[]), ...now];
+}
 
 /** A world whose connection speaks `script.bootstrap` during newSession and `script.prompt` with the prompt on the wire. */
 function makeWorld(
@@ -155,6 +191,7 @@ function makeWorld(
 			};
 		},
 		lifecyclePolicy: () => (shape.turnScoped ? "turn-scoped" : "process-scoped"),
+		sessionReader: piHost.sessionReader,
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
 				cwd,
@@ -165,13 +202,20 @@ function makeWorld(
 			}),
 		now: () => "2026-11-15T00:00:00Z",
 		sessionDir,
+		birthDir: `${sessionDir}-births`,
 		abortGraceMs: 40,
 	};
 	/** Run one whole turn; returns what it showed and how it sealed. */
-	const turn = async (opts: { sessionId?: string; summary?: boolean; text?: string }) => {
+	const turn = async (opts: { sessionId?: string; summary?: boolean; text?: string; texts?: string[] }) => {
+		const now = (opts.texts ?? [opts.text ?? "hello"]).map((text) => ({
+			role: "user" as const,
+			content: text,
+			timestamp: 0,
+		}));
 		const ctx = normalizeContext({
 			tools: opts.summary ? [] : PI_TOOLS,
-			messages: [{ role: "user", content: opts.text ?? "hello", timestamp: 0 }],
+			// A resident's later turn carries its earlier ones, as Pi's context does.
+			messages: opts.summary ? now : withEarlierTurns(opts.sessionId, "hello", now),
 		});
 		const options = {
 			sessionId: opts.sessionId,
@@ -216,6 +260,16 @@ function stderrLines(run: () => Promise<unknown>) {
 }
 
 describe("the ACP child's compactions through the turn driver (#163 S8)", () => {
+	it("[QK:ACP-COMPACT-FIRST-USER-BLOCK] attributes the command only to the first delta block, where Claude ACP reads a command", async () => {
+		// claude-agent-acp 0.109.0 takes a command from the first text block (prompt-to-claude.js:31,36-39,
+		// v1/acp-agent.js:1147,1152-1153); a session-info line after it must not hide the command.
+		const first = makeWorld({ prompt: c2Frames("first-compact") });
+		await first.turn({ sessionId: "first-compact", texts: ["/compact", "device=oracle time_kst=20261121T091435"] });
+		expect(backend.takeAcpCompactionRecords("first-compact").records[0]?.promptWasCompactCommand).toBe(true);
+		const second = makeWorld({ prompt: c2Frames("first-bash") });
+		await second.turn({ sessionId: "first-bash", texts: ["Ran `echo hi`", "/compact"] });
+		expect(backend.takeAcpCompactionRecords("first-bash").records[0]?.promptWasCompactCommand).toBe(false);
+	});
 	it("[QK:ACP-COMPACT-CAPABILITY-DECLARED] initialize declares the session.compaction client capability", async () => {
 		const w = makeWorld({});
 		await w.turn({ sessionId: "S-cap" });
@@ -279,7 +333,8 @@ describe("the ACP child's compactions through the turn driver (#163 S8)", () => 
 		const plainSummary = await makeWorld({}).turn({ sessionId: "S-summary-uuid-2", summary: true });
 		expect((s.value as { shown: string }).shown).toBe(plainSummary.shown);
 
-		const cwd = makeWorld({ prompt: c2Frames("IN-CWD") });
+		// A one-shot may run with no Pi session id; a resident may not (#171 step 8).
+		const cwd = makeWorld({ prompt: c2Frames("IN-CWD") }, { turnScoped: true });
 		const c = await stderrLines(() => cwd.turn({}));
 		expect((c.value as { shown: string }).shown).toContain("[acp: compaction completed 18k→4k");
 		expect(c.lines.join("")).toContain("not recorded: outside the record's scope");

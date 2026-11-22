@@ -1,0 +1,135 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-l16",
+	"mutants": [
+		{
+			"claim": "ACP-L16-RANGE",
+			"title": "the marker range starts at the last assistant instead of after it",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": ["\t\t\tstart = i + 1;"],
+			"replace": ["\t\t\tstart = i;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-RANGE]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-L16-OUTDATED",
+			"title": "a record written before the marker existed is read as a sealed record",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["SESSION_RECORD_VERSION_BEFORE_MARKER)\n\t\treturn { status: \"outdated\" };"],
+			"replace": [
+				"SESSION_RECORD_VERSION_BEFORE_MARKER)\n\t\treturn { status: \"found\", record: { ...(raw as SessionRecord), pendingDispatch: null } };"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-OUTDATED]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-L16-MARKER-WRITTEN",
+			"title": "no marker is written before the prompt",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\twriteRecordFor(session, deps, marker);"],
+			"replace": ["\t\t\tvoid writeRecordFor;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-MARKER-WRITTEN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-MARKER-CLEARED",
+			"title": "the sealing write leaves a marker standing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tsession.unsealed = [];\n\t\twriteRecordFor(session, deps, null);"],
+			"replace": [
+				"\t\tsession.unsealed = [];\n\t\twriteRecordFor(session, deps, { start: 0, count: 0, contextMessageSignatures: [] });"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-MARKER-CLEARED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-WRITE-FAIL-ZERO-SENDS",
+			"title": "a marker that cannot be written is swallowed and the prompt is sent anyway",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tthrow new Error(refusal.errorMessage);"],
+			"replace": ["\t\t\tvoid refusal;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-WRITE-FAIL-ZERO-SENDS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-STORED-SESSION-NO-SECOND-NEW",
+			"title": "a record written before the marker existed is not seen by the guard, so the turn goes on to a birth check instead of stopping on it",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\tif (record.status === \"outdated\") {\n\t\treturn { kind: \"stop\", stop: \"version\", why: \"the session record is from before resume was supported\" };\n\t}"
+			],
+			"replace": ["\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-STORED-SESSION-NO-SECOND-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-HISTORY-WITHOUT-RECORD-STOPS",
+			"title": "the Pi session's ACP history is never read, so a fork or an import is born as a second session",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["return hasAcpTrace(piSession?.getEntries() ?? [], provenPreBirthAnswer);"],
+			"replace": ["return false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-HISTORY-WITHOUT-RECORD-STOPS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-PROMPT-FAIL-KEEPS-RECORD",
+			"title": "a prompt that failed after its marker does not tell the operator the record was kept",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tpushAcpLifecycleNotice(state, ACP_RECORD_KEPT_NOTICE);"],
+			"replace": ["\t\tvoid ACP_RECORD_KEPT_NOTICE;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-PROMPT-FAIL-KEEPS-RECORD]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-BIRTH-RECORD-BEFORE-SETUP",
+			"title": "the id session/new answered is not recorded until the first marker — a failure during model or effort setup loses it",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\t\twriteRecordFor(session, deps, null);"],
+			"replace": ["\t\t\t\t\tvoid writeRecordFor;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-BIRTH-RECORD-BEFORE-SETUP]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-UNREADABLE-REFUSES",
+			"title": "an unreadable record is treated as no record, and a marker in it goes unseen",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": [
+				"\tif (record.status === \"unreadable\") {\n\t\treturn { kind: \"stop\", stop: \"unreadable\", why: \"session record unreadable\", code: record.code };\n\t}\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-UNREADABLE-REFUSES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-L16-TURN-SCOPED-NONE",
+			"title": "a turn-scoped turn writes a dispatch marker",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tif (params.lifecyclePolicy === \"process-scoped\") {\n\t\t\t\tmarker = markDispatch("],
+			"replace": ["\t\t\t{\n\t\t\t\tmarker = markDispatch("],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-L16-TURN-SCOPED-NONE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		}
+	]
+}

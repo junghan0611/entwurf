@@ -81,6 +81,9 @@ for (const handler of extension.handlers.get("session_start") ?? []) {
 	}
 }
 out.afterStart = snapshot();
+// #171 decision 18: the control flag as the ACP backend would read it, straight off globalThis.
+const controlFlagFact = () => globalThis[Symbol.for("entwurf.acp.host-facts.v1")]?.controlEnabled ?? null;
+out.controlFlagAfterStart = controlFlagFact();
 out.envAfterStart = { PI_SESSION_ID: process.env.PI_SESSION_ID ?? null, PI_AGENT_ID: process.env.PI_AGENT_ID ?? null };
 // Independent identity oracle: the V3 record the store holds for THIS native session.
 const sessionsDir = join(agentDir, "meta-sessions");
@@ -138,6 +141,7 @@ for (const handler of extension.handlers.get("session_shutdown") ?? []) {
 	}
 }
 out.afterShutdown = snapshot();
+out.controlFlagAfterShutdown = controlFlagFact();
 out.execPath = process.execPath;
 console.log(JSON.stringify(out));
 process.exit(0);

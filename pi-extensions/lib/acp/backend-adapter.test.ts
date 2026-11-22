@@ -18,13 +18,17 @@ import { RequestError } from "@agentclientprotocol/sdk";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { describe, expect, it } from "vitest";
 import {
+	type AcpAgentFacts,
 	AGY_ACP_AGENT,
 	admitAcpAgent,
 	agyAdapter,
+	attachAllowed,
 	CLAUDE_ACP_AGENT,
 	claudeAdapter,
 	cortexAdapter,
 	INCOMPLETE_TOOL_CALL_VERDICT,
+	readAgentFacts,
+	resumeAllowed,
 } from "./backend-adapter.ts";
 import { CLAUDE_CONFIG_OVERLAY_DIR } from "./overlay.ts";
 
@@ -289,5 +293,194 @@ describe("the shared admission rule (#168)", () => {
 				else process.env[cell.env] = saved;
 			}
 		}
+	});
+});
+
+/**
+ * #171 L1 and V5. The two answers below are the `initialize` results the vendors gave on 2026-11-21
+ * (receipts all-claude-20261121T065930Z/experiments-claude-20261121T070023Z/claude-02-l11-new.wire-in.ndjson
+ * and all-agy-20261121T071252Z/experiments-agy-20261121T071413Z/agy-01-z2.wire-in.ndjson; protocolVersion,
+ * promptCapabilities and the fields the reader does not read left out), copied as literals so the reader
+ * cannot move its own oracle. The judgement is checked against those facts with the shipped pins.
+ */
+const CLAUDE_R1 = {
+	protocolVersion: 1,
+	agentInfo: { name: "@agentclientprotocol/claude-agent-acp", title: "Claude Agent", version: "0.109.0" },
+	agentCapabilities: {
+		loadSession: true,
+		sessionCapabilities: {
+			additionalDirectories: {},
+			close: {},
+			delete: {},
+			fork: {},
+			list: {},
+			options: {},
+			resume: {},
+			status: {},
+			systemPrompt: { mode: { override: {} } },
+			title: {},
+		},
+		auth: { logout: {}, status: {} },
+	},
+	authMethods: [],
+};
+const AGY_R1 = {
+	protocolVersion: 1,
+	agentInfo: { name: "Antigravity ACP Server", version: "1.5.13" },
+	agentCapabilities: {
+		loadSession: true,
+		sessionCapabilities: { resume: {}, close: {}, load: {}, list: {}, additionalDirectories: {} },
+		auth: { logout: {} },
+	},
+	authMethods: [{ id: "oauth-personal" }, { id: "oauth-business" }, { id: "gemini-api-key" }, { id: "agent-platform" }],
+};
+const at = (answer: { agentInfo: { name: string } }, version: string): AcpAgentFacts =>
+	readAgentFacts({ ...answer, agentInfo: { ...answer.agentInfo, version } });
+
+describe("the child's initialize facts and the attach judgement (#171 L1, V5)", () => {
+	it("[QK:ACP-L1-FACTS-READ] reads name, version, loadSession, session capabilities and auth method ids as answered, and nothing it was not told", () => {
+		expect(readAgentFacts(CLAUDE_R1)).toEqual({
+			agent: { name: "@agentclientprotocol/claude-agent-acp", version: "0.109.0" },
+			loadSession: true,
+			sessionCapabilities: [
+				"additionalDirectories",
+				"close",
+				"delete",
+				"fork",
+				"list",
+				"options",
+				"resume",
+				"status",
+				"systemPrompt",
+				"title",
+			],
+			authMethods: [],
+		});
+		expect(readAgentFacts(AGY_R1)).toEqual({
+			agent: { name: "Antigravity ACP Server", version: "1.5.13" },
+			loadSession: true,
+			sessionCapabilities: ["additionalDirectories", "close", "list", "load", "resume"],
+			authMethods: ["oauth-personal", "oauth-business", "gemini-api-key", "agent-platform"],
+		});
+		const nothing = { agent: null, loadSession: false, sessionCapabilities: [], authMethods: [] };
+		for (const answer of [undefined, null, "initialize", [], {}, { agentInfo: null, agentCapabilities: null }])
+			expect(readAgentFacts(answer), JSON.stringify(answer)).toEqual(nothing);
+		expect(
+			readAgentFacts({
+				agentInfo: { name: "n", version: 1 },
+				agentCapabilities: { loadSession: "true", sessionCapabilities: { resume: null, close: true, list: {} } },
+				authMethods: [{ id: 7 }, null, { id: "kept" }],
+			}),
+		).toEqual({ agent: null, loadSession: false, sessionCapabilities: ["list"], authMethods: ["kept"] });
+	});
+
+	it("[QK:ACP-V5-ATTACH-EQUAL] each pinned agent at exactly its measured version, advertising the capability, may resume and load", () => {
+		for (const [answer, agent] of [
+			[CLAUDE_R1, CLAUDE_ACP_AGENT],
+			[AGY_R1, AGY_ACP_AGENT],
+		] as const) {
+			const facts = readAgentFacts(answer);
+			expect(facts.agent?.version).toBe(agent.measured);
+			expect(attachAllowed(facts, agent, "resume")).toEqual({ allowed: true });
+			expect(attachAllowed(facts, agent, "load")).toEqual({ allowed: true });
+		}
+	});
+
+	it("[QK:ACP-V5-ATTACH-UNMEASURED] an admitted server at any other version may not attach — the previously measured agy 1.5.12, the agy floor, a newer Claude behind CLAUDE_AGENT_ACP_COMMAND", () => {
+		const saved = process.env.CLAUDE_AGENT_ACP_COMMAND;
+		try {
+			process.env.CLAUDE_AGENT_ACP_COMMAND = "/opt/claude-agent-acp-0.110.0";
+			const cells = [
+				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "1.5.12" },
+				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: AGY_ACP_AGENT.floor },
+				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.110.0" },
+				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.109.1" },
+			];
+			for (const cell of cells) {
+				const answer = { ...cell.answer, agentInfo: { ...cell.answer.agentInfo, version: cell.version } };
+				expect(() => cell.adapter.admitAgent?.(answer), cell.version).not.toThrow();
+				for (const need of ["resume", "load"] as const)
+					expect(attachAllowed(readAgentFacts(answer), cell.agent, need), `${cell.version} ${need}`).toEqual({
+						allowed: false,
+						reason: "version-unmeasured",
+					});
+			}
+			for (const version of ["1.5.13-beta.1", "1.5.13+b", "v1.5.13", " 1.5.13"])
+				expect(attachAllowed(at(AGY_R1, version), AGY_ACP_AGENT, "resume"), version).toEqual({
+					allowed: false,
+					reason: "version-unmeasured",
+				});
+		} finally {
+			if (saved === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
+			else process.env.CLAUDE_AGENT_ACP_COMMAND = saved;
+		}
+	});
+
+	it("[QK:ACP-V5-ATTACH-CAPABILITY-ABSENT] at the measured version, resume needs sessionCapabilities.resume and load needs loadSession", () => {
+		const noResume = readAgentFacts({
+			...AGY_R1,
+			agentCapabilities: { loadSession: true, sessionCapabilities: { load: {}, close: {} } },
+		});
+		expect(attachAllowed(noResume, AGY_ACP_AGENT, "resume")).toEqual({ allowed: false, reason: "capability-absent" });
+		expect(attachAllowed(noResume, AGY_ACP_AGENT, "load")).toEqual({ allowed: true });
+		const noLoad = readAgentFacts({
+			...CLAUDE_R1,
+			agentCapabilities: { ...CLAUDE_R1.agentCapabilities, loadSession: false },
+		});
+		expect(attachAllowed(noLoad, CLAUDE_ACP_AGENT, "load")).toEqual({ allowed: false, reason: "capability-absent" });
+		expect(attachAllowed(noLoad, CLAUDE_ACP_AGENT, "resume")).toEqual({ allowed: true });
+	});
+
+	it("[QK:ACP-V5-ATTACH-NAME] a server that does not answer the pinned name may not attach, even at that pin's measured version", () => {
+		const cells = [
+			{ facts: at(AGY_R1, CLAUDE_ACP_AGENT.measured), agent: CLAUDE_ACP_AGENT },
+			{ facts: at(CLAUDE_R1, AGY_ACP_AGENT.measured), agent: AGY_ACP_AGENT },
+			{ facts: readAgentFacts({ ...AGY_R1, agentInfo: undefined }), agent: AGY_ACP_AGENT },
+		];
+		for (const { facts, agent } of cells)
+			expect(attachAllowed(facts, agent, "load")).toEqual({ allowed: false, reason: "agent-unnamed" });
+	});
+
+	it("[QK:ACP-L1-RESUME-ALLOWED] a stored session is resumed only by the measured reader, and only when its writer is one that reader was measured on", () => {
+		const claude = claudeAdapter.resume;
+		const agy = agyAdapter.resume;
+		if (!claude || !agy) throw new Error("both adapters carry measured resume data");
+		// What is done with an unanswered prompt's inputs is the vendor's measured behaviour.
+		expect(claude.unknownDispatch).toBe("skip");
+		expect(agy.unknownDispatch).toBe("resend");
+		const own = (pin: { name: string; measured: string }) => ({ name: pin.name, version: pin.measured });
+		expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, own(CLAUDE_ACP_AGENT))).toEqual({ allowed: true });
+		expect(resumeAllowed(readAgentFacts(AGY_R1), agy, own(AGY_ACP_AGENT))).toEqual({ allowed: true });
+		// The one cross-version pair a receipt measured, and no other writer.
+		expect(resumeAllowed(readAgentFacts(AGY_R1), agy, { name: AGY_ACP_AGENT.name, version: "1.5.12" })).toEqual({
+			allowed: true,
+		});
+		for (const writer of [
+			{ name: CLAUDE_ACP_AGENT.name, version: "0.107.3" },
+			{ name: CLAUDE_ACP_AGENT.name, version: "0.110.0" },
+			{ name: AGY_ACP_AGENT.name, version: CLAUDE_ACP_AGENT.measured },
+			{ name: "claude", version: "unknown" },
+		]) {
+			expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, writer), JSON.stringify(writer)).toEqual({
+				allowed: false,
+				reason: "writer-unmeasured",
+			});
+		}
+		// The reader's own refusals come first and keep their names.
+		expect(resumeAllowed(at(AGY_R1, "1.5.12"), agy, own(AGY_ACP_AGENT))).toEqual({
+			allowed: false,
+			reason: "version-unmeasured",
+		});
+		const noResume = readAgentFacts({ ...CLAUDE_R1, agentCapabilities: { loadSession: true } });
+		expect(resumeAllowed(noResume, claude, own(CLAUDE_ACP_AGENT))).toEqual({
+			allowed: false,
+			reason: "capability-absent",
+		});
+	});
+
+	it("a pinned measured version that is not X.Y.Z crashes rather than judging", () => {
+		expect(() => attachAllowed(readAgentFacts(AGY_R1), { ...AGY_ACP_AGENT, measured: "1.5" }, "load")).toThrow(
+			/measured version "1\.5" of Antigravity ACP Server is not X\.Y\.Z/,
+		);
 	});
 });

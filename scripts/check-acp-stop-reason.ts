@@ -54,7 +54,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { fakePiHost } from "./lib/acp-fake-pi-session.ts";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 // #142: a Claude turn carries pi's thinking level, which the backend sets as effort and reads back
 // before the prompt. This fixture runs every turn at one fixed level on rows carrying the curated
@@ -75,6 +79,24 @@ const sonnet = { id: "claude-sonnet-5-5", thinkingLevelMap: FIXTURE_THINKING_LEV
 type Stream = AsyncIterable<AssistantMessageEvent> & {
 	result: () => Promise<{ stopReason: string; errorMessage?: string }>;
 };
+
+/**
+ * What a failed turn says. Since #171 step 8 a prompt that may have been dispatched and got no classified
+ * terminal answer seals a fixed text
+ * (Pi reads `errorMessage` alone to decide a retry), and the raw failure is kept whole in a diagnostic:
+ * the first failure, the lifecycle line, the launch signal and the stderr tail. A turn with no standing
+ * marker still carries them in `errorMessage`. Both are read here, in that order.
+ */
+function failureText(error: any): string {
+	const parts = [String(error?.errorMessage)];
+	for (const d of error?.diagnostics ?? []) {
+		if (d?.type !== "entwurf_acp_prompt_unknown") continue;
+		for (const part of [d.error?.message, d.details?.lifecycle, d.details?.launchSignal, d.details?.stderrTail]) {
+			if (typeof part === "string") parts.push(part);
+		}
+	}
+	return parts.join("\n");
+}
 
 async function collect(stream: Stream): Promise<AssistantMessageEvent[]> {
 	const events: AssistantMessageEvent[] = [];
@@ -153,9 +175,11 @@ function makeHarness(recordDir: string, wireReason: string | null) {
 			},
 		}),
 		lifecyclePolicy: () => "process-scoped",
+		sessionReader: piHost.sessionReader,
 		loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 		now: () => "2026-07-30T00:00:00Z",
 		sessionDir: recordDir,
+		birthDir: `${recordDir}-births`,
 	};
 }
 
@@ -270,11 +294,11 @@ try {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const eventUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/event-mapper.js")).href;
 	const backendModule = (await import(backendUrl)) as any;
-	const backend = {
+	const backend = piHost.wrap({
 		...backendModule,
 		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
 			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
-	};
+	});
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const eventMod = (await import(eventUrl)) as any;
 
@@ -357,11 +381,11 @@ try {
 
 		if (cell.errorContains) {
 			assert.ok(
-				typeof final.errorMessage === "string" && final.errorMessage.includes(cell.errorContains),
+				typeof final.errorMessage === "string" && failureText(final).includes(cell.errorContains),
 				tag(
 					cell,
-					`[${label}] errorMessage must name the reason (expected to contain "${cell.errorContains}", got ` +
-						`${JSON.stringify(final.errorMessage)})`,
+					`[${label}] the failure must name the reason, in errorMessage or in the unknown diagnostic (expected to contain "${cell.errorContains}", got ` +
+						`${JSON.stringify(failureText(final))})`,
 				),
 			);
 		} else {

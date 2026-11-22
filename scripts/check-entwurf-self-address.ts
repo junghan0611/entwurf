@@ -598,7 +598,8 @@ const noticeBody = nativeSrc.slice(
 ok(
 	"pi-native: the not-a-citizen notice is decided from the REAL flag, on the UI only, never on stderr " +
 		"[QK:SELFADDR-UNCITIZENED-NOTICED]",
-	/const enabled = pi\.getFlag\(ENTWURF_FLAG\) === true;\n\t\tawait noticeUncitizenedSession\(ctx, enabled\);/.test(
+	// Between the two stands only #171's report of the same parsed flag to the ACP backend, with its comment.
+	/const enabled = pi\.getFlag\(ENTWURF_FLAG\) === true;\n(?:\t\t\/\/[^\n]*\n)*\t\treportEntwurfControlFlag\(enabled\);\n\t\tawait noticeUncitizenedSession\(ctx, enabled\);/.test(
 		nativeSrc,
 	) &&
 		/decideUncitizenedNotice\(\{ controlEnabled, hasUI: ctx\.hasUI, alreadyShown: uncitizenedNoticeShown \}\)/.test(

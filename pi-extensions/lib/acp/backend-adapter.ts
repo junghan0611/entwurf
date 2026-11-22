@@ -301,6 +301,16 @@ export interface AcpBackendAdapter {
 	 *  ABSENT means no summary mode is declared, so backend.ts refuses the summary turn by name. */
 	summaryTurnMode?: AcpSummaryTurnMode;
 
+	/** OPTIONAL (#171 L18): what this backend needs between the text blocks of one prompt. agy hands
+	 *  its model the blocks joined with nothing between them — measured in its own transcript, where
+	 *  "…reply with only DONE." and "What does…" touch — so two user messages, or the augment and
+	 *  the transcript, read as one sentence. backend.ts ends every block but the last with this
+	 *  string, on the wire only.
+	 *
+	 *  ABSENT means the blocks go as built. Claude must stay absent: it reads a command such as
+	 *  `/compact` from the first block alone, and a block is a boundary for it already. */
+	textBlockSeparator?: string;
+
 	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
 	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
 	 *  from `errorMessage` alone, and a vendor's "Internal error" reads as transient
@@ -319,6 +329,21 @@ export interface AcpBackendAdapter {
 	 *  launched server's own name and version — an operator override included — so a floor needs no
 	 *  PATH probe. Throws a named refusal. ABSENT admits every server. */
 	admitAgent?(initializeAnswer: unknown): void;
+
+	/**
+	 * OPTIONAL capability (#171 step 8): this backend's stored sessions can be resumed under the same
+	 * id. ABSENT: a stored session of this backend stops. Every value is a measured fact, never a guess:
+	 * - `agent`: the pin whose `measured` version is the only reader that may attach (`attachAllowed`);
+	 * - `writers`: the versions whose sessions that reader was measured to resume;
+	 * - `unknownDispatch`: what to do with inputs of a prompt whose outcome is unknown. `skip`: never
+	 *   send them again (the agent may hold them). `resend`: send every input after the last answer
+	 *   again (the agent keeps nothing of an unanswered prompt).
+	 */
+	resume?: Readonly<{
+		agent: AcpAgentPin;
+		writers: readonly string[];
+		unknownDispatch: "skip" | "resend";
+	}>;
 }
 
 /** Explicit summary-turn modes a backend adapter may declare (#168 S1). */
@@ -346,9 +371,22 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
 
 /** `initialize.agentInfo` as each server answers it. Claude: the bundled pin, which a test binds to
  *  package.json (`[측정 2026-11-17]` 0.107.0 and 0.107.3 answered this name and their own version).
- *  agy: the one measured version (#167, 2026-11-16). */
-export const CLAUDE_ACP_AGENT = Object.freeze({ name: "@agentclientprotocol/claude-agent-acp", floor: "0.107.3" });
-export const AGY_ACP_AGENT = Object.freeze({ name: "Antigravity ACP Server", floor: "1.5.9" });
+ *  agy: the one measured version (#167, 2026-11-16).
+ *
+ *  `floor` admits a server to run at all (#168). `measured` is the one version whose session
+ *  resume/load the receipts named in docs/acp-client-baseline.md measured (#171 V5, decision 10,
+ *  GLG 2026-11-21); only that exact version may attach a stored session (`attachAllowed`). A gate binds
+ *  each `measured` to the version the Receipts paragraph names (receipt-versions.ts). */
+export const CLAUDE_ACP_AGENT = Object.freeze({
+	name: "@agentclientprotocol/claude-agent-acp",
+	floor: "0.109.0",
+	measured: "0.109.0",
+});
+export const AGY_ACP_AGENT = Object.freeze({
+	name: "Antigravity ACP Server",
+	floor: "1.5.9",
+	measured: "1.5.13",
+});
 
 function parseReleaseVersion(value: unknown): [number, number, number] | undefined {
 	if (typeof value !== "string") return undefined;
@@ -391,8 +429,95 @@ export function admitAcpAgent(
 	);
 }
 
+/** What one ACP child said about itself in its `initialize` answer (#171 L1). Read once per child and
+ *  never inferred: a field that is absent, null or of the wrong type reads as absent. */
+export interface AcpAgentFacts {
+	/** `agentInfo` name and version as answered; null unless both are strings. */
+	readonly agent: Readonly<{ name: string; version: string }> | null;
+	/** `agentCapabilities.loadSession === true`. */
+	readonly loadSession: boolean;
+	/** The keys of `agentCapabilities.sessionCapabilities` whose value is an object, sorted. */
+	readonly sessionCapabilities: readonly string[];
+	/** The `id` of each `authMethods` entry, in answer order. */
+	readonly authMethods: readonly string[];
+}
+
+function objectOrUndefined(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === "object" && value !== null && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
+/** Read an `initialize` answer into the child's facts. Pure and total: it never throws. */
+export function readAgentFacts(initializeAnswer: unknown): AcpAgentFacts {
+	const answer = objectOrUndefined(initializeAnswer);
+	const info = objectOrUndefined(answer?.agentInfo);
+	const capabilities = objectOrUndefined(answer?.agentCapabilities);
+	const session = objectOrUndefined(capabilities?.sessionCapabilities) ?? {};
+	const methods = Array.isArray(answer?.authMethods) ? answer.authMethods : [];
+	return Object.freeze({
+		agent:
+			typeof info?.name === "string" && typeof info.version === "string"
+				? Object.freeze({ name: info.name, version: info.version })
+				: null,
+		loadSession: capabilities?.loadSession === true,
+		sessionCapabilities: Object.freeze(
+			Object.keys(session)
+				.filter((key) => objectOrUndefined(session[key]))
+				.sort(),
+		),
+		authMethods: Object.freeze(
+			methods.flatMap((method) => {
+				const id = objectOrUndefined(method)?.id;
+				return typeof id === "string" ? [id] : [];
+			}),
+		),
+	});
+}
+
+/** An ACP agent as entwurf pins it: the name it answers, the admission floor and the measured version. */
+export type AcpAgentPin = Readonly<{ name: string; floor: string; measured: string }>;
+
+/** Why a stored session may not be attached on a child. */
+export type AcpAttachRefusal = "agent-unnamed" | "version-unmeasured" | "capability-absent";
+export type AcpAttachJudgement = { allowed: true } | { allowed: false; reason: AcpAttachRefusal };
+
+/**
+ * May a stored ACP session be attached (`session/resume` or `session/load`) on this child (#171 V5,
+ * decision 10)? Only the pinned agent, reporting exactly its `measured` version, advertising the
+ * capability the attach needs: resume needs `sessionCapabilities.resume`, load needs `loadSession`.
+ * Admission (`admitAcpAgent`) is a floor; this is not — a newer admitted server, an operator
+ * override's included, is unmeasured and refused. Pure; no attach path calls it yet (L8).
+ */
+export function attachAllowed(facts: AcpAgentFacts, agent: AcpAgentPin, need: "resume" | "load"): AcpAttachJudgement {
+	if (!parseReleaseVersion(agent.measured))
+		throw new Error(`entwurf: the measured version ${jsonText(agent.measured)} of ${agent.name} is not X.Y.Z`);
+	if (facts.agent?.name !== agent.name) return { allowed: false, reason: "agent-unnamed" };
+	if (facts.agent.version !== agent.measured) return { allowed: false, reason: "version-unmeasured" };
+	const advertised = need === "resume" ? facts.sessionCapabilities.includes("resume") : facts.loadSession;
+	return advertised ? { allowed: true } : { allowed: false, reason: "capability-absent" };
+}
+
 /** The pi diagnostic type under which backend.ts preserves a recognised rejection verbatim. */
 export const ACP_PROMPT_REJECTION_DIAGNOSTIC = "entwurf_acp_prompt_rejection";
+
+/**
+ * May the session a record names be resumed on this child (#171 step 8)? The reader must be the
+ * adapter's measured version advertising resume (`attachAllowed`), and the record's writer must be
+ * one of the versions that reader was measured to resume. Pure.
+ */
+export function resumeAllowed(
+	facts: AcpAgentFacts,
+	resume: NonNullable<AcpBackendAdapter["resume"]>,
+	writer: Readonly<{ name: string; version: string }>,
+): AcpAttachJudgement | { allowed: false; reason: "writer-unmeasured" } {
+	const reader = attachAllowed(facts, resume.agent, "resume");
+	if (!reader.allowed) return reader;
+	if (writer.name !== resume.agent.name || !resume.writers.includes(writer.version)) {
+		return { allowed: false, reason: "writer-unmeasured" };
+	}
+	return { allowed: true };
+}
 
 /** The verdict for claude-agent-acp's `incomplete_tool_call` (#127; upstream #1212, 0.85.0+). */
 export const INCOMPLETE_TOOL_CALL_VERDICT =
@@ -713,6 +838,14 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// #168: the server that answered initialize must be claude-agent-acp at the bundled pin or newer.
 	admitAgent: (answer) =>
 		admitAcpAgent(answer, "claude", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, "CLAUDE_AGENT_ACP_COMMAND"),
+	// #171 step 7 receipts: 0.109.0 resumes its own sessions. A record an earlier version wrote names no
+	// last answer and never reaches this judgement (GLG 2026-11-22). An input of an unanswered prompt
+	// may be in the session's history (G2a), so it is never sent twice.
+	resume: Object.freeze({
+		agent: CLAUDE_ACP_AGENT,
+		writers: Object.freeze(["0.109.0"]),
+		unknownDispatch: "skip",
+	}),
 };
 
 // ---------------------------------------------------------------------------
@@ -1033,8 +1166,18 @@ export const agyAdapter: AcpBackendAdapter = {
 	// vocabulary is unmeasured, and its tools run with permission prompts bypassed.
 	readPromptRejection: readAgyPromptRejection,
 
+	// #171 L18: agy joins the text blocks of one prompt with no separator; a blank line keeps them apart.
+	textBlockSeparator: "\n\n",
+
 	// #168: the server that answered initialize must be agy's own ACP server at the measured floor or newer.
 	admitAgent: (answer) => admitAcpAgent(answer, "agy", ACP_AGY_VERSION_UNSUPPORTED, AGY_ACP_AGENT, "AGY_ACP_COMMAND"),
+	// #171 step 7 receipts (U26, U17): 1.5.13 resumes its own sessions and 1.5.12's, and keeps nothing of
+	// a prompt it did not answer, so the inputs after the last answer are sent again.
+	resume: Object.freeze({
+		agent: AGY_ACP_AGENT,
+		writers: Object.freeze(["1.5.13", "1.5.12"]),
+		unknownDispatch: "resend",
+	}),
 
 	// #168: agy takes no tool list on session/new, so the model still sees tool schemas; summary
 	// turns run in an isolated per-turn root with a `v1:deny-all` PreToolUse hook and neutral cwd.

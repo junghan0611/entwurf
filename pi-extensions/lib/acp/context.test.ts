@@ -12,7 +12,7 @@
  */
 import { type AssistantMessage, type Message, normalizeContext, type Usage } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { ABORTED_TURN_STATUS, buildAcpPrompt } from "./context.ts";
+import { ABORTED_TURN_STATUS, buildAcpPrompt, latestUserDelta, separateTextBlocks, userDeltaRange } from "./context.ts";
 
 const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
 
@@ -55,7 +55,7 @@ describe("aborted assistant turns in a rebuilt transcript (#142)", () => {
 		const cut = assistant("aborted", [
 			notice("\n[acp: sending prompt]\n"),
 			said("[tool:start] Terminal\n\n[tool:failed] echo start >> count.log — The tool use was rejected"),
-			notice("\n[acp: stopped — changes already made stay; next message opens a new session]\n"),
+			notice("\n[acp: stopped — changes already made stay; the ACP process was closed]\n"),
 		]);
 		const text = rebuild(userRun, cut, userNext);
 		expect(text).toBe(
@@ -85,7 +85,7 @@ describe("aborted assistant turns in a rebuilt transcript (#142)", () => {
 		);
 	});
 
-	it("a reused session receives only the latest user text, never the status line", () => {
+	it("a reused session receives the user text after the last assistant, never the aborted-turn status line", () => {
 		const messages: Message[] = [userRun, assistant("aborted", [said("[tool:failed] rejected")]), userNext];
 		const blocks = buildAcpPrompt(normalizeContext({ tools: [], messages }), "reuse");
 		expect(blocks).toEqual([{ type: "text", text: "change of plan" }]);
@@ -101,4 +101,42 @@ describe("aborted assistant turns in a rebuilt transcript (#142)", () => {
 		expect(text).not.toContain("SYSTEM-SECRET");
 		expect(text).toContain(ABORTED_TURN_STATUS);
 	});
+});
+
+describe("the range a dispatch marker names (#171 L16)", () => {
+	it("[QK:ACP-L16-RANGE] is the messages after the last assistant, as positions over the whole context", () => {
+		const steered = normalizeContext({
+			tools: [],
+			messages: [userRun, assistant("stop", [said("done")]), userNext, { ...userNext, content: "and this" }],
+		});
+		expect(steered.messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "user"]);
+		expect(userDeltaRange(steered)).toEqual({ start: 2, count: 2 });
+		// The delta the prompt carries is exactly the user messages of that range.
+		expect(latestUserDelta(steered).map((block) => block.text)).toEqual(["change of plan", "and this"]);
+		// A first turn: no assistant yet, so the range starts at the first message.
+		expect(userDeltaRange(normalizeContext({ tools: [], messages: [userRun] }))).toEqual({ start: 0, count: 1 });
+		// Nothing after the last assistant: an empty range at the end.
+		const answered = normalizeContext({ tools: [], messages: [userRun, assistant("stop", [said("done")])] });
+		expect(userDeltaRange(answered)).toEqual({ start: 2, count: 0 });
+	});
+});
+
+it("[QK:ACP-L18-SEPARATE-BLOCKS] every block but the last ends with the separator, once, with count and order kept", () => {
+	const blocks = [
+		{ type: "text" as const, text: "reply with only DONE." },
+		{ type: "text" as const, text: "already apart\n\n" },
+		{ type: "text" as const, text: "What does effects.txt contain now?" },
+	];
+	const separated = separateTextBlocks(blocks, "\n\n");
+	expect(separated.map((b) => b.text)).toEqual([
+		"reply with only DONE.\n\n",
+		"already apart\n\n",
+		"What does effects.txt contain now?",
+	]);
+	// What the backend's model reads when the blocks are joined with nothing between them.
+	expect(separated.map((b) => b.text).join("")).toContain("DONE.\n\nalready");
+	expect(separateTextBlocks(separated, "\n\n")).toEqual(separated);
+	// The input is not changed in place: the marker and the delta proof read the built blocks.
+	expect(blocks[0].text).toBe("reply with only DONE.");
+	expect(separateTextBlocks([], "\n\n")).toEqual([]);
 });

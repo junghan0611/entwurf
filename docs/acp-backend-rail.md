@@ -11,6 +11,7 @@ are not registered and a direct selection refuses before launch, without a Claud
 Existing Cortex settings, credentials and native citizen records are not removed.
 Dated Cortex observations below are historical, not a current support claim.
 Implementation history and audit chronology live in CHANGELOG, issues, and git.
+What a complete ACP client must decide, and the state of each row in Entwurf, is the table in [acp-client-baseline.md](./acp-client-baseline.md) (#171).
 
 ## Boundary
 
@@ -62,15 +63,21 @@ backend-specific keys; `adapterSettings` remains opaque until handed back to its
 A connection, model, carrier, MCP declaration, or overlay-relevant setting change must
 change the reuse signature rather than mutate a live incompatible session.
 
-**Session reuse needs a resident pi.** Reuse — the live ACP session kept across turns, each
-later turn sending only the new user message — exists only in a pi process started with
-`--entwurf-control` (`entwurf pi` adds it). Every other pi process, plain interactive `pi`
-and `pi -p` included, is turn-scoped: each turn opens a new ACP session, sends the pi
-transcript rendered as one text prompt, and tears the child down when the turn ends
-(`resolveLifecyclePolicy`, `pi-extensions/lib/acp/session-store.ts`). This boundary is as
-old as reuse itself (S2c, hang-safe one-shot exit); it is stated here so that "reuse without
-resending the transcript" is not read as a property of every pi process. Nothing in a pi
-profile or AGENTS file changes it.
+**ACP rows run under a resident pi.** Reuse — the live ACP session kept across turns, each
+later turn sending only the new user message — exists only in a pi process whose control
+extension reports `--entwurf-control` as set (`entwurf pi` adds it). A pi whose reported run
+mode is `print` or `json` (`pi -p`, `--mode json`, or redirected stdio) is a one-shot and
+turn-scoped: its turn opens a new ACP session, sends the pi transcript rendered as one text
+prompt, and tears the child down when the turn ends. Any other pi process — a plain
+interactive `pi`, or RPC, without the flag — is unhosted: a conversation turn on an ACP row
+stops with a fixed text that names `entwurf pi`, and no child is started (#171 decision 18;
+before it, such a process opened a new vendor session on every turn). The one exception is
+Pi's own stateless summary request (compaction and `/tree` summaries), which is classified
+before this check and still runs on its isolated child. The split is `resolveLifecyclePolicy`
+(`pi-extensions/lib/acp/session-store.ts`) over two reported facts
+(`pi-extensions/lib/acp-host-facts.ts`): the control extension's parsed flag first, Pi's run
+mode second. It never scans argv, so `pi -- --entwurf-control` (a prompt) is not a resident.
+Nothing in a pi profile or AGENTS file changes it.
 
 **What a rebuilt prompt carries (`context.ts`).** The rebuild is a TEXT rendering of pi's own
 transcript, not a replay: user text, assistant text and tool results become `User:` /
@@ -105,21 +112,20 @@ none.** A turn ends only on a lifecycle event:
 
 **What an abort leaves (#142).** After the turn has settled, the operator is told one of two
 things: `[acp: stopped — changes already made stay; next message continues this session]` when
-the agent closed a reused turn on `session/cancel` (or ended a new turn `cancelled` with no
-operator abort, so the session was retained), so the live ACP session stays and the next
-message is a delta; or `[acp: stopped — changes already made stay; next message opens a new
-session]` when the session was dropped — a cancelled first turn (only a live, un-aborted
-session is retained), escalation teardown, or an abort before the prompt was sent — so the next
-message rebuilds from the pi transcript. That rebuild states the cut to the new session: an
+the agent closed the turn on `session/cancel`, a first turn included (#171 step 8), so the live
+ACP session stays and the next message is a delta; or `[acp: stopped — changes already made stay;
+the ACP process was closed]` after an escalation teardown or an abort before a first prompt was
+sent. A resident's record stays either way, and no second session is opened for the conversation.
+A one-shot rebuilds from the pi transcript, and that rebuild states the cut to the new session: an
 assistant turn pi recorded as `aborted` is followed by one harness line, `[turn status: aborted —
 actions this turn had started may already have taken effect; cancellation is
 not rollback]`, and claims nothing about what ran (`context.ts` `ABORTED_TURN_STATUS`; a reused
 session gets the user delta only). Neither notice rolls anything back, and neither speaks
 for the private Claude transcript behind the live session. An abort while a reuse turn waits
 for a changed effort's answer settles on the abort, not on the answer or the 30s bound; no
-prompt is sent and the session is dropped, since the effort the driver holds is unknown. Gates:
+prompt is sent and the session is kept (#171 step 8). Gates:
 `check-acp-set-model-readback` (`backend.thinking.test.ts`, QKs `ACP-THINKING-REUSE-ABORT`,
-`ACP-CANCEL-NOTICE-REUSE-KEPT`, `ACP-CANCEL-NOTICE-NEW-CLOSED`, `ACP-THINKING-REUSE-ABORT-LATE`;
+`ACP-CANCEL-NOTICE-REUSE-KEPT`, `ACP-CANCEL-NOTICE-NEW-KEPT`, `ACP-THINKING-REUSE-ABORT-LATE`;
 `context.test.ts`, QKs `ACP-REBUILD-ABORTED-STATUS`, `ACP-REBUILD-ABORTED-EMPTY`).
 
 Elapsed time is not evidence of failure, and a silent turn is not a failed turn: tool
@@ -197,9 +203,11 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
 and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK, Claude adapter and transitive Claude
-Agent SDK rows are the #168 candidate `0.107.3` / `2.7.0` / `0.3.325`, not yet published. The published
-0.53.1 ships `0.107.0` / `2.6.0` / `0.3.323` (`[측정 2026-11-14]` `git show v0.53.1:package.json` and
-its lockfile): #142 landed `0.106.0` / `2.6.0` / `0.3.322` and #163 moved the adapter to `0.107.0`
+Agent SDK rows are `0.109.0` / `2.8.0` / `0.3.328`, unreleased on this branch; the adapter was measured on
+2026-11-21 in #171 step 7. The published 0.60.0 ships the #168 set `0.107.3` / `2.7.0` / `0.3.325`, and
+0.55.0 and 0.55.1 ship `0.107.0` / `2.6.0` / `0.3.323` (`[측정 2026-11-21]` `git show <tag>:package.json`
+and its lockfile). The published 0.53.1 ships `0.107.0` / `2.6.0` / `0.3.323` (`[측정 2026-11-14]` `git
+show v0.53.1:package.json` and its lockfile): #142 landed `0.106.0` / `2.6.0` / `0.3.322` and #163 moved the adapter to `0.107.0`
 and the transitive SDK to `0.3.323` (wire SDK unchanged). 0.53.0 carried the #142 set but was tagged
 and never published to npm. Before that, 0.36.1–0.52.0 shipped `claude-agent-acp 0.90.0` /
 `@agentclientprotocol/sdk 1.8.0` with the transitive `0.3.296` (CHANGELOG 0.36.1, #128; 0.38.0, #145,
@@ -211,9 +219,9 @@ entry; its bumps are recorded in the ROADMAP Dep bump ledger.
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
 | pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 and 0.53.1 ship (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
-| ACP wire SDK | `@agentclientprotocol/sdk 2.7.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry) |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.107.3` | **exact**, bundled | #168 candidate over 0.107.0 (#163, published in 0.53.1; 0.90.0 shipped 0.36.1–0.52.0); a missing package fails at launch resolution, with no PATH fallback; the server that answers `initialize` is admitted only at or above this pin (`acp-claude-version-unsupported`, §Backend parity); declaration is not compatibility evidence |
-| Claude Agent SDK | `0.3.325` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| ACP wire SDK | `@agentclientprotocol/sdk 2.8.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry); the adapter pins the same version, so both sides share one wire SDK |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.109.0` | **exact**, bundled | #171 bump over 0.107.3 (#168, published in 0.60.0; 0.107.0 shipped 0.53.1–0.55.1, #163; 0.90.0 shipped 0.36.1–0.52.0); a missing package fails at launch resolution, with no PATH fallback; the server that answers `initialize` is admitted only at or above this pin (`acp-claude-version-unsupported`, §Backend parity); declaration is not compatibility evidence |
+| Claude Agent SDK | `0.3.328` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -611,7 +619,7 @@ proof is shared and only the wire facts differ per backend.
 | Seat | Claude (reference) | agy |
 |---|---|---|
 | `routeModel` / `curatedModels` | **provided** — three unprefixed ids, anchor row first (`[QK:ACP-ROWS-ANCHOR-FIRST]`); the registered set `[QK:ACP-PROVIDER-CLAUDE-ONLY]` | **provided** — three `agy-` rows, prefix stripped, nothing else routes (`[QK:ACP-AGY-ROUTE-EXACT]`, `[QK:ACP-AGY-ROWS]`); cost 0 and window 1,048,576 from `usage_update.size` (`models.ts:190`, `:221`) |
-| `resolveLaunch` | **provided** — bundled `claude-agent-acp` exact `0.107.3`; a missing package fails at launch resolution, with no PATH fallback; `CLAUDE_AGENT_ACP_COMMAND` override (`backend-adapter.ts:462-471`) | **provided** — `agy` from PATH (`agyAdapter.resolveLaunch`, `backend-adapter.ts:898-902`); the version is admitted at `initialize`, not at launch (`admitAgent`, floor `1.5.9`); `AGY_ACP_COMMAND` override owns the whole line (`[QK:ACP-AGY-LAUNCH-ARGV]`). **recorded limit**: PATH-resolved, no pinned path |
+| `resolveLaunch` | **provided** — bundled `claude-agent-acp` exact `0.109.0`; a missing package fails at launch resolution, with no PATH fallback; `CLAUDE_AGENT_ACP_COMMAND` override (`backend-adapter.ts:462-471`) | **provided** — `agy` from PATH (`agyAdapter.resolveLaunch`, `backend-adapter.ts:898-902`); the version is admitted at `initialize`, not at launch (`admitAgent`, floor `1.5.9`); `AGY_ACP_COMMAND` override owns the whole line (`[QK:ACP-AGY-LAUNCH-ARGV]`). **recorded limit**: PATH-resolved, no pinned path |
 | `launchEnvDefaults` | **provided** — `CLAUDE_CONFIG_DIR` plus foreground-only work (`[QK:ACP-CLAUDE-FOREGROUND-ONLY]`) | **provided** — none; the overlay rides argv (`backend-adapter.ts:904-908`) |
 | `resolveAdapterSettings` | **provided** — no own settings; `tools`, `disallowedTools`, `permissionAllow`, `settingSources` are common config (`backend-adapter.ts:597-602`) | **refused by name** for the three narrowing keys (`acp-agy-narrowing-unsupported`, `[QK:ACP-AGY-NARROWING-REFUSED]`); only the GLOBAL `skillPlugins` is read (`[QK:ACP-AGY-SKILLS-GLOBAL-ONLY]`) |
 | `ensureOverlay` | **provided** — constant `CLAUDE_CONFIG_DIR` whitelist (`overlay.ts:146`); **recorded limit**: an overlay path that is itself a symlink is not refused (§Antigravity, Known limits) | **provided** — `--gemini-dir` state root with one linked token file (`[QK:ACP-AGY-OVERLAY-ONE-LINK]`, `-RELINK`, `-SWEEP`, `-REAL-DIRECTORY`); **recorded limit**: one overlay for every agy child, and a rule file a child writes there is loaded by later children |
@@ -621,8 +629,10 @@ proof is shared and only the wire facts differ per backend.
 | `configSignatureFields` | **provided** — `{}` (`backend-adapter.ts:673-678`) | **provided** — `{ agyHookPolicy }`, the hook policy, so a resident child is not reused across a policy change (`agyAdapter.configSignatureFields`, `backend-adapter.ts:964-966`, `[QK:ACP-AGY-POLICY-SIGNATURE]`) |
 | `sealsTurnAccounting` | **provided** (`backend-adapter.ts:686`) — see the accounting rows below | **recorded limit** — not declared (`[QK:ACP-AGY-NO-SEAL]`): `usage_update` carries no cost |
 | `summaryTurnMode` | **provided** (`"toolless"`) — the summary child gets `tools: []`, no MCP, no plugin (`[QK:ACP-SUMMARY-TURN-TOOLLESS]`) | **provided** (`"execution-denied"`) — agy takes no tool list, so tool schemas stay visible; each summary turn runs in an isolated `0700` root (`~/.pi/agent/agy-summary/<turn>/{gemini,cwd}`) with `v1:deny-all` PreToolUse hook verified by byte readback before spawn, empty MCP/skills, and a neutral cwd whose resolved path must lie outside every git work tree for repository hooks to stay out (not checked, symlinks included) (`[QK:ACP-AGY-SUMMARY-EXECUTION-DENIED]`, `[QK:ACP-AGY-SUMMARY-ISOLATED-DIR]`, `[QK:ACP-AGY-HOOK-DENY-ALL]`). `AGY_ACP_COMMAND` override refuses summary turns by name (`acp-agy-summary-override-unsupported`, `[QK:ACP-AGY-SUMMARY-OVERRIDE-REFUSED]`). After confirmed child exit, only the isolated token symlink is unlinked; success removes `<turn>/`, failure preserves logs, unconfirmed exit touches nothing (`[QK:ACP-AGY-SUMMARY-CLEANUP-S3]`). Guarantee difference vs `"toolless"`: measured `Additional focus` temptation cost ~3× (31,045 vs ~10,300 tokens, n=1); summary text lives in Pi's compaction entry, so agy's turn copy is not Rule 8 memory |
-| `readPromptRejection` | **provided** for one kind — `-32603` `incomplete_tool_call` seals a fixed verdict (`[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW]`, `-REUSE`, `[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE]`); **recorded limit**: every other failure keeps the verbatim path, whose text or stderr tail can read as transient to pi (§Support contract, 0.79.0 → 0.85.1) | **provided** as one verdict for every failure after the prompt is sent (`[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`); bootstrap keeps the verbatim path (`[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]`). **recorded limit**: overflow, quota and login are not told apart — the raw failure and any overflow hint ride only `diagnostics` (`backend.ts:1754-1767`), so pi neither retries nor compacts. An empty, garbage or fake-expired token file fails at `session/new` with `-32000 Authentication required`, before any prompt — a bootstrap failure (#168, agy 1.5.9, 2026-11-17, n=1 each). **unmeasured**: agy's `session/prompt` wording for an exhausted quota, a login that expires mid-session, or an overflow |
-| `admitAgent` | **provided** — `initialize.agentInfo` must name `@agentclientprotocol/claude-agent-acp` at or above the bundled pin `0.107.3`, an override launch included; otherwise `acp-claude-version-unsupported` (`[QK:ACP-CLAUDE-ADMIT-FLOOR]`, `[QK:ACP-CLAUDE-ADMIT-NAME]`; the floor equals the `package.json` pin, `[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]`) | **provided** — `initialize.agentInfo` must name `Antigravity ACP Server` at or above `1.5.9`, an `AGY_ACP_COMMAND` launch included; otherwise `acp-agy-version-unsupported` (`[QK:ACP-AGY-ADMIT-FLOOR]`, `[QK:ACP-AGY-ADMIT-NAME]`). LIVE n=1, 2026-11-17: the live 0.107.3 and 1.5.9 answers admitted, the live 0.107.3 answer with its version set to 0.107.2 refused (BASELINE). Both: refused after `initialize` and before `session/new` — no session, no set, no prompt, the child not kept — with text pi reads as neither transient nor overflow (`[QK:ACP-AGENT-ADMIT-BEFORE-SESSION]`, `[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]`) |
+| `readPromptRejection` | **provided** for one kind — `-32603` `incomplete_tool_call` seals a fixed verdict (`[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW]`, `-REUSE`, `[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE]`); every other failure of a resident's prompt seals the fixed `unknown` stop with the raw failure in an `entwurf_acp_prompt_unknown` diagnostic (`[QK:ACP-UNKNOWN-FIXED-TEXT]`, #171 step 8); **recorded limit**: a one-shot keeps the verbatim path, whose text or stderr tail can read as transient to pi (§Support contract, 0.79.0 → 0.85.1) | **provided** as one verdict for every failure after the prompt is sent (`[QK:ACP-AGY-PROMPT-FAILURE-NO-REPLAY]`); bootstrap keeps the verbatim path (`[QK:ACP-AGY-BOOTSTRAP-FAILURE-VERBATIM]`). **recorded limit**: overflow, quota and login are not told apart — the raw failure and any overflow hint ride only `diagnostics` (`backend.ts:1754-1767`), so pi neither retries nor compacts. An empty, garbage or fake-expired token file fails at `session/new` with `-32000 Authentication required`, before any prompt — a bootstrap failure (#168, agy 1.5.9, 2026-11-17, n=1 each). **unmeasured**: agy's `session/prompt` wording for an exhausted quota, a login that expires mid-session, or an overflow |
+| `admitAgent` | **provided** — `initialize.agentInfo` must name `@agentclientprotocol/claude-agent-acp` at or above the bundled pin `0.109.0`, an override launch included; otherwise `acp-claude-version-unsupported` (`[QK:ACP-CLAUDE-ADMIT-FLOOR]`, `[QK:ACP-CLAUDE-ADMIT-NAME]`; the floor equals the `package.json` pin, `[QK:ACP-CLAUDE-FLOOR-MATCHES-PIN]`) | **provided** — `initialize.agentInfo` must name `Antigravity ACP Server` at or above `1.5.9`, an `AGY_ACP_COMMAND` launch included; otherwise `acp-agy-version-unsupported` (`[QK:ACP-AGY-ADMIT-FLOOR]`, `[QK:ACP-AGY-ADMIT-NAME]`). LIVE n=1, 2026-11-17: the live 0.107.3 and 1.5.9 answers admitted, the live 0.107.3 answer with its version set to 0.107.2 refused (BASELINE). Both: refused after `initialize` and before `session/new` — no session, no set, no prompt, the child not kept — with text pi reads as neither transient nor overflow (`[QK:ACP-AGENT-ADMIT-BEFORE-SESSION]`, `[QK:ACP-AGENT-ADMIT-NOT-TRANSIENT]`) |
+
+Admission is a floor. Attaching a stored session (`session/resume` or `session/load`) is a stricter, separate judgement: `attachAllowed` admits only the exact `measured` version of each pin, so a newer admitted server, an operator override included, stops the turn of a stored session by name until it is re-measured (V5 in [acp-client-baseline.md](./acp-client-baseline.md), #171). A resident resumes its recorded session under the same id with `session/resume` (`resumeAllowed`: the measured reader, and a writer version that reader was measured on), under a holder lease that a second Pi stops on (`holder-lease.ts`), and sends it only the inputs the Pi session's branch shows after the session's last answer (`branch-gate.ts`). An input of a prompt whose outcome is unknown is not sent to Claude twice and is sent to agy again, each as measured; `session/new` happens only as a birth (`[QK:ACP-ATTACH-SAME-ID-DELTA]`, `[QK:ACP-ATTACH-REFUSAL-KEEPS-RECORD]`, `[QK:ACP-ATTACH-HOLDER-STOPS]`, `[QK:ACP-DELTA-UNKNOWN-BY-ENTRY-ID]`).
 
 In the thinking row: `medium` is offered on every Claude and agy row (`claudeAcpThinkingLevelMap` and
 `agyThinkingLevelMap` in `models.ts`; `[QK:ACP-CLAUDE-THINKING-MENU]`, `[QK:ACP-AGY-THINKING-MENU]`), and agy's own
@@ -1114,7 +1124,8 @@ occupancy it reads (`usage.totalTokens` = the child's `used`, `[QK:ACP-CONTEXT-O
 exceeds `contextWindow − reserveTokens` (983,616 on the 1M window). The child compacts inside a
 prompt (observed once at 969k, mid-prompt, 2026-11-15). Inside one long ACP prompt the child
 compacts first whatever Pi's setting is, and a Pi compaction does not shrink the live child's
-context — only closing it and building a new child does (`[QK:ACP-COMPACT-CLOSES-CHILD]`). The
+context: since #171 the next turn resumes the same vendor session (`[QK:ACP-COMPACT-CLOSES-CHILD]`,
+`[QK:ACP-COMPACT-KEEPS-SESSION]`), whose context the vendor's own compaction governs. The
 adapter's own idle compaction is off (`idleCompaction: false`, `[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]`).
 
 **What is recorded.** For each compaction of a prompt, one plain custom entry
@@ -1155,7 +1166,7 @@ not examined. Pi emits `entry_appended` for it, so an RPC/JSON consumer sees it 
 own summary and what followed; a child built anew from the host transcript remembers the host
 transcript, which never held the child's internal tool results. The record shows where the live
 child's memory became a summary, but a rebuild does not receive it. Unchanged and approved: a Pi
-compaction closes the child and the next turn builds a new one from the compacted host context.
+compaction closes the child and the next turn resumes the same vendor session with the inputs after its last answer (#171, `[QK:ACP-COMPACT-KEEPS-SESSION]`).
 What is refused is injecting the recorded compaction facts or summary into a live child, or
 using a recorded summary as rebuild input. Since Pi's threshold reads the child's occupancy, the host transcript a rebuild would
 send is not measured by anything; a very long session's rebuild can exceed the window and then
@@ -1315,8 +1326,8 @@ summary on a Claude ACP model.
   `stop` and preserving it on `length`/error/unconfirmed exit.
 - **After compaction.** `acp-provider.ts` subscribes to `session_compact` and closes that Pi
   session's retained child at once (GLG 2026-11-14), unless a turn is in flight. A session is busy
-  only inside its key's in-flight claim, so the in-flight check covers both. The next turn opens a
-  new child from the compacted transcript.
+  only inside its key's in-flight claim, so the in-flight check covers both. The next turn resumes
+  the same vendor session and sends it the inputs after its last answer (#171).
 
 Proof: `pi-extensions/lib/acp/backend.summary-turn.test.ts` drives Pi's own `generateSummary` and
 `generateBranchSummary` through `streamAcpTurn`, so the request shape is Pi's, not a fixture's. A Pi

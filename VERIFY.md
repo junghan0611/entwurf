@@ -146,8 +146,8 @@ A session's first effort is the pi thinking level in force when it starts: `defa
 
 ESC sends ACP `session/cancel`; the agent ends its own turn, and only after a bounded grace does process cleanup follow. After an ESC the turn carries one of two notices, defined as `ACP_CANCEL_KEPT_NOTICE` / `ACP_CANCEL_CLOSED_NOTICE` in `backend.ts`; `pushAcpLifecycleNotice` in `event-mapper.ts` wraps them as `[acp: …]` on screen:
 
-- `stopped — changes already made stay; next message continues this session` — a reuse turn the agent closed on cancel;
-- `stopped — changes already made stay; next message opens a new session` — a cancelled first turn, an escalation, or an abort before the prompt was sent.
+- `stopped — changes already made stay; next message continues this session` — a turn the agent closed on cancel;
+- `stopped — changes already made stay; the ACP process was closed` — an escalation, or an abort before a first prompt was sent.
 
 When the next turn rebuilds the transcript, an aborted assistant turn is followed by `[turn status: aborted — actions this turn had started may already have taken effect; cancellation is not rollback]` (`context.ts`). The reuse delta carries no such line.
 
@@ -168,7 +168,7 @@ Only the operator can type `/compact` (Pi handles it from interactive input; a m
 - **c5 O6 `tools: []`.** Record exactly: "delivery path read + non-use observed (summary child transcript has 0 `tool_use`, ended `end_turn`); the provided tool set is unobserved." The ACP wire does not expose it; a stronger check is a separate LIVE probe that needs GLG's approval.
 - **c6 (optional) cancel.** ESC during `/compact` shows `Compaction cancelled`: no compaction entry, no leftover summary child.
 
-**Recording.** Header: n=1, host, date, pi 1.5.2, claude-agent-acp 0.107.3, model id, effective `keepRecentTokens` with its source. States: PASS / FAIL / PARTIAL / UNMEASURED.
+**Recording.** Header: n=1, host, date, pi 1.5.2, the bundled claude-agent-acp version, model id, effective `keepRecentTokens` with its source. States: PASS / FAIL / PARTIAL / UNMEASURED.
 - Not attempted: `UNMEASURED — not attempted`. `Nothing to compact`: `UNMEASURED — Pi gate not reached: estTokensAfterFirstUser=<n> < keepRecentTokens=<k>`, with the pre-check result and footer % side by side. `Already compacted`: this attempt UNMEASURED.
 - Compacted but an observation missed: only that row is PARTIAL, with the reason. A summary-turn `error` stop is FAIL with the raw reason; repair nothing.
 - Fixture or source passes (`backend.summary-turn.test.ts`) never stand in for this session's compact; success at a short context is not long-context durability, so state the context reached.
@@ -374,7 +374,7 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 |---|---|
 | Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live` (a bare-vendor shape by design: no overlay and no session meta, so it is not the production session shape), `check-acp-prompt-builder` |
 | Multi-turn continuity + recall (process-scoped reuse) | `smoke-acp-session-reuse-live`, `check-acp-session-reuse` |
-| Cross-process continuity / cache before-after | `check-acp-session-store` (signature, decideBootstrap, persist/parse) |
+| Cross-process continuity / cache before-after | `check-acp-session-store` (signature, persist/parse); resident guard beside `session-store.ts` |
 | Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
 | Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
 | Prompt lifecycle — no wall-clock cutoff on a running turn; abort ends it by ACP `session/cancel` with bounded cleanup; a child death is reported with exit status + stderr on new AND reuse turns; our prompt-phase error text is not classified transient by pi | `check-acp-prompt-lifecycle`, `check-probe-ordering` |

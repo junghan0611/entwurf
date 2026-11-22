@@ -82,7 +82,7 @@ function textFromAssistantContent(content: AssistantMessage["content"]): string 
  * not run when its first effect was on disk). It adds no claim about what did or
  * did not happen — only that the turn was cut and that a cut is not a rollback.
  * Only the full transcript carries it: a reused session already holds its own
- * record of the interruption and receives just the latest user delta.
+ * record of the interruption and receives only the user messages after the last assistant.
  */
 export const ABORTED_TURN_STATUS =
 	"[turn status: aborted — actions this turn had started may already have taken effect; cancellation is not rollback]";
@@ -155,32 +155,78 @@ export function contextToAcpPrompt(context: TranscriptContext): AcpTextBlock[] {
 export type AcpBootstrapPath = "new" | "reuse" | "resume" | "load";
 
 /**
- * The latest user turn only — the first user message AFTER the last assistant
- * message. Ported from 0.11.0 `index.ts:732 extractPromptBlocks`: taking the
- * FIRST user of the trailing group (not `reverse().find()`) skips the
- * SessionStart hook user-message (`device=…, time_kst=…`) that pi appends AFTER
- * the real prompt. Images leave a text marker (S2c decision — real ACP image
- * passthrough is a later lane), never raw data.
+ * Where the delta sits: the messages after the last assistant, as positions in `context.messages` (the same
+ * index space as `contextMessageSignatures`). It is the range a dispatch marker names (#171 L16): the input
+ * the prompt answers, on a new session as on a live one.
+ */
+export function userDeltaRange(context: TranscriptContext): { start: number; count: number } {
+	let start = 0;
+	for (let i = context.messages.length - 1; i >= 0; i--) {
+		if (context.messages[i].role === "assistant") {
+			start = i + 1;
+			break;
+		}
+	}
+	return { start, count: context.messages.length - start };
+}
+
+/**
+ * Every nonempty user-role message after the last assistant, in order, as separate
+ * blocks. Pi's projection can turn custom messages and bash output into user-role
+ * messages without retaining their origin; no message is silently discarded here.
+ * Images leave a text marker, never raw data.
  *
  * This is the prompt scope for a session that ALREADY holds the prior turns
  * (reuse/resume/load): re-sending the whole transcript there would duplicate
  * history the backend already remembers.
  */
 export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
-	let lastAssistantIdx = -1;
-	for (let i = context.messages.length - 1; i >= 0; i--) {
-		if (context.messages[i].role === "assistant") {
-			lastAssistantIdx = i;
-			break;
-		}
-	}
-	const latestUser = context.messages.slice(lastAssistantIdx + 1).find((m): m is UserMessage => m.role === "user");
-	if (!latestUser) return [];
-	// The delta IS the user's actual prompt — preserve its body verbatim (0.11.0
-	// extractPromptBlocks sent it near-raw). Only the EMPTINESS test trims, so a
-	// whitespace-only turn yields no block.
-	const raw = textFromUserOrToolContent(latestUser.content);
+	const { start } = userDeltaRange(context);
+	return context.messages.slice(start).flatMap((message): AcpTextBlock[] => {
+		if (message.role !== "user") return [];
+		return userInputBlock(message.content);
+	});
+}
+
+/** One user input as the delta sends it: its text as one block, or nothing when it is blank. */
+function userInputBlock(content: UserMessage["content"]): AcpTextBlock[] {
+	const raw = textFromUserOrToolContent(content);
 	return raw.trim() ? [{ type: "text", text: raw }] : [];
+}
+
+/**
+ * The delta blocks a list of text-only inputs would produce, by the renderer `latestUserDelta` uses,
+ * or `undefined` when an input is not text only (#171 step 8). An input is its content as Pi stores
+ * it: a string, or an array of `{type: "text", text}` blocks. The branch gate's caller holds this
+ * against the delta built from the provider context, so the comparison is between two wire texts
+ * and never between two hashes of something else.
+ */
+export function textInputBlocks(inputs: readonly unknown[]): AcpTextBlock[] | undefined {
+	const blocks: AcpTextBlock[] = [];
+	for (const content of inputs) {
+		if (typeof content !== "string") {
+			if (!Array.isArray(content)) return undefined;
+			for (const part of content) {
+				const p = part as { type?: unknown; text?: unknown } | null;
+				if (typeof p !== "object" || p === null || p.type !== "text" || typeof p.text !== "string") return undefined;
+			}
+		}
+		blocks.push(...userInputBlock(content as UserMessage["content"]));
+	}
+	return blocks;
+}
+
+/**
+ * End every block but the last with `separator`, for a backend that joins the text blocks of one
+ * prompt with nothing between them (#171 L18). A block that already ends with it is left as it is,
+ * so applying this twice changes nothing. The count and order of blocks do not change.
+ */
+export function separateTextBlocks(blocks: readonly AcpTextBlock[], separator: string): AcpTextBlock[] {
+	return blocks.map((block, index) =>
+		index === blocks.length - 1 || block.text.endsWith(separator)
+			? { ...block }
+			: { ...block, text: `${block.text}${separator}` },
+	);
 }
 
 /**
@@ -190,12 +236,12 @@ export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
  *     S2c spawn-per-turn path). Delta-only here would lose history on
  *     rebuild/compaction/edited-history.
  *   - `"reuse" | "resume" | "load"`: the stateful ACP session already holds the
- *     prior turns, so send only the latest user delta — the whole transcript
- *     would duplicate remembered history.
+ *     prior turns, so send only the user-role messages after the last assistant
+ *     (`latestUserDelta`) — the whole transcript would duplicate remembered history.
  *
- * The delta-only SAFETY for resume/load is owned by the caller's
- * `contextMessageSignatures` prefix-compat gate (mismatch → fall back to
- * `"new"` + full transcript); this pure function only splits the scope.
+ * The caller's prefix-compat gate detects divergence, not a record that is
+ * behind the transcript. Record currency is L16 (`recordIsBehind` and the dispatch
+ * marker in session-store.ts); this pure function only splits the scope.
  */
 export function buildAcpPrompt(context: TranscriptContext, bootstrapPath: AcpBootstrapPath): AcpTextBlock[] {
 	switch (bootstrapPath) {

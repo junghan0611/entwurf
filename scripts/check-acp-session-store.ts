@@ -24,20 +24,13 @@ import {
 	bridgeConfigSignature,
 	buildSessionRecord,
 	contextMessageSignatures,
-	decideBootstrap,
-	deleteSessionRecord,
-	ENTWURF_CONTROL_FLAG,
-	type ExistingSession,
 	hasPrefix,
-	isCompatible,
 	parseSessionRecord,
 	readSessionRecord,
 	resolveLifecyclePolicy,
 	SESSION_RECORD_PROVIDER,
 	SESSION_RECORD_VERSION,
 	type SessionCompatFacts,
-	SessionModelLockedError,
-	type SessionRecord,
 	sessionRecordPath,
 	writeSessionRecord,
 } from "../pi-extensions/lib/acp/session-store.ts";
@@ -190,137 +183,13 @@ const baseInput = (): BridgeConfigInput => ({
 }
 
 // ---------------------------------------------------------------------------
-// 3) hasPrefix / isCompatible
+// 3) hasPrefix
 // ---------------------------------------------------------------------------
-{
-	assert.ok(hasPrefix(["a", "b"], ["a", "b", "c"]), "shorter prefix matches");
-	assert.ok(hasPrefix(["a", "b"], ["a", "b"]), "equal is a prefix");
-	assert.ok(hasPrefix([], ["a"]), "empty is a prefix");
-	assert.ok(!hasPrefix(["a", "b", "c"], ["a", "b"]), "longer existing is NOT a prefix");
-	assert.ok(!hasPrefix(["a", "x"], ["a", "b", "c"]), "divergent history breaks the prefix");
-
-	const facts = (over: Partial<SessionCompatFacts> = {}): SessionCompatFacts => ({
-		cwd: "/w",
-		modelId: "claude-sonnet-5",
-		bridgeConfigSignature: bridgeConfigSignature(baseInput()),
-		contextMessageSignatures: ["user:text:a"],
-		...over,
-	});
-	const params = facts({ contextMessageSignatures: ["user:text:a", "assistant:text:b"] });
-	assert.ok(isCompatible(facts(), params), "prefix history + same cfg → compatible");
-	assert.ok(!isCompatible(facts({ cwd: "/other" }), params), "cwd drift → incompatible");
-	assert.ok(!isCompatible(facts({ modelId: "claude-opus-5" }), params), "model drift → incompatible");
-	assert.ok(!isCompatible(facts({ bridgeConfigSignature: "different" }), params), "signature drift → incompatible");
-	assert.ok(
-		!isCompatible(facts({ contextMessageSignatures: ["user:text:EDITED"] }), params),
-		"edited history → prefix break → incompatible",
-	);
-}
-
-// ---------------------------------------------------------------------------
-// 4) decideBootstrap matrix
-// ---------------------------------------------------------------------------
-{
-	const sig = bridgeConfigSignature(baseInput());
-	const compatFacts: SessionCompatFacts = {
-		cwd: "/w",
-		modelId: "claude-sonnet-5",
-		bridgeConfigSignature: sig,
-		contextMessageSignatures: ["user:text:a"],
-	};
-	const params = (policy: "process-scoped" | "turn-scoped") => ({
-		...compatFacts,
-		contextMessageSignatures: ["user:text:a", "assistant:text:b", "user:text:c"],
-		lifecyclePolicy: policy,
-	});
-	const aliveCompat: ExistingSession = { ...compatFacts, alive: true };
-	const persistedCompat: SessionRecord = buildSessionRecord(
-		{ sessionKey: "k", acpSessionId: "acp-123", ...compatFacts },
-		"2026-06-18T00:00:00Z",
-	);
-
-	// turn-scoped: ALWAYS new, even with a compatible existing AND persisted (④).
-	assert.deepEqual(
-		decideBootstrap(params("turn-scoped"), {
-			existing: aliveCompat,
-			persisted: persistedCompat,
-			capabilities: { resumeSession: true, loadSession: true },
-		}).path,
-		"new",
-		"turn-scoped one-shot is always new",
-	);
-
-	// process-scoped + alive compatible existing → reuse.
-	assert.equal(
-		decideBootstrap(params("process-scoped"), { existing: aliveCompat }).path,
-		"reuse",
-		"compatible alive → reuse",
-	);
-
-	// process-scoped + persisted compatible + resume capability → resume.
-	{
-		const d = decideBootstrap(params("process-scoped"), {
-			persisted: persistedCompat,
-			capabilities: { resumeSession: true, loadSession: false },
-		});
-		assert.equal(d.path, "resume", "persisted compatible + resume cap → resume");
-		assert.equal(d.acpSessionId, "acp-123", "resume carries the persisted acpSessionId");
-	}
-
-	// process-scoped + persisted compatible + only load capability → load.
-	assert.equal(
-		decideBootstrap(params("process-scoped"), {
-			persisted: persistedCompat,
-			capabilities: { resumeSession: false, loadSession: true },
-		}).path,
-		"load",
-		"persisted compatible + load cap → load",
-	);
-
-	// process-scoped + persisted compatible + NO capability → new.
-	assert.equal(
-		decideBootstrap(params("process-scoped"), {
-			persisted: persistedCompat,
-			capabilities: { resumeSession: false, loadSession: false },
-		}).path,
-		"new",
-		"persisted compatible but no resume/load capability → new",
-	);
-
-	// process-scoped + alive INCOMPATIBLE existing → new + invalidatePersisted,
-	// and the persisted record is NOT trusted even if itself compatible.
-	{
-		const incompatAlive: ExistingSession = {
-			...compatFacts,
-			bridgeConfigSignature: "drifted",
-			alive: true,
-		};
-		const d = decideBootstrap(params("process-scoped"), { existing: incompatAlive, persisted: persistedCompat });
-		assert.equal(d.path, "new", "incompatible existing → new");
-		assert.equal(d.invalidatePersisted, true, "incompatible existing also invalidates persisted");
-	}
-
-	// process-scoped + persisted incompatible (no existing) → new + invalidate.
-	{
-		const incompatPersisted: SessionRecord = { ...persistedCompat, bridgeConfigSignature: "drifted" };
-		const d = decideBootstrap(params("process-scoped"), { persisted: incompatPersisted });
-		assert.equal(d.path, "new", "incompatible persisted → new");
-		assert.equal(d.invalidatePersisted, true, "incompatible persisted is invalidated");
-	}
-
-	// process-scoped + nothing → new.
-	assert.equal(decideBootstrap(params("process-scoped"), {}).path, "new", "no source → new");
-
-	// model-lock: live existing with a different model → fail-loud throw (①).
-	assert.throws(
-		() =>
-			decideBootstrap(params("process-scoped"), {
-				existing: { ...aliveCompat, modelId: "claude-opus-5" },
-			}),
-		SessionModelLockedError,
-		"live model mismatch throws SessionModelLockedError",
-	);
-}
+assert.ok(hasPrefix(["a", "b"], ["a", "b", "c"]), "shorter prefix matches");
+assert.ok(hasPrefix(["a", "b"], ["a", "b"]), "equal is a prefix");
+assert.ok(hasPrefix([], ["a"]), "empty is a prefix");
+assert.ok(!hasPrefix(["a", "b", "c"], ["a", "b"]), "longer existing is NOT a prefix");
+assert.ok(!hasPrefix(["a", "x"], ["a", "b", "c"]), "divergent history breaks the prefix");
 
 // ---------------------------------------------------------------------------
 // 5) record build (pure) + parse validate + roundtrip in a temp dir
@@ -332,7 +201,16 @@ const baseInput = (): BridgeConfigInput => ({
 		bridgeConfigSignature: bridgeConfigSignature(baseInput()),
 		contextMessageSignatures: ["user:text:a"],
 	};
-	const rec = buildSessionRecord({ sessionKey: "sess/key 1", acpSessionId: "acp-9", ...facts }, "2026-06-18T01:02:03Z");
+	const rec = buildSessionRecord(
+		{
+			sessionKey: "sess/key 1",
+			acpSessionId: "acp-9",
+			writer: { name: "fixture-agent", version: "1.2.3" },
+			firstPrompt: "sealed",
+			...facts,
+		},
+		"2026-06-18T01:02:03Z",
+	);
 	assert.equal(rec.version, SESSION_RECORD_VERSION);
 	assert.equal(rec.provider, SESSION_RECORD_PROVIDER);
 	assert.equal(rec.updatedAt, "2026-06-18T01:02:03Z", "updatedAt is the injected clock (pure build)");
@@ -341,19 +219,19 @@ const baseInput = (): BridgeConfigInput => ({
 	try {
 		writeSessionRecord(rec, dir);
 		const read = readSessionRecord("sess/key 1", dir);
-		assert.deepEqual(read, rec, "write→read roundtrip preserves the record");
+		assert.deepEqual(read, { status: "found", record: rec }, "write→read roundtrip preserves the record");
 		// sessionKey with a slash/space is encoded into a single safe filename.
 		assert.ok(sessionRecordPath("sess/key 1", dir).endsWith(".json"), "record path is a .json file");
 		assert.ok(!sessionRecordPath("sess/key 1", dir).includes("/key 1"), "sessionKey is encoded, not a path segment");
 
 		// Unknown key → undefined.
-		assert.equal(readSessionRecord("missing", dir), undefined, "missing record → undefined");
+		assert.deepEqual(readSessionRecord("missing", dir), { status: "missing" }, "missing record is named");
 
-		// Corrupt file → undefined AND deleted.
+		// Corrupt file is named and preserved.
 		const corruptPath = sessionRecordPath("corrupt", dir);
 		writeFileSync(corruptPath, "{ not json");
-		assert.equal(readSessionRecord("corrupt", dir), undefined, "corrupt JSON → undefined");
-		assert.ok(!existsSync(corruptPath), "corrupt record is DELETED on read, not left on disk");
+		assert.deepEqual(readSessionRecord("corrupt", dir), { status: "invalid" }, "corrupt JSON is invalid");
+		assert.ok(existsSync(corruptPath), "corrupt record is preserved");
 
 		// Wrong version/provider/sessionKey → parse rejects.
 		assert.equal(parseSessionRecord({ ...rec, version: 999 }, rec.sessionKey), undefined, "wrong version rejected");
@@ -369,11 +247,7 @@ const baseInput = (): BridgeConfigInput => ({
 			"empty acpSessionId rejected",
 		);
 
-		// delete removes the file.
-		deleteSessionRecord("sess/key 1", dir);
-		assert.equal(readSessionRecord("sess/key 1", dir), undefined, "deleted record → undefined");
 		// On-disk JSON is pretty + has a provider field (sanity that it really wrote).
-		writeSessionRecord(rec, dir);
 		assert.match(readFileSync(sessionRecordPath("sess/key 1", dir), "utf8"), /"provider": "entwurf"/, "json written");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
@@ -381,30 +255,30 @@ const baseInput = (): BridgeConfigInput => ({
 }
 
 // ---------------------------------------------------------------------------
-// 6) resolveLifecyclePolicy — only exact --entwurf-control is process-scoped
+// 6) resolveLifecyclePolicy — from reported host facts, never argv
 // ---------------------------------------------------------------------------
-{
-	// A resident may ALSO carry -p (fire a first prompt, then stay alive) — it
-	// must still be process-scoped. Keying on -p (candidate B) would kill it.
-	const residentWithP = resolveLifecyclePolicy(["pi", ENTWURF_CONTROL_FLAG, "-p", "hi"]);
-	assert.equal(residentWithP, "process-scoped", "resident with -p is still process-scoped (B trap)");
-	assert.equal(resolveLifecyclePolicy(["pi", ENTWURF_CONTROL_FLAG]), "process-scoped", "resident → process-scoped");
-	// pi -p one-shot and plain interactive are turn-scoped (S2c hang-safe).
-	assert.equal(resolveLifecyclePolicy(["pi", "-p", "hi"]), "turn-scoped", "pi -p one-shot → turn-scoped");
-	assert.equal(resolveLifecyclePolicy(["pi"]), "turn-scoped", "interactive → turn-scoped (conservative)");
-	// Exact token only — a substring/look-alike flag must NOT qualify.
-	assert.equal(
-		resolveLifecyclePolicy(["pi", "--not-entwurf-control"]),
-		"turn-scoped",
-		"look-alike flag is not the exact token → turn-scoped",
-	);
-}
+// #171 decision 18: the resolver reads the reported host facts (lib/acp-host-facts.ts), never argv.
+// A resident may ALSO be in print mode (fire a first prompt, then stay alive).
+assert.equal(
+	resolveLifecyclePolicy({ controlEnabled: true, mode: "print" }),
+	"process-scoped",
+	"resident in print mode",
+);
+assert.equal(
+	resolveLifecyclePolicy({ controlEnabled: true, mode: "tui" }),
+	"process-scoped",
+	"resident → process-scoped",
+);
+assert.equal(resolveLifecyclePolicy({ controlEnabled: false, mode: "print" }), "turn-scoped", "print one-shot");
+assert.equal(resolveLifecyclePolicy({ controlEnabled: false, mode: "json" }), "turn-scoped", "json one-shot");
+assert.equal(resolveLifecyclePolicy({ controlEnabled: false, mode: "tui" }), "unhosted", "bare interactive");
+assert.equal(resolveLifecyclePolicy({ controlEnabled: false, mode: "rpc" }), "unhosted", "bare rpc");
+assert.equal(resolveLifecyclePolicy({ controlEnabled: undefined, mode: undefined }), "unhosted", "nothing reported");
 
 console.log(
 	"[check-acp-session-store] ok — signature (pure sha256 digest, carrier/model drift detected, no raw on disk), " +
 		"contextMessageSignatures (sha256(role:content), no raw text, toolResult folds toolName/isError), " +
-		"hasPrefix/isCompatible (prefix-only, cwd/model/sig/edited drift → incompatible), " +
-		"decideBootstrap matrix (turn-scoped→always new, process reuse/resume/load/new, incompatible→invalidate, " +
-		"live model mismatch→throw), record build (injected clock) + parse validate + temp-dir roundtrip, " +
-		"resolveLifecyclePolicy (exact --entwurf-control → process-scoped incl. with -p; -p/interactive/look-alike → turn-scoped)",
+		"hasPrefix (prefix-only), record build (injected clock) + parse validate + temp-dir roundtrip, " +
+		"resolveLifecyclePolicy (reported control flag → process-scoped incl. print mode; print/json → turn-scoped; " +
+		"tui/rpc/unreported → unhosted)",
 );

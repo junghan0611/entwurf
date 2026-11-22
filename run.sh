@@ -1352,9 +1352,14 @@ check_acp_set_model_readback() {
   # and (#163) the display-only tool title, output preview and compaction lines in the event mapper;
   # and (#167) the Antigravity ACP adapter: routing, rows, launch argv, carrier seat, model and
   # thought-level readback, the overlay link policy, the refused summary turn and operator
-  # narrowing, and what the first-user augment tells an agy child about its own wire.
+  # narrowing, what the first-user augment tells an agy child about its own wire, and the
+  # #171 ACP baseline table's row/QK integrity contract.
+  # and (#171 step 8) the fixed stop texts against Pi's retry and overflow classifiers.
+  # and (#171 step 8) the branch gate of a live session and the resident's payload-hook stop.
+  # and (#171 step 8) the holder lease of a vendor session.
+  # ACP oracle mutant execution coordinate as well.
   section "claude ACP set-model + effort readback (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts pi-extensions/lib/acp/event-mapper.test.ts pi-extensions/lib/acp/agy-adapter.test.ts pi-extensions/lib/acp/augment.test.ts
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/birth-reservation.test.ts pi-extensions/lib/acp/branch-gate.test.ts pi-extensions/lib/acp/client-baseline.test.ts pi-extensions/lib/acp/receipt-versions.test.ts pi-extensions/lib/acp/session-store.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts pi-extensions/lib/acp/backend.summary-turn.test.ts pi-extensions/lib/acp/event-mapper.test.ts pi-extensions/lib/acp/agy-adapter.test.ts pi-extensions/lib/acp/augment.test.ts pi-extensions/lib/acp/stop-texts.test.ts pi-extensions/lib/acp/holder-lease.test.ts
 }
 
 check_acp_vendor_rejection() {

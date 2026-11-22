@@ -39,7 +39,11 @@ import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
+import { fakePiHost } from "./lib/acp-fake-pi-session.ts";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
+
+// #171 step 8: the Pi session a resident turn reads, kept in step with each call.
+const piHost = fakePiHost();
 
 // #142: a Claude turn carries pi's thinking level, which the backend sets as effort and reads back
 // before the prompt. This fixture runs every turn at one fixed level on rows carrying the curated
@@ -224,9 +228,11 @@ function makeHarness(recordDir: string) {
 			},
 			createConnection: (_child: any, handlers: any) => makeConnection(handlers),
 			lifecyclePolicy: () => "process-scoped",
+			sessionReader: piHost.sessionReader,
 			loadConfig: () => DEFAULT_RESOLVED_CONFIG,
 			now: () => "2026-07-30T00:00:00Z",
 			sessionDir: recordDir,
+			birthDir: `${recordDir}-births`,
 			abortGraceMs: TEST_ABORT_GRACE_MS,
 		},
 	};
@@ -245,6 +251,24 @@ function startTurn(
 		for await (const ev of stream) events.push(ev);
 	})();
 	return { events, done };
+}
+
+/**
+ * What a failed turn says. Since #171 step 8 a prompt that may have been dispatched and got no classified
+ * terminal answer seals a fixed text
+ * (Pi reads `errorMessage` alone to decide a retry), and the raw failure is kept whole in a diagnostic:
+ * the first failure, the lifecycle line, the launch signal and the stderr tail. A turn with no standing
+ * marker still carries them in `errorMessage`. Both are read here, in that order.
+ */
+function failureText(error: any): string {
+	const parts = [String(error?.errorMessage)];
+	for (const d of error?.diagnostics ?? []) {
+		if (d?.type !== "entwurf_acp_prompt_unknown") continue;
+		for (const part of [d.error?.message, d.details?.lifecycle, d.details?.launchSignal, d.details?.stderrTail]) {
+			if (typeof part === "string") parts.push(part);
+		}
+	}
+	return parts.join("\n");
 }
 
 const sealed = (events: AssistantMessageEvent[]) =>
@@ -310,11 +334,11 @@ try {
 	const backendModule = (await import(
 		pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href
 	)) as any;
-	const backend = {
+	const backend = piHost.wrap({
 		...backendModule,
 		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
 			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
-	};
+	});
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 
 	// ----------------------------------------------------------------------
@@ -445,7 +469,7 @@ try {
 
 		const seal = sealed(turn.events);
 		assert.equal(seal[0].type, "error", "a child death seals as an error event");
-		childDeathMessage = String(seal[0].error.errorMessage);
+		childDeathMessage = failureText(seal[0].error);
 		assert.ok(
 			childDeathMessage.includes("ended while the prompt was still in flight") &&
 				childDeathMessage.includes("exit code 1") &&
@@ -478,7 +502,7 @@ try {
 		h.children[0].die(null, "SIGKILL");
 		await t2.done;
 
-		const message = String(sealed(t2.events)[0].error.errorMessage);
+		const message = failureText(sealed(t2.events)[0].error);
 		assert.ok(
 			message.includes("signal SIGKILL") && message.includes("REUSE-STDERR-MARK"),
 			"[QK:REUSE-CARRIES-CHILD-DIAGNOSTICS] a reuse turn must report the child's exit status and stderr tail too — " +
@@ -517,33 +541,45 @@ try {
 			.filter((e: any) => e.type === "text" || e.type === "text_start" || e.type === "text_delta")
 			.map((e: any) => String(e.delta ?? e.text ?? e.content ?? ""))
 			.join("");
-		const announced = notices.includes("previous claude session ended between turns");
+		const announced = notices.includes("previous claude agent ended between turns");
 		assert.ok(
 			announced && notices.includes("exit code 137") && notices.includes("signal SIGKILL"),
 			"[QK:IDLE-DEATH-ANNOUNCED] a backend session that died BETWEEN turns must be announced by the next turn, with " +
 				`how it ended — a silent respawn hides that the session the operator was talking to is gone. Saw: ${JSON.stringify(notices.slice(0, 400))}`,
 		);
+		// #171 step 8 (decision 17): the dead agent's session stays in its record, and the next turn resumes
+		// it. This harness's agent offers no resume, so the turn stops by name; no second session is opened.
+		await t2.done;
+		const all = t2.events
+			.filter((e: any) => e.type === "text_delta")
+			.map((e: any) => String(e.delta ?? ""))
+			.join("");
 		assert.ok(
-			notices.indexOf("previous claude session ended between turns") <
-				notices.indexOf("[acp: preparing claude session]"),
-			"the death is announced BEFORE the bootstrap notice — otherwise it reads as an ordinary cold start",
+			all.indexOf("previous claude agent ended between turns") < all.indexOf("resume not allowed"),
+			`the death is announced BEFORE the stop's cause — otherwise the stop reads as if no session had been there. Saw: ${JSON.stringify(all.slice(0, 400))}`,
+		);
+		assert.equal(sealed(t2.events)[0].type, "error", "the turn stops: a dead session is not replaced by a new one");
+		assert.match(
+			String(sealed(t2.events)[0].error?.errorMessage),
+			/offers no resume/,
+			"the stop names the missing resume: the agent started for it is refused before any session call",
 		);
 
-		h.settle("end_turn");
-		await t2.done;
-		assert.equal(sealed(t2.events)[0].type, "done", "the announcement does not fail the turn — it explains it");
-
-		// Announced ONCE: a third turn is a plain cold start again.
-		const t3 = startTurn(backend, userCtx("third NONCE-D3"), { sessionId: "life-idle-death" }, h.deps);
+		// Announced ONCE: a third turn stops the same way and says nothing about the death again.
+		const t3 = startTurn(
+			backend,
+			reuseCtx("first NONCE-D1", "third NONCE-D3"),
+			{ sessionId: "life-idle-death" },
+			h.deps,
+		);
 		await delay(20);
-		h.settle("end_turn");
 		await t3.done;
 		const laterNotices = t3.events
 			.filter((e: any) => e.type === "text" || e.type === "text_start" || e.type === "text_delta")
 			.map((e: any) => String(e.delta ?? e.text ?? e.content ?? ""))
 			.join("");
 		assert.ok(
-			!laterNotices.includes("previous claude session ended between turns"),
+			!laterNotices.includes("ended between turns"),
 			"the announcement is read-and-clear — a stale death must not be re-announced every turn",
 		);
 	}
@@ -638,7 +674,7 @@ try {
 		h.children[0].die(0, null);
 		await t2.done;
 
-		eofFirstMessage = String(sealed(t2.events)[0].error.errorMessage);
+		eofFirstMessage = failureText(sealed(t2.events)[0].error);
 		assert.ok(
 			eofFirstMessage.includes("ACP connection closed"),
 			"the backend's own first words are preserved verbatim, not swapped out for ours — " +
@@ -694,7 +730,7 @@ try {
 		h.children[0].die(null, "SIGKILL");
 		await turn.done;
 
-		const message = String(sealed(turn.events)[0].error.errorMessage);
+		const message = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			message.includes("signal SIGKILL") && !message.includes("exit code"),
 			"a child killed from outside must read as a SIGNAL, never as a clean exit — a report that always said " +
@@ -727,7 +763,7 @@ try {
 		h.children[0].die(0, null);
 		await turn.done;
 
-		const message = String(sealed(turn.events)[0].error.errorMessage);
+		const message = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			message.includes("launch observed SIGTERM before child exit"),
 			"[QK:LAUNCH-SIGNAL-EVIDENCE-STRUCTURED] a caught SIGTERM must reach the operator even though the vendor " +
@@ -769,7 +805,7 @@ try {
 		h.children[0].die(0, null);
 		await turn.done;
 
-		const message = String(sealed(turn.events)[0].error.errorMessage);
+		const message = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			!message.includes("launch observed"),
 			"[QK:LAUNCH-SIGNAL-EXACT-FRAME-ONLY] neither vendor prose containing 'SIGTERM', an unknown signal value, nor " +
@@ -801,7 +837,7 @@ try {
 		h.children[0].die(0, null);
 		await turn.done;
 
-		const message = String(sealed(turn.events)[0].error.errorMessage);
+		const message = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			message.includes("FATAL dying words with no newline"),
 			"[QK:STDERR-TAIL-FLUSHES-PARTIAL-LINE] a child that dies mid-write leaves its last line unterminated, and " +
@@ -829,7 +865,7 @@ try {
 		h.children[0].die(0, null);
 		await turn.done;
 
-		const message = String(sealed(turn.events)[0].error.errorMessage);
+		const message = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			message.includes("launch observed SIGTERM before child exit"),
 			"[QK:LAUNCH-FRAME-SPANS-CHUNKS] the frame must be recognised across a chunk boundary — the kernel, not the " +
@@ -859,7 +895,7 @@ try {
 		await turn.done;
 		const waited = Date.now() - closedAt;
 
-		noEndMessage = String(sealed(turn.events)[0].error.errorMessage);
+		noEndMessage = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			noEndMessage.includes("reported no exit status within") &&
 				!noEndMessage.includes("exit code") &&
@@ -895,7 +931,7 @@ try {
 		await turn.done;
 		const waited = Date.now() - closedAt;
 
-		const message = String(sealed(turn.events)[0].error.errorMessage);
+		const message = failureText(sealed(turn.events)[0].error);
 		assert.ok(
 			!message.includes("[acp] lifecycle:"),
 			`a closure that named its own reason must not be re-diagnosed. Got: ${JSON.stringify(message)}`,
