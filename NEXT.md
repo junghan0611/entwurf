@@ -16,7 +16,8 @@
     - durable 저장소: 열기 직전 manifest가 백업과 같았다(`3bff6531ece1260b`).
     - 68bd94: `entwurf pi-durable --session <native id> --native-module …/agent-config/pi-durable/index.mjs`로 같은 id로 재오픈했다. `entwurf_resume_call`은 module을 빼고 연다. `entwurf_self` 왕복은 13초였다(n=1).
 - [x] **7. 0.62.0 cut.** prepare `9dfe3fa0`: FULL 1160s, P5 MUST 25/0/0 BEHAVIOR 1/0/0(Codex managed daemon 381279 재사용, GLG 지시), OpenClaw home receipt `receipt-0.62.0-0dbcf114`, dep-versions PARTIAL 12/12. README에 ACP 꼭지(Fable·Sol·68bd94·Opus 리뷰). make: exact-SHA CI run 45086261925 4/4, Windows preview run 45087432832, candidate sha256 `2220d0cb…`(container 수용), tag `v0.62.0`, GitHub release. GLG npm publish; U2 latest=0.62.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
-- [ ] **8. Herdr re-pin 0.62.0.** ← CURRENT. `runtime-lock.json` npm 0.62.0(registry sha512 = integrity), 0.61.0 region은 이전 pin으로 유지, setup guide·ACP/mux rail·ROADMAP floor 줄의 "미출하 후보" 문구 정리. 다음: exact-SHA CI, snapshot `v2026.11.23-herdr.0.62.0` GitHub release(latest는 v0.62.0 유지).
+- [x] **8. Herdr re-pin 0.62.0.** `805fce26`(`runtime-lock.json` npm 0.62.0, registry sha512 = integrity; 0.61.0 region은 이전 pin으로 유지; setup guide·ACP/mux rail·ROADMAP floor 줄의 "미출하 후보" 문구 정리), exact-SHA CI run 45090634277 4/4, snapshot `v2026.11.23-herdr.0.62.0` GitHub release(latest는 v0.62.0 유지).
+- [ ] **9. 다음 레일.** ← CURRENT. GLG가 고른다. 아래 미측정·남은 후보가 재료다.
   - 미측정(이월): installed-consumer LIVE(1.6.0), RPC 세션 교체의 socket 수·switch/fork, summary 실패 때 원문 유지를 고정하는 테스트, Codex 외 provider와 비정상 종료 때 소켓 해제.
   - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수(floor마다 4개). release skill P9의 OWNED 목록이 `pi-extensions`·`plugins`의 `mkdtempSync` 접두사를 읽지 않는다(이번 cut은 확장해서 회수). 68bd94 관찰: rail:673이 옛 #168 new-after-compact를 provided로 적는다(현재 계약과 어긋나 보임).
 
