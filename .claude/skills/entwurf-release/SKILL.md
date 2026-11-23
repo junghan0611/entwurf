@@ -528,13 +528,16 @@ Reclaim (only prefixes the checkout itself mints, only roots older than the run,
 roots nothing holds):
 
 ```bash
-mapfile -t OWNED < <(grep -rhoE 'mkdtempSync\(\s*(path\.)?join\([^"]*tmpdir\(\)[^"]*"[^"]+"' scripts test |
-  grep -oE '"[^"]+"$' | tr -d '"' | sort -u)
+mapfile -t OWNED < <(grep -rhoE 'mkdtemp(Sync)?\(\s*(path\.)?(join|resolve)\([^"]*tmpdir\(\)[^"]*"[^"]+"' scripts test pi-extensions plugins |
+  grep -oE '"[^"]+"$' | tr -d '"' | awk 'length >= 7' | sort -u)
 RESIDUE=$(mktemp -t entwurf-residue.XXXXXX)
 while IFS= read -r d; do
   for u in "${IN_USE[@]:-}"; do [ "$d" = "$u" ] && continue 2; done
   b=$(basename "$d")
-  for o in "${OWNED[@]}"; do case "$b" in "$o"*) printf '%s\n' "$d"; break ;; esac; done
+  for o in "${OWNED[@]}"; do
+    # mkdtemp's exact shape: the prefix, then six random characters and nothing else.
+    [[ "$b" == "$o"* && "${b:${#o}}" =~ ^[A-Za-z0-9]{6}$ ]] && { printf '%s\n' "$d"; break; }
+  done
 done < <(census -mmin +60 | sort) > "$RESIDUE"
 printf 'reclaimable roots: %d\n' "$(wc -l < "$RESIDUE")"
 du -sch --files0-from=<(tr '\n' '\0' < "$RESIDUE") 2>/dev/null | tail -1
@@ -546,7 +549,13 @@ rm -f "$RESIDUE"
 Four fences make that safe and none is optional: `-user` keeps it to this operator,
 `-mmin +60` keeps it off a concurrently running gate, the in-use filter (argv AND
 `/proc/*/cwd`) keeps it off a root some process still holds, and `OWNED` keeps it to
-prefixes this checkout provably mints. Never widen it to a bare `rm -rf /tmp/*` or to
+prefixes this checkout provably mints, in mkdtemp's exact prefix-plus-six shape, read from
+`scripts`, `test`, `pi-extensions` and `plugins` (the behavior-adjacent tests live in the last
+two; until 0.62.0 the list read only the first two and missed them). A prefix shorter than
+seven characters (`ea-`, `rpc-`, `pdf-`) is one any other tool could mint, so it stays out of
+`OWNED` and is left to the census for a person to read. The pattern reads double-quoted
+`join`/`resolve(tmpdir(), "...")` prefixes only; single-quoted, template-literal and Python
+`tempfile` roots are not in it. Never widen it to a bare `rm -rf /tmp/*` or to
 the prefix-blind census list, and never kill reparented processes as a batch without
 naming their prefix first.
 

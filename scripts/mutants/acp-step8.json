@@ -421,6 +421,17 @@
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		},
 		{
+			"claim": "ACP-SUMMARY-FAILURE-KEEPS-WORDS",
+			"title": "a failed summary request is sealed with the one-shot fixed stop, so Pi loses the agent's words and no longer retries a stateless, tool-less summary",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (adapter && !aborted && !summaryTurnActive) {"],
+			"replace": ["if (adapter && !aborted) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-SUMMARY-FAILURE-KEEPS-WORDS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
 			"claim": "ACP-ANSWERED-STOP-KEEPS-SESSION",
 			"title": "a refusal is treated as no answer: the session that answered is closed and the conversation is stranded",
 			"subject": "pi-extensions/lib/acp/backend.ts",

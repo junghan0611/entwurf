@@ -1104,6 +1104,8 @@ try {
 		// non-empty or already gone — fine either way
 	}
 	rmSync(recordDir, { recursive: true, force: true });
+	// The birth directory sits beside the record directory, not inside it; it was never removed.
+	rmSync(`${recordDir}-births`, { recursive: true, force: true });
 	gateHome.restore();
 }
 

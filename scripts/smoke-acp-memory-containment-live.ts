@@ -48,7 +48,7 @@
 import { strict as assert } from "node:assert";
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { type Dirent, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -67,7 +67,7 @@ import {
 	DEFAULT_CLAUDE_PERMISSION_ALLOW,
 	DEFAULT_CLAUDE_TOOLS,
 } from "../pi-extensions/lib/acp/tool-surface.ts";
-import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { removeSmokeRoot, terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_MEMORY_MODEL ?? "claude-sonnet-5-5";
@@ -373,13 +373,7 @@ async function main(): Promise<void> {
 	} finally {
 		connection.close?.();
 		await terminateChild(child);
-		for (const dir of [scratch, overlayDir]) {
-			try {
-				await rm(dir, { recursive: true, force: true });
-			} catch {
-				// best-effort cleanup
-			}
-		}
+		for (const dir of [scratch, overlayDir]) await removeSmokeRoot(dir);
 	}
 
 	if (failure) fail(failure.message);

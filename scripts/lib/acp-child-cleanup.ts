@@ -17,6 +17,8 @@
 // of `catch {}` (environment probing), never control flow we lie about.
 
 import type { ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -113,4 +115,17 @@ export async function terminateChild(
 	}
 
 	throw new Error(`terminateChild: child pid=${pid} still alive after SIGKILL + ${killWaitMs}ms bounded wait`);
+}
+
+/**
+ * Remove a smoke-owned temp root after its children were terminated, then once more after a bounded
+ * settle. `terminateChild` ends the direct child only; a grandchild (the vendor CLI under an ACP agent)
+ * can still write on its way out and recreate the root. Measured 2026-11-23 in release-gate 0.62.0:
+ * `/tmp/entwurf-memguard-overlay-*` came back holding only `.claude.json`, written after the smoke's
+ * own removal. Best-effort like every cleanup here; the release protocol's P9 reclaims the rest.
+ */
+export async function removeSmokeRoot(dir: string, settleMs = 1_500): Promise<void> {
+	await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+	await sleep(settleMs);
+	if (existsSync(dir)) await rm(dir, { recursive: true, force: true }).catch(() => undefined);
 }

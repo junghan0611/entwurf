@@ -24,7 +24,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, getSupportedThinkingLevels, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -317,53 +317,49 @@ describe("agy ACP thought level — mapped per model, set after the model, read 
 	// offers. A characterization of that composition: the refusal stays for a caller that bypasses the
 	// clamp. Oracle: pi's own ModelRuntime + getSupportedThinkingLevels / clampThinkingLevel.
 	it("[QK:ACP-AGY-THINKING-MENU] pi offers only the levels each row carries, and its clamp lands every other level on one the adapter resolves", async () => {
-		const sandbox = mkdtempSync(join(tmpdir(), "acp-agy-thinking-"));
-		try {
-			const runtime = await ModelRuntime.create({
-				authPath: join(sandbox, "oracle-auth.json"),
-				modelsPath: null,
-				modelsStorePath: join(sandbox, "oracle-models-store.json"),
-				allowModelNetwork: false,
-				refreshOnCreate: false,
-			});
-			const rows = allCuratedModels().filter((row) => row.id.startsWith("agy-"));
-			runtime.registerProvider("acp-agy-thinking-oracle", {
-				baseUrl: "x",
-				apiKey: "x",
-				api: "acp-agy-thinking-oracle",
-				streamSimple: () => {
-					throw new Error("the oracle never streams");
-				},
-				models: rows,
-			});
-			// Literals: the measured offer per native model (#167).
-			const lowToHigh = {
-				menu: ["low", "medium", "high"],
-				clamp: { off: "low", minimal: "low", xhigh: "high", max: "high" },
-			};
-			const expected: Record<string, { menu: string[]; clamp: Record<string, string> }> = {
-				"agy-gemini-3.8-flash": lowToHigh,
-				"agy-gemini-4-argon": lowToHigh,
-				"agy-gemini-4-hydrogen": {
-					menu: ["low", "medium", "high", "xhigh"],
-					clamp: { off: "low", minimal: "low", xhigh: "xhigh", max: "xhigh" },
-				},
-			};
-			expect(rows.map((r) => r.id).sort()).toEqual(Object.keys(expected).sort());
-			for (const row of rows) {
-				const registered = runtime.getModel("acp-agy-thinking-oracle", row.id);
-				expect(registered, row.id).toBeDefined();
-				if (!registered) continue;
-				expect(getSupportedThinkingLevels(registered), row.id).toEqual(expected[row.id].menu);
-				for (const [asked, landed] of Object.entries(expected[row.id].clamp)) {
-					const clamped = clampThinkingLevel(registered, asked as never);
-					expect(clamped, `${row.id} ${asked}`).toBe(landed);
-					// pi sends the clamped level as `reasoning`; the adapter resolves it without its refusal.
-					expect(resolveAgyThoughtLevel(row.id, clamped, row.thinkingLevelMap), `${row.id} ${asked}`).toBe(clamped);
-				}
+		// In-memory credentials: the default file store keeps reading auth.json after the test returns,
+		// and its lock path recreated a removed tmpdir sandbox (one `acp-agy-thinking-*` left per run).
+		const runtime = await ModelRuntime.create({
+			credentials: new InMemoryCredentialStore(),
+			modelsPath: null,
+			allowModelNetwork: false,
+			refreshOnCreate: false,
+		});
+		const rows = allCuratedModels().filter((row) => row.id.startsWith("agy-"));
+		runtime.registerProvider("acp-agy-thinking-oracle", {
+			baseUrl: "x",
+			apiKey: "x",
+			api: "acp-agy-thinking-oracle",
+			streamSimple: () => {
+				throw new Error("the oracle never streams");
+			},
+			models: rows,
+		});
+		// Literals: the measured offer per native model (#167).
+		const lowToHigh = {
+			menu: ["low", "medium", "high"],
+			clamp: { off: "low", minimal: "low", xhigh: "high", max: "high" },
+		};
+		const expected: Record<string, { menu: string[]; clamp: Record<string, string> }> = {
+			"agy-gemini-3.8-flash": lowToHigh,
+			"agy-gemini-4-argon": lowToHigh,
+			"agy-gemini-4-hydrogen": {
+				menu: ["low", "medium", "high", "xhigh"],
+				clamp: { off: "low", minimal: "low", xhigh: "xhigh", max: "xhigh" },
+			},
+		};
+		expect(rows.map((r) => r.id).sort()).toEqual(Object.keys(expected).sort());
+		for (const row of rows) {
+			const registered = runtime.getModel("acp-agy-thinking-oracle", row.id);
+			expect(registered, row.id).toBeDefined();
+			if (!registered) continue;
+			expect(getSupportedThinkingLevels(registered), row.id).toEqual(expected[row.id].menu);
+			for (const [asked, landed] of Object.entries(expected[row.id].clamp)) {
+				const clamped = clampThinkingLevel(registered, asked as never);
+				expect(clamped, `${row.id} ${asked}`).toBe(landed);
+				// pi sends the clamped level as `reasoning`; the adapter resolves it without its refusal.
+				expect(resolveAgyThoughtLevel(row.id, clamped, row.thinkingLevelMap), `${row.id} ${asked}`).toBe(clamped);
 			}
-		} finally {
-			rmSync(sandbox, { recursive: true, force: true });
 		}
 	});
 });

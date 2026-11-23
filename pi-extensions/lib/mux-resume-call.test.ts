@@ -21,7 +21,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import type { Placement } from "./mux-placement.ts";
 import {
 	buildResumeCallArgs,
@@ -46,6 +46,7 @@ const PLACEMENT: Placement = {
 	panePid: "4243",
 };
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "mux-resume-call-pd-"));
+afterAll(() => fs.rmSync(TMP, { recursive: true, force: true }));
 const PROJECT = path.join(TMP, "project");
 fs.mkdirSync(PROJECT);
 // `assertLaunchTarget` proves the runtime is real before argv is built.

@@ -31,7 +31,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import type { HerdrLayoutDeps, HerdrRun, HerdrSocketOutcome, SpawnFn } from "./herdr-fresh-call.ts";
 import {
 	buildHerdrResumeTabCreateArgs,
@@ -56,6 +56,7 @@ function ok(label: string, cond: boolean): void {
 }
 
 const CWD = fs.mkdtempSync(path.join(os.tmpdir(), "herdr-resume-call-"));
+afterAll(() => fs.rmSync(CWD, { recursive: true, force: true }));
 const ENV: NodeJS.ProcessEnv = { HERDR_ENV: "1", HERDR_BIN_PATH: "/opt/herdr/bin/herdr", HERDR_PANE_ID: "w7:p1" };
 const NAME = "entwurf-resume-0123456789abcdef";
 const RUNTIME_ARGS = [
@@ -630,6 +631,9 @@ describe("the pi-durable layout resume (#157 B3)", () => {
 	const LAUNCHER = path.join(PKG, "run.sh");
 	fs.writeFileSync(LAUNCHER, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 	const NO_LAUNCHER = fs.mkdtempSync(path.join(os.tmpdir(), "herdr-resume-pd-nolauncher-"));
+	afterAll(() => {
+		for (const dir of [PKG, NO_LAUNCHER]) fs.rmSync(dir, { recursive: true, force: true });
+	});
 	const layoutAt = (root: string) => ({ root }) as unknown as PiDurablePackageLayout;
 
 	type Responder = (requestLine: string) => HerdrSocketOutcome;

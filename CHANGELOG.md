@@ -4,6 +4,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Test and gate hygiene
+
+- `[QK:ACP-AGY-THINKING-MENU]` (`agy-adapter.test.ts`) builds Pi's `ModelRuntime` on an in-memory credential store. The default file store kept working on its `auth.json` after the test returned and recreated the removed sandbox: one `/tmp/acp-agy-thinking-*` per run, 230 reclaimed at the 0.62.0 cut.
+- `herdr-resume-call.test.ts` and `mux-resume-call.test.ts` remove the sandboxes they create at module and describe scope.
+- `smoke-entwurf-chain-live` removes its world when the chain passes; a red chain keeps it, as does `ENTWURF_KEEP_SMOKE_WORLD=1`. It had never removed it. `smoke-acp-memory-containment-live` removes its roots a second time after a short settle: the vendor CLI under the ACP agent wrote `.claude.json` into the overlay after the first removal. Each ran LIVE once on oracle (2026-11-23): green, and no root left behind.
+- Five ACP check gates (`check-acp-prompt-lifecycle`, `-stop-reason`, `-session-reuse`, `-usage-accounting`, `-stream-hooks`) remove the birth directory they place beside their record directory (`<recordDir>-births`). Only the record directory was removed: 363 roots (14 MB) had piled up on oracle since 2026-11-21, mostly from mutant runs.
+- The release skill's P9 reclaim list also reads the prefixes under `pi-extensions` and `plugins` and the `resolve(tmpdir(), …)` form, takes a root only in mkdtemp's exact prefix-plus-six shape, and leaves out prefixes shorter than seven characters (`ea-`, `rpc-`, `pdf-`), which any other tool could mint. The old list missed 11 roots on oracle (`entwurf-chain` 8, `entwurf-memguard-overlay` 2, `entwurf-reuse` 1).
+- New `[QK:ACP-SUMMARY-FAILURE-KEEPS-WORDS]` (`backend.summary-turn.test.ts`) and its `acp-step8` mutant: a summary request whose prompt fails keeps its own words, and Pi may retry a transient one; only a conversation one-shot seals the fixed stop. With that mutant applied by hand, the other 238 tests of its gate stay green and only the new QK fails (oracle, 2026-11-23; not a PARTIAL receipt).
+
+### Records
+
+- The ACP rail's agy row for a Pi compaction states the #171 measurement (2026-11-22, the `main-cover` pi-smoke: the next turn resumed the recorded session and recalled the word given before the compaction) instead of the 2026-11-17 one, which predates #171 and opened a new session.
+
+### Measured after 0.62.0 (oracle, 2026-11-23, host Pi 1.6.0)
+
+- RPC session replacement at 0 tokens, private HOME, agent directory and XDG roots (receipt `rpc-probe.out`, host-local). A resident opened on a hand-written session A, then ran `new_session` (B), `switch_session` back to A and `fork` from A's user message (C). After every step exactly one control socket existed and was listening, named by the current citizen's garden id. The switch back to A reused A's record and address; B and C were each born as their own citizen. After exit no socket remained and three records stayed; no `agent_start`, no extension error.
+- Per-session resources a close releases, read from pi-ai 1.6.0 (source, not a runtime measurement): three cleanups register, for Codex's WebSocket, Anthropic's in-memory thread state and the strict-tool-limit set. Only Codex holds a socket. An abrupt exit leaves the operating system to close the process's sockets, and none of the three is persisted.
+- Still not measured: installed-consumer LIVE on Pi 1.6.0.
+
 ## v2026.11.23-herdr.0.62.0 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.62.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.61.0 (`v2026.11.22-herdr.0.61.0`) on the Pi 1.5.2 SDK set; 0.62.0 carries the Pi 1.6.0 SDK set, so step 1 of the install takes host Pi `>=1.6.0 <1.7`, and activation refuses a Pi 1.5 host by name. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.

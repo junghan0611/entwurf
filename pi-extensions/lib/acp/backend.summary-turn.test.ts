@@ -476,6 +476,42 @@ describe("Pi's summary request through the ACP turn driver (#163)", () => {
 		).rejects.toThrow(backend.ACP_SUMMARY_CANCELLED_MESSAGE);
 	});
 
+	// #172: a conversation one-shot whose prompt failed seals a fixed stop so Pi cannot replay it
+	// ([QK:ACP-ONE-SHOT-PROMPT-NO-REPLAY]); Pi's summary request is stateless and tool-less, so it is the
+	// stated exception and keeps the agent's and the transport's own words, retryable ones included.
+	it("[QK:ACP-SUMMARY-FAILURE-KEEPS-WORDS] a summary request whose prompt fails keeps the failure's own words, not the one-shot fixed stop", async () => {
+		const transient = "ACP connection closed";
+		for (const said of [transient, "fake agent: the summary prompt failed"]) {
+			const world = makeWorld();
+			const failed = Promise.reject(new Error(said));
+			failed.catch(() => {});
+			world.control.hold = failed;
+			const summaryContext = normalizeContext({
+				systemPrompt: "summarize",
+				messages: [{ role: "user", content: "<conversation>hello</conversation>", timestamp: 0 }],
+			});
+			const opts = { sessionId: "S-summary-fails", reasoning: "medium", cacheRetention: "none" } as Parameters<
+				typeof backend.streamAcpTurn
+			>[2];
+			const events: AssistantMessageEvent[] = [];
+			for await (const event of backend.streamAcpTurn(sonnet(), summaryContext, opts, world.deps)) events.push(event);
+			const sealed = events.filter((e) => e.type === "done" || e.type === "error");
+			expect(sealed, said).toHaveLength(1);
+			const [seal] = sealed;
+			if (seal.type !== "error") throw new Error(`${said}: expected an error seal`);
+			expect(seal.error.errorMessage, said).toContain(said);
+			expect(seal.error.errorMessage, said).not.toBe(ACP_STOPS.oneShotUnknown.text);
+			expect(seal.error.diagnostics?.map((d) => d.type) ?? [], said).not.toContain(
+				backend.ACP_ONE_SHOT_UNKNOWN_DIAGNOSTIC,
+			);
+			expect(isRetryableAssistantError(seal.error), said).toBe(said === transient);
+			expect(
+				world.wire.filter((w) => w.method === "prompt"),
+				said,
+			).toHaveLength(1);
+		}
+	});
+
 	it("[QK:ACP-SUMMARY-REQUIRES-EMPTY-SURFACE] a request that declares tools stays an ordinary turn even with cacheRetention none", async () => {
 		const world = makeWorld();
 		const opts = { sessionId: "S-tools-none", reasoning: "medium", cacheRetention: "none" } as Parameters<

@@ -17,9 +17,10 @@
     - 68bd94: `entwurf pi-durable --session <native id> --native-module …/agent-config/pi-durable/index.mjs`로 같은 id로 재오픈했다. `entwurf_resume_call`은 module을 빼고 연다. `entwurf_self` 왕복은 13초였다(n=1).
 - [x] **7. 0.62.0 cut.** prepare `9dfe3fa0`: FULL 1160s, P5 MUST 25/0/0 BEHAVIOR 1/0/0(Codex managed daemon 381279 재사용, GLG 지시), OpenClaw home receipt `receipt-0.62.0-0dbcf114`, dep-versions PARTIAL 12/12. README에 ACP 꼭지(Fable·Sol·68bd94·Opus 리뷰). make: exact-SHA CI run 45086261925 4/4, Windows preview run 45087432832, candidate sha256 `2220d0cb…`(container 수용), tag `v0.62.0`, GitHub release. GLG npm publish; U2 latest=0.62.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
 - [x] **8. Herdr re-pin 0.62.0.** `805fce26`(`runtime-lock.json` npm 0.62.0, registry sha512 = integrity; 0.61.0 region은 이전 pin으로 유지; setup guide·ACP/mux rail·ROADMAP floor 줄의 "미출하 후보" 문구 정리), exact-SHA CI run 45090634277 4/4, snapshot `v2026.11.23-herdr.0.62.0` GitHub release(latest는 v0.62.0 유지).
-- [ ] **9. 다음 레일.** ← CURRENT. GLG가 고른다. 아래 미측정·남은 후보가 재료다.
-  - 미측정(이월): installed-consumer LIVE(1.6.0), RPC 세션 교체의 socket 수·switch/fork, summary 실패 때 원문 유지를 고정하는 테스트, Codex 외 provider와 비정상 종료 때 소켓 해제.
-  - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수(floor마다 4개). release skill P9의 OWNED 목록이 `pi-extensions`·`plugins`의 `mkdtempSync` 접두사를 읽지 않는다(이번 cut은 확장해서 회수). 68bd94 관찰: rail:673이 옛 #168 new-after-compact를 provided로 적는다(현재 계약과 어긋나 보임).
+- [ ] **9. 0.62.0 뒷정리.** ← CURRENT. 고칠 후보 수정과 측정은 CHANGELOG `## Unreleased`에 있다(테스트 잔여물 3파일, ACP check 5종의 births 디렉터리, chain·memguard smoke, release skill P9 목록, rail 673행, `[QK:ACP-SUMMARY-FAILURE-KEEPS-WORDS]`, RPC switch/fork 0-token, provider 소켓 source 판독). 영수증 `~/.local/share/entwurf-lab/062/measure/`.
+  - 남은 것: PARTIAL `check-acp-set-model-readback`(mutant 추가, test 변경; 약 1.6시간) 그리고 resume 테스트 두 파일의 그룹. PARTIAL은 공유 checkout에 mutant를 심으므로 이 checkout에서 pi를 띄우지 않는 창에서만 돈다.
+  - 미측정: installed-consumer LIVE(Pi 1.6.0) — GLG 노트북 소비자 설치가 첫 측정.
+  - 관찰: `pi-durable-owner-fence.test.ts`는 `afterEach`로 지우는데도 floor 두 번에 `pdf-*` 하나가 남았다(원인 미확인).
 
 **0.62.0 cut 관찰:** U3 registry 설치에서 npm 11.16.0이 `allow-scripts` 정책으로 entwurf `postinstall`(chmod)을 돌리지 않았다. tarball이 이미 실행 비트를 갖고 있어 영향은 없었다.
 

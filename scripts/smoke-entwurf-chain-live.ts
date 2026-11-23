@@ -63,7 +63,7 @@ import {
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
-import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { removeSmokeRoot, terminateChild } from "./lib/acp-child-cleanup.ts";
 import { awaitTerminusPublication } from "./lib/chain-terminus-publication.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
@@ -241,6 +241,7 @@ async function main(): Promise<void> {
 	const gidD = terminus.record.gardenId;
 	const children: ChildProcess[] = [];
 	let terminusOwner: ChildProcess | null = null;
+	let chainPassed = false;
 	let streamB = "";
 	let streamC = "";
 	try {
@@ -469,11 +470,17 @@ async function main(): Promise<void> {
 		);
 
 		console.error(`[smoke-entwurf-chain-live] chain: ${gidA} → ${gidB} → ${gidC} → ${gidD}`);
+		chainPassed = true;
 	} finally {
 		for (const ch of children) await terminateChild(ch).catch(() => undefined);
 		try {
 			terminusOwner?.kill("SIGTERM");
 		} catch {}
+		// The world was never removed: one `/tmp/entwurf-chain-*` per release gate (eight on oracle by
+		// 0.62.0). A red chain keeps it as its evidence; ENTWURF_KEEP_SMOKE_WORLD=1 keeps a green one too.
+		if (!chainPassed || process.env.ENTWURF_KEEP_SMOKE_WORLD === "1")
+			console.error(`[smoke-entwurf-chain-live] kept world: ${world}`);
+		else await removeSmokeRoot(world);
 	}
 
 	console.log(
