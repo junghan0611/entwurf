@@ -20,6 +20,7 @@
 - [ ] **9. 0.62.0 뒷정리.** ← CURRENT. 고칠 후보 수정과 측정은 CHANGELOG `## Unreleased`에 있다(테스트 잔여물 3파일, ACP check 5종의 births 디렉터리, chain·memguard smoke, release skill P9 목록, rail 673행, `[QK:ACP-SUMMARY-FAILURE-KEEPS-WORDS]`, RPC switch/fork 0-token, provider 소켓 source 판독). 영수증 `~/.local/share/entwurf-lab/062/measure/`.
   - 남은 것: PARTIAL `check-acp-set-model-readback`(mutant 추가, test 변경; 약 1.6시간) 그리고 resume 테스트 두 파일의 그룹. PARTIAL은 공유 checkout에 mutant를 심으므로 이 checkout에서 pi를 띄우지 않는 창에서만 돈다.
   - 미측정: installed-consumer LIVE(Pi 1.6.0) — GLG 노트북 소비자 설치가 첫 측정.
+  - GLG 관측(2026-11-23 11:08 KST, n=1, agy 1.5.14, 대화 관측이며 LIVE gate는 아님): 첫 turn은 새 agy 세션을 열었다. pi를 다시 연 뒤(pi pid 시작 11:09:03, 두 turn 사이) 둘째 turn이 기록된 세션을 resume(`[acp: resuming agy session]`)했고 답을 받았다. 1.5.14는 attach 범위 [1.5.9, 1.6.0) 안이다. LIVE에서 잰 agy 버전은 아직 1.5.13이다.
   - 관찰: `pi-durable-owner-fence.test.ts`는 `afterEach`로 지우는데도 floor 두 번에 `pdf-*` 하나가 남았다(원인 미확인).
 
 **0.62.0 cut 관찰:** U3 registry 설치에서 npm 11.16.0이 `allow-scripts` 정책으로 entwurf `postinstall`(chmod)을 돌리지 않았다. tarball이 이미 실행 비트를 갖고 있어 영향은 없었다.
