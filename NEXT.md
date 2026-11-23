@@ -1,6 +1,6 @@
-# NEXT — Pi SDK 1.6.0 landed (#172); 0.62.0 cut next
+# NEXT — 0.62.0 shipped (Pi SDK 1.6.0, #172); Herdr pinned to 0.62.0
 
-**현재 (2026-11-23):** #172(Pi SDK 1.6.0 + pi-durable carrier)가 main에 들어왔고(브랜치 fast-forward, 마지막 코드 커밋 `9d7aa52e`), 운영 창 2부도 끝났다. 다음은 0.62.0 cut이다. 0.61.0은 npm `latest`다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, prepare 실무 Opus `20261120T213316-793499`, 설계·수정 Fable `20261121T180949-b6d8f7`, 리뷰 Sol `20261121T135110-09fa15`.
+**현재 (2026-11-23):** #172(Pi SDK 1.6.0 + pi-durable carrier)가 main에 들어왔고(브랜치 fast-forward, 마지막 코드 커밋 `9d7aa52e`), 운영 창 2부도 끝났다. 0.62.0이 npm `latest`이고 Herdr lock도 0.62.0을 가리킨다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, prepare 실무 Opus `20261120T213316-793499`, 설계·수정 Fable `20261121T180949-b6d8f7`, 리뷰 Sol `20261121T135110-09fa15`.
 
 # RAIL — 현재 좌표
 
@@ -15,9 +15,12 @@
     - 점검: `doctor-pi-package` owned, `doctor-pi-provider` ok.
     - durable 저장소: 열기 직전 manifest가 백업과 같았다(`3bff6531ece1260b`).
     - 68bd94: `entwurf pi-durable --session <native id> --native-module …/agent-config/pi-durable/index.mjs`로 같은 id로 재오픈했다. `entwurf_resume_call`은 module을 빼고 연다. `entwurf_self` 왕복은 13초였다(n=1).
-- [ ] **7. 0.62.0 cut.** ← CURRENT. 0.61.0 publish 24시간 뒤. `## Unreleased`에 `b5c26cc3`(agy [1.5.9, 1.6.0), U26 미측정)과 #172가 모였다.
-  - 미측정: installed-consumer LIVE(1.6.0), RPC 세션 교체의 socket 수·switch/fork, summary 실패 때 원문 유지를 고정하는 테스트, Codex 외 provider와 비정상 종료 때 소켓 해제.
-  - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수.
+- [x] **7. 0.62.0 cut.** prepare `9dfe3fa0`: FULL 1160s, P5 MUST 25/0/0 BEHAVIOR 1/0/0(Codex managed daemon 381279 재사용, GLG 지시), OpenClaw home receipt `receipt-0.62.0-0dbcf114`, dep-versions PARTIAL 12/12. README에 ACP 꼭지(Fable·Sol·68bd94·Opus 리뷰). make: exact-SHA CI run 45086261925 4/4, Windows preview run 45087432832, candidate sha256 `2220d0cb…`(container 수용), tag `v0.62.0`, GitHub release. GLG npm publish; U2 latest=0.62.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
+- [ ] **8. Herdr re-pin 0.62.0.** ← CURRENT. `runtime-lock.json` npm 0.62.0(registry sha512 = integrity), 0.61.0 region은 이전 pin으로 유지, setup guide·ACP/mux rail·ROADMAP floor 줄의 "미출하 후보" 문구 정리. 다음: exact-SHA CI, snapshot `v2026.11.23-herdr.0.62.0` GitHub release(latest는 v0.62.0 유지).
+  - 미측정(이월): installed-consumer LIVE(1.6.0), RPC 세션 교체의 socket 수·switch/fork, summary 실패 때 원문 유지를 고정하는 테스트, Codex 외 provider와 비정상 종료 때 소켓 해제.
+  - 남은 후보: `agy-adapter.test.ts:320` sandbox 회수(floor마다 4개). release skill P9의 OWNED 목록이 `pi-extensions`·`plugins`의 `mkdtempSync` 접두사를 읽지 않는다(이번 cut은 확장해서 회수). 68bd94 관찰: rail:673이 옛 #168 new-after-compact를 provided로 적는다(현재 계약과 어긋나 보임).
+
+**0.62.0 cut 관찰:** U3 registry 설치에서 npm 11.16.0이 `allow-scripts` 정책으로 entwurf `postinstall`(chmod)을 돌리지 않았다. tarball이 이미 실행 비트를 갖고 있어 영향은 없었다.
 
 **0.61.0 cut 관찰:** 턴 중에 창을 닫은 LIVE 실행 두 번이 operator HOME에 fixture holder lease를 남겼다(`~/.pi/agent/entwurf-acp-holders/claude/` `e505…`·`f531…`, 지우지 않음; `e505…`는 pidNs 없는 옛 형식이라 재부팅 전까지 인계되지 않는다). 두 P5가 각각 `/tmp/entwurf-s2b-overlay-*` 한 개를 남겼다(P9에서 회수). PARTIAL은 공유 checkout에 mutant를 실제로 심는다(`mutation-qualify.ts:921-944`) — 도는 동안 FULL·LIVE·OpenClaw 실측을 같이 돌리지 않는다.
 

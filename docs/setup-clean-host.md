@@ -23,7 +23,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-This package uses the exact Pi 1.6.0 SDK set and host Pi `>=1.6.0 <1.7` (#172). The `package.json` `version` and `dependencies` of the package you hold are the authority for the current pairing. Published 0.52.0 through 0.61.0 shipped the Pi 1.5.2 SDK set (#158; 0.53.0 was tagged but never published to npm) and 0.51.0 the 1.5.0 set. The marked 0.61.0 / SDK 1.5.2 examples below describe that last published package and remain bound to its own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
+This package uses the exact Pi 1.6.0 SDK set and host Pi `>=1.6.0 <1.7` (#172), first published as 0.62.0. The `package.json` `version` and `dependencies` of the package you hold are the authority for the current pairing. Published 0.52.0 through 0.61.0 shipped the Pi 1.5.2 SDK set (#158; 0.53.0 was tagged but never published to npm) and 0.51.0 the 1.5.0 set. The marked 0.61.0 / SDK 1.5.2 examples below describe the last package on that set and remain bound to its own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
 
 The validation TGZ installed in #155's operating window before the D1 display repair is an earlier, separate artifact, not the published one; see the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below.
 
@@ -35,7 +35,7 @@ The older package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4.x 
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; published 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`>=1.5.2 <1.6`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; previous 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`>=1.5.2 <1.6`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.6.0 in this package; 1.5.2 in published 0.52.0 through 0.61.0; 1.5.0 in historical 0.51.0) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
@@ -457,7 +457,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2; published 0.61.0 range <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`>=1.5.2 <1.6`<!-- /entwurf:published -->, this package's range `>=1.6.0 <1.7`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2; previous 0.61.0 range <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`>=1.5.2 <1.6`<!-- /entwurf:published -->, this package's range `>=1.6.0 <1.7`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. The native harnesses own credentials, model settings and their respective session stores — ordinary Pi JSONL and pi-durable SQLite; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native

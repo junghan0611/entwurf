@@ -37,15 +37,10 @@
 		},
 		{
 			"claim": "VERSION-MENTIONS-HERDR-LOCK",
-			"title": "the lock switches to npm but the README does not declare an active npm pin",
+			"title": "the Herdr runtime lock moves without its README npm pin, leaving the installation description on the previous artifact",
 			"subject": "plugins/herdr/runtime-lock.json",
-			"find": ["\"source\": \"herdr-checkout\",", "\t\"repository\": \"junghan0611/entwurf\""],
-			"replace": [
-				"\"source\": \"npm\",",
-				"\t\"name\": \"@junghanacs/entwurf\",",
-				"\t\"version\": \"0.61.0\",",
-				"\t\"integrity\": \"sha512-Rc6aV0Dhvsc5Mzo9gZcARfYrhfPC6rLfKoiQVfoScsmV2BUXEF6Irwg0OxPAqM2B6CSMa26juPkbnlXYU2IXaQ==\""
-			],
+			"find": ["\"version\": \"0.62.0\""],
+			"replace": ["\"version\": \"0.61.0\""],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:VERSION-MENTIONS-HERDR-LOCK]",
@@ -55,8 +50,8 @@
 			"claim": "VERSION-MENTIONS-CURRENT-LITERAL",
 			"title": "the original stale current-package wording returns to the Pi row of the clean-host guide",
 			"subject": "docs/setup-clean-host.md",
-			"find": ["| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; published 0.61.0:"],
-			"replace": ["| pi | optional-by-presence — current 0.60.0: `>=1.6.0 <1.7`; published 0.61.0:"],
+			"find": ["| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; previous 0.61.0:"],
+			"replace": ["| pi | optional-by-presence — current 0.60.0: `>=1.6.0 <1.7`; previous 0.61.0:"],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:VERSION-MENTIONS-CURRENT-LITERAL]",
@@ -115,10 +110,10 @@
 			"title": "a published-scope region in an operator doc names a package the frozen published manifest does not record, so the 1.5.2 instructions inside it would be held to a pairing no artifact ships — the doc can no longer prove which published package its install steps belong to",
 			"subject": "docs/setup-clean-host.md",
 			"find": [
-				"| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; published 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->"
+				"| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; previous 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->"
 			],
 			"replace": [
-				"| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; published 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.60.0 pi 1.5.2 -->"
+				"| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; previous 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.60.0 pi 1.5.2 -->"
 			],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,
