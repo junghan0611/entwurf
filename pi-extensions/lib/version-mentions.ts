@@ -51,7 +51,12 @@ export function versionMentions(file: string, text: string, herdrLock?: HerdrLoc
 				file === "plugins/herdr/README.md" &&
 				/\b(?:previous|older|earlier|historical|receipt|last Pi 1\.3 snapshot)\b/i.test(historyPrefix) &&
 				!/\bnpm\s+(?:install|i)\b/i.test(line);
-			const historical = HISTORY_FILES.has(file) || /^NEXT--[^/]+\.md$/.test(file) || inRegion || oldHerdr;
+			const historical =
+				HISTORY_FILES.has(file) ||
+				/^NEXT--[^/]+\.md$/.test(file) ||
+				file.startsWith("docs/dialogues/") ||
+				inRegion ||
+				oldHerdr;
 			const spec = /^@junghanacs\/entwurf@/i.test(match[0]);
 			const current = /^(?:current|현재)\s/i.test(match[0]);
 			// The checkout carrier has no npm version: retain the pin as report-only until re-pin.

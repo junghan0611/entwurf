@@ -26,6 +26,8 @@ describe("version mention lexical inventory", () => {
 		expect(kinds("CHANGELOG.md", "npm install @junghanacs/entwurf@0.1.0")).toEqual(["B"]);
 		expect(kinds("BASELINE.md", "current 0.1.0")).toEqual(["B"]);
 		expect(kinds("docs/baseline-receipts.md", "@junghanacs/entwurf@0.1.0")).toEqual(["B"]);
+		expect(kinds("docs/dialogues/archive.full.md", "current 2.1.195; @junghanacs/entwurf@0.23.0")).toEqual(["B", "B"]);
+		expect(kinds("docs/dialogues-guide.md", "current 2.1.195; @junghanacs/entwurf@0.23.0")).toEqual(["A", "A"]);
 		expect(kinds("NEXT--branch.md", "current 0.1.0")).toEqual(["B"]);
 		expect(kinds("ROADMAP.md", "current 0.1.0")).toEqual(["B"]);
 	});

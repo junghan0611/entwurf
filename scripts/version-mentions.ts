@@ -16,7 +16,9 @@ const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclud
 console.log(
 	"Version inventory: lexical hints, not semantic proof. A fails; B is historical; C is any other semver; L is a Herdr pin. --all prints B/C matches.",
 );
-console.log("History: NEXT.md, NEXT--*.md, ROADMAP.md, CHANGELOG.md, BASELINE.md, docs/baseline-receipts.md.");
+console.log(
+	"History: NEXT.md, NEXT--*.md, ROADMAP.md, CHANGELOG.md, BASELINE.md, docs/baseline-receipts.md, docs/dialogues/.",
+);
 const raw: unknown = JSON.parse(readFileSync("plugins/herdr/runtime-lock.json", "utf8"));
 const { lock, mismatch: pinMismatch, pinCount } = checkHerdrPin(raw, readFileSync("plugins/herdr/README.md", "utf8"));
 if (lock.source === "herdr-checkout")
