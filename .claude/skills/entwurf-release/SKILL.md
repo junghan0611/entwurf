@@ -920,22 +920,9 @@ gh release view "v${VERSION}" --json tagName,name,url
 rm -f "$NOTES_FILE"
 ```
 
-Do not notify until `gh release view` verifies the expected tag.
+## M7. Report & Hand Off
 
-## M7. Notify
-
-Run only after the GitHub release is verified.
-
-```bash
-source ~/.env.local
-gog chat messages send "$GOG_CHAT_SPACE_ID" \
-  --account "$GOG_CHAT_ACCOUNT" \
-  --text "entwurf v${VERSION} released
-${REPO_URL}/releases/tag/v${VERSION}"
-```
-
-A notification failure does not undo an existing release, but it must be
-reported exactly.
+Run only after `gh release view` verifies the expected tag.
 
 Report the release URL plus the preserved canonical candidate path, SHA-256, acceptance
 log, prepared SHA, image ID, and repository digest.
