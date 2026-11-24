@@ -277,10 +277,10 @@
 		},
 		{
 			"claim": "RESUMEROWS-NARROW-ONLY-HIDES",
-			"title": "typed words are matched as any-of instead of all-of, so a second word widens the list instead of narrowing it and an empty query shows nothing",
+			"title": "typed words are matched as any-of instead of all-of, so a second word widens the list instead of narrowing it",
 			"subject": "pi-extensions/lib/resume-picker-rows.ts",
 			"find": ["\t\treturn words.every((w) => text.includes(w));"],
-			"replace": ["\t\treturn words.some((w) => text.includes(w));"],
+			"replace": ["\t\treturn words.length === 0 || words.some((w) => text.includes(w));"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEROWS-NARROW-ONLY-HIDES]",
@@ -454,10 +454,14 @@
 		},
 		{
 			"claim": "RESUMEPICK-SPLIT-SEQUENCE",
-			"title": "an ESC at the end of a read is not kept for the next one, so an arrow key the terminal split in two types its tail into the search",
+			"title": "an unfinished escape sequence at the end of a read is not kept for the next one, so a sequence the terminal split in two types its tail into the search",
 			"subject": "pi-extensions/lib/resume-picker.ts",
-			"find": ["\t\t\t\t\tif (seq.kind === \"unfinished\") {"],
-			"replace": ["\t\t\t\t\tif (seq.kind === \"unfinished\" && rest.length > 1) {"],
+			"find": ["\t\t\t\t\tif (seq.kind === \"unfinished\") {", "\t\t\t\t\t\tflushText();", "\t\t\t\t\t\tcarry = rest;"],
+			"replace": [
+				"\t\t\t\t\tif (seq.kind === \"unfinished\") {",
+				"\t\t\t\t\t\tflushText();",
+				"\t\t\t\t\t\tcarry = \"\";"
+			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-SPLIT-SEQUENCE]",

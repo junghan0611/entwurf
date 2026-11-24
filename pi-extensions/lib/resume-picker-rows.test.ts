@@ -201,10 +201,12 @@ describe("the entwurf resume list", () => {
 			{ gardenId: D, name: "Far" },
 			{ gardenId: B, name: "Newest" },
 		]);
+		const unpinned = buildResumeListing(FACTS, HERE, []);
 		ok(
 			"bookmark order within a pin section, recency after",
 			ids(visibleResumeRows(listing, ALL)) === [A, B, D, C, E].join(",") &&
-				listing.rows.map((r) => r.section).join(",") === "pin-here,pin-here,pin-elsewhere,here,elsewhere",
+				listing.rows.map((r) => r.section).join(",") === "pin-here,pin-here,pin-elsewhere,here,elsewhere" &&
+				ids(visibleResumeRows(unpinned, ALL)) === [B, C, A, D, E].join(","),
 		);
 	});
 
