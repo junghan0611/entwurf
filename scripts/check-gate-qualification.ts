@@ -3459,6 +3459,7 @@ let manifestCount: number;
 		"bridge-boot-resume": 5,
 		"bridge-command-boot": 12,
 		"cc-retire-pidfd": 11,
+		"owner-start-key": 17,
 		"cc-retire-request": 15,
 		"entwurf-v2-retire": 32,
 		"capability-cache": 3,

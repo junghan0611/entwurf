@@ -1,0 +1,206 @@
+{
+	"schemaVersion": 1,
+	"lane": "owner-start-key",
+	"mutants": [
+		{
+			"claim": "STARTKEY-PROC-WINS",
+			"title": "a readable stat still asks the kernel probe before it is believed, so every live owner costs a second observation and a probe answer can veto the key /proc gave",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif (starttime !== null) return `linux:${starttime}`;"],
+			"replace": ["\t\tif (starttime !== null && deps.probeExists(pid) !== false) return `linux:${starttime}`;"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PROC-WINS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-GONE-NO-PS",
+			"title": "the one case that skips ps never fires, so every marker whose owner is gone spawns a process again — the nine-second first screen",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tdeps.linuxProcfsUsable()", "\t\t) {"],
+			"replace": ["\t\t\tdeps.linuxProcfsUsable() &&", "\t\t\tfalse", "\t\t) {"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-GONE-NO-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PRESENT-TAKES-PS",
+			"title": "a pid the kernel says is present also skips ps, so a hidepid host or a pid that appeared between the two reads loses the ps key it had",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tdeps.probeExists(pid) === false &&"],
+			"replace": ["\t\t\tdeps.probeExists(pid) !== null &&"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PRESENT-TAKES-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-UNPROVABLE-TAKES-PS",
+			"title": "an unprovable pid (EPERM) also skips ps, so a foreign owner that exists reads as keyless where ps used to answer",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tdeps.probeExists(pid) === false &&"],
+			"replace": ["\t\t\tdeps.probeExists(pid) !== true &&"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-UNPROVABLE-TAKES-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-NO-PROCFS-TAKES-PS",
+			"title": "the procfs-view answer is asked and ignored, so ENOENT from a host with no usable /proc is taken as a statement about the pid",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tdeps.linuxProcfsUsable()", "\t\t) {"],
+			"replace": ["\t\t\t(deps.linuxProcfsUsable(), true)", "\t\t) {"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-NO-PROCFS-TAKES-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-ERRNO-ENOENT-ONLY",
+			"title": "the errno test becomes a deny-list, so EPERM, EIO or an error with no code skips ps as if the stat had said no such file",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\t(err as { code?: unknown }).code === \"ENOENT\" &&"],
+			"replace": ["\t\t\t(err as { code?: unknown }).code !== \"EACCES\" &&"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-ERRNO-ENOENT-ONLY]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-UNPARSEABLE-TAKES-PS",
+			"title": "a stat that was read but did not parse consults the probe and may end without ps, so a parse failure is treated as the absence it never proved",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif (starttime !== null) return `linux:${starttime}`;"],
+			"replace": [
+				"\t\tif (starttime !== null) return `linux:${starttime}`;",
+				"\t\tif (deps.probeExists(pid) === false) return \"\";"
+			],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-UNPARSEABLE-TAKES-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PID-T-BOUND",
+			"title": "the pid_t bound moves up by one, so a number kill() cannot address is probed and its answer believed",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\tpid <= PID_T_MAX &&"],
+			"replace": ["\t\t\tpid <= PID_T_MAX + 1 &&"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PID-T-BOUND]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PS-MEANING",
+			"title": "the ps answer is no longer trimmed, so a ps: key carries the trailing newline and never equals the key recorded for the same process",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tconst out = deps.ps(pid).trim();"],
+			"replace": ["\t\tconst out = deps.ps(pid);"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PS-MEANING]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-INVALID-PID-OBSERVES-NOTHING",
+			"title": "a zero or negative pid reaches the observations, so a malformed marker pid is read from /proc and handed to ps",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"export function processStartKeyWith(pid: number, deps: ProcessStartKeyDeps): string {",
+				"\tif (!Number.isInteger(pid) || pid <= 0) return \"\";"
+			],
+			"replace": [
+				"export function processStartKeyWith(pid: number, deps: ProcessStartKeyDeps): string {",
+				"\tif (!Number.isInteger(pid)) return \"\";"
+			],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-INVALID-PID-OBSERVES-NOTHING]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PROCFS-LINUX-ONLY",
+			"title": "the platform test names one foreign OS instead of Linux, so every other platform reads a /proc it has no contract with",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (platform !== \"linux\") return false;"],
+			"replace": ["\tif (platform === \"win32\") return false;"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PROCFS-LINUX-ONLY]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PROCFS-PARSED",
+			"title": "the self stat is read but not parsed, so a mounted procfs that cannot give a start time still counts as a usable view",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\treturn procStatStarttime(readSelfStat()) !== null;"],
+			"replace": ["\t\treadSelfStat();", "\t\treturn true;"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PROCFS-PARSED]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-FOREIGN-PROC-TAKES-PS",
+			"title": "darwin is admitted beside Linux, so a procfs-shaped mount there lets ENOENT skip ps on a host whose only start key is the ps one",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (platform !== \"linux\") return false;"],
+			"replace": ["\tif (platform !== \"linux\" && platform !== \"darwin\") return false;"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-FOREIGN-PROC-TAKES-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-EMPTY-STAYS-UNKNOWN",
+			"title": "an empty current key with a pid proven present classifies dead, so the narrow race the leaf can now see would archive a live owner",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (facts.currentStartKey === \"\") return facts.pidExists === false ? \"dead\" : \"uncertain\";"],
+			"replace": ["\tif (facts.currentStartKey === \"\") return facts.pidExists === null ? \"uncertain\" : \"dead\";"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-EMPTY-STAYS-UNKNOWN]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PROD-LIVE",
+			"title": "the production stat reader opens another /proc file, so a live owner's key comes from ps instead of its start time",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\treadProcStat: (pid) => fs.readFileSync(`/proc/${pid}/stat`, \"utf8\"),"],
+			"replace": ["\treadProcStat: (pid) => fs.readFileSync(`/proc/${pid}/statm`, \"utf8\"),"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PROD-LIVE]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PROD-GONE-NO-PS",
+			"title": "the production probe is not the kernel's answer, so the skip never fires on a real host while every injected cell stays green",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tprobeExists: (pid) => probePidExistence(pid),"],
+			"replace": ["\tprobeExists: () => null,"],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PROD-GONE-NO-PS]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		},
+		{
+			"claim": "STARTKEY-PROD-PS-ARGV",
+			"title": "the production ps argv loses the `=` of lstart=, so the fallback key carries a header line",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\tps: (pid) => execFileSync(\"ps\", [\"-o\", \"lstart=\", \"-p\", String(pid)], { encoding: \"utf8\" }),"
+			],
+			"replace": [
+				"\tps: (pid) => execFileSync(\"ps\", [\"-o\", \"lstart\", \"-p\", String(pid)], { encoding: \"utf8\" }),"
+			],
+			"gate": ["bash", "run.sh", "check-owner-start-key"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STARTKEY-PROD-PS-ARGV]",
+			"signatureSource": "pi-extensions/lib/meta-session.start-key.test.ts"
+		}
+	]
+}

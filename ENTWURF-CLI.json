@@ -374,6 +374,11 @@
 					"summary": "#160 S6 landlord-home first-admission release MUST: judges the candidate-attributed receipt of the replacement-behaviour oracles (open, address, consume, reply, close, refusal, compact-reset, visibility, model/policy, send scope, resources) named by ENTWURF_OPENCLAW_HOME_RECEIPT against this HEAD and its commit time, the home named by ENTWURF_OPENCLAW_HOME_TARGET, and each evidence file's sha256 on disk. Strict at every level; only compactReset may be unmeasured, with a reason. No receipt → SKIP (97); no target, another candidate or home, a measurement before the commit or in the future, a stray key, a digest mismatch or a non-passing row → exit 1. It checks metadata and bytes, not whether the evidence measured this candidate. Touches no Gateway or store."
 				},
 				{
+					"synopsis": "check-owner-start-key",
+					"column": 38,
+					"summary": "#173 mutant execution coordinate (VERIFY rule 3): run_vitest over the owner start-key beside test (the /proc read, the one case that skips ps, the ps fallback and its production wiring) — the gate argv of the owner-start-key claims. Same file check-tests-beside-behavior already runs."
+				},
+				{
 					"synopsis": "check-pi-durable-receive",
 					"column": 38,
 					"summary": "#129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)"

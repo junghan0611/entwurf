@@ -683,6 +683,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh check_openclaw_home_receipt -> scripts/check-openclaw-home-receipt.ts: judgeOpenclawHomeReceipt over ENTWURF_OPENCLAW_HOME_RECEIPT for git HEAD and commit time, ENTWURF_OPENCLAW_HOME_TARGET and on-disk evidence digests, skipLive (97) when unnamed, exit 1 on any problem (#160 S6, S6.5)",
 		},
+		// #173 P1: the owner start-key mutant execution coordinate, right after the home-receipt MUST.
+		{
+			after: "  entwurf check-openclaw-home-receipt # ",
+			line: "  entwurf check-owner-start-key       # #173 mutant execution coordinate (VERIFY rule 3): run_vitest over the owner start-key beside test (the /proc read, the one case that skips ps, the ps fallback and its production wiring) — the gate argv of the owner-start-key claims. Same file check-tests-beside-behavior already runs.",
+			receipt:
+				"run.sh check_owner_start_key -> run_vitest over pi-extensions/lib/meta-session.start-key.test.ts (#173 P1)",
+		},
 		{
 			after: "  entwurf openclaw-send               # ",
 			line: "  entwurf openclaw-birth              # #160: the one writer of `openclaw` records. Checks the key against this host's openclaw-citizens.json, requires the declared Gateway's sessions.describe to answer alive, then upserts openclaw:<scope>:<sessionKey> idempotently (a re-birth attaches to the same garden id). --cwd is explicit, absolute and normalized; the directory's existence is not checked (no OpenClaw read RPC returns a session root). Prints one JSON line {action,gardenId,nativeSessionId,cwd}; any refusal throws (exit 1); wrong argv exit 2 (--scope <s> --session-key <agent:<id>:<key>> --cwd <absolute normalized path>)",

@@ -1182,6 +1182,15 @@ check_cc_retire_pidfd() {
   run_vitest pi-extensions/lib/cc-retire-pidfd.test.ts
 }
 
+check_owner_start_key() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — check-tests-beside-behavior finds the test.
+  # The #173 STARTKEY-* mutants name this as gate argv: the owner start-key leaf and the one case
+  # that skips `ps` (meta-session.ts processStartKeyWith). It stays in check:contracts for the same
+  # reason as check-cc-retire-pidfd.
+  section "owner start-key leaf (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/meta-session.start-key.test.ts
+}
+
 check_cc_retire_request() {
   # Mutant execution coordinate only; the existing beside glob owns test discovery.
   section "Claude Code retire request adapter (mutant execution coordinate)"

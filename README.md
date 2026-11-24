@@ -185,8 +185,7 @@ prompt is submitted.
   facts, not a promise that the sibling can be reopened.
 - **Bookmarks:** siblings named in that directory's `team.json` come first, under their names.
 
-`entwurf help resume` has the exit codes. On a host with thousands of records the list takes several
-seconds to appear.
+`entwurf help resume` has the exit codes.
 
 ### Renew a Pi chapter (source checkout only)
 

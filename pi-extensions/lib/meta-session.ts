@@ -2043,22 +2043,91 @@ export function applyOmpBridgeChildRootPolicy(
  * itself.
  */
 export function processStartKey(pid: number): string {
+	return processStartKeyWith(pid, PRODUCTION_START_KEY_DEPS);
+}
+
+/** The largest pid a `pid_t` can carry; above it `kill(pid, 0)` is not a statement about that pid. */
+const PID_T_MAX = 2147483647;
+
+/** The four observations {@link processStartKeyWith} makes, injected so its rule can be measured. */
+export interface ProcessStartKeyDeps {
+	/** The text of `/proc/<pid>/stat`; throws what the read throws. */
+	readProcStat(pid: number): string;
+	/** {@link probePidExistence}. */
+	probeExists(pid: number): boolean | null;
+	/** Is THIS process's own procfs view readable and parseable right now? Asked at most once per call, never cached. */
+	linuxProcfsUsable(): boolean;
+	/** Raw stdout of `ps -o lstart= -p <pid>`; throws when `ps` is missing or exits non-zero. */
+	ps(pid: number): string;
+}
+
+/** Field 22 (starttime, clock ticks) of a `/proc/<pid>/stat` text, or `null` when it is not there. */
+function procStatStarttime(stat: string): string | null {
+	// comm (field 2) is parenthesized and may contain spaces/parens — split AFTER the last ')'.
+	const fields = stat
+		.slice(stat.lastIndexOf(")") + 1)
+		.trim()
+		.split(/\s+/);
+	// after comm: index 0 = state(f3), 1 = ppid(f4), … 19 = starttime(f22).
+	const starttime = fields[19];
+	return starttime && /^\d+$/.test(starttime) ? starttime : null;
+}
+
+/**
+ * Can this process read its OWN start time out of procfs? Off Linux the answer is `false` and nothing
+ * is read. On Linux `/proc/self/stat` goes through the same parser a target's stat does, so a mounted
+ * but unparseable, absent or unreadable procfs is `false` too.
+ */
+export function linuxProcfsUsableOn(platform: string, readSelfStat: () => string): boolean {
+	if (platform !== "linux") return false;
+	try {
+		return procStatStarttime(readSelfStat()) !== null;
+	} catch {
+		return false;
+	}
+}
+
+const PRODUCTION_START_KEY_DEPS: ProcessStartKeyDeps = {
+	readProcStat: (pid) => fs.readFileSync(`/proc/${pid}/stat`, "utf8"),
+	probeExists: (pid) => probePidExistence(pid),
+	linuxProcfsUsable: () => linuxProcfsUsableOn(process.platform, () => fs.readFileSync("/proc/self/stat", "utf8")),
+	ps: (pid) => execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }),
+};
+
+/**
+ * {@link processStartKey} over injected observations.
+ *
+ * ONE case skips the `ps` fallback (#173): the stat read failed with ENOENT, the pid fits a `pid_t`,
+ * the kernel says no such process (`probeExists(pid) === false`, i.e. ESRCH) and this process's own
+ * procfs view is usable. Each alone is not enough — hidepid answers ENOENT for a foreign pid that
+ * exists (the probe then says `true` or `null`), and without a usable procfs ENOENT says nothing
+ * about the pid. Together they are taken for the "" `ps` gives for a pid that is gone — at the
+ * probe's instant, not `ps`'s a little later, and with no claim beyond it: the self stat shows that
+ * procfs is available here, not that this process and the pid share a PID namespace. Every other
+ * case takes the `ps` fallback as before (off Linux the probe is still asked on ENOENT, and the
+ * platform answer then sends it to `ps`).
+ *
+ * What changes is cost and that one narrow observation time. "" stays UNKNOWN; the callers ask
+ * their own `probePidExistence` and {@link classifyMarkerOwner} decides, unchanged.
+ */
+export function processStartKeyWith(pid: number, deps: ProcessStartKeyDeps): string {
 	if (!Number.isInteger(pid) || pid <= 0) return "";
 	try {
-		const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
-		// comm (field 2) is parenthesized and may contain spaces/parens — split AFTER the last ')'.
-		const fields = stat
-			.slice(stat.lastIndexOf(")") + 1)
-			.trim()
-			.split(/\s+/);
-		// after comm: index 0 = state(f3), 1 = ppid(f4), … 19 = starttime(f22).
-		const starttime = fields[19];
-		if (starttime && /^\d+$/.test(starttime)) return `linux:${starttime}`;
-	} catch {
-		// not Linux / no procfs
+		const starttime = procStatStarttime(deps.readProcStat(pid));
+		if (starttime !== null) return `linux:${starttime}`;
+	} catch (err) {
+		// not Linux / no procfs / hidepid / the pid is gone
+		if (
+			(err as { code?: unknown }).code === "ENOENT" &&
+			pid <= PID_T_MAX &&
+			deps.probeExists(pid) === false &&
+			deps.linuxProcfsUsable()
+		) {
+			return "";
+		}
 	}
 	try {
-		const out = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
+		const out = deps.ps(pid).trim();
 		if (out) return `ps:${out}`;
 	} catch {
 		// pid gone or ps unavailable
