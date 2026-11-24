@@ -12,7 +12,7 @@
 		"Read both IDs, backend and cwd from Entwurf's current record facts. This bookmark does not replace the record or certify current liveness. If they disagree, the record wins; reconcile the bookmark, never rewrite the record to match it.",
 		"Keep entries after retirement. Membership is not permission to send, resume or retire; use explicit operator requests and the owning lifecycle tools.",
 		"No program loads a team.json as configuration: it owns no authentication, transcript, model, placement, role assignment or lifecycle automation.",
-		"One command reads it, read-only: `entwurf resume` with no garden id takes garden_id and name from the team.json in the directory it was typed in, to put bookmarked siblings first and show their names. A row there grants nothing; the record decides whether a sibling can be reopened."
+		"Two things read it, read-only, taking garden_id and name: `entwurf resume` with no garden id (the team.json in the directory it was typed in) and the `entwurf_peers` tool (the one in the calling session's directory). Each puts bookmarked siblings first and shows their names. A row there grants nothing; the record decides whether a sibling can be reopened. The file must be a regular file of at most 1 MiB; a symlink is not followed."
 	],
 	"members": [
 		{

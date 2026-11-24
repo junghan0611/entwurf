@@ -77,6 +77,7 @@ import {
 } from "./entwurf-v2-visible-resume.ts";
 import { selectFreshCallRail } from "./fresh-call-dispatch.ts";
 import { readAnchor } from "./mux-placement.ts";
+import type { PeerPresentation } from "./peer-presentation.ts";
 import type { PickerRail, PickerResult } from "./resume-picker.ts";
 import { buildResumeListing, type ResumeListing, type ResumePin } from "./resume-picker-rows.ts";
 import { visibleResumeLaunch } from "./visible-resume-launch.ts";
@@ -112,8 +113,12 @@ export interface ResumeListDeps {
 	hasTerminal: boolean;
 	/** The directory the operator typed the command in, or null when the entry was not told. */
 	callerCwd: string | null;
-	listFacts: () => Promise<readonly PeerFact[]>;
+	/** The bookmarks first, because they decide which citizens the listing observes (#173 P2). */
 	readPins: (callerCwd: string) => ResumePin[];
+	listFacts: (pins: readonly ResumePin[]) => Promise<{
+		facts: readonly PeerFact[];
+		presentation: PeerPresentation | null;
+	}>;
 	pick: (listing: ResumeListing, rail: PickerRail) => Promise<PickerResult>;
 }
 
@@ -198,8 +203,9 @@ async function chooseFromList(
 		if (callerCwd === null) {
 			throw new Error("the directory the command was typed in was not handed over; run it as `entwurf resume`");
 		}
-		const facts = await deps.list.listFacts();
-		const listing = buildResumeListing(facts, callerCwd, deps.list.readPins(callerCwd));
+		const pins = deps.list.readPins(callerCwd);
+		const { facts, presentation } = await deps.list.listFacts(pins);
+		const listing = buildResumeListing(facts, callerCwd, pins, presentation);
 		picked = await deps.list.pick(listing, selectFreshCallRail(deps.env));
 	} catch (err) {
 		return {

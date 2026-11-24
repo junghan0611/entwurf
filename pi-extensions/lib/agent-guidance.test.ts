@@ -248,6 +248,10 @@ const reviewedR20 = JSON.parse(
 const reviewedR21 = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-21.json", import.meta.url), "utf8"),
 ) as ReviewedAmendmentLayer & { previousRevision: number };
+// #173 P2: the entwurf_peers MCP description gains one sentence about what its text shows; full literals.
+const reviewedR24 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-24.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
 // #151 R-2: the first layer that ADDS keys to existing hint families — two reject hints for a record
 // mid-/renew. It changes no existing leaf; each addition carries only its new literal, and the family
 // expectation checks the key was absent before. The README paragraph owns that provenance.
@@ -453,6 +457,7 @@ function currentExpectations() {
 		"tools.entwurf_v2.descriptions.mcp",
 		"tools.entwurf_v2.parameters.mode",
 	]);
+	expect(reviewedR24.amendments.map((a) => a.key.join("."))).toEqual(["tools.entwurf_peers.descriptions.mcp"]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -467,6 +472,7 @@ function currentExpectations() {
 		reviewedToolsR19,
 		reviewedR20,
 		reviewedR21,
+		reviewedR24,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -560,7 +566,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR22.revision).toBe(22);
 		expect(reviewedR23.previousRevision).toBe(reviewedR22.revision);
 		expect(reviewedR23.revision).toBe(23);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR23.revision);
+		expect(reviewedR24.previousRevision).toBe(reviewedR23.revision);
+		expect(reviewedR24.revision).toBe(24);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR24.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments and the reviewed revision-22 addition", () => {

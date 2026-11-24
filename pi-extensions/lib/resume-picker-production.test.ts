@@ -158,12 +158,19 @@ describe("the entwurf resume bookmark file and terminal", () => {
 		const body = (code.split("export async function listResumeFacts")[1] ?? "").split("\n}\n")[0] ?? "";
 		const peerFacts = fs.readFileSync(path.join(here, "..", "..", "scripts", "peer-facts.ts"), "utf8");
 		ok(
-			"one provider call with peer-facts' three deps and nothing more",
+			"one provider call with peer-facts' three deps and the presentation selector, nothing more",
 			/const result = await listEntwurfFacts\(\{/.test(body) &&
 				/metaEntries: readActiveStoreEntries\(storeDir\),/.test(body) &&
 				/readRecord: makeStoreRecordReader\(storeDir\),/.test(body) &&
 				/socket: \{ dir: env\.ENTWURF_DIR \?\? defaultControlSocketDir\(os\.homedir\(\)\) \},/.test(body) &&
-				/return resumeFactsOf\(storeDir, result\);/.test(body) &&
+				// #173 P2: the one addition is the presentation selector, bookmarks and the seven-day
+				// window handed to it; the rows come back as the provider gave them.
+				/presentation: makePeerPresentationSelector\(\{/.test(body) &&
+				/pinnedIds: new Set\(pins\.map\(\(pin\) => pin\.gardenId\)\),/.test(body) &&
+				/observeWithinMs: RECENT_WINDOW_MS,/.test(body) &&
+				/return \{ facts: resumeFactsOf\(storeDir, result\), presentation: result\.presentation \?\? null \};/.test(
+					body,
+				) &&
 				!/observationLimit|readPlacementIndex|observe:|\.filter\(|\.sort\(/.test(body) &&
 				/readRecord: makeStoreRecordReader\(storeDir\),/.test(peerFacts) &&
 				/process\.env\.ENTWURF_DIR \?\? defaultControlSocketDir\(os\.homedir\(\)\)/.test(peerFacts),
@@ -356,7 +363,7 @@ describe("the entwurf resume picker's real terminal wiring", () => {
 			list: {
 				hasTerminal: true,
 				callerCwd: "/work/project",
-				listFacts: async () => [fact],
+				listFacts: async () => ({ facts: [fact], presentation: null }),
 				readPins: () => [],
 				pick: (listing, rail) => runResumePicker(listing, rail, processPickerIo(proc)),
 			},

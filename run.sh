@@ -1191,6 +1191,15 @@ check_owner_start_key() {
   run_vitest pi-extensions/lib/meta-session.start-key.test.ts
 }
 
+check_peer_presentation() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — check-tests-beside-behavior finds the test.
+  # The #173 PEERPRES-* mutants name this as gate argv: what the two human listings (the entwurf
+  # resume list and the entwurf_peers text) show first and what they only count. It stays in
+  # check:contracts for the same reason as check-cc-retire-pidfd.
+  section "human listing presentation (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/peer-presentation.test.ts
+}
+
 check_cc_retire_request() {
   # Mutant execution coordinate only; the existing beside glob owns test discovery.
   section "Claude Code retire request adapter (mutant execution coordinate)"

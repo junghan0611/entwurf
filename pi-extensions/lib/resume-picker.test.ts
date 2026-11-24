@@ -640,7 +640,7 @@ describe("the entwurf resume picker", () => {
 				all[1] === "all directories  (Ctrl-A: this directory only)" &&
 				tmux.includes("-- Bookmarked, other directories") &&
 				tmux.includes("-- This directory") &&
-				tmux.some((l) => l.includes("[Far]  2026-11-01T00:00  provider/model-a  /work/other")) &&
+				tmux.some((l) => l.includes("[Far]  2026-11-01T00:00Z  provider/model-a  /work/other")) &&
 				at(tmux, 4) === `selected: ${fact(2).gardenId}  in /work/other  [Far]` &&
 				at(tmux, 3) === "1 citizen of other backends is not listed (codex 1) | 1 bookmark has no record here" &&
 				at(all, 3) === "2 citizens of other backends are not listed (codex 2) | 1 bookmark has no record here" &&

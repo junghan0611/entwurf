@@ -266,12 +266,10 @@
 		},
 		{
 			"claim": "RESUMEROWS-ORDER",
-			"title": "unpinned rows are sorted oldest record first, so the citizen worked with yesterday is hundreds of rows down",
+			"title": "unpinned rows are sorted least recently active first, so the citizen worked with yesterday is hundreds of rows down",
 			"subject": "pi-extensions/lib/resume-picker-rows.ts",
-			"find": ["\tif (a.recordUpdatedAt !== b.recordUpdatedAt) return a.recordUpdatedAt < b.recordUpdatedAt ? 1 : -1;"],
-			"replace": [
-				"\tif (a.recordUpdatedAt !== b.recordUpdatedAt) return a.recordUpdatedAt < b.recordUpdatedAt ? -1 : 1;"
-			],
+			"find": ["\t\treturn b.activityMs - a.activityMs;"],
+			"replace": ["\t\treturn a.activityMs - b.activityMs;"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEROWS-ORDER]",
@@ -384,7 +382,9 @@
 			"claim": "RESUMEPINS-BROKEN-IS-LOUD",
 			"title": "a bookmark file without a members array is read as no bookmarks, so a broken file silently unpins every sibling",
 			"subject": "pi-extensions/lib/resume-picker-production.ts",
-			"find": ["\tif (!Array.isArray(members)) throw new ResumeBookmarkError(file, `\"members\" must be an array`);"],
+			"find": [
+				"\tif (!Array.isArray(members)) throw new ResumeBookmarkError(file, \"invalid-members\", `\"members\" must be an array`);"
+			],
 			"replace": ["\tif (!Array.isArray(members)) return [];"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,

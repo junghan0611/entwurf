@@ -302,6 +302,10 @@
 		// the same way. Their one production consumer is scripts/resume.ts.
 		"pi-extensions/lib/resume-picker.ts",
 		"pi-extensions/lib/resume-picker-production.ts",
+		// peer-presentation.ts is the #173 P2 human-listing selector and plan (test rooms, activity,
+		// the entwurf_peers row order) — a lib→lib importer with explicit `.ts` extensions, same
+		// fence, received the same way. Consumers: the bridge's entwurf_peers and scripts/resume.ts.
+		"pi-extensions/lib/peer-presentation.ts",
 		// entwurf-v2-visible-resume.ts is the S1 visible-resume composition on the V2 side of the
 		// fence — a lib→lib VALUE importer (lock / resume-launch-identity / socket-discovery /
 		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports

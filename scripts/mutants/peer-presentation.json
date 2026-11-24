@@ -1,0 +1,382 @@
+{
+	"schemaVersion": 1,
+	"lane": "peer-presentation",
+	"mutants": [
+		{
+			"claim": "PEERPRES-TEMP-COMPONENT-BOUNDARY",
+			"title": "the temp boundary is a string prefix, so /tmp-other and every directory merely named like the temp root is hidden as a test room",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\treturn candidate === root || candidate.startsWith(`${root}/`);"],
+			"replace": ["\treturn candidate.startsWith(root);"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-TEMP-COMPONENT-BOUNDARY]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-TEMP-REALPATH-BOTH-SIDES",
+			"title": "a resolved cwd is compared with the temp root as written, so on a host whose temp directory is an alias no test room is recognised",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\treturn isAtOrUnder(resolved, roots.real);"],
+			"replace": ["\treturn isAtOrUnder(resolved, roots.lexical);"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-TEMP-REALPATH-BOTH-SIDES]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-TEMP-DELETED-CWD-LEXICAL",
+			"title": "a cwd that no longer resolves is never a test room, so every deleted LIVE-gate fixture stays in the list",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\t\treturn isAtOrUnder(written, roots.lexical) || isAtOrUnder(written, roots.real);"],
+			"replace": ["\t\treturn false;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-TEMP-DELETED-CWD-LEXICAL]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-TEMP-ROOT-DISABLED",
+			"title": "a temp root that resolves to / is accepted, so every citizen on the host is a test room and the list is empty",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\tif (lexical === \"/\" || real === \"/\" || !path.isAbsolute(real)) return null;"],
+			"replace": ["\tif (lexical === \"/\" || !path.isAbsolute(real)) return null;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-TEMP-ROOT-DISABLED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-ACTIVITY-FALLBACK-CHAIN",
+			"title": "a transcript path that is not a regular file still supplies the time, so a directory or device mtime orders the list",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\t\tif (stat?.isFile === true && Number.isFinite(stat.mtimeMs)) return stat.mtimeMs;"],
+			"replace": ["\t\tif (stat !== null && Number.isFinite(stat.mtimeMs)) return stat.mtimeMs;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-ACTIVITY-FALLBACK-CHAIN]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-WINDOW-INCLUSIVE",
+			"title": "the window is exclusive at seven days, so a sibling last active exactly a week ago is hidden",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\treturn activityMs === null || now - activityMs <= windowMs;"],
+			"replace": ["\treturn activityMs === null || now - activityMs < windowMs;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-WINDOW-INCLUSIVE]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-ACTIVITY-RENDER-UTC",
+			"title": "the activity time is printed without its zone mark, so a UTC minute reads as local time",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\treturn Number.isNaN(date.getTime()) ? \"unknown\" : `${date.toISOString().slice(0, 16)}Z`;"],
+			"replace": ["\treturn Number.isNaN(date.getTime()) ? \"unknown\" : date.toISOString().slice(0, 16);"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-ACTIVITY-RENDER-UTC]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SELECTOR-TEST-ROOM-ZERO-COST",
+			"title": "an unbookmarked test room is stat'ed and observed like any citizen, so hundreds of test rooms cost a receiver observation each",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": [
+				"\t\t\t\tif (testRoom && !pinned) {",
+				"\t\t\t\t\thints.set(identity.gardenId, { testRoom: true, activityMs: null });",
+				"\t\t\t\t\tcontinue;",
+				"\t\t\t\t}"
+			],
+			"replace": [
+				"\t\t\t\tif (testRoom && !pinned) {",
+				"\t\t\t\t\thints.set(identity.gardenId, { testRoom: true, activityMs: null });",
+				"\t\t\t\t}"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SELECTOR-TEST-ROOM-ZERO-COST]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SELECTOR-PIN-BEATS-TEMP",
+			"title": "a bookmark no longer exempts a test room, so a sibling a person bookmarked under the temp directory is never observed",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": [
+				"\t\t\t\tif (testRoom && !pinned) {",
+				"\t\t\t\t\thints.set(identity.gardenId, { testRoom: true, activityMs: null });",
+				"\t\t\t\t\tcontinue;"
+			],
+			"replace": [
+				"\t\t\t\tif (testRoom) {",
+				"\t\t\t\t\thints.set(identity.gardenId, { testRoom: true, activityMs: null });",
+				"\t\t\t\t\tcontinue;"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SELECTOR-PIN-BEATS-TEMP]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SELECTOR-WINDOW-OBSERVE",
+			"title": "the observation window is ignored, so the picker observes every citizen of the last year to draw a week",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": [
+				"\t\t\t\tif (pinned || opts.observeWithinMs === undefined || isWithinWindow(activityMs, now, opts.observeWithinMs)) {"
+			],
+			"replace": [
+				"\t\t\t\tif (pinned || opts.observeWithinMs === undefined || isWithinWindow(activityMs, now, Number.POSITIVE_INFINITY)) {"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SELECTOR-WINDOW-OBSERVE]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PLAN-ORDER",
+			"title": "observed-live no longer outranks activity, so a long-lived coordinator with no recent transcript falls below every recent test session",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\t\tif (la !== lb) return la ? -1 : 1;"],
+			"replace": ["\t\tif (la !== lb && false) return la ? -1 : 1;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PLAN-ORDER]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PLAN-BUDGET",
+			"title": "the plan reports no remainder, so a listing cut at 32 rows reads as the whole garden",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\t\toutsideBudget: candidates.length - rows.length,"],
+			"replace": ["\t\toutsideBudget: 0,"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PLAN-BUDGET]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PLAN-TEST-ROOMS-COUNTED",
+			"title": "unbookmarked test rooms become candidates again, so the newest garden ids — LIVE-gate fixtures — take the rows",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\t\tif (hint?.testRoom === true && pin === undefined) {", "\t\t\ttestRooms += 1;", "\t\t\tcontinue;"],
+			"replace": ["\t\tif (hint?.testRoom === true && pin === undefined) {", "\t\t\ttestRooms += 1;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PLAN-TEST-ROOMS-COUNTED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SEAM-DEFAULT-UNCHANGED",
+			"title": "the provider returns a presentation member with no selector, so peer-facts' payload gains a key nobody asked for",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": ["\tif (selection === undefined) return { facts, diagnostics };"],
+			"replace": ["\tif (selection === undefined) return { facts, diagnostics, presentation: undefined };"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SEAM-DEFAULT-UNCHANGED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SEAM-RENDERED-SUBSET-OF-OBSERVED",
+			"title": "the selector's observe set is ignored, so every test room is observed and the rationing the selector promised never happens",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": [
+				"\t\tselectedObserve = (identity) => (selection.observe.has(identity.gardenId) ? observe(identity) : UNOBSERVED_PEER);"
+			],
+			"replace": ["\t\tselectedObserve = (identity) => observe(identity);"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SEAM-RENDERED-SUBSET-OF-OBSERVED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SEAM-AFTER-QUARANTINE",
+			"title": "the selector is handed the identities before quarantine, so a garden id in an address conflict can be bookmarked back into a human listing's plan",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": ["\tconst selection = deps.presentation?.select(cleanIdentities);"],
+			"replace": ["\tconst selection = deps.presentation?.select(identities);"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SEAM-AFTER-QUARANTINE]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-SEAM-EXCLUSIVE",
+			"title": "a selector and an observation limit are both accepted, so two budgets ration one observation and neither surface can say which rows were looked at",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": ["\tif (deps.presentation !== undefined && deps.observationLimit !== undefined) {"],
+			"replace": ["\tif (deps.presentation !== undefined && deps.observationLimit !== undefined && false) {"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-SEAM-EXCLUSIVE]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-RENDER-NO-PLAN-UNCHANGED",
+			"title": "the planned branch is taken without a plan, so the unplanned listing loses its rows",
+			"subject": "pi-extensions/lib/entwurf-peers-render.ts",
+			"find": [
+				"\t\tplan === undefined",
+				"\t\t\t? section(\"Garden citizens (meta-record):\", peers.map(renderPeerLine), { compact: true })"
+			],
+			"replace": [
+				"\t\tplan === undefined",
+				"\t\t\t? section(\"Garden citizens (meta-record):\", [], { compact: true })"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-RENDER-NO-PLAN-UNCHANGED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-RENDER-PLAN-TEXT",
+			"title": "a planned row no longer prints its activity, so the rows are in an order no reader can check",
+			"subject": "pi-extensions/lib/entwurf-peers-render.ts",
+			"find": ["\t\t`${renderPeerLine(row.peer)}  activity=${renderActivity(row.activityMs)}` +"],
+			"replace": ["\t\t`${renderPeerLine(row.peer)}` +"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-RENDER-PLAN-TEXT]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-RENDER-LABEL-ENCODED",
+			"title": "control characters below space pass through the label, so a bookmark name with a line break starts a row of its own in text a model reads",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\t\t\tcode < 0x20 ||", "\t\t\t(code >= 0x7f && code <= 0x9f) ||"],
+			"replace": ["\t\t\t(code >= 0x7f && code <= 0x9f) ||"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-RENDER-LABEL-ENCODED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-RENDER-NOTES-FIXED",
+			"title": "the test-room note prints the temp root it was given, so a temp directory whose name holds a line break or an escape starts a row of its own in text a model reads",
+			"subject": "pi-extensions/lib/entwurf-peers-render.ts",
+			"find": [
+				"\t\t\t`  … ${plan.testRooms} test ${plan.testRooms === 1 ? \"room\" : \"rooms\"} not shown (record cwd under the OS temp directory)`,"
+			],
+			"replace": [
+				"\t\t\t`  … ${plan.testRooms} test ${plan.testRooms === 1 ? \"room\" : \"rooms\"} not shown (record cwd under ${plan.tempRoot ?? \"the OS temp directory\"})`,"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-RENDER-NOTES-FIXED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-CALLERDIR-NON-CODEX-NO-SELF",
+			"title": "every bridge resolves the caller's identity before listing, so entwurf_peers on an anonymous host pays for and can fail on a lookup it never needed",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\tif (!deps.isCodexBridge) return { kind: \"known\", cwd: deps.processCwd() };"],
+			"replace": [
+				"\tif (!deps.isCodexBridge) {",
+				"\t\tawait deps.codexCallerCwd().catch(() => undefined);",
+				"\t\treturn { kind: \"known\", cwd: deps.processCwd() };",
+				"\t}"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-CALLERDIR-NON-CODEX-NO-SELF]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-CALLERDIR-CODEX-RECORD-CWD",
+			"title": "a Codex bridge uses its own directory, so a Codex caller reads the app-server repository's bookmarks",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": ["\tif (!deps.isCodexBridge) return { kind: \"known\", cwd: deps.processCwd() };"],
+			"replace": ["\tif (!deps.isCodexBridge || true) return { kind: \"known\", cwd: deps.processCwd() };"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-CALLERDIR-CODEX-RECORD-CWD]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-CALLERDIR-CODEX-UNKNOWN",
+			"title": "an unresolved Codex caller falls back to the app-server's directory, so another repository's bookmarks lift its test rooms into the caller's listing",
+			"subject": "pi-extensions/lib/peer-presentation.ts",
+			"find": [
+				"\t\treturn cwd === undefined ? { kind: \"unknown\" } : { kind: \"known\", cwd };",
+				"\t} catch {",
+				"\t\treturn { kind: \"unknown\" };"
+			],
+			"replace": [
+				"\t\treturn cwd === undefined ? { kind: \"known\", cwd: deps.processCwd() } : { kind: \"known\", cwd };",
+				"\t} catch {",
+				"\t\treturn { kind: \"known\", cwd: deps.processCwd() };"
+			],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-CALLERDIR-CODEX-UNKNOWN]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-BOOKMARK-NON-REGULAR-REFUSED",
+			"title": "the entry is looked at by following it, so a symlinked team.json is read from wherever it points",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\t\tentry = fs.lstatSync(file);"],
+			"replace": ["\t\tentry = fs.statSync(file);"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-BOOKMARK-NON-REGULAR-REFUSED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-BOOKMARK-BOUNDED",
+			"title": "the size limit is not applied, so a bookmark file of any size is read whole on every entwurf_peers call",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\t\tif (opened.size > RESUME_BOOKMARK_MAX_BYTES) {"],
+			"replace": ["\t\tif (opened.size > RESUME_BOOKMARK_MAX_BYTES * 1024) {"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-BOOKMARK-BOUNDED]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PICKER-WINDOW",
+			"title": "the seven-day window is not applied to the list, so the first screen is the whole history again",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\t\tif (!isWithinWindow(activityMs, presentation.now, RECENT_WINDOW_MS)) {"],
+			"replace": ["\t\t\tif (!isWithinWindow(activityMs, presentation.now, Number.POSITIVE_INFINITY)) {"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PICKER-WINDOW]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PICKER-NO-HINTS-HIDES-NOTHING",
+			"title": "a listing built without hints applies the window against no clock, so every row is hidden",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\tif (pin === undefined && presentation !== null) {"],
+			"replace": ["\t\tif (pin === undefined) {"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PICKER-NO-HINTS-HIDES-NOTHING]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PICKER-ROW-ACTIVITY",
+			"title": "a row prints nothing where its activity time was, so the order of the list cannot be read off it",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\trenderActivity(row.activityMs),", ""],
+			"replace": ["\t\t\"\",", ""],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PICKER-ROW-ACTIVITY]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		},
+		{
+			"claim": "PEERPRES-PICKER-FRAME-64",
+			"title": "the left-out note is never added to the frame, so the list hides rows without saying that it did",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tif (hiddenParts.length > 0) notes.push(`not shown: ${hiddenParts.join(\", \")}`);"],
+			"replace": ["\tconst hiddenNote = hiddenParts.length > 0 ? `not shown: ${hiddenParts.join(\", \")}` : null;"],
+			"gate": ["bash", "run.sh", "check-peer-presentation"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PEERPRES-PICKER-FRAME-64]",
+			"signatureSource": "pi-extensions/lib/peer-presentation.test.ts"
+		}
+	]
+}

@@ -141,7 +141,7 @@ describe("the entwurf resume list", () => {
 			"default hides only unpinned other-directory rows; the far pin carries its path",
 			ids(def) === [E, B, C, A].join(",") &&
 				pinned?.section === "pin-elsewhere" &&
-				renderResumeRow(pinned as never).endsWith(`[Elsewhere pin]  2026-11-01T00:00  provider/model-a  ${THERE}`) &&
+				renderResumeRow(pinned as never).endsWith(`[Elsewhere pin]  2026-11-01T00:00Z  provider/model-a  ${THERE}`) &&
 				!renderResumeRow(def[1] as never).includes(HERE) &&
 				ids(all) === [E, B, C, A, D].join(",") &&
 				renderResumeRow(all[4] as never).endsWith(THERE),
@@ -191,7 +191,7 @@ describe("the entwurf resume list", () => {
 			row?.gardenId === P &&
 				row.section === "pin-here" &&
 				row.facts === "receiver active" &&
-				renderResumeRow(row).endsWith("receiver active       [운영코디]  2026-11-01T00:00"),
+				renderResumeRow(row).endsWith("receiver active       [운영코디]  2026-11-01T00:00Z"),
 		);
 	});
 

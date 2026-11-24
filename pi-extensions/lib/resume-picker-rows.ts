@@ -9,8 +9,8 @@
  *
  * WHAT IT READS. `PeerFact` rows exactly as `listEntwurfFacts` produced them (the provider is not
  * re-run, re-joined or re-ordered at the fact level), the directory the operator typed the command
- * in, and bookmark pins. Of a fact it reads identity, cwd, model, the record's update time and the
- * two liveness-side observations; it does NOT read `placement` — a pane is a view, and this list
+ * in, bookmark pins and the presentation hints (test room, activity time). Of a fact it reads
+ * identity, cwd, model, the record's update time and the two liveness-side observations; it does NOT read `placement` — a pane is a view, and this list
  * neither shows nor decides anything from one. `unsupported`, `unobserved` and `unknown` are
  * printed as the provider's own words, never translated into dead, inactive or eligible.
  *
@@ -26,6 +26,7 @@
  */
 
 import type { PeerFact } from "./entwurf-facts.ts";
+import { isWithinWindow, type PeerPresentation, RECENT_WINDOW_MS, renderActivity } from "./peer-presentation.ts";
 
 /** A bookmark: an id to float to the top and the name the operator knows it by. */
 export interface ResumePin {
@@ -46,7 +47,9 @@ export interface ResumeRow {
 	model: string | null;
 	/** The liveness-side facts, in the provider's words. */
 	facts: string;
-	recordUpdatedAt: string;
+	/** When this citizen was last active (its transcript's mtime, else its record's update time), or
+	 * `null` when neither is known. The order of the unpinned rows and the time a row prints. */
+	activityMs: number | null;
 	/** The bookmark's name, when this citizen is pinned. */
 	pin: string | null;
 	section: ResumeRowSection;
@@ -60,7 +63,13 @@ export interface ResumeListing {
 	unlisted: { backend: string; here: boolean }[];
 	/** Pins whose garden id has no record on this host. Counted and named, never a candidate. */
 	pinsWithoutRecord: ResumePin[];
+	/** Unbookmarked listed-backend citizens left out of the rows (#173 P2), and why. Presentation
+	 * only: naming such an id directly reaches the leaf exactly as before. */
+	hidden: { reason: ResumeHiddenReason; here: boolean }[];
 }
+
+/** `test-room`: the record cwd is under the OS temp directory. `older`: quiet for more than seven days. */
+export type ResumeHiddenReason = "test-room" | "older";
 
 /** The two observations a reader uses to guess whether a citizen is running — printed, not judged. */
 export function describeFacts(fact: Pick<PeerFact, "liveness" | "receiver">): string {
@@ -72,9 +81,13 @@ export function describeFacts(fact: Pick<PeerFact, "liveness" | "receiver">): st
 	return parts.length > 0 ? parts.join(", ") : `liveness ${fact.liveness}`;
 }
 
-/** Newest record first; the id breaks a tie so the order is total and stable. */
+/** Most recently active first, an unknown time last; the id breaks a tie so the order is total and stable. */
 function byRecency(a: ResumeRow, b: ResumeRow): number {
-	if (a.recordUpdatedAt !== b.recordUpdatedAt) return a.recordUpdatedAt < b.recordUpdatedAt ? 1 : -1;
+	if (a.activityMs !== b.activityMs) {
+		if (a.activityMs === null) return 1;
+		if (b.activityMs === null) return -1;
+		return b.activityMs - a.activityMs;
+	}
 	return a.gardenId < b.gardenId ? 1 : a.gardenId > b.gardenId ? -1 : 0;
 }
 
@@ -82,6 +95,8 @@ export function buildResumeListing(
 	facts: readonly PeerFact[],
 	callerCwd: string,
 	pins: readonly ResumePin[],
+	/** The #173 P2 hints. `null` hides nothing and reads each row's activity from its record. */
+	presentation: PeerPresentation | null = null,
 ): ResumeListing {
 	// First pin wins when a bookmark file names one id twice; its position is that first one.
 	const pinOrder = new Map<string, { name: string; index: number }>();
@@ -91,6 +106,7 @@ export function buildResumeListing(
 
 	const rows: ResumeRow[] = [];
 	const unlisted: ResumeListing["unlisted"] = [];
+	const hidden: ResumeListing["hidden"] = [];
 	const seen = new Set<string>();
 	for (const fact of facts) {
 		seen.add(fact.gardenId);
@@ -100,13 +116,28 @@ export function buildResumeListing(
 			continue;
 		}
 		const pin = pinOrder.get(fact.gardenId);
+		const hint = presentation?.hints.get(fact.gardenId);
+		const recorded = Date.parse(fact.recordUpdatedAt);
+		const activityMs = hint === undefined ? (Number.isFinite(recorded) ? recorded : null) : hint.activityMs;
+		// A bookmark is shown whatever its directory or age. Everything else is shown only when it is
+		// not a test room and was active inside the window, measured against the listing's one clock.
+		if (pin === undefined && presentation !== null) {
+			if (hint?.testRoom === true) {
+				hidden.push({ reason: "test-room", here });
+				continue;
+			}
+			if (!isWithinWindow(activityMs, presentation.now, RECENT_WINDOW_MS)) {
+				hidden.push({ reason: "older", here });
+				continue;
+			}
+		}
 		rows.push({
 			gardenId: fact.gardenId,
 			backend: fact.backend,
 			cwd: fact.cwd,
 			model: fact.model,
 			facts: describeFacts(fact),
-			recordUpdatedAt: fact.recordUpdatedAt,
+			activityMs,
 			pin: pin === undefined ? null : pin.name,
 			section: pin === undefined ? (here ? "here" : "elsewhere") : here ? "pin-here" : "pin-elsewhere",
 		});
@@ -125,7 +156,20 @@ export function buildResumeListing(
 		.filter(([gardenId]) => !seen.has(gardenId))
 		.map(([gardenId, pin]) => ({ gardenId, name: pin.name }));
 
-	return { callerCwd, rows, unlisted, pinsWithoutRecord };
+	return { callerCwd, rows, unlisted, pinsWithoutRecord, hidden };
+}
+
+/** How many unbookmarked citizens of the current scope the list left out, by reason. */
+export function hiddenResumeCounts(
+	listing: ResumeListing,
+	allDirectories: boolean,
+): Record<ResumeHiddenReason, number> {
+	const counts: Record<ResumeHiddenReason, number> = { older: 0, "test-room": 0 };
+	for (const h of listing.hidden) {
+		if (!allDirectories && !h.here) continue;
+		counts[h.reason] += 1;
+	}
+	return counts;
 }
 
 export interface ResumeView {
@@ -165,7 +209,7 @@ export function unlistedResumeCounts(listing: ResumeListing, allDirectories: boo
 
 /**
  * One row as text, the columns that identify a citizen first so an 80-column terminal still shows
- * the bookmark name: id, backend, facts, then the name, the record time, the model when one is
+ * the bookmark name: id, backend, facts, then the name, the activity time (UTC), the model when one is
  * recorded, and the directory. The directory is printed only where it is not the operator's own: a
  * pin from elsewhere always carries its path, and so does every row of the all-directories view.
  */
@@ -176,7 +220,7 @@ export function renderResumeRow(row: ResumeRow): string {
 		row.backend.padEnd(11),
 		row.facts.padEnd(20),
 		...(row.pin === null ? [] : [`[${row.pin}]`]),
-		row.recordUpdatedAt.slice(0, 16),
+		renderActivity(row.activityMs),
 		...(row.model === null ? [] : [row.model]),
 		...(elsewhere ? [row.cwd] : []),
 	].join("  ");

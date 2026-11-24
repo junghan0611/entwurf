@@ -26,6 +26,7 @@
 import type { EntwurfDiagnostic, EntwurfFactsResult } from "./entwurf-fact-provider.ts";
 import type { PeerFact } from "./entwurf-facts.ts";
 import { renderPlacement } from "./herdr-placement.ts";
+import { bookmarkLabel, type PeersDisplayPlan, type PeersDisplayRow, renderActivity } from "./peer-presentation.ts";
 
 /** The full `entwurf_peers` JSON payload: citizens + diagnostics, nothing else.
  * NO verb-routing field anywhere (the gate enforces this by deep key scan) and
@@ -64,6 +65,47 @@ function renderPeerLine(p: PeerFact): string {
 		`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  receiver=${p.receiver}  ` +
 		`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}  placement=${renderPlacement(p.placement)}`
 	);
+}
+
+// A planned row is the same fact line with two more observed facts at its end. `activity` is the
+// key the rows are ordered by — the mtime of the citizen's current transcript, or the record's
+// update time where there is none — printed because an order nobody can see is an order nobody can
+// check. `bookmark` is the name the caller's own team.json gives this garden id: a label for the
+// eye, encoded as one quoted token, and neither an identity nor an address.
+function renderPlannedPeerLine(row: PeersDisplayRow): string {
+	return (
+		`${renderPeerLine(row.peer)}  activity=${renderActivity(row.activityMs)}` +
+		(row.bookmark === null ? "" : `  bookmark=${bookmarkLabel(row.bookmark)}`)
+	);
+}
+
+/** The counted remainder of a planned listing. Fixed sentences; the only data in them are counts,
+ * a limit and the temp root this host resolved. Nothing here says what can be done with a citizen. */
+function renderPlanNotes(plan: PeersDisplayPlan, limit: number): string[] {
+	const notes: string[] = [];
+	if (plan.outsideBudget > 0) {
+		notes.push(
+			`  … ${plan.outsideBudget} more ${plan.outsideBudget === 1 ? "citizen" : "citizens"} outside this ${limit}-row budget (every row: entwurf peer-facts)`,
+		);
+	}
+	if (plan.testRooms > 0) {
+		notes.push(
+			// Fixed words only: the temp root is a path from the environment and may hold a line break or
+			// an escape, so it is never printed here.
+			`  … ${plan.testRooms} test ${plan.testRooms === 1 ? "room" : "rooms"} not shown (record cwd under the OS temp directory)`,
+		);
+	}
+	if (plan.bookmarksWithoutRecord > 0) {
+		notes.push(`  … bookmarks without a record: ${plan.bookmarksWithoutRecord}`);
+	}
+	if (plan.bookmarkNote?.kind === "caller-directory-unknown") {
+		notes.push("  … bookmarks: the caller directory is not known for this request; listed without bookmarks");
+	} else if (plan.bookmarkNote?.kind === "unreadable") {
+		notes.push(
+			`  … bookmarks: team.json in the caller directory could not be read (${plan.bookmarkNote.code}); listed without bookmarks`,
+		);
+	}
+	return notes;
 }
 
 function renderDiagnosticLine(d: EntwurfDiagnostic): string {
@@ -155,15 +197,24 @@ function section(title: string, lines: string[], opts: { compact?: boolean } = {
  * `record-less-socket` diagnostic (#50 C4), so `facts.recordLessSockets` is not
  * re-rendered here — diagnostics are the single channel for non-citizen state.
  */
-export function renderEntwurfPeers(result: EntwurfFactsResult): EntwurfPeersRender {
+export function renderEntwurfPeers(
+	result: Pick<EntwurfFactsResult, "facts" | "diagnostics">,
+	plan?: PeersDisplayPlan,
+): EntwurfPeersRender {
 	const { peers } = result.facts;
 	const { diagnostics } = result;
 
-	const text = [
-		section("Garden citizens (meta-record):", peers.map(renderPeerLine), { compact: true }),
-		"",
-		section("Diagnostics:", renderDiagnosticLines(diagnostics)),
-	].join("\n");
+	// With a plan (#173 P2) the citizen section prints exactly the plan's rows in the plan's order
+	// and then what it left out, counted. Without one it is the listing it always was. The payload
+	// is every row either way.
+	const citizens =
+		plan === undefined
+			? section("Garden citizens (meta-record):", peers.map(renderPeerLine), { compact: true })
+			: section("Garden citizens (meta-record):", [
+					...plan.rows.map(renderPlannedPeerLine),
+					...renderPlanNotes(plan, ENTWURF_PEERS_RENDER_LIMIT),
+				]);
+	const text = [citizens, "", section("Diagnostics:", renderDiagnosticLines(diagnostics))].join("\n");
 
 	const payload: EntwurfPeersPayload = { peers, diagnostics };
 	return { text, payload };

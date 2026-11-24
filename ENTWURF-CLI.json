@@ -163,8 +163,8 @@
 			"lines": [
 				"A person's own bookmark: who the siblings are, on which backend, at which",
 				"garden id. It is not configuration for identity, routes, roles, permissions",
-				"or lifecycle. One command reads it, read-only: entwurf resume, to order",
-				"and name the rows of its list.",
+				"or lifecycle. Two things read it, read-only, to order and name the rows",
+				"they show: the command entwurf resume and the tool entwurf_peers.",
 				"",
 				"Where it lives:",
 				"  team.json at the project root, kept out of git (add /team.json to",
@@ -188,6 +188,11 @@
 				"  the record decides whether a sibling can be reopened. An absent team.json",
 				"  simply means no bookmarks; one that exists but cannot be read stops the",
 				"  list by name. entwurf resume <garden-id> never reads it.",
+				"  entwurf_peers, the tool an agent calls, reads team.json in the calling",
+				"  session's directory the same way and prints bookmarked siblings first,",
+				"  each with bookmark=\"name\". There a file that cannot be read is noted",
+				"  under the listing, which goes on without bookmarks.",
+				"  Both read a regular file of at most 1 MiB; a symlink is not followed.",
 				"",
 				"Where the facts come from:",
 				"  Copy ids, backend and cwd from the records (entwurf meta-facts); never",
@@ -377,6 +382,11 @@
 					"synopsis": "check-owner-start-key",
 					"column": 38,
 					"summary": "#173 mutant execution coordinate (VERIFY rule 3): run_vitest over the owner start-key beside test (the /proc read, the one case that skips ps, the ps fallback and its production wiring) — the gate argv of the owner-start-key claims. Same file check-tests-beside-behavior already runs."
+				},
+				{
+					"synopsis": "check-peer-presentation",
+					"column": 38,
+					"summary": "#173 mutant execution coordinate (VERIFY rule 3): run_vitest over the human-listing presentation beside test (test rooms, activity time, the entwurf_peers row order and text, the opt-in provider selector, the bookmark file as a bounded regular file, the entwurf resume seven-day window) — the gate argv of the peer-presentation claims. Same file check-tests-beside-behavior already runs."
 				},
 				{
 					"synopsis": "check-pi-durable-receive",
@@ -1152,7 +1162,7 @@
 				{
 					"synopsis": "resume [<garden-id>]",
 					"column": 38,
-					"summary": "Reopen ONE dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside this terminal (inside herdr, a new herdr tab). No prompt is submitted; the record is the address, so no session name, harness or model is given. It works only inside tmux or herdr; elsewhere it says so first and reads nothing. With a garden id it reopens that sibling and needs no terminal. With none it shows a list: type to narrow, arrows to move, Ctrl-A for all directories (the default is the one you typed the command in), Enter reopens the row under the cursor with no confirmation, Esc opens nothing. Siblings in that directory's team.json (garden_id and name only) come first. A row is recorded facts, not a promise; siblings of other backends are counted, not listed. Below 64x8 Enter does nothing; a bracketed paste is search text, never a choice. A sibling that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened, never a message or a new session instead. The receipt is unattributed: a terminal has no garden identity. Same code path as entwurf_resume_call (#173). EXIT: 0 launched and the backend's same-id observation was positive (pi: socket connect; Claude Code: receiver re-armed by a new owner; pi-durable: reservation adopted, which is not readiness) / 3 launched, not observed in the bounded wait (it stays visible; no retry) / 4 refused, nothing opened / 5 failed at the launch step (the recovery receipt says what remains) / 6 list shown, nothing chosen / 7 the list could not be shown (store, unreadable team.json or terminal) / 2 usage / 1 the resume threw; its message is printed as written (e.g. no record for that id)"
+					"summary": "Reopen ONE dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside this terminal (inside herdr, a new herdr tab). No prompt is submitted; the record is the address, so no session name, harness or model is given. It works only inside tmux or herdr; elsewhere it says so first and reads nothing. With a garden id it reopens that sibling and needs no terminal. With none it shows a list: type to narrow, arrows to move, Ctrl-A for all directories (the default is the one you typed the command in), Enter reopens the row under the cursor with no confirmation, Esc opens nothing. Siblings in that directory's team.json (garden_id and name only) come first, whatever their age. The others are listed when active in the last 7 days, most recent first; older ones and test rooms (record cwd under the OS temp directory) are counted, not listed, and a garden id typed directly still reaches any of them. A row is recorded facts, not a promise; siblings of other backends are counted, not listed. Below 64x8 Enter does nothing; a bracketed paste is search text, never a choice. A sibling that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened, never a message or a new session instead. The receipt is unattributed: a terminal has no garden identity. Same code path as entwurf_resume_call (#173). EXIT: 0 launched and the backend's same-id observation was positive (pi: socket connect; Claude Code: receiver re-armed by a new owner; pi-durable: reservation adopted, which is not readiness) / 3 launched, not observed in the bounded wait (it stays visible; no retry) / 4 refused, nothing opened / 5 failed at the launch step (the recovery receipt says what remains) / 6 list shown, nothing chosen / 7 the list could not be shown (store, unreadable team.json or terminal) / 2 usage / 1 the resume threw; its message is printed as written (e.g. no record for that id)"
 				},
 				{
 					"synopsis": "check-remote-pair-installed",

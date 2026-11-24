@@ -262,9 +262,18 @@ function main(): void {
 		const nativeSrc = readFileSync(path.join(here, "..", "pi-extensions", "entwurf-control.ts"), "utf8");
 		ok("wiring: bridge calls listEntwurfFacts(", bridgeSrc.includes("listEntwurfFacts("));
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));
+		// #173 P2 replaced #112's newest-N observation budget on this surface: the bridge hands the
+		// provider the presentation selector (what to observe) and renders the plan made with the
+		// same render limit (what to print). The two budgets may not both be given.
 		ok(
-			"#112 wiring: MCP observation uses the render limit",
-			bridgeSrc.includes("observationLimit: ENTWURF_PEERS_RENDER_LIMIT"),
+			"#173 wiring: MCP observation is chosen by the presentation selector, not a newest-N budget",
+			bridgeSrc.includes("presentation: makePeerPresentationSelector({") && !bridgeSrc.includes("observationLimit:"),
+		);
+		ok(
+			"#173 wiring: the printed rows are the plan's, cut at the render limit",
+			/planPeersDisplay\(\s*result\.facts\.peers,\s*result\.presentation,\s*pins,\s*ENTWURF_PEERS_RENDER_LIMIT,\s*bookmarkNote,?\s*\)/.test(
+				bridgeSrc,
+			) && bridgeSrc.includes("renderEntwurfPeers(result, plan)"),
 		);
 		ok(
 			"wiring: bridge does not paste full JSON payload into human text",

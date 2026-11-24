@@ -164,7 +164,7 @@ function recording(
 					calls.listFacts += 1;
 					const facts = list.facts ?? [];
 					if (facts instanceof Error) throw facts;
-					return facts;
+					return { facts, presentation: null };
 				},
 				readPins: (callerCwd) => {
 					calls.readPins.push(callerCwd);
@@ -322,6 +322,7 @@ describe("entwurf resume <garden-id>", () => {
 					"./entwurf-v2-visible-resume.ts",
 					"./fresh-call-dispatch.ts",
 					"./mux-placement.ts",
+					"./peer-presentation.ts",
 					"./resume-picker-rows.ts",
 					"./resume-picker.ts",
 					"./visible-resume-launch.ts",
@@ -329,6 +330,7 @@ describe("entwurf resume <garden-id>", () => {
 				// The list reaches this module as TYPES and one pure function: the store, the bookmark file
 				// and the terminal are the entry's to supply.
 				src.includes('\nimport type { PeerFact } from "./entwurf-facts.ts";\n') &&
+				src.includes('\nimport type { PeerPresentation } from "./peer-presentation.ts";\n') &&
 				src.includes('\nimport type { PickerRail, PickerResult } from "./resume-picker.ts";\n') &&
 				// The two rail modules are here for their PREDICATES alone: no launcher, lock or record reader.
 				src.includes('\nimport { selectFreshCallRail } from "./fresh-call-dispatch.ts";\n') &&

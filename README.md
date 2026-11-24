@@ -183,7 +183,11 @@ prompt is submitted.
   narrow, arrows to move, `Ctrl-A` for every directory. `Enter` reopens the row under the cursor with
   no confirmation — the screen says so — and `Esc` opens nothing. A row is a listing of recorded
   facts, not a promise that the sibling can be reopened.
-- **Bookmarks:** siblings named in that directory's `team.json` come first, under their names.
+- **What the list leaves out:** siblings quiet for more than seven days and test rooms (a record
+  whose directory is under the OS temp directory) are counted on the screen, not listed. Typing
+  their garden id still reaches them.
+- **Bookmarks:** siblings named in that directory's `team.json` come first, under their names,
+  whatever their age.
 
 `entwurf help resume` has the exit codes.
 
@@ -231,9 +235,10 @@ holds the record — no discovery, wake or retry. `entwurf help remote-pair`, th
 
 **Team bookmarks:** [`team.json.example`](./team.json.example) is a person's note of the siblings one
 project works with, copied to an ignored `team.json`. It is not configuration for identity, routes,
-roles, permissions or lifecycle. One command reads it, read-only: `entwurf resume` takes `garden_id`
-and `name` from the `team.json` in the directory it was typed in, to put bookmarked siblings first in
-its list. `entwurf help team`.
+roles, permissions or lifecycle. Two things read it, read-only, taking `garden_id` and `name`: the
+command `entwurf resume` (the `team.json` of the directory it was typed in) and the tool
+`entwurf_peers` (that of the calling session's directory), each to show bookmarked siblings first.
+`entwurf help team`.
 
 ## Concepts
 

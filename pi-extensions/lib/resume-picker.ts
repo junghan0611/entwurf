@@ -37,6 +37,7 @@
  */
 
 import {
+	hiddenResumeCounts,
 	type ResumeListing,
 	type ResumeRow,
 	type ResumeRowSection,
@@ -476,6 +477,14 @@ export function renderPickerFrame(
 
 	const unlisted = unlistedResumeCounts(listing, state.allDirectories);
 	const notes: string[] = [];
+	// First on the line, because a narrow terminal cuts the line's end: what this list left out. It
+	// states the display rule and nothing about what such a citizen can do.
+	const hidden = hiddenResumeCounts(listing, state.allDirectories);
+	const hiddenParts = [
+		...(hidden.older > 0 ? [`${hidden.older} older than 7 days`] : []),
+		...(hidden["test-room"] > 0 ? [`${hidden["test-room"]} test ${hidden["test-room"] === 1 ? "room" : "rooms"}`] : []),
+	];
+	if (hiddenParts.length > 0) notes.push(`not shown: ${hiddenParts.join(", ")}`);
 	if (unlisted.length > 0) {
 		const sum = unlisted.reduce((n, [, count]) => n + count, 0);
 		notes.push(

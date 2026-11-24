@@ -8,8 +8,10 @@
  * same way `scripts/peer-facts.ts` assembles them: the active store entries with their kind, the
  * store's own record reader, and the control-socket directory `ENTWURF_DIR` selects. The join is
  * not re-implemented and the provider is not narrowed; this module returns its rows as given.
- * Observation is unbounded for the reason it is there: a rationed row would say `unobserved`, and a
- * person choosing whom to reopen cannot tell that from "nobody could look".
+ * Every row the list DRAWS is observed: a rationed row would say `unobserved`, and a person choosing
+ * whom to reopen cannot tell that from "nobody could look". What the list does not draw (#173 P2: an
+ * unbookmarked test room, an unbookmarked citizen quiet for more than seven days) is counted, not
+ * drawn, and so not observed.
  *
  * A RECORD THAT COULD NOT BE READ IS NOT A SHORTER LIST. The provider reports such a record as a
  * `meta-record-read-error` diagnostic and leaves it out of the rows. peer-facts prints that
@@ -35,6 +37,12 @@ import { defaultControlSocketDir } from "./control-socket-path.js";
 import { type EntwurfFactsResult, listEntwurfFacts } from "./entwurf-fact-provider.ts";
 import type { PeerFact } from "./entwurf-facts.ts";
 import { defaultMetaSessionsDir, makeStoreRecordReader, readActiveStoreEntries } from "./meta-session.ts";
+import {
+	makePeerPresentationSelector,
+	type PeerPresentation,
+	productionPresentationIo,
+	RECENT_WINDOW_MS,
+} from "./peer-presentation.ts";
 import type { PickerIo } from "./resume-picker.ts";
 import type { ResumePin } from "./resume-picker-rows.ts";
 
@@ -52,34 +60,69 @@ export class ResumeListingError extends Error {
 
 /** The provider's rows, or a throw when a record it met could not be read. Split from the read so
  * the rule is testable on a provider result with no store behind it. */
-export function resumeFactsOf(storeDir: string, result: EntwurfFactsResult): PeerFact[] {
+export function resumeFactsOf(storeDir: string, result: Pick<EntwurfFactsResult, "facts" | "diagnostics">): PeerFact[] {
 	const unreadable = result.diagnostics.filter((d) => d.kind === "meta-record-read-error");
 	if (unreadable.length > 0) throw new ResumeListingError(storeDir, unreadable);
 	return result.facts.peers;
 }
 
-/** Every citizen the fact provider lists on this host, in provider order. Throws when the store
- * cannot be read: an unreadable host must never look like an empty one. */
-export async function listResumeFacts(env: NodeJS.ProcessEnv = process.env): Promise<PeerFact[]> {
+/** The rows of a list and what orders and windows them. */
+export interface ResumeFactsListing {
+	facts: readonly PeerFact[];
+	presentation: PeerPresentation | null;
+}
+
+/**
+ * Every citizen the fact provider lists on this host, in provider order, with the presentation
+ * hints of #173 P2. Throws when the store cannot be read: an unreadable host must never look like
+ * an empty one.
+ *
+ * Observation is rationed to the rows the list will draw — every bookmark, and every other citizen
+ * that is not a test room and was active inside the window. A row the list does not draw is not a
+ * row that says `unobserved`; it is counted.
+ */
+export async function listResumeFacts(
+	pins: readonly ResumePin[] = [],
+	env: NodeJS.ProcessEnv = process.env,
+): Promise<ResumeFactsListing> {
 	const storeDir = defaultMetaSessionsDir();
 	const result = await listEntwurfFacts({
 		metaEntries: readActiveStoreEntries(storeDir),
 		readRecord: makeStoreRecordReader(storeDir),
 		socket: { dir: env.ENTWURF_DIR ?? defaultControlSocketDir(os.homedir()) },
+		presentation: makePeerPresentationSelector({
+			pinnedIds: new Set(pins.map((pin) => pin.gardenId)),
+			io: productionPresentationIo(),
+			observeWithinMs: RECENT_WINDOW_MS,
+		}),
 	});
-	return resumeFactsOf(storeDir, result);
+	return { facts: resumeFactsOf(storeDir, result), presentation: result.presentation ?? null };
 }
 
 export const RESUME_BOOKMARK_FILE = "team.json";
 
+/** Why a bookmark file was refused, as a closed set: the only part of the error another surface
+ * may repeat. The message is for the operator's own terminal. */
+export type ResumeBookmarkErrorCode =
+	| "not-a-regular-file"
+	| "too-large"
+	| "unreadable"
+	| "not-json"
+	| "invalid-members";
+
 export class ResumeBookmarkError extends Error {
 	readonly file: string;
-	constructor(file: string, detail: string) {
+	readonly code: ResumeBookmarkErrorCode;
+	constructor(file: string, code: ResumeBookmarkErrorCode, detail: string) {
 		super(`${file} is not a readable bookmark file: ${detail}`);
 		this.name = "ResumeBookmarkError";
 		this.file = file;
+		this.code = code;
 	}
 }
+
+/** The most bytes a bookmark file may have. A person's list of siblings is a few kilobytes. */
+export const RESUME_BOOKMARK_MAX_BYTES = 1024 * 1024;
 
 /**
  * The bookmarks of `callerCwd`, in file order. `readFile` is the seam: it returns the bytes, or
@@ -87,44 +130,81 @@ export class ResumeBookmarkError extends Error {
  */
 export function readResumePins(
 	callerCwd: string,
-	readFile: (file: string) => string | null = readFileOrNull,
+	readFile: (file: string) => string | null = readBookmarkFileOrNull,
 ): ResumePin[] {
 	const file = path.join(callerCwd, RESUME_BOOKMARK_FILE);
 	let raw: string | null;
 	try {
 		raw = readFile(file);
 	} catch (err) {
-		throw new ResumeBookmarkError(file, err instanceof Error ? err.message : String(err));
+		if (err instanceof ResumeBookmarkError) throw err;
+		throw new ResumeBookmarkError(file, "unreadable", err instanceof Error ? err.message : String(err));
 	}
 	if (raw === null) return [];
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(raw);
 	} catch (err) {
-		throw new ResumeBookmarkError(file, `not JSON (${err instanceof Error ? err.message : String(err)})`);
+		throw new ResumeBookmarkError(file, "not-json", `not JSON (${err instanceof Error ? err.message : String(err)})`);
 	}
 	const members = typeof parsed === "object" && parsed !== null ? (parsed as { members?: unknown }).members : undefined;
-	if (!Array.isArray(members)) throw new ResumeBookmarkError(file, `"members" must be an array`);
+	if (!Array.isArray(members)) throw new ResumeBookmarkError(file, "invalid-members", `"members" must be an array`);
 	return members.map((member, index) => {
 		const m = typeof member === "object" && member !== null ? (member as Record<string, unknown>) : {};
 		const gardenId = m.garden_id;
 		const name = m.name;
 		if (typeof gardenId !== "string" || gardenId.length === 0) {
-			throw new ResumeBookmarkError(file, `members[${index}].garden_id must be a non-empty string`);
+			throw new ResumeBookmarkError(file, "invalid-members", `members[${index}].garden_id must be a non-empty string`);
 		}
 		if (typeof name !== "string" || name.length === 0) {
-			throw new ResumeBookmarkError(file, `members[${index}].name must be a non-empty string`);
+			throw new ResumeBookmarkError(file, "invalid-members", `members[${index}].name must be a non-empty string`);
 		}
 		return { gardenId, name };
 	});
 }
 
-function readFileOrNull(file: string): string | null {
+/**
+ * The bytes of a bookmark file, `null` when there is none.
+ *
+ * THE FILE IS A REGULAR FILE OF BOUNDED SIZE, OR IT IS REFUSED BY NAME. `entwurf_peers` reads this
+ * on every call an agent makes, so the read must not be able to hang or wander: a FIFO would block
+ * a plain read forever, a symlink would read whatever it points at, and a device has no end. The
+ * entry is looked at without following it (lstat), opened without following it and without
+ * blocking, looked at again through the descriptor, and read up to the size seen there, which must
+ * not exceed the limit.
+ */
+export function readBookmarkFileOrNull(file: string): string | null {
+	let entry: fs.Stats;
 	try {
-		return fs.readFileSync(file, "utf8");
+		entry = fs.lstatSync(file);
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
 		throw err;
+	}
+	if (!entry.isFile()) {
+		throw new ResumeBookmarkError(file, "not-a-regular-file", "it is not a regular file (a symlink is not followed)");
+	}
+	const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+	try {
+		const opened = fs.fstatSync(fd);
+		if (!opened.isFile()) {
+			throw new ResumeBookmarkError(file, "not-a-regular-file", "it is not a regular file (a symlink is not followed)");
+		}
+		if (opened.size > RESUME_BOOKMARK_MAX_BYTES) {
+			throw new ResumeBookmarkError(file, "too-large", `it is larger than ${RESUME_BOOKMARK_MAX_BYTES} bytes`);
+		}
+		// The size seen through the descriptor is the bound: at most that many bytes are read, so a
+		// file that grows meanwhile is cut at the size that was checked, never read past the limit.
+		const buffer = Buffer.alloc(opened.size);
+		let length = 0;
+		while (length < buffer.length) {
+			const read = fs.readSync(fd, buffer, length, buffer.length - length, null);
+			if (read === 0) break;
+			length += read;
+		}
+		return buffer.subarray(0, length).toString("utf8");
+	} finally {
+		fs.closeSync(fd);
 	}
 }
 

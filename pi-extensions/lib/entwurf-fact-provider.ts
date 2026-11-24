@@ -30,6 +30,7 @@
 import {
 	type FactList,
 	isOutOfSocketDomainGardenIdConflict,
+	type PeerFact,
 	type PeerObserver,
 	resolveFactList,
 	UNOBSERVED_PEER,
@@ -42,6 +43,7 @@ import {
 	FRESH_CUT_PRESCRIPTION,
 	listAllMetaIdentities,
 	type MetaCitizenBackend,
+	type MetaIdentity,
 } from "./meta-session.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
@@ -88,12 +90,29 @@ export function recordLessSocketMessage(liveness: SocketLiveness): string {
 	}
 }
 
-export interface EntwurfFactsResult {
-	facts: FactList;
-	diagnostics: EntwurfDiagnostic[];
+/**
+ * The ONE opt-in seam a human listing uses to ration and order what it shows (#173 P2). It is
+ * called once, AFTER the identities are certified and the conflicts quarantined, so it can neither
+ * hide a record from certification nor see a quarantined one. `select` names the citizens to
+ * observe; `finish` runs once over the resolved rows and returns whatever the surface wants beside
+ * them. The rows themselves are untouched: every citizen, the provider's order, every field — only
+ * an observation that was not made reads `unobserved`, exactly as with `observationLimit`.
+ */
+export interface PeerPresentationSelector<T> {
+	select(identities: readonly MetaIdentity[]): {
+		observe: ReadonlySet<string>;
+		finish(peers: readonly PeerFact[]): T;
+	};
 }
 
-export interface EntwurfFactsDeps {
+export interface EntwurfFactsResult<T = undefined> {
+	facts: FactList;
+	diagnostics: EntwurfDiagnostic[];
+	/** What the selector's `finish` returned; absent when no selector was given. */
+	presentation?: T;
+}
+
+export interface EntwurfFactsDeps<T = undefined> {
 	/** Meta-store axis: the `.meta.json` entry names + a record reader. */
 	/** Store entries WITH their kind (`readActiveStoreEntries`), never bare names: the
 	 * listing must be able to refuse a symlinked record without following it. */
@@ -116,6 +135,10 @@ export interface EntwurfFactsDeps {
 	 * observation contract; peers surfaces pass their shared render limit. Older machine
 	 * payload rows then say `unobserved` rather than fabricating `active` / `exists`. */
 	observationLimit?: number;
+	/** The opt-in human presentation selector. Undefined is the generic provider, unchanged:
+	 * nothing is stat'ed or resolved and every row is observed. Not combinable with
+	 * `observationLimit` — both ration the same observations. */
+	presentation?: PeerPresentationSelector<T>;
 }
 
 function diagnosticSortKey(d: EntwurfDiagnostic): string {
@@ -143,7 +166,7 @@ function diagnosticSortKey(d: EntwurfDiagnostic): string {
  * call-site arguments. Probes are gid + liveness only (#50 C4 — the per-socket get_info
  * enrich left with the socket-only quasi-citizen listing).
  */
-export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfFactsResult> {
+export async function listEntwurfFacts<T = undefined>(deps: EntwurfFactsDeps<T>): Promise<EntwurfFactsResult<T>> {
 	const diagnostics: EntwurfDiagnostic[] = [];
 
 	// 1. meta-store axis — expected corruption becomes diagnostics, not a throw.
@@ -234,6 +257,13 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 		);
 		selectedObserve = (identity) => (observedGardenIds.has(identity.gardenId) ? observe(identity) : UNOBSERVED_PEER);
 	}
+	if (deps.presentation !== undefined && deps.observationLimit !== undefined) {
+		throw new Error("listEntwurfFacts: presentation and observationLimit both ration observation; give one");
+	}
+	const selection = deps.presentation?.select(cleanIdentities);
+	if (selection !== undefined) {
+		selectedObserve = (identity) => (selection.observe.has(identity.gardenId) ? observe(identity) : UNOBSERVED_PEER);
+	}
 	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes, selectedObserve);
 
 	// 5. #50 C4 demotion: a record-less socket is a diagnostic, not a listing
@@ -253,5 +283,6 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 		const kb = diagnosticSortKey(b);
 		return ka < kb ? -1 : ka > kb ? 1 : 0;
 	});
-	return { facts, diagnostics };
+	if (selection === undefined) return { facts, diagnostics };
+	return { facts, diagnostics, presentation: selection.finish(facts.peers) };
 }

@@ -92,6 +92,7 @@ import {
 } from "../../../pi-extensions/lib/entwurf-v2-visible-resume.ts";
 import { dispatchFreshCall, renderDispatchedFreshCall } from "../../../pi-extensions/lib/fresh-call-dispatch.ts";
 import {
+	CODEX_BRIDGE_PROVENANCE_LABEL,
 	type CodexRequestSender,
 	probeNativeSenderAlive,
 	reconcileSenderIdentityClaims,
@@ -113,12 +114,21 @@ import {
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 import {
+	type BookmarkNote,
+	makePeerPresentationSelector,
+	planPeersDisplay,
+	productionPresentationIo,
+	resolvePeersCallerDirectory,
+} from "../../../pi-extensions/lib/peer-presentation.ts";
+import {
 	makeLocalTraceFact,
 	readRemotePairOptIn,
 	remotePairOptInPath,
 	runEntwurfV2WithRemoteRoute,
 } from "../../../pi-extensions/lib/remote-pair-send.ts";
 import { processTransport } from "../../../pi-extensions/lib/remote-pair-transport.ts";
+import { ResumeBookmarkError, readResumePins } from "../../../pi-extensions/lib/resume-picker-production.ts";
+import type { ResumePin } from "../../../pi-extensions/lib/resume-picker-rows.ts";
 import { CONTROL_SOCKET_DIR } from "../../../pi-extensions/lib/socket-discovery.ts";
 import { probeSocketLiveness } from "../../../pi-extensions/lib/socket-probe.ts";
 import { visibleResumeLaunch } from "../../../pi-extensions/lib/visible-resume-launch.ts";
@@ -574,7 +584,7 @@ server.tool("entwurf_self", ENTWURF_TOOL_GUIDANCE.entwurf_self.descriptions.mcp,
 	}
 });
 
-server.tool("entwurf_peers", ENTWURF_TOOL_GUIDANCE.entwurf_peers.descriptions.mcp, {}, async () => {
+server.tool("entwurf_peers", ENTWURF_TOOL_GUIDANCE.entwurf_peers.descriptions.mcp, {}, async (_args, extra) => {
 	try {
 		// Meta-store axis: entries WITH their kind (ENOENT = fresh install = empty; any
 		// other readdir failure is a real error, not a silent empty). The name-only
@@ -582,16 +592,50 @@ server.tool("entwurf_peers", ENTWURF_TOOL_GUIDANCE.entwurf_peers.descriptions.mc
 		// `readRecord` would follow a symlinked `.meta.json` to bytes the store does not
 		// own, while the doctor refused that same entry. One store, one contract.
 		const sessionsDir = defaultMetaSessionsDir();
+		// #173 P2: the caller's bookmarks first — they decide which citizens are observed and which
+		// rows come first. Nothing about them can fail this verb: no known caller directory or an
+		// unreadable team.json is a counted note under a listing made without bookmarks.
+		const callerDirectory = await resolvePeersCallerDirectory({
+			isCodexBridge: process.env.ENTWURF_BRIDGE_NATIVE_HOST === CODEX_BRIDGE_PROVENANCE_LABEL,
+			processCwd: () => process.cwd(),
+			codexCallerCwd: async () => {
+				const self = await buildAuthoritativeSelfEnvelope({ requestMeta: extra._meta });
+				return self.codexThreadId === undefined ? undefined : self.envelope.cwd;
+			},
+		});
+		let pins: ResumePin[] = [];
+		let bookmarkNote: BookmarkNote | null = null;
+		if (callerDirectory.kind === "unknown") {
+			bookmarkNote = { kind: "caller-directory-unknown" };
+		} else {
+			try {
+				pins = readResumePins(callerDirectory.cwd);
+			} catch (err) {
+				if (!(err instanceof ResumeBookmarkError)) throw err;
+				bookmarkNote = { kind: "unreadable", code: err.code };
+			}
+		}
 		const result = await listEntwurfFacts({
 			metaEntries: readActiveStoreEntries(sessionsDir),
 			readRecord: makeStoreRecordReader(sessionsDir),
 			// Socket axis: the same dir dispatch uses (grammar SSOT), scan-internal only.
 			socket: { dir: ENTWURF_DIR },
-			// #112: observe only rows this human surface can render. Full store facts,
-			// diagnostics, liveness, and machine payload remain intact.
-			observationLimit: ENTWURF_PEERS_RENDER_LIMIT,
+			// Observe what this human surface may render: every bookmark and every citizen that is
+			// not a test room. Full store facts, diagnostics and liveness remain intact.
+			presentation: makePeerPresentationSelector({
+				pinnedIds: new Set(pins.map((pin) => pin.gardenId)),
+				io: productionPresentationIo(),
+			}),
 		});
-		const { text } = renderEntwurfPeers(result);
+		if (result.presentation === undefined) throw new Error("entwurf_peers: the presentation selector returned nothing");
+		const plan = planPeersDisplay(
+			result.facts.peers,
+			result.presentation,
+			pins,
+			ENTWURF_PEERS_RENDER_LIMIT,
+			bookmarkNote,
+		);
+		const { text } = renderEntwurfPeers(result, plan);
 		return textOk(text);
 	} catch (err) {
 		return textErr(`entwurf_peers error: ${err instanceof Error ? err.message : String(err)}`);

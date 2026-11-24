@@ -43,13 +43,13 @@ const outcome = await runResumeCli(
 	productionResumeCliDeps({
 		hasTerminal: resumePickerHasTerminal(),
 		callerCwd,
-		listFacts: () => {
-			// Reading every record and probing its rail takes seconds on a long-lived host; say so, or
+		readPins: (cwd) => readResumePins(cwd),
+		listFacts: (pins) => {
+			// Reading every record and probing its rail is not instant on a long-lived host; say so, or
 			// the terminal looks hung. On stderr, like the list itself.
 			process.stderr.write("entwurf resume: reading the garden's records…\n");
-			return listResumeFacts();
+			return listResumeFacts(pins);
 		},
-		readPins: (cwd) => readResumePins(cwd),
 		pick: (listing, rail) => runResumePicker(listing, rail, processPickerIo()),
 	}),
 );
