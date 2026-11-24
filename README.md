@@ -38,7 +38,7 @@ A recorded source-checkout demo: callback → task → native Bash → reply.
 | Verb | Tool | What it does | Harnesses |
 |---|---|---|---|
 | **Open** | `entwurf_fresh_call` | Opens a new visible sibling beside the caller — a new Herdr tab, or a tmux window — and hands it a first task. The sibling's own callback supplies its garden id | tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex. Herdr: pi, pi-durable, Claude Code |
-| **Reopen** | `entwurf_resume_call` | Reopens a dormant sibling under the same garden id, its record selecting the native session. Submits no prompt | pi, pi-durable, Claude Code |
+| **Reopen** | `entwurf_resume_call`; from a terminal, `entwurf resume` | Reopens a dormant sibling under the same garden id, its record selecting the native session. Submits no prompt | pi, pi-durable, Claude Code |
 | **Message** | `entwurf_v2` | Delivers to an existing sibling over its own rail. Starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Codex |
 | **Retire** | `entwurf_retire_call` | One guarded attempt on one sibling the human operator explicitly named. The record stays for a later same-id return | pi, Claude Code |
 
@@ -162,6 +162,31 @@ These are MCP tools inside a session, not shell commands; pi reaches them as
 `mcp__entwurf_bridge__<verb>` through its built-in MCP. A running host offers what its
 already-loaded bridge listed:
 [applying new source to a running host](./docs/setup-clean-host.md#applying-new-source-to-a-running-host).
+Reopening is the one verb that is also a shell command, below.
+
+### Reopen a sibling from your terminal
+
+```bash
+entwurf resume <garden-id>   # reopen exactly that sibling
+entwurf resume               # choose it from a list
+```
+
+Both forms reopen one dormant pi, pi-durable or Claude Code sibling under its own garden id — in a
+new tmux window beside your terminal, or a new Herdr tab — through the same code path
+`entwurf_resume_call` uses. Nothing else is given: the record selects the native session, and no
+prompt is submitted.
+
+- **Run it inside tmux or Herdr.** A terminal with neither is told so first, before anything is read.
+- **Only dormant siblings reopen.** One that is live, of another harness or not provably dormant is
+  refused and nothing is opened — never a message or a new session instead.
+- **The list** starts with the siblings recorded in the directory you typed the command in; type to
+  narrow, arrows to move, `Ctrl-A` for every directory. `Enter` reopens the row under the cursor with
+  no confirmation — the screen says so — and `Esc` opens nothing. A row is a listing of recorded
+  facts, not a promise that the sibling can be reopened.
+- **Bookmarks:** siblings named in that directory's `team.json` come first, under their names.
+
+`entwurf help resume` has the exit codes. On a host with thousands of records the list takes several
+seconds to appear.
 
 ### Renew a Pi chapter (source checkout only)
 
@@ -206,8 +231,10 @@ holds the record — no discovery, wake or retry. `entwurf help remote-pair`, th
 [contract](./DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts).
 
 **Team bookmarks:** [`team.json.example`](./team.json.example) is a person's note of the siblings one
-project works with, copied to an ignored `team.json`. Entwurf never loads it as configuration for
-identity, routes, roles, permissions or lifecycle. `entwurf help team`.
+project works with, copied to an ignored `team.json`. It is not configuration for identity, routes,
+roles, permissions or lifecycle. One command reads it, read-only: `entwurf resume` takes `garden_id`
+and `name` from the `team.json` in the directory it was typed in, to put bookmarked siblings first in
+its list. `entwurf help team`.
 
 ## Concepts
 

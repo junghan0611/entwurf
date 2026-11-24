@@ -1,0 +1,14 @@
+{
+	"previousRevision": 22,
+	"revision": 23,
+	"amendments": [
+		{
+			"key": [
+				"resumeLaunchRejectHints",
+				"no-tmux-context"
+			],
+			"old": "this agent is not running inside tmux, so there is no session to reopen the citizen in",
+			"new": "the caller is not running inside tmux, so there is no session to reopen the citizen in"
+		}
+	]
+}

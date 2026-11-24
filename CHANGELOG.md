@@ -4,6 +4,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### `entwurf resume` — reopen a sibling from the terminal (#173)
+
+- New operator command `entwurf resume <garden-id>`: reopens one dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside the terminal or a new Herdr tab, and submits no prompt. It is the leaf `entwurf_resume_call` uses, through the same launcher, with no caller attribution; a live, unsupported or not provably dormant target is that leaf's refusal and nothing is opened.
+- `entwurf resume` with no argument shows a list to choose the garden id from. It starts with the siblings recorded in the directory the command was typed in (`Ctrl-A` lifts that filter), narrows as you type, and reopens the row under the cursor on `Enter` with no confirmation; `Esc` opens nothing. It needs a terminal; the form with a garden id does not. Rows are the fact provider's words, a row is not a promise that the sibling can be reopened, and siblings of harnesses with no same-id resume are counted rather than listed.
+- Bookmarks: the list reads `team.json` in the directory the command was typed in — that file only, read-only, `garden_id` and `name` — and shows those siblings first under their names. An absent file is no bookmarks; one that cannot be read stops the list by name. The team guide and `team.json.example` no longer say Entwurf never loads the file.
+- A terminal outside tmux and Herdr is told so first, before any list, record read or lock. The hint for that refusal now says "the caller is not running inside tmux" (guidance payload revision 23; it said "this agent").
+- Exit codes: 0 launched and the backend's own same-id observation was positive, 3 launched without it, 4 refused, 5 failed at the launch step, 6 the list was shown and nothing chosen, 7 the list could not be shown, 2 usage, 1 the leaf threw. An id with no record is still the leaf's throw, exit 1.
+- The list refuses `Enter` while the terminal is smaller than 64x8. A marked (bracketed) paste is search text and never a choice. Accepted residual risk (GLG, 2026-11-24): in a terminal that ignores bracketed paste, pasted text whose trailing line break arrives in a separate read is an `Enter` on its own and does choose.
+- The first screen is slow on a long-lived host. Measured once: on a host with about 2,400 records and 1,308 receiver markers, one `--cpu-prof` run of `entwurf peer-facts` took about 9.0s, about 8.1s of it in `processStartKey` (6.7s of that in `spawnSync`). Reading the source, a failed `/proc/<pid>/stat` read falls back to one `ps` per marker whose owner is gone; the number of `ps` calls was not counted. The list of `entwurf resume`, `entwurf peer-facts` and `entwurf_peers` share that fact provider; reducing the cost is deferred to a follow-up outside #173.
+- Refusal and receipt texts are still the leaf's agent-facing ones (`entwurf_resume_call rejected: …`); rewording them for a person is deferred.
+- Not measured in this entry: a real reopen by typed id or by `Enter`, the live-target refusal, anything inside Herdr, and the kill-power of the new `resume-cli` mutant lane.
+
 ### Test and gate hygiene
 
 - `[QK:ACP-AGY-THINKING-MENU]` (`agy-adapter.test.ts`) builds Pi's `ModelRuntime` on an in-memory credential store. The default file store kept working on its `auth.json` after the test returned and recreated the removed sandbox: one `/tmp/acp-agy-thinking-*` per run, 230 reclaimed at the 0.62.0 cut.

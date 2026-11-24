@@ -364,6 +364,28 @@ function applyR18(family: string, expected: Record<string, string>): void {
 	}
 }
 
+// #173: one resume launch-stage hint changes its subject from "this agent" to "the caller", because the
+// operator command `entwurf resume` now prints it to a person. One leaf; the fresh family is untouched.
+// The README paragraph owns its provenance.
+const reviewedR23 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-23.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: { key: ["resumeLaunchRejectHints", string]; old: string; new: string }[];
+};
+
+function applyR23(family: string, expected: Record<string, string>): void {
+	expect(reviewedR23.amendments.map((a) => a.key.join("."))).toEqual(["resumeLaunchRejectHints.no-tmux-context"]);
+	for (const amendment of reviewedR23.amendments) {
+		if (amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+}
+
 function applyR19(family: string, expected: Record<string, string>): void {
 	expect(reviewedR19.amendments).toHaveLength(3);
 	expect(reviewedR19.amendments.map((a) => a.key.join(".")).sort()).toEqual([
@@ -536,7 +558,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR21.revision).toBe(21);
 		expect(reviewedR22.previousRevision).toBe(reviewedR21.revision);
 		expect(reviewedR22.revision).toBe(22);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR22.revision);
+		expect(reviewedR23.previousRevision).toBe(reviewedR22.revision);
+		expect(reviewedR23.revision).toBe(23);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR23.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments and the reviewed revision-22 addition", () => {
@@ -593,6 +617,8 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		const expectedResume = structuredClone(originalLaunchRejectHints.resume);
 		applyR12("resumeLaunchRejectHints", expectedResume);
 		applyR19("resumeLaunchRejectHints", expectedResume);
+		// Revision 23 (#173): no-tmux-context names the caller, not an agent.
+		applyR23("resumeLaunchRejectHints", expectedResume);
 		for (const [actualFamily, expected] of [
 			[ENTWURF_FRESH_LAUNCH_REJECT_HINTS, originalLaunchRejectHints.fresh],
 			[ENTWURF_RESUME_LAUNCH_REJECT_HINTS, expectedResume],

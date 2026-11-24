@@ -11,7 +11,8 @@
 		"The top-level cwd is shared by the members shown in this single-project example; consult each citizen's record for its actual cwd.",
 		"Read both IDs, backend and cwd from Entwurf's current record facts. This bookmark does not replace the record or certify current liveness. If they disagree, the record wins; reconcile the bookmark, never rewrite the record to match it.",
 		"Keep entries after retirement. Membership is not permission to send, resume or retire; use explicit operator requests and the owning lifecycle tools.",
-		"No program loads this example as configuration. It owns no authentication, transcript, model, placement, role assignment or lifecycle automation."
+		"No program loads a team.json as configuration: it owns no authentication, transcript, model, placement, role assignment or lifecycle automation.",
+		"One command reads it, read-only: `entwurf resume` with no garden id takes garden_id and name from the team.json in the directory it was typed in, to put bookmarked siblings first and show their names. A row there grants nothing; the record decides whether a sibling can be reopened."
 	],
 	"members": [
 		{

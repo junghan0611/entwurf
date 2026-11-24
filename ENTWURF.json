@@ -6,8 +6,14 @@
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. A slotted hint holds only the text around its slot: the slot value (for record-less-socket, the fresh-cut command in both invocation forms) is supplied by its code owner and never copied here. Metadata is not delivered to models."
 	},
 	"schemaVersion": 6,
-	"revision": 22,
+	"revision": 23,
 	"history": [
+		{
+			"revision": 23,
+			"source": "fca46e8a7212a498230017f040ef59d12be67e04",
+			"issue": "https://github.com/junghan0611/entwurf/issues/173",
+			"change": "Explicit semantic amendment of one resume launch-stage reject hint, resumeLaunchRejectHints no-tmux-context: its subject changes from this agent to the caller, because since #173 the same hint is also printed to a person by the operator command entwurf resume, where no agent is involved. One leaf of one family; the fresh-call family's hint of the same name is unchanged, since only an agent reaches it."
+		},
 		{
 			"revision": 22,
 			"source": "563d71abd10e00d823ff9b3020fe9db6916f2d0c",
@@ -272,7 +278,7 @@
 		"runtime-not-executable": "the resolved runtime path is not executable"
 	},
 	"resumeLaunchRejectHints": {
-		"no-tmux-context": "this agent is not running inside tmux, so there is no session to reopen the citizen in",
+		"no-tmux-context": "the caller is not running inside tmux, so there is no session to reopen the citizen in",
 		"anchor-malformed": "TMUX_PANE is not a native pane id",
 		"anchor-unresolved": "tmux resolved no pane for this agent's anchor",
 		"anchor-mismatch": "tmux answered about a different pane than the one asked about",

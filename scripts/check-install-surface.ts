@@ -519,6 +519,30 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		throw new Error("S9: the amended remote-pair guide is not the reviewed #157 page");
 	}
 	topicPage.set("remote-pair", remoteAmended);
+	// #173 C4 (GLG 2026-11-24, relayed by ff08d4): the team guide said "Entwurf never loads it", which
+	// stopped being true when `entwurf resume` began reading `<typed-in directory>/team.json` for the
+	// order and names of its list. Exactly these two literal edits of the baseline fixture, each exactly
+	// once, and the result pinned — receipt: pi-extensions/lib/resume-picker-production.ts readResumePins.
+	// The baseline fixture itself is unchanged.
+	const TEAM_AMENDMENTS_173: { old: string; next: string }[] = [
+		{
+			old: "garden id. Entwurf never loads it, and it is not configuration for identity,\nroutes, roles, permissions or lifecycle.\n",
+			next: "garden id. It is not configuration for identity, routes, roles, permissions\nor lifecycle. One command reads it, read-only: entwurf resume, to order\nand name the rows of its list.\n",
+		},
+		{
+			old: "Where the facts come from:\n",
+			next: "Who reads it:\n  entwurf resume with no garden id shows a list. It reads team.json in the\n  directory you typed the command in, that file only, and takes garden_id\n  and name from each member: bookmarked siblings come first, under their\n  names. A bookmark with no record makes no row, and a row grants nothing:\n  the record decides whether a sibling can be reopened. An absent team.json\n  simply means no bookmarks; one that exists but cannot be read stops the\n  list by name. entwurf resume <garden-id> never reads it.\n\nWhere the facts come from:\n",
+		},
+	];
+	let teamAmended = topicPage.get("team") ?? "";
+	for (const a of TEAM_AMENDMENTS_173) {
+		if (teamAmended.split(a.old).length !== 2) throw new Error(`S9: team amendment not exactly once: ${a.old}`);
+		teamAmended = teamAmended.replace(a.old, a.next);
+	}
+	if (sha256(teamAmended) !== "90f63eb19718caf9be970987e86ee20e375ff54f81771f1b93edb22750754249") {
+		throw new Error("S9: the amended team guide is not the reviewed #173 page");
+	}
+	topicPage.set("team", teamAmended);
 
 	// The catalog today is that ce92dc7 fixture with exactly these explicit amendments applied, each naming
 	// the source that justifies it — never a text regenerated from the new data. The prefix: a command
@@ -605,7 +629,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// same-id visible resume, right after renew-recover — receipt: the run.sh `resume)` arm.
 		{
 			after: "  entwurf renew-recover <gardenId>    # ",
-			line: "  entwurf resume [<garden-id>]        # #173: the operator's terminal entry to the same-id visible resume — the leaf the MCP tool entwurf_resume_call uses, through the same launcher. Reopens ONE dormant pi, pi-durable or Claude Code citizen under its OWN garden id in a new tmux window of this terminal's session (inside herdr, a new herdr tab) and submits NO prompt. The record is the sole address: no native session name, harness or model is given. With a garden id it goes straight to that citizen and needs no terminal. With none it shows a list to choose the id from, which needs a terminal: type to narrow, arrows to move, Enter reopens the row under the cursor (there is no confirmation; the screen says what Enter does), Esc opens nothing. The list starts with the citizens recorded in the directory you typed the command in, and Ctrl-A lifts that filter; siblings bookmarked in that directory's team.json (garden_id and name only) come first, those of other directories with their path. A row is a fact listing, not a promise: its words are the provider's (socket dead, receiver inactive, ...), citizens of other backends are counted and not listed, and a row being there does not mean it can be reopened. A target that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened — never a send, a focus or a new session instead — whether it was typed or chosen. Run it inside tmux or herdr: a terminal with neither is told so first, before any list is shown, record read or lock taken. The receipt is unattributed: a terminal has no garden identity, and attribution was never authority. EXIT: 0 launched and the backend's own same-id observation was positive (pi: the control socket accepted a connection; Claude Code: a new owner re-armed the receiver marker; pi-durable: the reservation was adopted, which is not readiness or recall) / 3 launched, that observation not positive in the bounded wait (the window or tab stays visible; nothing is retried) / 4 refused, nothing opened / 5 failed at the launch step: the recovery receipt in the text says what was created and what remains (none, unknown, closed or orphan-unreclaimed) / 6 the list was shown and nothing was chosen / 7 the list could not be shown (the store, a broken team.json or the terminal), nothing opened / 2 usage: more than one argument, a dash word, or no argument where there is no terminal / 1 the leaf threw and its message is printed as written (e.g. no record for that id)",
+			line: "  entwurf resume [<garden-id>]        # Reopen ONE dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside this terminal (inside herdr, a new herdr tab). No prompt is submitted; the record is the address, so no session name, harness or model is given. It works only inside tmux or herdr; elsewhere it says so first and reads nothing. With a garden id it reopens that sibling and needs no terminal. With none it shows a list: type to narrow, arrows to move, Ctrl-A for all directories (the default is the one you typed the command in), Enter reopens the row under the cursor with no confirmation, Esc opens nothing. Siblings in that directory's team.json (garden_id and name only) come first. A row is recorded facts, not a promise; siblings of other backends are counted, not listed. Below 64x8 Enter does nothing; a bracketed paste is search text, never a choice. A sibling that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened, never a message or a new session instead. The receipt is unattributed: a terminal has no garden identity. Same code path as entwurf_resume_call (#173). EXIT: 0 launched and the backend's same-id observation was positive (pi: socket connect; Claude Code: receiver re-armed by a new owner; pi-durable: reservation adopted, which is not readiness) / 3 launched, not observed in the bounded wait (it stays visible; no retry) / 4 refused, nothing opened / 5 failed at the launch step (the recovery receipt says what remains) / 6 list shown, nothing chosen / 7 the list could not be shown (store, unreadable team.json or terminal) / 2 usage / 1 the resume threw; its message is printed as written (e.g. no record for that id)",
 			receipt:
 				"run.sh `resume)` arm -> scripts/resume.ts -> pi-extensions/lib/resume-cli.ts: runResumeCli argv shape (exit 2), resumeByGardenId -> visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch)) -> renderVisibleResume(result, { actor: null }), resumeCliExitCode 0/3/4/5, the launch-context preflight (selectFreshCallRail + readAnchor) before the list and the leaf exit 4, no argument: no terminal exit 2, else chooseFromList (listFacts, readPins, pick) cancelled exit 6 / failed exit 7, leaf throw exit 1 (#173 C2, C3)",
 		},
