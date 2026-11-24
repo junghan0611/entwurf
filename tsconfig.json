@@ -292,6 +292,16 @@
 		// mcp/tsconfig.json through their existing ../pi-extensions/lib/**/*.ts includes; its beside
 		// test takes the existing test fence.
 		"pi-extensions/lib/resume-cli.ts",
+		// resume-picker-rows.ts is the #173 C3 list model of `entwurf resume` — pure, a lib→lib TYPE
+		// importer (entwurf-facts.ts) with an explicit `.ts` extension, same fence. Received by
+		// scripts/tsconfig.json and mcp/tsconfig.json through their ../pi-extensions/lib/**/*.ts includes.
+		"pi-extensions/lib/resume-picker-rows.ts",
+		// resume-picker.ts is the #173 C3 list UI (pure state, frame and a runner over an injected
+		// terminal) and resume-picker-production.ts its real wiring (fact provider, bookmark file,
+		// process terminal) — lib→lib importers with explicit `.ts` extensions, same fence, received
+		// the same way. Their one production consumer is scripts/resume.ts.
+		"pi-extensions/lib/resume-picker.ts",
+		"pi-extensions/lib/resume-picker-production.ts",
 		// entwurf-v2-visible-resume.ts is the S1 visible-resume composition on the V2 side of the
 		// fence — a lib→lib VALUE importer (lock / resume-launch-identity / socket-discovery /
 		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports

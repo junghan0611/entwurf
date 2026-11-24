@@ -465,7 +465,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// footer edit is applied to the page as the #157 footer amendment above left it.
 		{
 			old: "  entwurf meta-facts                  garden records and store diagnostics\n",
-			next: "  entwurf meta-facts                  garden records and store diagnostics\n\nReopen a sibling (inside tmux or herdr):\n  entwurf resume <garden-id>          reopen one dormant sibling under its own id\n",
+			next: "  entwurf meta-facts                  garden records and store diagnostics\n\nReopen a sibling (inside tmux or herdr):\n  entwurf resume [<garden-id>]        reopen one dormant sibling; no id shows a list\n",
 		},
 		{
 			old: "Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,\nnot commands here. Advanced maintenance and development gates: entwurf help all\n",
@@ -478,7 +478,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		expectedCompact = expectedCompact.replace(a.old, a.next);
 	}
 	// 24d41fb4… was the #157 page; the two #173 amendments move it. Taken from the amended literal.
-	if (sha256(expectedCompact) !== "8cc92bf18f5efdfd89a8fdf96e5c3e68a4f9133673204ede2ac8d1cb78e0a4b8") {
+	if (sha256(expectedCompact) !== "362da2c0493e245072dd0f1d9d3ed7035bc10bef831bedda9f34f037cecbe123") {
 		throw new Error("S9: the amended root page is not the reviewed #157 + #173 page");
 	}
 	// The guide topics' oracles: reviewed literals, pinned, written before the data and never
@@ -605,9 +605,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// same-id visible resume, right after renew-recover — receipt: the run.sh `resume)` arm.
 		{
 			after: "  entwurf renew-recover <gardenId>    # ",
-			line: "  entwurf resume <garden-id>          # #173: the operator's terminal entry to the same-id visible resume — the leaf the MCP tool entwurf_resume_call uses, through the same launcher. Reopens ONE dormant pi, pi-durable or Claude Code citizen under its OWN garden id in a new tmux window of this terminal's session (inside herdr, a new herdr tab) and submits NO prompt. The record is the sole address: no native session name, harness or model is given. A target that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened — never a send, a focus or a new session instead. Run it inside tmux or herdr: a terminal with neither is told so first, before any record is read or lock taken. The receipt is unattributed: a terminal has no garden identity, and attribution was never authority. EXIT: 0 launched and the backend's own same-id observation was positive (pi: the control socket accepted a connection; Claude Code: a new owner re-armed the receiver marker; pi-durable: the reservation was adopted, which is not readiness or recall) / 3 launched, that observation not positive in the bounded wait (the window or tab stays visible; nothing is retried) / 4 refused, nothing opened / 5 failed at the launch step: the recovery receipt in the text says what was created and what remains (none, unknown, closed or orphan-unreclaimed) / 2 usage: not exactly one non-option argument / 1 the leaf threw and its message is printed as written (e.g. no record for that id)",
+			line: "  entwurf resume [<garden-id>]        # #173: the operator's terminal entry to the same-id visible resume — the leaf the MCP tool entwurf_resume_call uses, through the same launcher. Reopens ONE dormant pi, pi-durable or Claude Code citizen under its OWN garden id in a new tmux window of this terminal's session (inside herdr, a new herdr tab) and submits NO prompt. The record is the sole address: no native session name, harness or model is given. With a garden id it goes straight to that citizen and needs no terminal. With none it shows a list to choose the id from, which needs a terminal: type to narrow, arrows to move, Enter reopens the row under the cursor (there is no confirmation; the screen says what Enter does), Esc opens nothing. The list starts with the citizens recorded in the directory you typed the command in, and Ctrl-A lifts that filter; siblings bookmarked in that directory's team.json (garden_id and name only) come first, those of other directories with their path. A row is a fact listing, not a promise: its words are the provider's (socket dead, receiver inactive, ...), citizens of other backends are counted and not listed, and a row being there does not mean it can be reopened. A target that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened — never a send, a focus or a new session instead — whether it was typed or chosen. Run it inside tmux or herdr: a terminal with neither is told so first, before any list is shown, record read or lock taken. The receipt is unattributed: a terminal has no garden identity, and attribution was never authority. EXIT: 0 launched and the backend's own same-id observation was positive (pi: the control socket accepted a connection; Claude Code: a new owner re-armed the receiver marker; pi-durable: the reservation was adopted, which is not readiness or recall) / 3 launched, that observation not positive in the bounded wait (the window or tab stays visible; nothing is retried) / 4 refused, nothing opened / 5 failed at the launch step: the recovery receipt in the text says what was created and what remains (none, unknown, closed or orphan-unreclaimed) / 6 the list was shown and nothing was chosen / 7 the list could not be shown (the store, a broken team.json or the terminal), nothing opened / 2 usage: more than one argument, a dash word, or no argument where there is no terminal / 1 the leaf threw and its message is printed as written (e.g. no record for that id)",
 			receipt:
-				"run.sh `resume)` arm -> scripts/resume.ts -> pi-extensions/lib/resume-cli.ts: runResumeCli argv shape (exit 2), resumeByGardenId -> visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch)) -> renderVisibleResume(result, { actor: null }), resumeCliExitCode 0/3/4/5, the launch-context preflight (selectFreshCallRail + readAnchor) before the leaf exit 4, leaf throw exit 1 (#173 C2)",
+				"run.sh `resume)` arm -> scripts/resume.ts -> pi-extensions/lib/resume-cli.ts: runResumeCli argv shape (exit 2), resumeByGardenId -> visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch)) -> renderVisibleResume(result, { actor: null }), resumeCliExitCode 0/3/4/5, the launch-context preflight (selectFreshCallRail + readAnchor) before the list and the leaf exit 4, no argument: no terminal exit 2, else chooseFromList (listFacts, readPins, pick) cancelled exit 6 / failed exit 7, leaf throw exit 1 (#173 C2, C3)",
 		},
 		// #160 (relayed by 9fc008, GLG approval 2026-11-13): the OpenClaw send entry and birth verb, right after
 		// remote-pair-receive — receipts: the run.sh `openclaw-send)` / `openclaw-birth)` arms.
@@ -1046,7 +1046,10 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// Moved for #173 C2: one `resume)` arm before `peer-facts)`, nothing else changed (137 -> 138 labels,
 	// re-reviewed: a described entry and outside the debt). The diff against the 73038f7a… case is exactly
 	// those 9 added lines.
-	const REVIEWED_CASE_SHA256 = "689365f86bb2e581ef4bff2018792d95a6a79cc4a45154c36ea7d8747be8293c";
+	// Moved for #173 C3: the same `resume)` arm now hands the typed-in directory over first
+	// (`--caller-cwd "$PWD"`) and its comment says so; no label added or removed (138 labels). The diff
+	// against the 689365f8… case is that one arm's comment and its run_ts line.
+	const REVIEWED_CASE_SHA256 = "dfddda9846a2a9f67bd7e5cf7206f4a5bc593702f3f2524160f477f83c6b0115";
 	ok(
 		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus its reviewed #153, #157, #160, #151 and #173 amendments, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,

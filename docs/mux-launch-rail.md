@@ -769,7 +769,9 @@ herdr-resume-call                               -> herdr-fresh-call  (정확한 
 fresh-call-dispatch                             -> herdr-resume-call  (#157 G1a: 공통 rail root의 resume 진입점; 두 레일을 아는 유일한 모듈)
 visible-resume-launch                           -> fresh-call-dispatch + mux-resume-call + entwurf-v2-visible-resume(type)  (정확한 집합; #173: 두 resume 입구가 함께 쓰는 launcher, rail은 공통 root가 고른다)
 MCP bridge (entwurf-bridge/src/index.ts)        -> fresh-call-dispatch + visible-resume-launch + entwurf-v2-visible-resume  (fresh·resume 두 동사의 composition root; mux-resume-call·herdr-* 없음 — rail은 공통 root가 고른다)
-resume-cli (`entwurf resume`, #173)             -> visible-resume-launch + entwurf-v2-visible-resume + fresh-call-dispatch(selectFreshCallRail만) + mux-placement(readAnchor만) + agent-guidance  (정확한 집합; 두 술어는 leaf 앞의 launch 문맥 조기 안내용이고 launcher·lock·record reader는 없다)
+resume-cli (`entwurf resume`, #173)             -> visible-resume-launch + entwurf-v2-visible-resume + fresh-call-dispatch(selectFreshCallRail만) + mux-placement(readAnchor만) + agent-guidance + resume-picker-rows(buildResumeListing) + resume-picker·entwurf-facts(type)  (정확한 집합; 두 술어는 leaf 앞의 launch 문맥 조기 안내용이고 launcher·lock·record reader는 없다. 목록의 store·team.json·터미널은 entry가 주입한다)
+resume-picker / resume-picker-rows              -X-> 모든 mux/herdr/entwurf core 모듈   (선택기 UI와 목록 모델; entwurf-facts는 type만. 터미널은 PickerIo로 주입, node builtin import 0)
+resume-picker-production                        -> entwurf-fact-provider + meta-session + control-socket-path  (peer-facts와 같은 조립; `<호출 cwd>/team.json`의 garden_id·name 읽기와 process 터미널. launch·lock 없음)
 all other shipped production sources           -X-> mux-launch
 ```
 

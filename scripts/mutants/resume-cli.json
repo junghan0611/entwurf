@@ -9,7 +9,7 @@
 			"find": ["\tconst result = await deps.resume(target);"],
 			"replace": ["\tconst result = await deps.resume(target.trim().toLowerCase());"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-TARGET-PASSTHROUGH]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -17,10 +17,10 @@
 			"claim": "RESUMECLI-USAGE-RUNS-NOTHING",
 			"title": "extra argv is ignored instead of refused, so `entwurf resume <id> <anything>` runs a resume the operator's command line did not spell",
 			"subject": "pi-extensions/lib/resume-cli.ts",
-			"find": ["\tif (argv.length !== 1 || target === undefined || target.startsWith(\"-\")) {"],
-			"replace": ["\tif (target === undefined || target.startsWith(\"-\")) {"],
+			"find": ["\tif (argv.length > 1 || typed?.startsWith(\"-\") === true) {"],
+			"replace": ["\tif (typed?.startsWith(\"-\") === true) {"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-USAGE-RUNS-NOTHING]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -33,7 +33,7 @@
 			],
 			"replace": ["\treturn RESUME_CLI_EXIT.refused;"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-EXIT-FROM-RESULT]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -48,7 +48,7 @@
 				"const NOT_BACK = new Set([\"resume-unobserved\", \"record-unreadable\", \"pane-process-unread\", \"not-yet-adopted\", \"reservation-lost\", \"unobserved\"]);\nconst OBSERVED_BACK = { has: (kind: string): boolean => !NOT_BACK.has(kind) };"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-UNKNOWN-OBSERVATION]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -61,7 +61,7 @@
 				"\tconst rendered = renderVisibleResume(result, { actor: process.env.PI_SESSION_ID ?? \"terminal\" });"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-UNATTRIBUTED]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -74,7 +74,7 @@
 			],
 			"replace": ["\treturn { exitCode, stdout: text, stderr: \"\" };"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-REFUSAL-ON-STDERR]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -85,7 +85,7 @@
 			"find": ["\t\t\texitCode: RESUME_CLI_EXIT.crashed,"],
 			"replace": ["\t\t\texitCode: RESUME_CLI_EXIT.refused,"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-THROW-IS-EXIT-ONE]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -96,7 +96,7 @@
 			"find": ["import { visibleResumeLaunch } from \"./visible-resume-launch.ts\";"],
 			"replace": ["import { tmuxResumeLaunch as visibleResumeLaunch } from \"./visible-resume-launch.ts\";"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-SHARED-LEAF]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -107,7 +107,7 @@
 			"find": ["\tconst refusal = resumeLaunchContextRefusal(deps.env);"],
 			"replace": ["\tconst refusal = null as ReturnType<typeof resumeLaunchContextRefusal>;\n\tvoid deps.env;"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-CONTEXT-BEFORE-LEAF]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		},
@@ -118,9 +118,394 @@
 			"find": ["\tif (selectFreshCallRail(env) === \"herdr\") return null;"],
 			"replace": ["\tvoid selectFreshCallRail;"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-CONTEXT-HERDR]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-SAME-LEAF-ARG",
+			"title": "the id chosen in the list is tidied before the leaf sees it, so a citizen chosen there is not reopened the way the same id typed would be",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\t\ttarget = choice.gardenId;"],
+			"replace": ["\t\ttarget = choice.gardenId.trim().toUpperCase();"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-SAME-LEAF-ARG]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-CANCEL-OPENS-NOTHING",
+			"title": "Esc in the list exits 0, the code that means a citizen came back, so a wrapper reads a cancel as a completed resume",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": [
+				"\t\t\toutcome: { exitCode: RESUME_CLI_EXIT.cancelled, stdout: \"\", stderr: `${RESUME_CLI_CANCELLED}\\n` },"
+			],
+			"replace": [
+				"\t\t\toutcome: { exitCode: RESUME_CLI_EXIT.resumed, stdout: \"\", stderr: `${RESUME_CLI_CANCELLED}\\n` },"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-CANCEL-OPENS-NOTHING]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-NEEDS-TERMINAL",
+			"title": "the no-terminal check never fires, so a piped `entwurf resume` reads the whole store and hands a list to a picker with no keyboard",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (typed === undefined && !deps.list.hasTerminal) {"],
+			"replace": ["\tif (typed === undefined && deps.list.hasTerminal === undefined) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-NEEDS-TERMINAL]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-CONTEXT-FIRST",
+			"title": "the early launch-context answer is asked only of a typed id, so a bare terminal shows the whole list and lets the operator choose a citizen that cannot be reopened there",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (refusal !== null) {"],
+			"replace": ["\tif (refusal !== null && typed !== undefined) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-CONTEXT-FIRST]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-FAILURE-DISTINCT",
+			"title": "a list that could not be shown exits with the cancel code, so an unreadable store or a broken bookmark file looks like the operator pressing Esc",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\t\t\t\texitCode: RESUME_CLI_EXIT.listFailed,"],
+			"replace": ["\t\t\t\texitCode: RESUME_CLI_EXIT.cancelled,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-FAILURE-DISTINCT]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-LEAF-REFUSAL-SHOWN",
+			"title": "a choice made in the list is reported as done without the leaf being asked, so choosing a live citizen prints nothing and exits 0 instead of showing the leaf's refusal",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\treturn { kind: \"chosen\", gardenId: picked.gardenId };"],
+			"replace": [
+				"\tvoid picked.gardenId;\n\treturn { kind: \"ended\", outcome: { exitCode: RESUME_CLI_EXIT.resumed, stdout: \"\", stderr: \"\" } };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-LEAF-REFUSAL-SHOWN]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-LIST-INPUTS",
+			"title": "the picker is always told the tmux rail, so inside herdr the screen promises a tmux window while Enter opens a herdr tab",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\t\tpicked = await deps.list.pick(listing, selectFreshCallRail(deps.env));"],
+			"replace": ["\t\tpicked = await deps.list.pick(listing, \"tmux\");"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-LIST-INPUTS]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-PIN-BY-GARDEN-ID",
+			"title": "a bookmark file naming one id twice lets the later entry rename and reposition the row, so the name on screen is not the one at the position shown",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\tif (!pinOrder.has(pin.gardenId)) pinOrder.set(pin.gardenId, { name: pin.name, index });"],
+			"replace": ["\t\tpinOrder.set(pin.gardenId, { name: pin.name, index });"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-PIN-BY-GARDEN-ID]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-LIVE-STILL-LISTED",
+			"title": "the list drops citizens whose socket answers, so it starts deciding eligibility from a fact read seconds earlier instead of leaving that to the leaf",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\tconst pin = pinOrder.get(fact.gardenId);"],
+			"replace": ["\t\tif (fact.liveness === \"alive\") continue;\n\t\tconst pin = pinOrder.get(fact.gardenId);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-LIVE-STILL-LISTED]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-FACTS-VERBATIM",
+			"title": "an unobserved receiver is printed as none, so a citizen nobody looked at reads as one that has no receiver",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\tif (fact.receiver !== \"n/a\") parts.push(`receiver ${fact.receiver}`);"],
+			"replace": [
+				"\tif (fact.receiver !== \"n/a\") parts.push(`receiver ${fact.receiver === \"unobserved\" ? \"none\" : fact.receiver}`);"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-FACTS-VERBATIM]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-DEFAULT-IS-THIS-DIR",
+			"title": "the directory filter also hides bookmarked citizens of other directories, so a pinned sibling vanishes from the default view",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\tif (row.section === \"elsewhere\" && !view.allDirectories) return false;"],
+			"replace": [
+				"\t\tif ((row.section === \"elsewhere\" || row.section === \"pin-elsewhere\") && !view.allDirectories) return false;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-DEFAULT-IS-THIS-DIR]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-UNLISTED-COUNTED",
+			"title": "the not-listed count ignores the directory filter, so the default view reports other directories' citizens as missing from this one",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\tif (!allDirectories && !u.here) continue;"],
+			"replace": ["\t\tvoid allDirectories;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-UNLISTED-COUNTED]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-ORDER",
+			"title": "unpinned rows are sorted oldest record first, so the citizen worked with yesterday is hundreds of rows down",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\tif (a.recordUpdatedAt !== b.recordUpdatedAt) return a.recordUpdatedAt < b.recordUpdatedAt ? 1 : -1;"],
+			"replace": [
+				"\tif (a.recordUpdatedAt !== b.recordUpdatedAt) return a.recordUpdatedAt < b.recordUpdatedAt ? -1 : 1;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-ORDER]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-NARROW-ONLY-HIDES",
+			"title": "typed words are matched as any-of instead of all-of, so a second word widens the list instead of narrowing it and an empty query shows nothing",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\treturn words.every((w) => text.includes(w));"],
+			"replace": ["\t\treturn words.some((w) => text.includes(w));"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-NARROW-ONLY-HIDES]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-ENTER-RETURNS-CURSOR-ID",
+			"title": "Enter returns the first visible row instead of the one under the cursor, so arrowing to a sibling and pressing Enter reopens a different citizen",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": [
+				"\t\t\treturn row === undefined ? { kind: \"continue\", state } : { kind: \"selected\", gardenId: row.gardenId };"
+			],
+			"replace": [
+				"\t\t\treturn row === undefined ? { kind: \"continue\", state } : { kind: \"selected\", gardenId: (rowsNow[0] ?? row).gardenId };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-ENTER-RETURNS-CURSOR-ID]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-ESC-CANCELS",
+			"title": "a lone Esc, once its wait is over, is decoded as Enter, so the key that means open nothing reopens the citizen under the cursor",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\t\treturn held === ESC ? [{ kind: \"cancel\" }] : [];"],
+			"replace": ["\t\t\treturn held === ESC ? [{ kind: \"enter\" }] : [];"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-ESC-CANCELS]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-RESTORE-EVERY-EXIT",
+			"title": "raw mode is never switched off on the way out, so every exit of the list leaves the operator's shell without echo or line editing",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\t\t\tif (rawOn) io.setRawMode(false);"],
+			"replace": ["\t\t\t\tvoid rawOn;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-RESTORE-EVERY-EXIT]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-UNKNOWN-SEQUENCE-INERT",
+			"title": "only the ESC byte of an Alt chord is skipped, so the character after it is typed into the search",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\treturn { kind: \"skip\", length: 2 };"],
+			"replace": ["\treturn { kind: \"skip\", length: 1 };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-UNKNOWN-SEQUENCE-INERT]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-WIDE-CELLS",
+			"title": "the width cut counts every character as one cell, so a row with a Korean name runs past the terminal's edge and wraps the frame",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\tif (width + w > cells) break;"],
+			"replace": ["\t\tif (width + 1 > cells) break;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-WIDE-CELLS]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-SCROLL-KEEPS-CURSOR",
+			"title": "the window does not follow the cursor downward, so past the first screenful the highlighted row is off screen and Enter reopens a citizen nobody can see",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\tif (at >= top + bodyHeight) top = at - bodyHeight + 1;"],
+			"replace": ["\t\tvoid bodyHeight;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-SCROLL-KEEPS-CURSOR]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-SCREEN-SAYS-ENTER",
+			"title": "the footer no longer says what Enter does, so the one key that opens a window with no confirmation is unexplained",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\ttmux: \"Enter: reopen in a new tmux window beside this one\","],
+			"replace": ["\ttmux: \"Enter: select\","],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-SCREEN-SAYS-ENTER]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPINS-ONE-FILE-TWO-FIELDS",
+			"title": "the bookmark file is looked for in the parent directory, so another project's bookmarks pin this project's list",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\tconst file = path.join(callerCwd, RESUME_BOOKMARK_FILE);"],
+			"replace": ["\tconst file = path.join(callerCwd, \"..\", RESUME_BOOKMARK_FILE);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPINS-ONE-FILE-TWO-FIELDS]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPINS-BROKEN-IS-LOUD",
+			"title": "a bookmark file without a members array is read as no bookmarks, so a broken file silently unpins every sibling",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\tif (!Array.isArray(members)) throw new ResumeBookmarkError(file, `\"members\" must be an array`);"],
+			"replace": ["\tif (!Array.isArray(members)) return [];"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPINS-BROKEN-IS-LOUD]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-TERMINAL-BOTH-ENDS",
+			"title": "only stdin is asked to be a terminal, so with stderr redirected the list is drawn into a file while the keyboard is captured in raw mode",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\treturn stdin.isTTY === true && stderr.isTTY === true;"],
+			"replace": ["\treturn stdin.isTTY === true;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-TERMINAL-BOTH-ENDS]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMELIST-PROVIDER-AS-PEER-FACTS",
+			"title": "the listing passes an observation budget, so older rows say unobserved and a person cannot tell a rationed row from one nobody could read",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\t\tsocket: { dir: env.ENTWURF_DIR ?? defaultControlSocketDir(os.homedir()) },"],
+			"replace": [
+				"\t\tsocket: { dir: env.ENTWURF_DIR ?? defaultControlSocketDir(os.homedir()) },\n\t\tobservationLimit: 50,"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMELIST-PROVIDER-AS-PEER-FACTS]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-TOO-SMALL-NO-ENTER",
+			"title": "Enter still chooses while the terminal is too small to show the row under the cursor, so a keypress reopens a citizen the operator could not read",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tif (!pickerFits(size)) return { kind: \"continue\", state };"],
+			"replace": ["\tif (!pickerFits(size) && key.kind !== \"enter\") return { kind: \"continue\", state };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-TOO-SMALL-NO-ENTER]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-FRAME-INVARIANT",
+			"title": "the line under the list no longer carries the chosen row's directory, so in a narrow terminal two siblings of different directories look the same",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": [
+				"\t\t\t: fit(`selected: ${selected.gardenId}  in ${selected.cwd}${selected.pin === null ? \"\" : `  [${selected.pin}]`}`),"
+			],
+			"replace": [
+				"\t\t\t: fit(`selected: ${selected.gardenId}${selected.pin === null ? \"\" : `  [${selected.pin}]`}`),"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-FRAME-INVARIANT]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-MARKED-PASTE-NO-CHOICE",
+			"title": "line breaks inside a marked paste are no longer turned into spaces, so the pasted lines are not the search text the screen shows and control bytes reach the query",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\tif (ch === \"\\r\" || ch === \"\\n\" || ch === \"\\t\") out += \" \";"],
+			"replace": ["\t\tif (ch === \"\\t\") out += \" \";\n\t\telse if (ch === \"\\r\" || ch === \"\\n\") out += ch;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-MARKED-PASTE-NO-CHOICE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-SPLIT-SEQUENCE",
+			"title": "an ESC at the end of a read is not kept for the next one, so an arrow key the terminal split in two types its tail into the search",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\t\t\t\tif (seq.kind === \"unfinished\") {"],
+			"replace": ["\t\t\t\t\tif (seq.kind === \"unfinished\" && rest.length > 1) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-SPLIT-SEQUENCE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMELIST-UNREADABLE-IS-ERROR",
+			"title": "an unreadable record is no longer the diagnostic that fails the listing, so a store nobody can read is an empty list the operator cancels out of",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\tconst unreadable = result.diagnostics.filter((d) => d.kind === \"meta-record-read-error\");"],
+			"replace": ["\tconst unreadable = result.diagnostics.filter((d) => d.kind === \"socket-dir-read-error\");"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMELIST-UNREADABLE-IS-ERROR]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-STDIN-UTF8-STREAM",
+			"title": "each read is decoded on its own, so a Korean search word split between two reads becomes replacement characters",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\t\t\t\tconst text = typeof chunk === \"string\" ? chunk : decoder.write(chunk);"],
+			"replace": ["\t\t\t\tconst text = typeof chunk === \"string\" ? chunk : chunk.toString(\"utf8\");"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-STDIN-UTF8-STREAM]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-TERMINAL-FAILURES",
+			"title": "stdin closing is not listened for, so when the terminal goes away the list waits forever with raw mode on",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\t\t\tstdin.on(\"end\", onEnd);"],
+			"replace": ["\t\t\tvoid onEnd;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-TERMINAL-FAILURES]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-DEAD-SINK-NO-UNHANDLED",
+			"title": "detaching leaves stderr with no error listener, so the stream's late echo of a write failure the picker already handled is an uncaught exception and the command dies with the wrong exit",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\t\t\t\t\tstderr.on(\"error\", alreadyHandled);"],
+			"replace": ["\t\t\t\t\tvoid stderr;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-DEAD-SINK-NO-UNHANDLED]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
 		}
 	]
 }
