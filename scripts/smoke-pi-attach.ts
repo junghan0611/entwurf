@@ -107,11 +107,14 @@ const children: ChildProcess[] = [];
 /** Spawn the built bridge dist and speak MCP stdio to it. Each driver owns its
  * child + reply map + stderr, so P6/P7 (external-mcp child) and P8 (the
  * ACP-enriched child) drive two independent processes with one mechanism. */
-function makeBridgeDriver(envArg: NodeJS.ProcessEnv): {
+function makeBridgeDriver(
+	envArg: NodeJS.ProcessEnv,
+	cwd: string,
+): {
 	send: (o: unknown) => void;
 	await_: (id: number, what: string, ms?: number) => Promise<any>;
 } {
-	const child = spawn(process.execPath, [DIST_ENTRY], { stdio: ["pipe", "pipe", "pipe"], env: envArg });
+	const child = spawn(process.execPath, [DIST_ENTRY], { stdio: ["pipe", "pipe", "pipe"], env: envArg, cwd });
 	children.push(child);
 	let stderr = "";
 	child.stderr?.on("data", (d) => {
@@ -282,8 +285,19 @@ try {
 	// is the socket rail (peers listing + control-socket delivery), not sender policy
 	// — D11/D12 in check-bridge-delivery own that — so it takes the documented hatch.
 	env.ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER = "1";
+	// #173 P2: entwurf_peers counts a citizen whose record cwd is under the OS temp directory as a
+	// test room and does not list it. This drive's citizens live under `tmp` by construction, so the
+	// bridge is given a temp directory of its own beside them: the listing under test is the socket
+	// rail's, and the test-room rule has its own gate (check-peer-presentation).
+	const bridgeTmp = path.join(tmp, "bridge-tmp");
+	fs.mkdirSync(bridgeTmp, { recursive: true });
+	env.TMPDIR = bridgeTmp;
+	// The bridge reads team.json from its own working directory; an empty one of its own keeps the
+	// operator's bookmarks in this checkout out of the listing.
+	const bridgeCwd = path.join(tmp, "bridge-cwd");
+	fs.mkdirSync(bridgeCwd, { recursive: true });
 
-	const { send, await_ } = makeBridgeDriver(env);
+	const { send, await_ } = makeBridgeDriver(env, bridgeCwd);
 
 	send({
 		jsonrpc: "2.0",
@@ -357,7 +371,7 @@ try {
 		ok("P8: enrich injects the HOST record gardenId as PI_SESSION_ID", envPairs.PI_SESSION_ID === host.gardenId);
 		ok("P8: enrich injects PI_AGENT_ID = entwurf/<model>", envPairs.PI_AGENT_ID === "entwurf/claude-sonnet-5");
 
-		const acp = makeBridgeDriver({ ...env, ...envPairs });
+		const acp = makeBridgeDriver({ ...env, ...envPairs }, bridgeCwd);
 		const acpMessage = "smoke-pi-attach: the ACP chain, sender = the host record.";
 		acp.send({
 			jsonrpc: "2.0",
