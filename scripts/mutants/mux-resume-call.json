@@ -196,14 +196,10 @@
 		},
 		{
 			"claim": "MUXRESUME-HERDR-COMPOSED",
-			"title": "the bridge bypasses the shared rail root and calls the tmux leaf directly, so every resume inside herdr is refused by the tmux leaf",
-			"subject": "mcp/entwurf-bridge/src/index.ts",
-			"find": [
-				"const visibleResumeLaunch: VisibleResumeDeps[\"launch\"] = (input) => dispatchResumeLaunch(input, tmuxResumeLaunch);"
-			],
-			"replace": [
-				"const visibleResumeLaunch: VisibleResumeDeps[\"launch\"] = (input) => tmuxResumeLaunch(input);\nvoid dispatchResumeLaunch;"
-			],
+			"title": "the shared resume launcher bypasses the shared rail root and calls the tmux leaf directly, so every resume inside herdr is refused by the tmux leaf",
+			"subject": "pi-extensions/lib/visible-resume-launch.ts",
+			"find": ["\tdispatchResumeLaunch(input, tmuxResumeLaunch);"],
+			"replace": ["\ttmuxResumeLaunch(input);\nvoid dispatchResumeLaunch;"],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-HERDR-COMPOSED]",

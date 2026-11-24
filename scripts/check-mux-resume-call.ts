@@ -30,8 +30,9 @@
  *   MUXRESUME-SURFACE-SEAM          both surfaces hand the launcher IN; neither lets the v2
  *                                   composition import mux
  *   MUXRESUME-V2-NO-HERDR-IMPORT    the v2 composition imports no herdr module either (#157 G1a)
- *   MUXRESUME-HERDR-COMPOSED        the bridge delegates the resume launch to the shared rail root,
- *                                   handing it this leaf's mapping, and reads no rail fact itself
+ *   MUXRESUME-HERDR-COMPOSED        the shared launcher (`visible-resume-launch`, #173) delegates the
+ *                                   resume launch to the shared rail root, handing it this leaf's
+ *                                   mapping; neither it nor the bridge reads a rail fact
  *                                   (the root's own choice is FCD-RESUME-RAIL-SHARED, beside it)
  */
 
@@ -275,9 +276,16 @@ function main(): void {
 			"[QK:MUXRESUME-V2-NO-HERDR-IMPORT] the v2 composition imports no herdr module either — the herdr resume launch is passed IN through the same seam, so neither rail's CLI enters entwurf core",
 			v2ImportSpecifiers.length > 0 && !v2ImportSpecifiers.some((s) => /herdr-/.test(s)),
 		);
+		// #173: a visible resume has two entries (this bridge and the `entwurf resume` CLI), so the
+		// launcher both hand to the v2 composition is one lib module, `visible-resume-launch`. The
+		// bridge joins that module to the v2 composition and no longer reaches the mux leaf itself.
+		const LAUNCH_ROOT = read("pi-extensions/lib/visible-resume-launch.ts");
+		const LAUNCH_ROOT_IMPORTS = [...LAUNCH_ROOT.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
 		ok(
-			"the bridge is the composition root: it imports the mux launcher AND the v2 composition and joins them itself",
-			/mux-resume-call/.test(MCP_SURFACE) && /entwurf-v2-visible-resume/.test(MCP_SURFACE),
+			"the bridge joins the shared resume launcher to the v2 composition and reaches the mux leaf only through it — one launcher for every entry",
+			/visible-resume-launch/.test(MCP_SURFACE) &&
+				/entwurf-v2-visible-resume/.test(MCP_SURFACE) &&
+				!/mux-resume-call/.test(MCP_SURFACE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")),
 		);
 		// #125: pi reaches entwurf_resume_call through Pi's built-in MCP — the bridge above IS its
 		// surface. The native pi registration, its target-only TypeBox schema and its description are
@@ -297,22 +305,25 @@ function main(): void {
 			/async \(\{ target \}, extra\) =>/.test(MCP_RESUME_BLOCK) &&
 				/await visibleResume\(target, makeVisibleResumeDeps\(visibleResumeLaunch\)\)/.test(MCP_RESUME_BLOCK),
 		);
-		// #157 G1a: the bridge is still where this leaf meets the v2 composition, but the rail is NOT
-		// chosen here. The shared root (`dispatchResumeLaunch` in fresh-call-dispatch, held there by
-		// FCD-RESUME-RAIL-SHARED) reads the capability fact; the bridge hands it this leaf's fixed
-		// mapping and imports no herdr module (its reading no rail fact is FCD-SURFACE-ROOT-ONLY). The
-		// launchers are closures inside the bridge entry, so their wiring is read from the bridge source.
+		// #157 G1a, relocated by #173: the launcher is where this leaf meets the v2 composition, but the
+		// rail is NOT chosen there. The shared root (`dispatchResumeLaunch` in fresh-call-dispatch, held
+		// there by FCD-RESUME-RAIL-SHARED) reads the capability fact; the launcher module hands it this
+		// leaf's fixed mapping and imports no herdr module, and neither does the bridge (its reading no
+		// rail fact is FCD-SURFACE-ROOT-ONLY). Its exact import set is asserted so a second rail cannot
+		// enter beside the root.
 		const MCP_IMPORTS = [...MCP_SURFACE.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-		const TMUX_RESUME_BLOCK = (MCP_SURFACE.split("const tmuxResumeLaunch")[1] ?? "").split("\n};")[0];
+		const TMUX_RESUME_BLOCK = (LAUNCH_ROOT.split("export const tmuxResumeLaunch")[1] ?? "").split("\n};")[0];
 		ok(
-			"[QK:MUXRESUME-HERDR-COMPOSED] the bridge hands every resume launch to the shared rail root together with this tmux leaf's mapping, and imports no herdr module of its own — a bridge that called this leaf directly would refuse every resume inside herdr, and one that reached a herdr launch itself would be a second copy of the rail choice",
-			/^const visibleResumeLaunch: VisibleResumeDeps\["launch"\] = \(input\) => dispatchResumeLaunch\(input, tmuxResumeLaunch\);$/m.test(
-				MCP_SURFACE,
+			"[QK:MUXRESUME-HERDR-COMPOSED] the shared launcher hands every resume launch to the shared rail root together with this tmux leaf's mapping, and neither it nor the bridge imports a herdr module — a launcher that called this leaf directly would refuse every resume inside herdr, and one that reached a herdr launch itself would be a second copy of the rail choice",
+			/^export const visibleResumeLaunch: VisibleResumeDeps\["launch"\] = \(input\) =>\n\tdispatchResumeLaunch\(input, tmuxResumeLaunch\);$/m.test(
+				LAUNCH_ROOT,
 			) &&
 				/resumeCall\(\{ backend: input\.backend, cwd: input\.cwd, runtimeArgs: input\.runtimeArgs \}\)/.test(
 					TMUX_RESUME_BLOCK,
 				) &&
-				MCP_IMPORTS.includes("../../../pi-extensions/lib/fresh-call-dispatch.ts") &&
+				JSON.stringify([...LAUNCH_ROOT_IMPORTS].sort()) ===
+					JSON.stringify(["./entwurf-v2-visible-resume.ts", "./fresh-call-dispatch.ts", "./mux-resume-call.ts"]) &&
+				MCP_IMPORTS.includes("../../../pi-extensions/lib/visible-resume-launch.ts") &&
 				!MCP_IMPORTS.some((s) => /herdr-/.test(s)),
 		);
 

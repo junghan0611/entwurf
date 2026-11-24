@@ -459,14 +459,27 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			old: "  entwurf pi-durable [args...]        the packaged durable pi launcher\n",
 			next: "  entwurf pi-durable [args...]        the packaged durable pi launcher\n  entwurf claude [args...]            Claude Code itself; args go to claude unchanged\n",
 		},
+		// #173 C2 (GLG 2026-11-24, contract issuecomment-7130851749; relayed by ff08d4 with Sol review 1):
+		// `resume` is now also a command, so the footer that called it MCP-only is corrected and the
+		// command gets its own section after the read-only one — receipt: the run.sh `resume)` arm. The
+		// footer edit is applied to the page as the #157 footer amendment above left it.
+		{
+			old: "  entwurf meta-facts                  garden records and store diagnostics\n",
+			next: "  entwurf meta-facts                  garden records and store diagnostics\n\nReopen a sibling (inside tmux or herdr):\n  entwurf resume <garden-id>          reopen one dormant sibling under its own id\n",
+		},
+		{
+			old: "Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,\nnot commands here. Advanced maintenance and development gates: entwurf help all\n",
+			next: "Fresh call, send and retire are entwurf-bridge MCP tools inside a session, not commands\nhere; resume is both. Advanced maintenance and development gates: entwurf help all\n",
+		},
 	];
 	let expectedCompact = compact153;
 	for (const a of ROOT_AMENDMENTS_157) {
 		if (expectedCompact.split(a.old).length !== 2) throw new Error(`S9: root amendment not exactly once: ${a.old}`);
 		expectedCompact = expectedCompact.replace(a.old, a.next);
 	}
-	if (sha256(expectedCompact) !== "24d41fb481b910d2c60a9c14d92dc75f200b7d1214c104b6f26e61a85a8b0949") {
-		throw new Error("S9: the amended root page is not the reviewed #157 page");
+	// 24d41fb4… was the #157 page; the two #173 amendments move it. Taken from the amended literal.
+	if (sha256(expectedCompact) !== "8cc92bf18f5efdfd89a8fdf96e5c3e68a4f9133673204ede2ac8d1cb78e0a4b8") {
+		throw new Error("S9: the amended root page is not the reviewed #157 + #173 page");
 	}
 	// The guide topics' oracles: reviewed literals, pinned, written before the data and never
 	// generated from it. Each names the package files it sends the reader to (S9w checks they ship).
@@ -588,6 +601,14 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh `renew-recover)` arm -> scripts/renew-recover.ts -> pi-extensions/lib/renew-recover.ts (#151 C1.4o)",
 		},
+		// #173 (GLG 2026-11-24, contract issuecomment-7130851749): the operator's terminal entry to the
+		// same-id visible resume, right after renew-recover — receipt: the run.sh `resume)` arm.
+		{
+			after: "  entwurf renew-recover <gardenId>    # ",
+			line: "  entwurf resume <garden-id>          # #173: the operator's terminal entry to the same-id visible resume — the leaf the MCP tool entwurf_resume_call uses, through the same launcher. Reopens ONE dormant pi, pi-durable or Claude Code citizen under its OWN garden id in a new tmux window of this terminal's session (inside herdr, a new herdr tab) and submits NO prompt. The record is the sole address: no native session name, harness or model is given. A target that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened — never a send, a focus or a new session instead. Run it inside tmux or herdr: a terminal with neither is told so first, before any record is read or lock taken. The receipt is unattributed: a terminal has no garden identity, and attribution was never authority. EXIT: 0 launched and the backend's own same-id observation was positive (pi: the control socket accepted a connection; Claude Code: a new owner re-armed the receiver marker; pi-durable: the reservation was adopted, which is not readiness or recall) / 3 launched, that observation not positive in the bounded wait (the window or tab stays visible; nothing is retried) / 4 refused, nothing opened / 5 failed at the launch step: the recovery receipt in the text says what was created and what remains (none, unknown, closed or orphan-unreclaimed) / 2 usage: not exactly one non-option argument / 1 the leaf threw and its message is printed as written (e.g. no record for that id)",
+			receipt:
+				"run.sh `resume)` arm -> scripts/resume.ts -> pi-extensions/lib/resume-cli.ts: runResumeCli argv shape (exit 2), resumeByGardenId -> visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch)) -> renderVisibleResume(result, { actor: null }), resumeCliExitCode 0/3/4/5, the launch-context preflight (selectFreshCallRail + readAnchor) before the leaf exit 4, leaf throw exit 1 (#173 C2)",
+		},
 		// #160 (relayed by 9fc008, GLG approval 2026-11-13): the OpenClaw send entry and birth verb, right after
 		// remote-pair-receive — receipts: the run.sh `openclaw-send)` / `openclaw-birth)` arms.
 		{
@@ -702,7 +723,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	};
 	const rootBad = rendersRoot(path.join(REPO, "run.sh"), REPO);
 	ok(
-		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the three #157 amendments)`,
+		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the three #157 and two #173 amendments)`,
 		rootBad.length === 0,
 		rootBad.join("\n"),
 	);
@@ -1022,9 +1043,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// Moved for #151 C1.4o: one `renew-recover)` arm before `meta-facts)`, nothing else changed (136 -> 137
 	// labels, re-reviewed: a described entry and outside the debt). The diff against the 6ca06d68… case is
 	// exactly those 8 added lines.
-	const REVIEWED_CASE_SHA256 = "73038f7a71df9c58286bedab4612b19fb5bb679a0af98d04835d7dc42d33c3c8";
+	// Moved for #173 C2: one `resume)` arm before `peer-facts)`, nothing else changed (137 -> 138 labels,
+	// re-reviewed: a described entry and outside the debt). The diff against the 73038f7a… case is exactly
+	// those 9 added lines.
+	const REVIEWED_CASE_SHA256 = "689365f86bb2e581ef4bff2018792d95a6a79cc4a45154c36ea7d8747be8293c";
 	ok(
-		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus its reviewed #153, #157, #160 and #151 amendments, byte for byte",
+		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus its reviewed #153, #157, #160, #151 and #173 amendments, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,
 		"the top-level case changed: re-review its labels against ENTWURF-CLI.json and the debt below, then move the pin",
 	);

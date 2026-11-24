@@ -87,6 +87,16 @@
 				]
 			},
 			{
+				"title": "Reopen a sibling (inside tmux or herdr):",
+				"column": 38,
+				"rows": [
+					{
+						"name": "resume",
+						"text": "reopen one dormant sibling under its own id"
+					}
+				]
+			},
+			{
 				"title": "Remove wiring:",
 				"column": 38,
 				"rows": [
@@ -141,8 +151,8 @@
 			]
 		},
 		"footer": [
-			"Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,",
-			"not commands here. Advanced maintenance and development gates: entwurf help all",
+			"Fresh call, send and retire are entwurf-bridge MCP tools inside a session, not commands",
+			"here; resume is both. Advanced maintenance and development gates: entwurf help all",
 			"Guides: entwurf help team | entwurf help remote-pair"
 		]
 	},
@@ -1123,6 +1133,11 @@
 					"synopsis": "renew-recover <gardenId>",
 					"column": 38,
 					"summary": "#151 C1.4o: the explicit OFFLINE recovery of a /renew whose owner Pi is gone — a human runs it once, in a quiet window. No flag: read-only status (from, to, owner pid and whether it is proven gone, body sha). --continue <abs session file>: the reserved chapter's file is checked (header, first user message exactly the agreed body, once), the mark is handed over to this process and the SAME commit runs; no append, and Pi is NOT opened — open that file with pi --session and check the address and first input there. --abort --save-outline <abs new file>: only when nothing is reserved; the body is saved and read back first, then hand-over and the SAME clear. A live or uncertain owner refuses. EXIT: 0 status/done, 2 usage, 4 refused (the record is unchanged; an abort names any save file it already wrote), 5 stopped after the hand-over (the line carries what the record says now — it may already be committed or open), 1 unexpected"
+				},
+				{
+					"synopsis": "resume <garden-id>",
+					"column": 38,
+					"summary": "#173: the operator's terminal entry to the same-id visible resume — the leaf the MCP tool entwurf_resume_call uses, through the same launcher. Reopens ONE dormant pi, pi-durable or Claude Code citizen under its OWN garden id in a new tmux window of this terminal's session (inside herdr, a new herdr tab) and submits NO prompt. The record is the sole address: no native session name, harness or model is given. A target that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened — never a send, a focus or a new session instead. Run it inside tmux or herdr: a terminal with neither is told so first, before any record is read or lock taken. The receipt is unattributed: a terminal has no garden identity, and attribution was never authority. EXIT: 0 launched and the backend's own same-id observation was positive (pi: the control socket accepted a connection; Claude Code: a new owner re-armed the receiver marker; pi-durable: the reservation was adopted, which is not readiness or recall) / 3 launched, that observation not positive in the bounded wait (the window or tab stays visible; nothing is retried) / 4 refused, nothing opened / 5 failed at the launch step: the recovery receipt in the text says what was created and what remains (none, unknown, closed or orphan-unreclaimed) / 2 usage: not exactly one non-option argument / 1 the leaf threw and its message is printed as written (e.g. no record for that id)"
 				},
 				{
 					"synopsis": "check-remote-pair-installed",

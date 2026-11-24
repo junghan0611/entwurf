@@ -1,0 +1,126 @@
+{
+	"schemaVersion": 1,
+	"lane": "resume-cli",
+	"mutants": [
+		{
+			"claim": "RESUMECLI-TARGET-PASSTHROUGH",
+			"title": "the terminal entry tidies the typed id before the leaf sees it, so an id the leaf would refuse as malformed reopens a citizen the operator did not type",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tconst result = await deps.resume(target);"],
+			"replace": ["\tconst result = await deps.resume(target.trim().toLowerCase());"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-TARGET-PASSTHROUGH]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-USAGE-RUNS-NOTHING",
+			"title": "extra argv is ignored instead of refused, so `entwurf resume <id> <anything>` runs a resume the operator's command line did not spell",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (argv.length !== 1 || target === undefined || target.startsWith(\"-\")) {"],
+			"replace": ["\tif (target === undefined || target.startsWith(\"-\")) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-USAGE-RUNS-NOTHING]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-EXIT-FROM-RESULT",
+			"title": "a launch-step failure exits like a clean refusal, so a script reads `nothing was opened` while the recovery receipt says unknown or names a pane that was left",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": [
+				"\treturn result.reason === \"launch-failed\" ? RESUME_CLI_EXIT.launchFailed : RESUME_CLI_EXIT.refused;"
+			],
+			"replace": ["\treturn RESUME_CLI_EXIT.refused;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-EXIT-FROM-RESULT]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-UNKNOWN-OBSERVATION",
+			"title": "the closed list of positive observations becomes a list of known negatives, so every observation kind added to the leaf later exits 0 as `the citizen is back`",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": [
+				"const OBSERVED_BACK: ReadonlySet<string> = new Set([\"socket-alive\", \"receiver-armed\", \"adopted\"]);"
+			],
+			"replace": [
+				"const NOT_BACK = new Set([\"resume-unobserved\", \"record-unreadable\", \"pane-process-unread\", \"not-yet-adopted\", \"reservation-lost\", \"unobserved\"]);\nconst OBSERVED_BACK = { has: (kind: string): boolean => !NOT_BACK.has(kind) };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-UNKNOWN-OBSERVATION]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-UNATTRIBUTED",
+			"title": "the terminal entry attributes the resume to an id it read from the environment, so a receipt names a record-backed caller nobody verified",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tconst rendered = renderVisibleResume(result, { actor: null });"],
+			"replace": [
+				"\tconst rendered = renderVisibleResume(result, { actor: process.env.PI_SESSION_ID ?? \"terminal\" });"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-UNATTRIBUTED]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-REFUSAL-ON-STDERR",
+			"title": "a refusal is written to stdout like a receipt, so a script capturing stdout takes `rejected` text for the product of a resume",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": [
+				"\treturn result.ok ? { exitCode, stdout: text, stderr: \"\" } : { exitCode, stdout: \"\", stderr: text };"
+			],
+			"replace": ["\treturn { exitCode, stdout: text, stderr: \"\" };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-REFUSAL-ON-STDERR]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-THROW-IS-EXIT-ONE",
+			"title": "a leaf throw exits as a refusal, so an unreleased lock or an unreadable store is reported with the code that means nothing was opened",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\t\t\texitCode: RESUME_CLI_EXIT.crashed,"],
+			"replace": ["\t\t\texitCode: RESUME_CLI_EXIT.refused,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-THROW-IS-EXIT-ONE]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-SHARED-LEAF",
+			"title": "the terminal entry takes the tmux mapping as its launcher instead of the shared one, so it skips the rail root and every `entwurf resume` inside herdr is refused by the tmux leaf while the MCP verb works",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["import { visibleResumeLaunch } from \"./visible-resume-launch.ts\";"],
+			"replace": ["import { tmuxResumeLaunch as visibleResumeLaunch } from \"./visible-resume-launch.ts\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-SHARED-LEAF]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-CONTEXT-BEFORE-LEAF",
+			"title": "the early launch-context answer is skipped, so a bare terminal reaches the leaf: the record is read, the lock is taken and a pi-durable reservation is written before anyone says there is no tmux here",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tconst refusal = resumeLaunchContextRefusal(deps.env);"],
+			"replace": ["\tconst refusal = null as ReturnType<typeof resumeLaunchContextRefusal>;\n\tvoid deps.env;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-CONTEXT-BEFORE-LEAF]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-CONTEXT-HERDR",
+			"title": "the early check asks for a tmux anchor inside herdr too, so every `entwurf resume` typed in a herdr pane is refused before the rail root can launch the herdr resume",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (selectFreshCallRail(env) === \"herdr\") return null;"],
+			"replace": ["\tvoid selectFreshCallRail;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMECLI-CONTEXT-HERDR]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		}
+	]
+}

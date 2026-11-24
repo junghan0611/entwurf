@@ -1447,9 +1447,11 @@ check_entwurf_v2_visible_resume() {
   # would be one more undescribed name for check-install-surface S9. #157 B3: the tmux leaf's
   # pi-durable window (mux-resume-call.test.ts) joins it for the same reason. #157 S3 joint review:
   # the owner fence's release-failure facts the pi-durable resume reports (pi-durable-release-failure.test.ts)
-  # join it too, rather than the glob shim's every-test replay per mutant. Named files, no glob.
+  # join it too, rather than the glob shim's every-test replay per mutant. #173 C2: the operator's
+  # terminal entry to this same leaf (resume-cli.test.ts) joins it for that reason as well.
+  # Named files, no glob.
   section "visible same-id resume + its herdr and tmux launches (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/entwurf-v2-visible-resume.test.ts pi-extensions/lib/herdr-resume-call.test.ts pi-extensions/lib/mux-resume-call.test.ts pi-extensions/lib/pi-durable-release-failure.test.ts
+  run_vitest pi-extensions/lib/entwurf-v2-visible-resume.test.ts pi-extensions/lib/herdr-resume-call.test.ts pi-extensions/lib/mux-resume-call.test.ts pi-extensions/lib/pi-durable-release-failure.test.ts pi-extensions/lib/resume-cli.test.ts
 }
 
 check_resume_launch_identity() {
@@ -3870,6 +3872,12 @@ check_pack() {
     # out: the placement join it emits is the copy a herdr-side consumer would
     # otherwise fork, and such a consumer runs against an installed host.
     "mcp/entwurf-bridge/dist/scripts/peer-facts.js"
+    # #173 — the operator's `entwurf resume` (run_ts twin) and the two libs it adds: its own
+    # entry lib, and the shared resume launcher the bridge's entwurf_resume_call now imports too —
+    # without that one the installed bridge dies at boot, not just this command.
+    "mcp/entwurf-bridge/dist/scripts/resume.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/resume-cli.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/visible-resume-launch.js"
     # #107 — the receiving host's entry the sender's ssh runs (run_ts twin), plus the three
     # remote-pair libs the bridge's entwurf_v2 handler and that entry import.
     "mcp/entwurf-bridge/dist/scripts/remote-pair-receive.js"
@@ -4911,6 +4919,11 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
     # #116 M2-a — the owner-normalized peer projection (see check-pack).
     "mcp/entwurf-bridge/dist/scripts/peer-facts.js"
+    # #173 — `entwurf resume` and the two libs it adds (see check-pack). The installed-command
+    # regression below drives it through the real bin.
+    "mcp/entwurf-bridge/dist/scripts/resume.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/resume-cli.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/visible-resume-launch.js"
     # #107 — the receiving host's entry the sender's ssh runs (run_ts twin), plus the three
     # remote-pair libs the bridge's entwurf_v2 handler and that entry import.
     "mcp/entwurf-bridge/dist/scripts/remote-pair-receive.js"
@@ -6385,6 +6398,41 @@ process.stdout.write(resolveCodexDefaultSocketPath(process.env));
     return 1
   fi
   echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store, fresh-cut opens a generation)"
+
+  # #173 — installed `entwurf resume`, through the real bin and its compiled twin. `resume --help`
+  # would prove nothing here: the dispatcher's help preflight answers it before the arm. Three
+  # drives, none of which can open anything: (1) no argument is the usage refusal — exit 2, EMPTY
+  # stdout, the usage line on stderr; (2) a terminal with no launch context is refused early by
+  # name — exit 4, before any record read; (3) with a syntactically valid tmux anchor a malformed id
+  # reaches the LEAF, which refuses it as target-invalid before it takes a lock — exit 4, and proof
+  # that the twin loaded the whole leaf graph under node_modules. The anchor in (3) names no real
+  # tmux server and nothing asks tmux anything on that path.
+  local rs_out="$npm_tmp/resume.out" rs_err="$npm_tmp/resume.err" rs_rc
+  rs_rc=0
+  env -u TMUX -u TMUX_PANE -u HERDR_ENV HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" \
+    "$installed_entwurf" resume >"$rs_out" 2>"$rs_err" || rs_rc=$?
+  if [ "$rs_rc" -ne 2 ] || [ -s "$rs_out" ] || ! grep -q '^entwurf resume: takes exactly one garden id' "$rs_err"; then
+    fail "[check-pack-install] installed 'entwurf resume' with no argument is not the usage refusal (want exit 2, empty stdout, usage on stderr): rc=$rs_rc"
+    tail -8 "$rs_err" | sed 's/^/    /' >&2
+    return 1
+  fi
+  rs_rc=0
+  env -u TMUX -u TMUX_PANE -u HERDR_ENV HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" \
+    "$installed_entwurf" resume 20260101T000000-feed00 >"$rs_out" 2>"$rs_err" || rs_rc=$?
+  if [ "$rs_rc" -ne 4 ] || [ -s "$rs_out" ] || ! grep -q '^entwurf resume refused: no-tmux-context ' "$rs_err"; then
+    fail "[check-pack-install] installed 'entwurf resume <id>' in a terminal with no launch context is not the early refusal (want exit 4, empty stdout, no-tmux-context on stderr): rc=$rs_rc"
+    tail -8 "$rs_err" | sed 's/^/    /' >&2
+    return 1
+  fi
+  rs_rc=0
+  env -u HERDR_ENV TMUX="$npm_tmp/no-such-tmux-socket,1,0" TMUX_PANE="%0" HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" \
+    "$installed_entwurf" resume not-a-garden-id >"$rs_out" 2>"$rs_err" || rs_rc=$?
+  if [ "$rs_rc" -ne 4 ] || [ -s "$rs_out" ] || ! grep -q 'target-invalid' "$rs_err" || ! grep -q 'No window was opened\.' "$rs_err"; then
+    fail "[check-pack-install] installed 'entwurf resume <malformed id>' did not reach the leaf's target-invalid refusal (want exit 4, empty stdout): rc=$rs_rc"
+    tail -8 "$rs_err" | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed 'entwurf resume' pass (usage exit 2 with empty stdout, early no-tmux-context exit 4, leaf target-invalid exit 4 through the compiled twin; nothing opened)"
 
   # ── generation lane: the INSTALLED lifecycle on a host that already carries a
   # previous-generation store. Everything above this line meets an empty store,
@@ -8731,6 +8779,15 @@ case "$cmd" in
     # sessions.describe must answer alive, then an idempotent upsert. Explicit --cwd, never inferred.
     shift || true
     run_ts scripts/openclaw-birth.ts "$@"
+    ;;
+  resume)
+    # #173: the operator's terminal entry to the same-id visible resume. `entwurf resume <garden-id>`
+    # makes the three calls the MCP verb entwurf_resume_call makes (visibleResume through the shared
+    # launcher, then renderVisibleResume) with no caller attribution, and submits no prompt. A live,
+    # unsupported or not provably dormant target is the leaf's refusal — never a send or a new
+    # session. Exit contract in pi-extensions/lib/resume-cli.ts (0/3/4/5/2/1).
+    shift || true
+    run_ts scripts/resume.ts "$@"
     ;;
   peer-facts)
     # #116 M2-a READ-ONLY projection of the OBSERVED peer listing: one provider

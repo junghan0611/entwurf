@@ -279,6 +279,19 @@
 		// allow: entwurf-control.ts through a NON-LITERAL dynamic import, the MCP bridge through
 		// a static import typechecked by mcp/tsconfig.json.
 		"pi-extensions/lib/fresh-call-dispatch.ts",
+		// visible-resume-launch.ts is the #173 shared resume launcher — the one launch seam both
+		// visible-resume entries (the MCP bridge and the `entwurf resume` CLI) hand to the v2
+		// composition. A lib→lib VALUE importer of fresh-call-dispatch and mux-resume-call with
+		// explicit `.ts` extensions, same fence. Received by mcp/tsconfig.json and scripts/tsconfig.json
+		// through their existing ../pi-extensions/lib/**/*.ts includes.
+		"pi-extensions/lib/visible-resume-launch.ts",
+		// resume-cli.ts is the #173 operator CLI entry to the same-id visible resume — a lib→lib VALUE
+		// importer of entwurf-v2-visible-resume and visible-resume-launch with explicit `.ts`
+		// extensions, same fence. Its one consumer is scripts/resume.ts (run_ts; compiled twin through
+		// mcp/entwurf-bridge/tsconfig.build.json). Received by scripts/tsconfig.json and
+		// mcp/tsconfig.json through their existing ../pi-extensions/lib/**/*.ts includes; its beside
+		// test takes the existing test fence.
+		"pi-extensions/lib/resume-cli.ts",
 		// entwurf-v2-visible-resume.ts is the S1 visible-resume composition on the V2 side of the
 		// fence — a lib→lib VALUE importer (lock / resume-launch-identity / socket-discovery /
 		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports

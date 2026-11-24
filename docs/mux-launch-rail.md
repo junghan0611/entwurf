@@ -767,7 +767,9 @@ codex-fresh-preflight                           -> codex-ws-client + smol-toml  
 entwurf-v2-visible-resume                      -X-> mux-* · herdr-*  (launch는 표면이 주입하는 seam; #157 G1a의 herdr launch도 같은 seam)
 herdr-resume-call                               -> herdr-fresh-call  (정확한 집합 + node:child_process·node:crypto; mux·entwurf core 없음)
 fresh-call-dispatch                             -> herdr-resume-call  (#157 G1a: 공통 rail root의 resume 진입점; 두 레일을 아는 유일한 모듈)
-public surfaces                                 -> fresh-call-dispatch + mux-resume-call + entwurf-v2-visible-resume  (composition root; herdr-* 없음 — rail은 공통 root가 고른다)
+visible-resume-launch                           -> fresh-call-dispatch + mux-resume-call + entwurf-v2-visible-resume(type)  (정확한 집합; #173: 두 resume 입구가 함께 쓰는 launcher, rail은 공통 root가 고른다)
+MCP bridge (entwurf-bridge/src/index.ts)        -> fresh-call-dispatch + visible-resume-launch + entwurf-v2-visible-resume  (fresh·resume 두 동사의 composition root; mux-resume-call·herdr-* 없음 — rail은 공통 root가 고른다)
+resume-cli (`entwurf resume`, #173)             -> visible-resume-launch + entwurf-v2-visible-resume + fresh-call-dispatch(selectFreshCallRail만) + mux-placement(readAnchor만) + agent-guidance  (정확한 집합; 두 술어는 leaf 앞의 launch 문맥 조기 안내용이고 launcher·lock·record reader는 없다)
 all other shipped production sources           -X-> mux-launch
 ```
 

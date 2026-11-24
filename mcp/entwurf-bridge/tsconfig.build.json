@@ -177,6 +177,7 @@
 		"../../scripts/meta-facts.ts",
 		"../../scripts/renew-recover.ts",
 		"../../scripts/peer-facts.ts",
+		"../../scripts/resume.ts",
 		"../../scripts/omp-receive-facts.ts",
 		"../../scripts/codex-socket-path.ts",
 		"../../scripts/codex-socket-classify.ts",

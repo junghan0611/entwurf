@@ -88,14 +88,9 @@ import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/ent
 import {
 	makeVisibleResumeDeps,
 	renderVisibleResume,
-	type VisibleResumeDeps,
 	visibleResume,
 } from "../../../pi-extensions/lib/entwurf-v2-visible-resume.ts";
-import {
-	dispatchFreshCall,
-	dispatchResumeLaunch,
-	renderDispatchedFreshCall,
-} from "../../../pi-extensions/lib/fresh-call-dispatch.ts";
+import { dispatchFreshCall, renderDispatchedFreshCall } from "../../../pi-extensions/lib/fresh-call-dispatch.ts";
 import {
 	type CodexRequestSender,
 	probeNativeSenderAlive,
@@ -116,11 +111,6 @@ import {
 	readMetaSenderMarker,
 	requireBackend,
 } from "../../../pi-extensions/lib/meta-session.ts";
-import {
-	RESUME_CALL_REJECT_HINT,
-	resumeCall,
-	resumePiDurableCall,
-} from "../../../pi-extensions/lib/mux-resume-call.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 import {
 	makeLocalTraceFact,
@@ -131,6 +121,7 @@ import {
 import { processTransport } from "../../../pi-extensions/lib/remote-pair-transport.ts";
 import { CONTROL_SOCKET_DIR } from "../../../pi-extensions/lib/socket-discovery.ts";
 import { probeSocketLiveness } from "../../../pi-extensions/lib/socket-probe.ts";
+import { visibleResumeLaunch } from "../../../pi-extensions/lib/visible-resume-launch.ts";
 
 const HOME = os.homedir();
 
@@ -755,28 +746,10 @@ server.tool(
 	},
 );
 
-// The composition root for a visible resume: this surface is the only layer that may know BOTH
-// halves, so it is where the mux launcher is handed to the v2 composition. `entwurf-v2-visible-
-// resume` cannot open a window on its own and `mux-resume-call` cannot read a record — that is
-// the import fence in docs/mux-launch-rail.md §11, expressed as a function argument.
-//
-// #157 G1a: this surface does NOT choose the rail. It hands the fixed tmux mapping below to the
-// shared rail root (`fresh-call-dispatch`), which reads the same capability fact fresh_call reads
-// and, inside herdr, launches the herdr resume instead — never calling this mapping there.
-//
-// #157 B3: a pi-durable resume is the same leaf's second entry, which also carries the fixed adopt
-// projection the v2 side built from its reservation; no other backend can hand it one.
-const tmuxResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
-	const launched =
-		input.backend === "pi-durable"
-			? resumePiDurableCall({ cwd: input.cwd, runtimeArgs: input.runtimeArgs, adoptEnv: input.piDurableAdoptEnv })
-			: resumeCall({ backend: input.backend, cwd: input.cwd, runtimeArgs: input.runtimeArgs });
-	return launched.ok
-		? { ok: true, handle: { rail: "tmux", ...launched.receipt } }
-		: { ok: false, reason: launched.reason, hint: RESUME_CALL_REJECT_HINT[launched.reason] };
-};
-const visibleResumeLaunch: VisibleResumeDeps["launch"] = (input) => dispatchResumeLaunch(input, tmuxResumeLaunch);
-
+// A visible resume has two entries since #173 — this MCP verb and the operator CLI `entwurf resume`
+// — so the launcher both hand to the v2 composition lives in `visible-resume-launch`, not here. This
+// surface still reads no rail fact and imports neither a mux nor a herdr module: it joins that one
+// launcher to `makeVisibleResumeDeps` and supplies only the target and the caller's attribution.
 server.tool(
 	"entwurf_resume_call",
 	ENTWURF_TOOL_GUIDANCE.entwurf_resume_call.descriptions.mcp,
