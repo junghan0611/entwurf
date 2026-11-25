@@ -148,6 +148,27 @@ export type FirstPromptState = "pending" | "dispatched" | "sealed";
 
 const FIRST_PROMPT_STATES: readonly string[] = ["pending", "dispatched", "sealed"];
 
+/**
+ * #175: the vendor's own compaction of one Pi compaction boundary, asked for with a lone `/compact`.
+ * `sent`: the request is (or may be) on the wire and no answer was accepted, so the next provider call
+ * asks again. `done`: the answer was accepted and this boundary is not asked for again while this slot
+ * names it — a suppression for as long as `done` holds, not an exactly-once (a reader that does not know
+ * this field drops it, and then one more `/compact` may go out). `effect` is a separate axis, set only
+ * with `done`: `confirmed` when the agent reported a completed compaction inside that prompt,
+ * `unconfirmed` when it answered `end_turn` with no such report (agy always; GLG D-3 2026-11-25).
+ */
+export interface VendorCompaction {
+	/** The Pi compaction entry (the latest after the anchor) this request was for. */
+	compactionEntryId: string;
+	/** The vendor session it was sent to. */
+	acpSessionId: string;
+	state: "sent" | "done";
+	effect?: "confirmed" | "unconfirmed";
+}
+
+const VENDOR_COMPACTION_STATES: readonly string[] = ["sent", "done"];
+const VENDOR_COMPACTION_EFFECTS: readonly string[] = ["confirmed", "unconfirmed"];
+
 /** The agent that answered `initialize` for the session a record names (#171 step 8). */
 export interface RecordWriter {
 	name: string;
@@ -176,6 +197,8 @@ export interface SessionRecord {
 	unsealed?: UnsealedDispatch[];
 	/** #171 step 8: the parts `bridgeConfigSignature` was taken from. */
 	config?: ConfigParts;
+	/** #175: the one slot of the vendor's compaction state; absent means nothing is suppressed. */
+	vendorCompaction?: VendorCompaction;
 	updatedAt: string;
 }
 
@@ -356,6 +379,7 @@ export function buildSessionRecord(
 		sealedTurnId?: string;
 		unsealed?: readonly UnsealedDispatch[];
 		config?: ConfigParts;
+		vendorCompaction?: VendorCompaction;
 	} & SessionCompatFacts,
 	now: string,
 ): SessionRecord {
@@ -386,8 +410,23 @@ export function buildSessionRecord(
 			? { unsealed: input.unsealed.map((u) => ({ turnId: u.turnId, inputEntryIds: [...u.inputEntryIds] })) }
 			: {}),
 		...(input.config ? { config: { ...input.config } } : {}),
+		...(input.vendorCompaction ? { vendorCompaction: copyVendorCompaction(input.vendorCompaction) } : {}),
 		updatedAt: now,
 	};
+}
+
+function copyVendorCompaction(v: VendorCompaction): VendorCompaction {
+	return {
+		compactionEntryId: v.compactionEntryId,
+		acpSessionId: v.acpSessionId,
+		state: v.state,
+		...(v.effect === undefined ? {} : { effect: v.effect }),
+	};
+}
+
+/** #175: the same record with only its vendor compaction slot replaced, stamped `now`. Pure. */
+export function withVendorCompaction(record: SessionRecord, value: VendorCompaction, now: string): SessionRecord {
+	return { ...record, vendorCompaction: copyVendorCompaction(value), updatedAt: now };
 }
 
 function isNonEmptyString(v: unknown): v is string {
@@ -427,7 +466,7 @@ function parsePendingDispatch(raw: unknown): PendingDispatch | null | undefined 
 /** The optional step-8 fields: absent, or well formed. `undefined` means the record is invalid. */
 function parseContinuity(
 	r: Record<string, unknown>,
-): Pick<SessionRecord, "sealedTurnId" | "unsealed" | "config"> | undefined {
+): Pick<SessionRecord, "sealedTurnId" | "unsealed" | "config" | "vendorCompaction"> | undefined {
 	if (r.sealedTurnId !== undefined && !isNonEmptyString(r.sealedTurnId)) return undefined;
 	let unsealed: UnsealedDispatch[] | undefined;
 	if (r.unsealed !== undefined) {
@@ -447,10 +486,29 @@ function parseContinuity(
 		if (!isNonEmptyString(c.mcpServers) || !isNonEmptyString(c.text) || !isNonEmptyString(c.tools)) return undefined;
 		config = { mcpServers: c.mcpServers, text: c.text, tools: c.tools };
 	}
+	let vendorCompaction: VendorCompaction | undefined;
+	if (r.vendorCompaction !== undefined) {
+		// #175: a value this build does not know is not read as "nothing to suppress": the record is invalid.
+		const v = r.vendorCompaction as Record<string, unknown> | null;
+		if (typeof v !== "object" || v === null) return undefined;
+		if (!isNonEmptyString(v.compactionEntryId) || !isNonEmptyString(v.acpSessionId)) return undefined;
+		if (typeof v.state !== "string" || !VENDOR_COMPACTION_STATES.includes(v.state)) return undefined;
+		if (v.effect !== undefined) {
+			if (v.state !== "done") return undefined;
+			if (typeof v.effect !== "string" || !VENDOR_COMPACTION_EFFECTS.includes(v.effect)) return undefined;
+		} else if (v.state === "done") return undefined;
+		vendorCompaction = {
+			compactionEntryId: v.compactionEntryId,
+			acpSessionId: v.acpSessionId,
+			state: v.state as VendorCompaction["state"],
+			...(v.effect === undefined ? {} : { effect: v.effect as NonNullable<VendorCompaction["effect"]> }),
+		};
+	}
 	return {
 		...(r.sealedTurnId === undefined ? {} : { sealedTurnId: r.sealedTurnId as string }),
 		...(unsealed && unsealed.length > 0 ? { unsealed } : {}),
 		...(config ? { config } : {}),
+		...(vendorCompaction ? { vendorCompaction } : {}),
 	};
 }
 

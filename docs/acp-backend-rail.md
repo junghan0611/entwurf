@@ -671,6 +671,7 @@ level LIVE runs and measurements use.
 | Remote steer inside a turn (#163 S7) | **provided** — `_session/steering` behind `_meta.steering.supported` (`[QK:ACP-STEER-CAPABILITY-GATED]`; adapter direct n=24) | **recorded limit** — initialize advertises no steering and `_session/steering` is `-32601`, so a steer waits in Pi's queue. A second `session/prompt` during a running tool turn is not a steer: it preempts. The first prompt resolved `end_turn` 10 ms after the second arrived, with no text; its running `run_command` never settled and its effect never happened within the observed window; the second began at the tool's `WaitMsBeforeAsync` boundary and answered normally (#168, agy 1.5.9, 2026-11-17, n=1). That `end_turn` cannot be told apart from a completed turn, so nothing uses it. This reverses the #167 reading (2026-11-16) that agy answers a second prompt inside the turn: that observation saw two `end_turn`s, the first of them a dropped turn |
 | Child compaction records (#163 S8) | **provided** — `compaction_update` behind the declared `session.compaction` (`[QK:ACP-COMPACT-CAPABILITY-DECLARED]`, `-DEPOSIT-ONCE`, `-SCOPE`) | **recorded limit** — no compaction capability advertised. `/compact` (advertised as a command) after three short turns sent no text and no compaction frame, only one `usage_update` and `end_turn`; that `used` (10,289) equals the compaction call's `totalTokens`, and the next turn read `used` 9,380 against 9,081 before it and recalled the first turn's facts (#168, agy 1.5.9, 2026-11-17, n=1; a system prompt of about 8.9k dominates a short session, so the reduction itself is not measured). agy's automatic compaction near a full window is **unmeasured** (not driven: quota) |
 | Child closed after a Pi compaction | **provided** — `[QK:ACP-COMPACT-CLOSES-CHILD]`, `[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT]`; the next turn resumes the same vendor session (`[QK:ACP-COMPACT-KEEPS-SESSION]`, #171) | **provided** (`[측정, LIVE n=1, 2026-11-22, flash/medium, sandbox HOME, main 0d8c22d9, agy 1.5.13]`): after a Pi compaction the next turn started a new agy child that resumed the recorded session (`[acp: resuming agy session]`) and recalled the word given before the compaction. The earlier n=1 (2026-11-17, #168) predates #171: that turn opened a new agy session from the transcript |
+| Vendor compaction after a Pi compaction (#175, §11-8-b) | **provided** — `compactCommand: "/compact"`, a lone prompt before the first delta after a Pi compaction; `end_turn` with a completed `compaction_update` is `confirmed` (`[QK:ACP-VENDOR-COMPACT-ORDER]`, `-CLAUDE-EVIDENCE`). Wire: d3, 2026-11-25, sonnet, n=1 — `in_progress` → `completed` before `end_turn` on two `/compact` in a row | **provided** — same command; `end_turn` with no report is `unconfirmed` (`[QK:ACP-VENDOR-COMPACT-AGY-END-TURN]`). Wire: d3, 2026-11-25, flash, n=1 — no frame, no text; the request's `used` 25,231 above 23,403 before it, the next turn 13,610 |
 | Adapter-initiated idle compaction | **provided** as a `_meta` shape (`idleCompaction: false`, `[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]`); its runtime effect is **unmeasured** | **unmeasured** — whether agy compacts or prompts on an idle session |
 | Background work | **provided** — `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` (`[QK:ACP-CLAUDE-FOREGROUND-ONLY]`); a command that detaches itself is outside it | **recorded limit** — `run_command` hands a command to a background task that outlives agy; accepted by GLG 2026-11-16 (Known limits). Reproduced on x86_64: a 70 s loop backgrounded at the 10000 ms cap stood at ppid 1 after agy exited (#168, agy 1.5.9, 2026-11-17, n=1) |
 | Other `session/update` kinds | **recorded limit** — ignored by the common `default:` (`event-mapper.ts:613-614`) | **recorded limit** — ignored by the common `default:` (`event-mapper.ts:613-614`); `/compact` is advertised among agy's available commands. Observed kinds: `user_message_chunk`, `agent_message_chunk`, `tool_call`, `tool_call_update`, `usage_update`, `session_info_update`, `available_commands_update`, `config_option_update` (#168, agy 1.5.9, 2026-11-17, every lab run); any other kind is **unmeasured** |
@@ -1139,7 +1140,8 @@ exceeds `contextWindow − reserveTokens` (983,616 on the 1M window). The child 
 prompt (observed once at 969k, mid-prompt, 2026-11-15). Inside one long ACP prompt the child
 compacts first whatever Pi's setting is, and a Pi compaction does not shrink the live child's
 context: since #171 the next turn resumes the same vendor session (`[QK:ACP-COMPACT-CLOSES-CHILD]`,
-`[QK:ACP-COMPACT-KEEPS-SESSION]`), whose context the vendor's own compaction governs. The
+`[QK:ACP-COMPACT-KEEPS-SESSION]`), whose context the vendor's own compaction governs; since #175
+that session is asked to compact itself before the next input (§11-8-b). The
 adapter's own idle compaction is off (`idleCompaction: false`, `[QK:ACP-CLAUDE-NO-IDLE-COMPACTION]`).
 
 **What is recorded.** For each compaction of a prompt, one plain custom entry
@@ -1193,6 +1195,85 @@ a stderr line of its own as well, from the backend at the moment it drops — tw
 each; the UI hears of a drop only through a later take of the same session. Headless, stderr is the only trace (accepted boundary, GLG 2026-11-15). There is no
 viewer for the stored summary yet: it is kept like Pi's own compaction summary, but not shown like
 one.
+
+### 11-8-b. After a Pi compaction, the vendor session compacts itself (#175)
+
+**Relation to #171 decision 16.** Decision 16 stands: a Pi compaction changes what Pi shows a
+provider, not what the vendor session holds, so the branch gate passes a compacted branch and the
+next turn still sends only the inputs after the anchor to the same vendor session. Before #175 that
+session kept everything it held, so the occupancy Pi's threshold reads did not fall after a Pi
+compaction. #175 adds one request; it changes neither the gate nor the delta.
+
+**The request.** Before the first input after a Pi compaction, a resumed (attach) or reused session
+is sent one prompt whose only block is the adapter's `compactCommand` (`/compact` on Claude and agy),
+after the model and effort are set and before the delta and its dispatch marker, under the lease the
+turn already holds (`[QK:ACP-VENDOR-COMPACT-ORDER]`, `-ORDER-ATTACH`, `-MARKER-AFTER`). The vendor
+compacts its own transcript: Pi's summary is never sent, no transcript is rebuilt (AGENTS Rule 9), and
+the vendor session id does not change. A birth and a one-shot send none, nor does Pi's own summary
+request, which runs on its own child and leaves the request pending for the conversation's next turn
+(`[QK:ACP-VENDOR-COMPACT-SUMMARY-NONE]`); a turn whose delta is empty is refused before the request
+(`[QK:ACP-VENDOR-COMPACT-NONE-WITHOUT-BOUNDARY]`). The request has no payload hook and no
+steer window. Its text, thinking, `used` and cost are not the turn's output; its `used` is carried
+nowhere, and an accepted request clears the occupancy the session carried, so a delta that reports
+no `used` seals 0 and Pi estimates (`[QK:ACP-VENDOR-COMPACT-NO-LEAK]`, `-OCCUPANCY-CLEARED`). On
+Claude its cost stays in the vendor's cumulative total and lands in the next turn's diff
+(`[QK:ACP-VENDOR-COMPACT-COST]`); the turn says so.
+
+**Which boundary, and when it is done.** The ACP session record carries one slot,
+`vendorCompaction {compactionEntryId, acpSessionId, state: sent|done, effect?: confirmed|unconfirmed}`.
+The plan reads the latest Pi compaction entry after the anchor; only `done` for that entry on that
+vendor session suppresses the request (`[QK:ACP-VENDOR-COMPACT-PLAN]`, `-DONE-SUPPRESSES`). `sent` is
+written before the request leaves, `done` only after the answer is accepted; a `sent` that cannot be
+written sends nothing (`[QK:ACP-VENDOR-COMPACT-SENT-NOT-SAVED]`), and a `done` that cannot be written
+stops the turn with `sent` kept (`-DONE-NOT-SAVED`). Every later record write carries the slot
+(`-RECORD-ROUNDTRIP`). It is one slot, not a ledger: a Pi branch back to an earlier boundary asks for
+that one again (`[QK:ACP-VENDOR-COMPACT-SINGLE-SLOT]`).
+
+**Reading the answer (GLG D-3, 2026-11-25, symmetric).** `end_turn` ends the command on every
+backend and is accepted (`done`). A `compaction_update` that completed inside the request makes the
+effect `confirmed`; no report makes it `unconfirmed` ("ended /compact with no report", said in the
+turn: the command ended, its effect is not known). A conflicting report — one that failed or was
+cancelled, one that started and never ended, or two different terminals for the same compaction in
+either order — is not accepted; the same terminal repeated is one report
+(`[QK:ACP-VENDOR-COMPACT-CLAUDE-EVIDENCE]`, `[QK:ACP-VENDOR-COMPACT-VERDICT]`, `-CONFLICT-STICKY`). This is
+the dispatch verdict only; the display record keeps its first-terminal rule (§11-8-a). The measured
+Claude order is held as one fixture: confirmed, recorded as `source: "prelude"` with its summary and
+`tokensAfter` 1006, none of it in the delta's output (`[QK:ACP-VENDOR-COMPACT-CLAUDE-MEASURED]`). Measured at d3 (n=1 per
+backend, raw resume of the same vendor id, `/compact` twice in a row): Claude sonnet answered
+`end_turn` with `in_progress` → `completed` before the result both times, `used` 1,006 and 996 (the
+vendor's post-compaction tokens, without the system part), and the next turn's first `used` was 4,928 (4,934 at its end); agy flash
+answered `end_turn` with no frame and no text, the request's own `used` 25,231 above the 23,403
+before it, and the next turn read 13,610. Neither vendor refused the second `/compact`, and both
+recalled a word given before it (`[QK:ACP-VENDOR-COMPACT-AGY-END-TURN]`). For an `unconfirmed` effect,
+a first delta `used` at 90% or more of the anchor's stored `used` writes one stderr line and nothing
+else (`[QK:ACP-VENDOR-COMPACT-NO-SHRINK]`); the request's own `used` is never the comparison.
+
+**A request not accepted.** Any other answer stops the turn by name with none of its input sent:
+`cancelled`, `refusal`, `max_tokens` and `max_turn_requests` as `vendorCompactFailed`, a conflict or a
+lost save as `vendorCompactUnknown` — those keep the session, live, with its anchor where the record
+has it; an unknown or absent stop reason, or no answer, as `vendorCompactUnknown` with the session
+closed (`[QK:ACP-VENDOR-COMPACT-SUCCESS-NOT-ANSWERED]`, `-ANCHOR-STAYS`). An abort during the request is
+a cancel first, on reuse and on attach, whose bootstrap teardown is handed over before the request
+(`-ABORT`, `-ABORT-ATTACH`); the turn says it was aborted. The stop is sealed as an error, so the next call passes the branch gate
+(`-STOP-PASSES-GATE`) and asks again, once, with the held input and the new one together; a call never
+asks twice (`[QK:ACP-VENDOR-COMPACT-RETRY-NEXT-CALL]`). A compaction may therefore run twice (accepted,
+GLG 2026-11-25).
+
+**Recorded.** Claude's compaction of the request is kept as an `entwurf-acp-compaction` record with
+`source: "prelude"`, also when the turn stops (`[QK:ACP-VENDOR-COMPACT-RECORDED]`); agy reports none.
+
+**Reader skew.** `vendorCompaction` is a slot of the ACP session record (record version unchanged),
+not a garden V3 meta key. A record without the slot is valid and suppresses nothing
+(`[QK:ACP-VENDOR-COMPACT-RECORD-PARSE]`); a value this build does not know makes the record invalid.
+A 0.62.x reader ignores the slot and reads the record as before, so addressing is unaffected and no
+restart of every citizen is needed. A 0.62.x writer that rewrites the same record (a marker or a seal)
+drops the slot, and a newer reader after it may send `/compact` once more for the same boundary: roll
+the loaded ACP writer forward before that session is continued.
+
+**Truncated answers wait for new input.** For a sealed length answer containing only text or thinking blocks that Pi hid with a matching null edit, an empty continuation sends nothing; the next verified input goes to the same vendor session. Only a stored compaction after the answer calls for the vendor prelude. Entwurf neither finishes the answer automatically nor sends Pi's summary; generating that summary still costs a Pi turn. Native tool-call/result blocks are not admitted. ACP tool updates appear as text notices, not native tool calls. Before new input, repeated waits and manual compactions use the latest saved boundary. A failed vendor prelude sends no delta: a later verified input can retry the prelude with the unsent inputs still pending. Both adapters' ACP `max_tokens` path has synthetic evidence only. In the measured Claude exhaustion, the vendor returned a JSON-RPC error instead: #171's unknown-dispatch handling kept the record and the next question resumed the same session without replay.
+
+**Not measured here.** A LIVE product turn through Pi (manual `/compact` and threshold) and the 1M
+window.
 
 ## 11-9. A busy ACP receiver takes a remote steer inside its turn (#163 S7; was #120 P5)
 

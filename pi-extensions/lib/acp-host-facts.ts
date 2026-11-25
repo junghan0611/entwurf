@@ -31,6 +31,7 @@ export interface AcpSessionReader {
 	getSessionId(): string;
 	getBranch(): unknown[];
 	getEntries(): unknown[];
+	buildSessionProjection?: import("@earendil-works/pi-coding-agent").SessionManager["buildSessionProjection"];
 }
 
 export interface AcpHostFacts {

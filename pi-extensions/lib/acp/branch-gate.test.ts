@@ -251,10 +251,12 @@ it("[QK:ACP-DELTA-COMPACTION-PASSED] a Pi compaction after the last answer is pa
 			timestamp: 1,
 		} as never);
 		const inputId = session.appendMessage({ role: "user", content: "X", timestamp: 2 });
-		session.appendCompaction("OLD", answerId, 10);
-		session.appendCompaction("SUM", keep === "answer" ? answerId : keep === "input" ? inputId : null, 10);
+		const oldId = session.appendCompaction("OLD", answerId, 10);
+		const sumId = session.appendCompaction("SUM", keep === "answer" ? answerId : keep === "input" ? inputId : null, 10);
 		session.appendMessage({ role: "user", content: "Y", timestamp: 3 });
 		return {
+			oldId,
+			sumId,
 			branch: session.getBranch() as unknown[],
 			context: convertToLlm(session.buildSessionContext().messages) as unknown[],
 		};
@@ -265,8 +267,18 @@ it("[QK:ACP-DELTA-COMPACTION-PASSED] a Pi compaction after the last answer is pa
 	const keptInput = project("input");
 	expect(keptAnswer.context.map((m) => (m as { role: string }).role)).toEqual(["user", "assistant", "user", "user"]);
 	expect(keptInput.context.map((m) => (m as { role: string }).role)).toEqual(["user", "user", "user"]);
-	expect(walked(T1, keptAnswer.branch).compacted).toEqual({ summary: "SUM", anchorKept: true });
-	expect(walked(T1, keptInput.branch).compacted).toEqual({ summary: "SUM", anchorKept: false });
+	// #175: the boundary is the LATEST compaction after the anchor, named by its own entry id.
+	expect(walked(T1, keptAnswer.branch).compacted).toEqual({
+		summary: "SUM",
+		anchorKept: true,
+		entryId: keptAnswer.sumId,
+	});
+	expect(walked(T1, keptInput.branch).compacted).toEqual({
+		summary: "SUM",
+		anchorKept: false,
+		entryId: keptInput.sumId,
+	});
+	expect(keptAnswer.sumId).not.toBe(keptAnswer.oldId);
 	// Control: each branch with its own projection.
 	expect(carries(keptAnswer.branch, keptAnswer.context)).toEqual({ ok: true, positions: [2, 3] });
 	expect(carries(keptInput.branch, keptInput.context)).toEqual({ ok: true, positions: [1, 2] });

@@ -85,10 +85,8 @@
 			"claim": "ACP-STEER-NEW-TURN-REACHABLE",
 			"title": "the busy window opens only for a session already in the reuse map, so a Pi session's first turn can never be steered",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\tconst closeSteerWindow = openAcpSteerWindow(session.key, {"],
-			"replace": [
-				"\tconst closeSteerWindow = !bridgeSessions.has(session.key) ? () => {} : openAcpSteerWindow(session.key, {"
-			],
+			"find": ["\t\t\t: openAcpSteerWindow(session.key, {"],
+			"replace": ["\t\t\t: !bridgeSessions.has(session.key) ? () => {} : openAcpSteerWindow(session.key, {"],
 			"gate": ["bash", "run.sh", "check-acp-steer"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:ACP-STEER-NEW-TURN-REACHABLE]",

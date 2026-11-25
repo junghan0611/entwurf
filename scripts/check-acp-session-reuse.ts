@@ -655,7 +655,7 @@ try {
 		// second reading of the context.
 		assert.match(
 			src,
-			/const sent = chosen\.send\s*\.map\([\s\S]{0,200}?prompt: sent\.flatMap\(/,
+			/const sent = chosen\.send\s*\.map\([\s\S]{0,200}?if \(omission && sent\.length === 0\) \{\s*finishStop\("lengthWait",[^;]+;\s*return;\s*\}\s*checked = \{\s*prompt: sent\.flatMap\(/,
 			"an existing session's delta is built from the selected inputs",
 		);
 		assert.ok(!/buildAcpPrompt\(context,\s*"reuse"\)/.test(src), "the context is not read a second time for the delta");

@@ -36,6 +36,9 @@ export interface AcpCompactionRecord {
 	status: AcpCompactionStatus;
 	/** Observed fact: the first block of this prompt's user delta was a `/compact` command. Not a cause. */
 	promptWasCompactCommand: boolean;
+	/** #175: `prelude` when the prompt was Entwurf's own lone `/compact`, sent before this turn's input
+	 *  after a Pi compaction. Absent for a compaction inside the turn's own prompt. */
+	source?: "prelude";
 	startedObservedAt: string | null;
 	endedObservedAt: string | null;
 	/** Receipt interval between the two, not a backend-reported duration. */
@@ -95,6 +98,8 @@ export interface AcpCompactionCollectorOptions {
 	/** False for a turn outside the record's scope (Pi summary turn, `cwd:` key): lines only. */
 	collect: boolean;
 	promptWasCompactCommand: boolean;
+	/** #175: stamped on every record of this collector (Entwurf's own `/compact` before a turn's input). */
+	source?: "prelude";
 	/** The previous turn's last occupancy, if any. */
 	carried?: number;
 	now: () => number;
@@ -260,6 +265,7 @@ export class AcpCompactionCollector {
 			compactionId: p.compactionId,
 			status,
 			promptWasCompactCommand: this.opts.promptWasCompactCommand,
+			...(this.opts.source === undefined ? {} : { source: this.opts.source }),
 			startedObservedAt: p.startedMs === null ? null : this.iso(p.startedMs),
 			endedObservedAt: p.endedMs === null ? null : this.iso(p.endedMs),
 			observedIntervalMs: this.interval(p),

@@ -47,7 +47,13 @@ import {
 	type TranscriptContext,
 	type Usage,
 } from "@earendil-works/pi-ai";
-import { convertToLlm, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+	calculateContextTokens,
+	convertToLlm,
+	ModelRuntime,
+	SessionManager,
+	shouldCompact,
+} from "@earendil-works/pi-coding-agent";
 import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { entriesOf, fakePiHost } from "../../../scripts/lib/acp-fake-pi-session.ts";
@@ -408,6 +414,11 @@ function makeWorld(
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
 	const hooks: {
 		onPrompt?: () => void | Promise<void>;
+		/** #175: answer one prompt here; `say` speaks on that prompt's own session. Undefined keeps the default. */
+		answerFor?: (
+			prompt: { sessionId: string; blocks: string[] },
+			say: (update: Record<string, unknown>) => void,
+		) => AcpPromptResponse | undefined | Promise<AcpPromptResponse | undefined>;
 		/** The stop reason of each answer; `null` answers with none at all. */
 		stopReason?: AcpPromptResponse["stopReason"] | null;
 		/** The send itself throws, before any promise exists. */
@@ -526,6 +537,10 @@ function makeWorld(
 						});
 					}
 					await hooks.onPrompt?.();
+					const custom = await hooks.answerFor?.({ sessionId: p.sessionId, blocks }, (update) => {
+						void handlers?.sessionUpdate({ sessionId: p.sessionId, update } as never);
+					});
+					if (custom !== undefined) return custom;
 					return (hooks.stopReason === null ? {} : { stopReason: hooks.stopReason ?? "end_turn" }) as AcpPromptResponse;
 				}
 			}
@@ -722,15 +737,19 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 	it("[QK:ACP-DELTA-BASH-NEXT] forwards bash output and the following human prompt", async () => {
 		await trailingUsers("delta-bash", "Ran `echo BASH-OUTPUT`", "NEXT-U11-bash");
 	});
-	it("[QK:ACP-DELTA-MAX-TOKENS] after Pi hides a length-cut answer the next turn stops: the session is kept and nothing is sent twice", async () => {
+	it.each([
+		"[QK:ACP-DELTA-MAX-TOKENS]",
+		"[QK:ACP-LENGTH-PREFIX-MISS]",
+	])("%s omit-only rejects prefix drift and sends only verified new input", async (claim) => {
+		const id = claim.includes("PREFIX") ? "delta-length-prefix" : "delta-length";
 		const world = makeWorld();
-		await runTurn(world, transcript("seed"), "delta-length", "high");
+		await runTurn(world, transcript("seed"), id, "high");
 		world.hooks.stopReason = "max_tokens";
-		const cut = await runTurn(world, transcript("seed", "BRAVO-q72"), "delta-length", "high");
+		const cut = await runTurn(world, transcript("seed", "BRAVO-q72"), id, "high");
 		world.hooks.stopReason = "end_turn";
 		if (cut.type !== "done") throw new Error(`length cut sealed as ${cut.type}`);
 		expect(cut.reason).toBe("length");
-		// Pi 1.5.2 treats this answer as a recoverable length stop (zero usage: output 0 < maxTokens,
+		// Pi 1.6.0 treats this answer as a recoverable length stop (zero usage: output 0 < maxTokens,
 		// pi-ai utils/overflow.js:177-178) and persists a context_edit with a null replacement for it
 		// (agent-session.js:2533, :2564, :924). That edit, not the message projection, removes it:
 		// convertToLlm keeps a length-stopped assistant.
@@ -747,18 +766,28 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 		session.appendMessage({ role: "user", content: "NEXT-U12-max-tokens", timestamp: 4 });
 		const context = project();
 		expect(context.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "user", "user"]);
-		// The branch holds the cut answer and the edit that hides it; the context shows neither. What the
-		// session holds of the cut prompt cannot be told from here, so the turn stops and the session stays.
-		piHost.setBranch("delta-length", session.getBranch());
-		const stopped = await runTurn(world, context, "delta-length", "high");
-		expect(errorText(stopped)).toBe(ACP_STOPS.changed.text);
-		// What stops it is the edit itself: an entry after the last answer that is neither an input nor a turn.
-		expect(sealedNotices(stopped).join("\n")).toContain("a context_edit entry after the last answer");
+		// An otherwise exact omit-only witness is not permission to ignore a retained
+		// session's prefix mismatch. Change the same earlier user on BOTH sides.
+		const drift = structuredClone(context);
+		const raw = structuredClone(session.getBranch());
+		const head = raw.find((e) => e.type === "message" && e.message.role === "user");
+		const shown = drift.messages.find((m) => m.role === "user");
+		if (head?.type !== "message" || head.message.role !== "user" || !shown) throw Error("missing seed");
+		head.message.content = shown.content = "different seed";
+		piHost.setBranch(id, raw);
+		const before = world.wire.length;
+		expect(errorText(await runTurn(world, drift, id, "high"))).toBe(ACP_STOPS.changed.text);
+		expect(world.wire.length).toBe(before);
+		piHost.setBranch(id, session.getBranch());
+		const next = await runTurn(world, context, id, "high");
+		expect(next.type).toBe("done");
 		expect(world.children).toHaveLength(1);
-		expect(world.prompts).toHaveLength(2);
+		expect(world.prompts.slice(2).map((p) => [p.sessionId, p.blocks])).toEqual([
+			[world.prompts[0].sessionId, ["NEXT-U12-max-tokens"]],
+		]);
 		expect(world.lifecycle).toEqual([]);
 	});
-	it("[QK:ACP-COMPACT-KEEPS-SESSION] after a Pi compaction the same session gets the next input alone, whether Pi kept the last answer or only its summary", async () => {
+	it("[QK:ACP-COMPACT-KEEPS-SESSION] after a Pi compaction the same session is asked to compact itself and then gets the next input alone, whether Pi kept the last answer or only its summary", async () => {
 		// `closed`: Pi's session_compact handler closed the agent (acp-provider.ts), so the turn is an attach.
 		for (const [kept, closed] of [
 			[true, false],
@@ -786,13 +815,16 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 			if (closed) expect(backend.closeRetainedAcpSession(id)).toBe(true);
 			const next = await runTurn(world, context, id, "high");
 			expect(next.type, `${kept} ${closed}`).toBe("done");
-			// One vendor session in all, and the summary is Pi's: it is never on the wire.
+			// One vendor session in all, and the summary is Pi's: it is never on the wire. #175: the vendor
+			// compacts its own session first, with a lone `/compact`, and then gets the input alone.
 			expect(world.wire).toEqual(
 				closed
-					? ["initialize", "new", "prompt", "initialize", "resume", "prompt"]
-					: ["initialize", "new", "prompt", "prompt"],
+					? ["initialize", "new", "prompt", "initialize", "resume", "prompt", "prompt"]
+					: ["initialize", "new", "prompt", "prompt", "prompt"],
 			);
-			expect(world.prompts[1]).toMatchObject({ sessionId: world.prompts[0].sessionId, blocks: ["AFTER-COMPACTION"] });
+			expect(world.prompts[1]).toMatchObject({ sessionId: world.prompts[0].sessionId, blocks: ["/compact"] });
+			expect(world.prompts[2]).toMatchObject({ sessionId: world.prompts[0].sessionId, blocks: ["AFTER-COMPACTION"] });
+			expect(world.prompts.some((p) => p.text.includes("SUMMARY-OF-SEED"))).toBe(false);
 		}
 	});
 });
@@ -2328,6 +2360,97 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(existsSync(leaseOf(world))).toBe(false);
 	});
 
+	/** The timers as Node gave them, taken before any is watched; every watch is undone to these. */
+	const realTimers = { setTimeout, setInterval, clearTimeout, clearInterval };
+	const sleep = (ms: number): Promise<void> => new Promise((resolve) => realTimers.setTimeout(resolve, ms));
+
+	/**
+	 * Every timer made while this watches, and how many of them would still keep the event loop alive:
+	 * ref'd, not cleared, and (a timeout) not yet fired. Node ends a process whose loop holds nothing.
+	 * A second watch replaces the first.
+	 */
+	function watchTimers(): { holding: () => number } {
+		const real = realTimers;
+		const made: Array<{ handle: NodeJS.Timeout; spent: boolean }> = [];
+		const spend = (handle: unknown): void => {
+			for (const timer of made) if (timer.handle === handle) timer.spent = true;
+		};
+		const g = globalThis as unknown as Record<string, unknown>;
+		g.setTimeout = (fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const timer = { handle: undefined as unknown as NodeJS.Timeout, spent: false };
+			timer.handle = real.setTimeout(
+				(...a: unknown[]) => {
+					timer.spent = true;
+					fn(...a);
+				},
+				ms,
+				...args,
+			);
+			made.push(timer);
+			return timer.handle;
+		};
+		g.setInterval = (fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const timer = { handle: real.setInterval(fn, ms, ...args), spent: false };
+			made.push(timer);
+			return timer.handle;
+		};
+		g.clearTimeout = (handle?: NodeJS.Timeout) => {
+			spend(handle);
+			real.clearTimeout(handle);
+		};
+		g.clearInterval = (handle?: NodeJS.Timeout) => {
+			spend(handle);
+			real.clearInterval(handle);
+		};
+		onTestFinished(() => {
+			Object.assign(g, real);
+		});
+		return { holding: () => made.filter((timer) => !timer.spent && timer.handle.hasRef()).length };
+	}
+
+	it("[QK:ACP-LEASE-RELEASE-HOLDS-PROCESS] while a release proves its agent gone, something ref'd keeps the process alive: a quit with nothing else on the event loop does not end it mid-release", async () => {
+		const world = makeWorld();
+		const id = "release-holds";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		let groupEmpty = false;
+		const timers = watchTimers();
+		// #175 M4: every wait of the proof is unref'd and so is the agent it closes. Without a ref'd hold, a
+		// Pi with no control-socket server and no MCP bridge child drained here: exit 0, the lease stayed.
+		// This catches an unref'd hold only because nothing else in a release is a ref'd timer: the proof's
+		// pauses and the session/close wait are unref'd (backend.ts `proveChildGone`, `abandonRetainedSession`).
+		const pending = backend.releaseAcpSessions(id, undefined, 2_000, () => groupEmpty);
+		expect(timers.holding()).toBeGreaterThan(0);
+		await sleep(120);
+		expect(timers.holding()).toBeGreaterThan(0);
+		groupEmpty = true;
+		expect(await pending).toBe(1);
+		expect(existsSync(leaseOf(world))).toBe(false);
+	});
+
+	it("[QK:ACP-LEASE-RELEASE-HOLD-CLEARED] the hold of a release ends with it, on every way out: one that releases, one that keeps the lease, and one that throws", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "release-hold-cleared";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		const released = watchTimers();
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		expect(released.holding()).toBe(0);
+		// Kept: the agent's group is never seen empty within the wait.
+		await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+		const kept = watchTimers();
+		expect(await backend.releaseAcpSessions(id, undefined, 20, () => false)).toBe(0);
+		expect(existsSync(leaseOf(world))).toBe(true);
+		expect(kept.holding()).toBe(0);
+		// Thrown: the group probe fails.
+		const thrown = watchTimers();
+		await expect(
+			backend.releaseAcpSessions(id, undefined, 2_000, () => {
+				throw new Error("group probe failed");
+			}),
+		).rejects.toThrow("group probe failed");
+		expect(thrown.holding()).toBe(0);
+	});
+
 	it("[QK:ACP-ATTACH-TEXT-CHANGE-STOPS] a stored session is not resumed under a setup text other than the one it was opened with", async () => {
 		const world = makeWorld();
 		const id = "attach-text";
@@ -2955,5 +3078,913 @@ describe("streamAcpTurn — a resident's branch gate and payload hook (#171 step
 		});
 		expect(rewritten.type).toBe("done");
 		expect(world.prompts.at(-1)?.text).toContain("REWRITTEN-IN-PLACE");
+	});
+});
+
+describe("#175 the vendor's own compaction after a Pi compaction", () => {
+	type World = ReturnType<typeof makeWorld>;
+	const FRAMES = (id: string, ...statuses: string[]) =>
+		statuses.map((status) => ({ sessionUpdate: "compaction_update", compactionId: id, status }));
+	const isCompact = (p: { blocks: string[] }) => p.blocks.length === 1 && p.blocks[0] === "/compact";
+	/** What each call after the birth sent (a birth's prompt carries the first-user augment as well). */
+	const sentAfterBirth = (world: World) => world.prompts.slice(1).map((p) => p.blocks);
+	const agyModel = (): Model<Api> => {
+		const row = models.curatedAgyModels().find((r) => r.id === "agy-gemini-3.8-flash");
+		if (!row) throw new Error("agy-gemini-3.8-flash is not curated");
+		return { ...row, api: "entwurf", provider: "entwurf", baseUrl: "" } as Model<Api>;
+	};
+	const recordOf = (world: World, id: string) => {
+		const read = store.readSessionRecord(`pi:${id}`, world.sessionDir);
+		if (read.status !== "found") throw new Error(`record ${read.status}`);
+		return read.record;
+	};
+	/** A Pi session that has one ACP answer, then a Pi compaction, then `inputs`. */
+	async function compacted(
+		id: string,
+		opts: {
+			world?: World;
+			model?: Model<Api>;
+			kept?: boolean;
+			inputs?: string[];
+			/** The `used` the agent reports with its first answer (the anchor's stored occupancy). */
+			anchorUsed?: number;
+			/** Two Pi compactions before the input. */
+			twice?: boolean;
+		} = {},
+	) {
+		const world = opts.world ?? makeWorld();
+		const model = opts.model ?? sonnet();
+		const reasoning = "high";
+		// agy reads back its model and its thought level from the same kind of answer: echo both.
+		if (model.id.startsWith("agy-")) {
+			world.hooks.modelAnswer = (value) => ({
+				configOptions: [
+					{ id: "model", currentValue: value },
+					{ id: "thought_level", currentValue: value },
+				],
+			});
+		}
+		if (opts.anchorUsed !== undefined) {
+			const used = opts.anchorUsed;
+			world.hooks.answerFor = (_p, say) => {
+				say({ sessionUpdate: "usage_update", used, size: 1_048_576 });
+				return undefined;
+			};
+		}
+		const first = await runTurn(world, transcript("seed"), id, reasoning, { model });
+		world.hooks.answerFor = undefined;
+		if (first.type !== "done") throw new Error(`first turn sealed as ${first.type}: ${errorText(first)}`);
+		const pi = SessionManager.inMemory();
+		pi.appendMessage({ role: "user", content: "seed", timestamp: 0 });
+		const answerId = pi.appendMessage(first.message);
+		const earlierId = opts.twice ? pi.appendCompaction("EARLIER-SUMMARY", answerId, 1000) : undefined;
+		const compactionId = pi.appendCompaction("SUMMARY-OF-SEED", opts.kept === false ? null : answerId, 1000);
+		(opts.inputs ?? ["AFTER-COMPACTION"]).forEach((text, i) => {
+			pi.appendMessage({ role: "user", content: text, timestamp: 2 + i });
+		});
+		const project = (): TranscriptContext => {
+			piHost.setBranch(id, pi.getBranch());
+			return normalizeContext({ tools: PI_TOOLS, messages: convertToLlm(pi.buildSessionContext().messages) });
+		};
+		const turn = (more: Parameters<typeof runTurn>[4] = {}) =>
+			runTurn(world, project(), id, reasoning, { model, ...more });
+		return { world, model, pi, first, answerId, compactionId, earlierId, project, turn };
+	}
+
+	/** Reuse (`closed` false) or attach (`closed` true): one lone /compact on the same vendor session, then the delta. */
+	async function orderedTurn(closed: boolean) {
+		const id = `vc-order-${closed}`;
+		const c = await compacted(id);
+		if (closed) expect(backend.closeRetainedAcpSession(id)).toBe(true);
+		c.world.log.length = 0;
+		const next = await c.turn();
+		expect(next.type, String(closed)).toBe("done");
+		expect(sentAfterBirth(c.world)).toEqual([["/compact"], ["AFTER-COMPACTION"]]);
+		expect(new Set(c.world.prompts.map((p) => p.sessionId)).size).toBe(1);
+		// The attach sets the model and the effort before it; the reuse keeps them (no change asked).
+		expect(c.world.log).toEqual(
+			closed ? ["set:model=claude-sonnet-5-5", "set:effort=high", "prompt", "prompt"] : ["prompt", "prompt"],
+		);
+	}
+
+	it("[QK:ACP-VENDOR-COMPACT-ORDER-ATTACH] attach: model and effort first, then a lone /compact on the resumed session, then the delta", async () => {
+		await orderedTurn(true);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-ORDER] reuse: a lone /compact on the live session, then the delta; a birth and a one-shot send none", async () => {
+		await orderedTurn(false);
+		// A birth: the first turn of a conversation carries no compaction to ask for.
+		const birthWorld = makeWorld();
+		await runTurn(birthWorld, transcript("seed"), "vc-order-birth", "high");
+		expect(birthWorld.prompts.filter(isCompact)).toEqual([]);
+		// A one-shot is turn-scoped: always new, never asked to compact, whatever the branch shows.
+		const c = await compacted("vc-order-oneshot");
+		const oneShot = await runTurn(c.world, c.project(), "vc-order-oneshot", "high", {
+			deps: { lifecyclePolicy: () => "turn-scoped" },
+		});
+		expect(oneShot.type).toBe("done");
+		expect(c.world.prompts.filter(isCompact)).toEqual([]);
+	});
+
+	/** Reuse (`closed` false) or attach (`closed` true): no marker while the vendor compacts, one for the delta. */
+	async function markerAfterRequest(closed: boolean) {
+		const id = `vc-marker-after-${closed}`;
+		const c = await compacted(id);
+		if (closed) expect(backend.closeRetainedAcpSession(id)).toBe(true);
+		const atRequest: unknown[] = [];
+		const atDelta: unknown[] = [];
+		c.world.hooks.answerFor = (p) => {
+			(isCompact(p) ? atRequest : atDelta).push(recordOf(c.world, id).pendingDispatch);
+			return undefined;
+		};
+		const next = await c.turn();
+		expect(next.type).toBe("done");
+		expect(atRequest).toEqual([null]);
+		// The marker is written for the delta, after the request was accepted.
+		expect(atDelta).toHaveLength(1);
+		expect(atDelta[0]).not.toBeNull();
+	}
+
+	it("[QK:ACP-VENDOR-COMPACT-MARKER-AFTER] reuse: the request goes out before the dispatch marker; while the vendor compacts, the record names no dispatch of this turn", async () => {
+		await markerAfterRequest(false);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-MARKER-AFTER-ATTACH] attach: the request goes out before the dispatch marker; while the resumed vendor compacts, the record names no dispatch of this turn", async () => {
+		await markerAfterRequest(true);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-NONE-WITHOUT-BOUNDARY] a turn with no Pi compaction after the anchor asks nothing, and an empty delta after one asks nothing and leaves the record's slot as it was", async () => {
+		const world = makeWorld();
+		await runTurn(world, transcript("seed"), "vc-none", "high");
+		const next = await runTurn(world, transcript("seed", "PLAIN-NEXT"), "vc-none", "high");
+		expect(next.type).toBe("done");
+		expect(sentAfterBirth(world)).toEqual([["PLAIN-NEXT"]]);
+		// A Pi compaction followed by an input that renders to no block: the empty delta stops before any request.
+		const c = await compacted("vc-none-empty", { inputs: ["  "] });
+		const before = recordOf(c.world, "vc-none-empty");
+		await c.turn();
+		expect(c.world.prompts.filter(isCompact)).toEqual([]);
+		expect(recordOf(c.world, "vc-none-empty").vendorCompaction).toEqual(before.vendorCompaction);
+		expect(before.vendorCompaction).toBeUndefined();
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-SUCCESS-NOT-ANSWERED] an answer that is not end_turn stops by name with no delta; the record keeps its marker and unknown dispatches exactly and says sent", async () => {
+		for (const [reason, stop, answered] of [
+			["refusal", "vendorCompactFailed", true],
+			["max_tokens", "vendorCompactFailed", true],
+			["max_turn_requests", "vendorCompactFailed", true],
+			["cancelled", "vendorCompactFailed", true],
+			["an-unknown-reason", "vendorCompactUnknown", false],
+			[null, "vendorCompactUnknown", false],
+		] as const) {
+			const id = `vc-not-answered-${reason}`;
+			const c = await compacted(id);
+			const before = recordOf(c.world, id);
+			c.world.hooks.answerFor = (p) =>
+				isCompact(p) ? ((reason === null ? {} : { stopReason: reason }) as AcpPromptResponse) : undefined;
+			const stopped = await c.turn();
+			expect(errorText(stopped), String(reason)).toBe(ACP_STOPS[stop].text);
+			expect(sentAfterBirth(c.world), String(reason)).toEqual([["/compact"]]);
+			const kept = recordOf(c.world, id);
+			expect(kept.pendingDispatch, String(reason)).toEqual(before.pendingDispatch);
+			expect(kept.unsealed, String(reason)).toEqual(before.unsealed);
+			expect(kept.sealedTurnId, String(reason)).toBe(before.sealedTurnId);
+			expect(kept.vendorCompaction, String(reason)).toEqual({
+				compactionEntryId: c.compactionId,
+				acpSessionId: before.acpSessionId,
+				state: "sent",
+			});
+			// An agent that answered keeps its session; one that did not is closed.
+			expect(c.world.lifecycle.includes("close"), String(reason)).toBe(!answered);
+		}
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-STOP-PASSES-GATE] the stop is sealed as error, so the next call is not refused as a changed conversation", async () => {
+		const c = await compacted("vc-gate");
+		c.world.hooks.answerFor = (p) => (isCompact(p) ? { stopReason: "refusal" } : undefined);
+		const stopped = await c.turn();
+		if (stopped.type !== "error") throw new Error("expected an error seal");
+		expect(stopped.error.stopReason).toBe("error");
+		c.pi.appendMessage(stopped.error);
+		c.pi.appendMessage({ role: "user", content: "NEXT-AFTER-STOP", timestamp: 9 });
+		c.world.hooks.answerFor = undefined;
+		const next = await c.turn();
+		expect(next.type).toBe("done");
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-RETRY-NEXT-CALL] a request not accepted is asked once more on the next call and never twice in one; the input it held goes with the new one", async () => {
+		const c = await compacted("vc-retry");
+		c.world.hooks.answerFor = (p) => (isCompact(p) ? { stopReason: "refusal" } : undefined);
+		const stopped = await c.turn();
+		if (stopped.type !== "error") throw new Error("expected an error seal");
+		// One request in the failing call: no same-call retry.
+		expect(c.world.prompts.filter(isCompact)).toHaveLength(1);
+		c.pi.appendMessage(stopped.error);
+		c.pi.appendMessage({ role: "user", content: "NEXT-AFTER-STOP", timestamp: 9 });
+		c.world.hooks.answerFor = undefined;
+		const next = await c.turn();
+		expect(next.type).toBe("done");
+		// The live session (reuse) with `sent` asks again, once, then the held input and the new one together.
+		expect(sentAfterBirth(c.world)).toEqual([["/compact"], ["/compact"], ["AFTER-COMPACTION", "NEXT-AFTER-STOP"]]);
+		expect(c.world.children).toHaveLength(1);
+		expect(recordOf(c.world, "vc-retry").vendorCompaction?.state).toBe("done");
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-NO-LEAK] nothing the request says is the turn's output: its text, used and cost stay out, the summary never goes on the wire, and a delta that reports no used is not given the vendor's old one", async () => {
+		const c = await compacted("vc-no-leak");
+		// The live session carried an occupancy from its first turn: a stale value the delta must not inherit.
+		c.world.hooks.answerFor = (p, say) => {
+			if (!isCompact(p)) return undefined;
+			say({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "PRELUDE-TEXT" } });
+			say({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "PRELUDE-THOUGHT" } });
+			for (const frame of FRAMES("cmp-1", "in_progress", "completed")) say(frame);
+			say({ sessionUpdate: "usage_update", used: 939, size: 1_000_000, cost: { amount: 9.99, currency: "USD" } });
+			return { stopReason: "end_turn" };
+		};
+		const next = await c.turn();
+		if (next.type !== "done") throw new Error(`sealed as ${next.type}`);
+		const text = next.message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+		const thinking = next.message.content.flatMap((b) => (b.type === "thinking" ? [b.thinking] : [])).join("");
+		expect(text).not.toContain("PRELUDE-TEXT");
+		expect(thinking).not.toContain("PRELUDE-THOUGHT");
+		expect(next.message.usage.totalTokens).not.toBe(939);
+		expect(next.message.usage.totalTokens).toBe(0);
+		expect(next.message.usage.cost.total).toBe(0);
+		expect(c.world.prompts.some((p) => p.text.includes("SUMMARY-OF-SEED"))).toBe(false);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-OCCUPANCY-CLEARED] the occupancy the session carried from before the compaction is not this turn's: a delta with no used seals 0 and Pi estimates, one with a fresh used seals that, and Pi's threshold reads only the fresh value", async () => {
+		// Pi's own threshold oracle (pi-coding-agent compaction.js `calculateContextTokens`, `shouldCompact`), at
+		// a reserve that puts the threshold between the vendor's old occupancy and a compacted one (60k of 1M).
+		const settings = { enabled: true, reserveTokens: 940_000, keepRecentTokens: 20_000 };
+		const wouldCompact = (usage: Usage) => shouldCompact(calculateContextTokens(usage), 1_000_000, settings);
+		for (const fresh of [undefined, 4_928, 95_000]) {
+			const world = makeWorld();
+			const id = `vc-occupancy-${fresh}`;
+			// The first answer reports a large occupancy, which the live session carries.
+			const c = await compacted(id, { world, anchorUsed: 120_000 });
+			c.world.hooks.answerFor = (p, say) => {
+				if (isCompact(p) || fresh === undefined) return undefined;
+				say({ sessionUpdate: "usage_update", used: fresh, size: 1_000_000 });
+				return undefined;
+			};
+			const next = await c.turn();
+			if (next.type !== "done") throw new Error(`sealed as ${next.type}`);
+			expect(next.message.usage.totalTokens, String(fresh)).toBe(fresh ?? 0);
+			// 0 is Pi's cue to estimate on its own (agent-session.js threshold case 3); a carried 120k would
+			// compact again at once, every turn.
+			expect(calculateContextTokens(next.message.usage), String(fresh)).toBe(fresh ?? 0);
+			expect(wouldCompact(next.message.usage), String(fresh)).toBe(fresh === 95_000);
+		}
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-DONE-SUPPRESSES] done holds for its boundary on its vendor session: no second request after a failed delta, on reuse or after a restart; a slot for another boundary or session is no match and refuses nothing", async () => {
+		// (a) done, then the delta is refused by a provider hook before it is sent: the live session stays, and
+		// the next call does not ask again.
+		const a = await compacted("vc-done-reuse");
+		const hooked = await a.turn({
+			options: {
+				onPayload: () => {
+					throw new Error("hook refuses");
+				},
+			},
+		});
+		expect(hooked.type).toBe("error");
+		expect(recordOf(a.world, "vc-done-reuse").vendorCompaction?.state).toBe("done");
+		await a.turn();
+		expect(a.world.prompts.filter(isCompact)).toHaveLength(1);
+		// (b) done, then the delta has no answer (its marker stands, the session closes): the attach that follows
+		// reads done in the record and does not ask again.
+		const b = await compacted("vc-done-attach");
+		b.world.hooks.answerFor = (p) => (isCompact(p) ? undefined : ({} as AcpPromptResponse));
+		const lost = await b.turn();
+		expect(errorText(lost)).toBe(ACP_STOPS.unknown.text);
+		if (lost.type !== "error") throw new Error("expected an error seal");
+		b.pi.appendMessage(lost.error);
+		b.pi.appendMessage({ role: "user", content: "AFTER-LOST", timestamp: 9 });
+		b.world.hooks.answerFor = undefined;
+		const after = await b.turn();
+		expect(after.type).toBe("done");
+		expect(b.world.wire.filter((w) => w === "resume")).toHaveLength(1);
+		expect(b.world.prompts.filter(isCompact)).toHaveLength(1);
+		// (c) a slot for another boundary, and one for another vendor session: no match, the request goes out and
+		// the turn is not refused.
+		for (const other of ["entry", "session"] as const) {
+			const id = `vc-done-other-${other}`;
+			const c = await compacted(id);
+			expect(backend.closeRetainedAcpSession(id)).toBe(true);
+			const record = recordOf(c.world, id);
+			store.writeSessionRecord(
+				store.withVendorCompaction(
+					record,
+					{
+						compactionEntryId: other === "entry" ? "an-older-boundary" : c.compactionId,
+						acpSessionId: other === "session" ? "ANOTHER-VENDOR-SESSION" : record.acpSessionId,
+						state: "done",
+						effect: "confirmed",
+					},
+					"2026-11-13T00:00:00Z",
+				),
+				c.world.sessionDir,
+			);
+			const next = await c.turn();
+			expect(next.type, other).toBe("done");
+			expect(c.world.prompts.filter(isCompact), other).toHaveLength(1);
+		}
+		// (d) two Pi compactions before the first delta: one request, keyed to the later one.
+		const d = await compacted("vc-done-twice", { twice: true });
+		await d.turn();
+		expect(d.world.prompts.filter(isCompact)).toHaveLength(1);
+		expect(recordOf(d.world, "vc-done-twice").vendorCompaction?.compactionEntryId).toBe(d.compactionId);
+		expect(d.compactionId).not.toBe(d.earlierId);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-SENT-NOT-SAVED] a request whose sent state cannot be written is never sent: no /compact, no input, a fixed refusal Pi does not replay", async () => {
+		const c = await compacted("vc-sent-not-saved");
+		const recordDir = c.world.deps.sessionDir;
+		const badDir = join(SANDBOX, "vc-sent-not-saved-not-a-directory");
+		writeFileSync(badDir, "keep");
+		c.world.deps.sessionDir = badDir;
+		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		let refused: AssistantMessageEvent;
+		try {
+			refused = await c.turn();
+		} finally {
+			stderr.mockRestore();
+			c.world.deps.sessionDir = recordDir;
+		}
+		expect(errorText(refused)).toBe(backend.ACP_VENDOR_COMPACTION_NOT_SAVED);
+		assertNoReplay(errorText(refused));
+		for (const code of ["EAI_AGAIN", "ENOTFOUND"]) {
+			expect(isRetryableAssistantError(errorProbe(`${backend.ACP_VENDOR_COMPACTION_NOT_SAVED} (code=${code})`))).toBe(
+				true,
+			);
+		}
+		expect(sentAfterBirth(c.world)).toEqual([]);
+		expect(recordOf(c.world, "vc-sent-not-saved").vendorCompaction).toBeUndefined();
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-DONE-NOT-SAVED] an accepted answer whose done cannot be written stops unknown with the session kept; the record keeps sent and the next call asks again", async () => {
+		const c = await compacted("vc-done-not-saved");
+		const recordDir = c.world.deps.sessionDir;
+		const badDir = join(SANDBOX, "vc-done-not-saved-not-a-directory");
+		writeFileSync(badDir, "keep");
+		c.world.hooks.answerFor = (p) => {
+			if (isCompact(p)) c.world.deps.sessionDir = badDir;
+			return undefined;
+		};
+		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		let stopped: AssistantMessageEvent;
+		try {
+			stopped = await c.turn();
+		} finally {
+			stderr.mockRestore();
+			c.world.deps.sessionDir = recordDir;
+		}
+		expect(errorText(stopped)).toBe(ACP_STOPS.vendorCompactUnknown.text);
+		expect(c.world.lifecycle).not.toContain("close");
+		expect(recordOf(c.world, "vc-done-not-saved").vendorCompaction?.state).toBe("sent");
+		if (stopped.type !== "error") throw new Error("expected an error seal");
+		c.pi.appendMessage(stopped.error);
+		c.world.hooks.answerFor = undefined;
+		await c.turn();
+		expect(c.world.prompts.filter(isCompact)).toHaveLength(2);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-CLAUDE-EVIDENCE] a completed report confirms, none leaves it unconfirmed and said so, a conflicting report stops unknown with the session kept; a report outside the request is not its evidence", async () => {
+		const cases: Array<[string, Array<Record<string, unknown>>, "confirmed" | "unconfirmed" | "stop"]> = [
+			["completed", FRAMES("c1", "in_progress", "completed", "completed"), "confirmed"],
+			["none", [], "unconfirmed"],
+			["failed", FRAMES("c1", "in_progress", "failed"), "stop"],
+			["cancelled", FRAMES("c1", "in_progress", "cancelled"), "stop"],
+			["unended", FRAMES("c1", "in_progress"), "stop"],
+			// A later different terminal for the same compaction is a conflict, not a repeat (D-3: fail closed).
+			["completed-then-failed", FRAMES("c1", "in_progress", "completed", "failed"), "stop"],
+			["completed-then-cancelled", FRAMES("c1", "in_progress", "completed", "cancelled"), "stop"],
+		];
+		for (const [name, frames, outcome] of cases) {
+			const id = `vc-evidence-${name}`;
+			const c = await compacted(id);
+			c.world.hooks.answerFor = (p, say) => {
+				if (!isCompact(p)) return undefined;
+				for (const frame of frames) say(frame);
+				return { stopReason: "end_turn" };
+			};
+			const result = await c.turn();
+			const record = recordOf(c.world, id);
+			if (outcome === "stop") {
+				expect(errorText(result), name).toBe(ACP_STOPS.vendorCompactUnknown.text);
+				expect(record.vendorCompaction?.state, name).toBe("sent");
+				expect(sentAfterBirth(c.world), name).toEqual([["/compact"]]);
+				expect(c.world.lifecycle, name).not.toContain("close");
+				continue;
+			}
+			if (result.type !== "done") throw new Error(`${name} sealed as ${result.type}`);
+			expect(record.vendorCompaction, name).toMatchObject({ state: "done", effect: outcome });
+			const shown = result.message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+			expect(shown.includes("effect is unconfirmed"), name).toBe(outcome === "unconfirmed");
+		}
+		// A completed report that reaches this backend while no request is on the wire (a resume replay) is not evidence.
+		const r = await compacted("vc-evidence-replay");
+		expect(backend.closeRetainedAcpSession("vc-evidence-replay")).toBe(true);
+		r.world.hooks.onResume = () => {
+			r.world.agentSays(FRAMES("replayed", "completed")[0]);
+		};
+		await r.turn();
+		expect(recordOf(r.world, "vc-evidence-replay").vendorCompaction).toMatchObject({ effect: "unconfirmed" });
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-CLAUDE-MEASURED] Claude's measured request, in its wire order (d3 claude-02-resume.wire-in.ndjson:10-17): confirmed, kept as a prelude record with its summary and the 1006 after it, and none of it is the delta's output", async () => {
+		const c = await compacted("vc-measured");
+		backend.takeAcpCompactionRecords("vc-measured");
+		const summary = [{ type: "text", text: "MEASURED-SUMMARY: the user asked me to remember a codeword." }];
+		c.world.hooks.answerFor = (p, say) => {
+			if (isCompact(p)) {
+				say({ sessionUpdate: "compaction_update", compactionId: "e205eb22", status: "in_progress" });
+				say({ sessionUpdate: "compaction_update", compactionId: "e205eb22", status: "completed", summary });
+				say({ sessionUpdate: "available_commands_update", availableCommands: [] });
+				say({ sessionUpdate: "compaction_update", compactionId: "e205eb22", status: "completed" });
+				say({ sessionUpdate: "usage_update", used: 1006, size: 1_000_000 });
+				return {
+					stopReason: "end_turn",
+					usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedWriteTokens: 0, totalTokens: 0 },
+				} as AcpPromptResponse;
+			}
+			say({ sessionUpdate: "usage_update", used: 4_928, size: 1_000_000 });
+			return undefined;
+		};
+		const next = await c.turn();
+		if (next.type !== "done") throw new Error(`sealed as ${next.type}`);
+		expect(recordOf(c.world, "vc-measured").vendorCompaction).toMatchObject({ state: "done", effect: "confirmed" });
+		const records = backend.takeAcpCompactionRecords("vc-measured").records;
+		expect(records).toHaveLength(1);
+		expect(records[0]).toMatchObject({
+			compactionId: "e205eb22",
+			status: "completed",
+			source: "prelude",
+			promptWasCompactCommand: true,
+			summarySource: "terminal",
+			tokensAfter: { value: 1006, source: "usage_update" },
+		});
+		expect(records[0].summary).toContain("MEASURED-SUMMARY");
+		const shown = next.message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+		expect(shown).not.toContain("MEASURED-SUMMARY");
+		expect(next.message.usage.totalTokens).toBe(4_928);
+		expect(c.world.prompts.some((p) => p.text.includes("MEASURED-SUMMARY"))).toBe(false);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-SUMMARY-NONE] Pi's own summary request, on a session with a Pi compaction pending, goes to its own child and asks nobody to compact; the pending request stays for the conversation's next turn", async () => {
+		const c = await compacted("vc-summary");
+		const children = c.world.children.length;
+		const summaryContext = normalizeContext({
+			systemPrompt: "summarize",
+			messages: [{ role: "user", content: "<conversation>seed</conversation>", timestamp: 0 }],
+		});
+		const opts = { sessionId: "vc-summary", reasoning: "medium", cacheRetention: "none" } as Parameters<
+			typeof backend.streamAcpTurn
+		>[2];
+		const events: AssistantMessageEvent[] = [];
+		for await (const event of backend.streamAcpTurn(sonnet(), summaryContext, opts, c.world.deps)) events.push(event);
+		expect(events.at(-1)?.type).toBe("done");
+		expect(c.world.prompts.filter(isCompact)).toEqual([]);
+		expect(c.world.children.length).toBe(children + 1);
+		expect(c.world.prompts.at(-1)?.sessionId).not.toBe(c.world.prompts[0].sessionId);
+		expect(recordOf(c.world, "vc-summary").vendorCompaction).toBeUndefined();
+		// The conversation's next turn still asks, once, on its own session.
+		await c.turn();
+		expect(sentAfterBirth(c.world).slice(-2)).toEqual([["/compact"], ["AFTER-COMPACTION"]]);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-AGY-END-TURN] agy: end_turn with no report proceeds unconfirmed on reuse and attach; the no-shrink line reads the anchor's stored used and never the request's own", async () => {
+		const agy = agyModel();
+		for (const closed of [false, true]) {
+			for (const [anchorUsed, deltaUsed, said] of [
+				[100_000, 95_000, true],
+				[100_000, 40_000, false],
+				[undefined, 95_000, false],
+			] as const) {
+				const id = `vc-agy-${closed}-${anchorUsed}-${deltaUsed}`;
+				const c = await compacted(id, { model: agy, anchorUsed });
+				if (closed) expect(backend.closeRetainedAcpSession(id)).toBe(true);
+				c.world.hooks.answerFor = (p, say) => {
+					// The request's own used is larger than the anchor's (measured agy: 25,231 over 23,403).
+					say({ sessionUpdate: "usage_update", used: isCompact(p) ? 110_883 : deltaUsed, size: 1_048_576 });
+					return { stopReason: "end_turn" };
+				};
+				const lines: string[] = [];
+				const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+					lines.push(String(chunk));
+					return true;
+				});
+				let next: AssistantMessageEvent;
+				try {
+					next = await c.turn();
+				} finally {
+					stderr.mockRestore();
+				}
+				const label = `${closed} ${anchorUsed} ${deltaUsed}`;
+				expect(next.type, label).toBe("done");
+				expect(sentAfterBirth(c.world), label).toEqual([["/compact"], ["AFTER-COMPACTION"]]);
+				expect(recordOf(c.world, id).vendorCompaction, label).toMatchObject({ state: "done", effect: "unconfirmed" });
+				const diagnostic = lines.filter((l) => l.includes("no shrink observed"));
+				expect(diagnostic.length, label).toBe(said ? 1 : 0);
+				if (said) expect(diagnostic[0], label).toContain(`of the ${anchorUsed} before`);
+			}
+		}
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-COST] Claude: the request's cost is not taken into the baseline, so the next observed cumulative diff carries it", async () => {
+		const c = await compacted("vc-cost");
+		c.world.hooks.answerFor = (p, say) => {
+			say({
+				sessionUpdate: "usage_update",
+				used: 2_000,
+				size: 1_000_000,
+				cost: { amount: isCompact(p) ? 0.5 : 0.6, currency: "USD" },
+			});
+			return undefined;
+		};
+		const next = await c.turn();
+		if (next.type !== "done") throw new Error(`sealed as ${next.type}`);
+		// The first turn reported no cumulative, so the baseline is 0: the whole 0.6 is this turn's.
+		expect(next.message.usage.cost.total).toBeCloseTo(0.6, 10);
+	});
+
+	/** An abort while the vendor compacts, on reuse (`closed` false) or attach (`closed` true). */
+	async function abortedDuringRequest(closed: boolean) {
+		const id = `vc-abort-${closed}`;
+		const c = await compacted(id);
+		if (closed) expect(backend.closeRetainedAcpSession(id)).toBe(true);
+		const lifecycle = c.world.lifecycle.length;
+		const children = c.world.children.length;
+		c.world.log.length = 0;
+		const controller = new AbortController();
+		c.world.hooks.answerFor = (p) => {
+			if (!isCompact(p)) return undefined;
+			return new Promise((resolve) => {
+				controller.signal.addEventListener("abort", () => resolve({ stopReason: "cancelled" }), { once: true });
+				setTimeout(() => controller.abort(), 0);
+			});
+		};
+		const stopped = await c.turn({ options: { signal: controller.signal } });
+		if (stopped.type !== "error") throw new Error("expected an error seal");
+		const label = String(closed);
+		expect(stopped.error.stopReason, label).toBe("aborted");
+		expect(sealedNotices(stopped).join("\n"), label).toContain("this turn was aborted during the compaction request");
+		expect(c.world.log, label).toContain("cancel");
+		expect(sentAfterBirth(c.world), label).toEqual([["/compact"]]);
+		expect(c.world.lifecycle.slice(lifecycle), label).toEqual([]);
+		expect(recordOf(c.world, id).vendorCompaction?.state, label).toBe("sent");
+		// The session was kept: the next call asks again on it, with no new child.
+		const childrenAfterStop = c.world.children.length;
+		c.pi.appendMessage(stopped.error);
+		c.pi.appendMessage({ role: "user", content: "AFTER-ABORT", timestamp: 9 });
+		c.world.hooks.answerFor = undefined;
+		expect((await c.turn()).type, label).toBe("done");
+		expect(c.world.children.length, label).toBe(childrenAfterStop);
+		expect(childrenAfterStop - children, label).toBe(closed ? 1 : 0);
+	}
+
+	it("[QK:ACP-VENDOR-COMPACT-ABORT] reuse: an abort during the request is a cancel first; an answered cancel keeps the session, nothing of the input is sent, the record says sent", async () => {
+		await abortedDuringRequest(false);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-ABORT-ATTACH] attach: the bootstrap teardown is handed over before the request, so an abort during it is a cancel first and the resumed session is kept", async () => {
+		await abortedDuringRequest(true);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-ANCHOR-STAYS] an attach whose request was answered without success keeps its session live and its anchor where the record has it", async () => {
+		const c = await compacted("vc-anchor");
+		expect(backend.closeRetainedAcpSession("vc-anchor")).toBe(true);
+		const anchor = recordOf(c.world, "vc-anchor").sealedTurnId;
+		c.world.hooks.answerFor = (p) => (isCompact(p) ? { stopReason: "refusal" } : undefined);
+		const stopped = await c.turn();
+		expect(errorText(stopped)).toBe(ACP_STOPS.vendorCompactFailed.text);
+		expect(recordOf(c.world, "vc-anchor").sealedTurnId).toBe(anchor);
+		if (stopped.type !== "error") throw new Error("expected an error seal");
+		c.pi.appendMessage(stopped.error);
+		c.pi.appendMessage({ role: "user", content: "AFTER-ANCHOR", timestamp: 9 });
+		c.world.hooks.answerFor = undefined;
+		const next = await c.turn();
+		expect(next.type).toBe("done");
+		// The kept session is reused: one resume in all, and its anchor still opens the walk.
+		expect(c.world.wire.filter((w) => w === "resume")).toHaveLength(1);
+		expect(c.world.children).toHaveLength(2);
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-RECORDED] Claude's compaction of the request is kept as a prelude record, also when the turn stops; agy's request leaves none", async () => {
+		for (const [name, stopAfter] of [
+			["done", false],
+			["stopped", true],
+		] as const) {
+			const id = `vc-recorded-${name}`;
+			const c = await compacted(id);
+			backend.takeAcpCompactionRecords(id);
+			c.world.hooks.answerFor = (p, say) => {
+				if (!isCompact(p)) return undefined;
+				for (const frame of FRAMES("rec-1", "in_progress", "completed")) say(frame);
+				say({ sessionUpdate: "usage_update", used: 1_006, size: 1_000_000 });
+				// A later failed report in the same request makes the answer a conflict: the turn stops.
+				if (stopAfter) say(FRAMES("rec-2", "failed")[0]);
+				return { stopReason: "end_turn" };
+			};
+			const result = await c.turn();
+			expect(result.type, name).toBe(stopAfter ? "error" : "done");
+			const taken = backend.takeAcpCompactionRecords(id).records;
+			expect(
+				taken.find((r) => r.compactionId === "rec-1"),
+				name,
+			).toMatchObject({
+				source: "prelude",
+				status: "completed",
+				promptWasCompactCommand: true,
+			});
+		}
+		const agy = await compacted("vc-recorded-agy", { model: agyModel() });
+		backend.takeAcpCompactionRecords("vc-recorded-agy");
+		await agy.turn();
+		expect(backend.takeAcpCompactionRecords("vc-recorded-agy").records).toEqual([]);
+	});
+
+	const overflowClaims = [
+		"[QK:ACP-VENDOR-COMPACT-OVERFLOW]",
+		"[QK:ACP-LENGTH-MARKER]",
+		"[QK:ACP-LENGTH-DISPATCH]",
+		"[QK:ACP-LENGTH-CAPTURE]",
+		"[QK:ACP-LENGTH-READER-PRE]",
+		"[QK:ACP-LENGTH-NO-REPLAY]",
+		"",
+		"[QK:ACP-LENGTH-SECOND-CUT]",
+		"",
+		"[QK:ACP-LENGTH-WAIT-AGAIN]",
+		"",
+		"[QK:ACP-LENGTH-READER-MAIN]",
+		"",
+		"",
+		"",
+		"",
+	];
+	let cell = 0;
+	for (const rail of ["claude", "agy"])
+		for (const kept of [true, false])
+			for (const closed of [false, true])
+				for (const next of ["continue", "new-input"] as const)
+					it(`${overflowClaims[cell++]} C3 ${rail} kept=${kept} closed=${closed} ${next}`, async () => {
+						const model = rail === "claude" ? sonnet() : agyModel();
+						// Use Pi's public entry writer and projection, not a fabricated summary in provider context.
+						const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+						try {
+							{
+								const label = `kept=${kept} closed=${closed} ${next}`;
+								const world = makeWorld();
+								const id = `vc-overflow-${model.id}-${kept}-${closed}-${next}`;
+								if (model.id.startsWith("agy-"))
+									world.hooks.modelAnswer = (value) => ({
+										configOptions: [
+											{ id: "model", currentValue: value },
+											{ id: "thought_level", currentValue: value },
+										],
+									});
+								const turn = (ctx: TranscriptContext) => runTurn(world, ctx, id, "high", { model });
+								const seed = await turn(transcript("seed"));
+								if (seed.type !== "done") throw new Error("seed");
+								world.hooks.stopReason = "max_tokens";
+								const cut = await turn(transcript("seed", "BRAVO"));
+								world.hooks.stopReason = "end_turn";
+								if (cut.type !== "done") throw new Error(`cut sealed as ${cut.type}`);
+								const pi = SessionManager.inMemory();
+								pi.appendMessage({ role: "user", content: "seed", timestamp: 0 });
+								pi.appendMessage(seed.message);
+								const bravoId = pi.appendMessage({ role: "user", content: "BRAVO", timestamp: 2 });
+								const observation = {
+									v: 1,
+									compactionId: "S8-completed",
+									status: "completed",
+									source: "prelude",
+									promptWasCompactCommand: true,
+									startedObservedAt: null,
+									endedObservedAt: new Date(0).toISOString(),
+									observedIntervalMs: null,
+									tokensBefore: null,
+									tokensAfter: null,
+									recordedAt: new Date(0).toISOString(),
+								};
+								pi.appendCustomEntry("entwurf-acp-compaction", observation);
+								const cutId = pi.appendMessage({
+									...cut.message,
+									content: [{ type: "thinking", thinking: "considering" }, ...cut.message.content],
+								});
+								pi.appendCustomEntry("entwurf-acp-compaction", observation);
+								pi.appendContextEdit(cutId, null);
+								pi.appendCustomEntry("entwurf-acp-compaction", observation);
+								pi.appendCompaction("SUMMARY-OF-OVERFLOW", kept ? bravoId : null, 1000);
+								const afterId =
+									next === "new-input" ? pi.appendMessage({ role: "user", content: "BRAVO", timestamp: 9 }) : undefined;
+								piHost.setBranch(id, pi.getBranch());
+								const context = structuredClone(
+									normalizeContext({
+										tools: PI_TOOLS,
+										messages: convertToLlm(pi.buildSessionContext().messages),
+									}),
+								);
+								if (closed) expect(backend.closeRetainedAcpSession(id), label).toBe(true);
+								const wire = world.wire.length;
+								const prompts = world.prompts.length;
+								const children = world.children.length;
+								const before = recordOf(world, id);
+								if (closed) {
+									store.writeSessionRecord(
+										{
+											...before,
+											unsealed: [{ turnId: "entwurf-turn:missing-input", inputEntryIds: ["not-on-this-branch"] }],
+										},
+										world.sessionDir,
+									);
+									piHost.setBranch(id, pi.getBranch());
+									expect(errorText(await turn(context))).toBe(ACP_STOPS.changed.text);
+									expect(world.wire.length).toBe(wire);
+									store.writeSessionRecord(before, world.sessionDir);
+								}
+								if (kept) {
+									for (const drift of ["alter", "add", "drop"]) {
+										const altered = structuredClone(context);
+										const pos = altered.messages.findIndex((m) => m.role === "user" && m.content === "BRAVO");
+										expect(pos).toBeGreaterThan(0);
+										altered.messages.splice(
+											pos,
+											drift === "add" ? 0 : 1,
+											...(drift === "drop" ? [] : [{ role: "user" as const, content: "tampered", timestamp: 1 }]),
+										);
+										piHost.setBranch(id, pi.getBranch());
+										expect(errorText(await turn(altered)), drift).toBe(ACP_STOPS.changed.text);
+										expect(world.wire.length).toBe(wire);
+									}
+								}
+								piHost.setBranch(id, pi.getBranch());
+								let marker: unknown;
+								world.hooks.answerFor = (p) => {
+									if (isCompact(p)) {
+										const last = context.messages.at(-1);
+										if (last?.role === "user") last.content = "CHANGED DURING PRELUDE";
+										return undefined;
+									}
+									marker = recordOf(world, id).pendingDispatch?.inputEntryIds;
+									return { stopReason: "max_tokens" };
+								};
+								// On attach there is only the main proof. Change the provider-side copy just after
+								// its final comparison, before rendering: only the selected raw input is authoritative.
+								if (closed && next === "new-input") {
+									const read = world.deps.sessionReader;
+									world.deps.sessionReader = () => {
+										const session = read();
+										if (!session?.buildSessionProjection) return session;
+										return {
+											...session,
+											buildSessionProjection: () => {
+												const projection = session.buildSessionProjection!();
+												const rows = projection.entries.slice();
+												projection.entries[Symbol.iterator] = function* () {
+													yield* rows;
+													const last = context.messages.at(-1);
+													if (last?.role === "user") last.content = "NOT RAW";
+													return undefined;
+												};
+												return projection;
+											},
+										};
+									};
+								}
+								const result = await turn(context);
+								if (next === "continue") {
+									expect(recordOf(world, id)).toEqual(before);
+									expect(errorText(result), label).toBe(ACP_STOPS.lengthWait.text);
+									expect(world.wire.slice(wire), label).toEqual([]);
+									expect(world.children.length - children, label).toBe(0);
+								} else {
+									expect(result.type, label).toBe("done");
+									expect(
+										world.prompts.slice(prompts).map((p) => [p.sessionId, p.blocks]),
+										label,
+									).toEqual([
+										[world.prompts[0].sessionId, ["/compact"]],
+										[world.prompts[0].sessionId, ["BRAVO"]],
+									]);
+									expect(marker).toEqual([afterId]);
+									if (result.type !== "done" || result.reason !== "length") throw Error("second cut expected");
+									world.hooks.answerFor = undefined;
+									pi.appendContextEdit(pi.appendMessage(result.message), null);
+									const project = () => {
+										piHost.setBranch(id, pi.getBranch());
+										return normalizeContext({
+											tools: PI_TOOLS,
+											messages: convertToLlm(pi.buildSessionContext().messages),
+										});
+									};
+									const count = world.prompts.length;
+									const sealed = recordOf(world, id),
+										wire2 = world.wire.length,
+										child2 = world.children.length;
+									const wait = await turn(project());
+									expect(errorText(wait)).toBe(ACP_STOPS.lengthWait.text);
+									expect(world.prompts.length).toBe(count);
+									if (wait.type !== "error") throw Error("wait expected");
+									pi.appendMessage(wait.error);
+									const repeat = await turn(project());
+									expect(errorText(repeat)).toBe(ACP_STOPS.lengthWait.text);
+									if (repeat.type !== "error") throw Error("repeat wait");
+									pi.appendMessage(repeat.error);
+									expect(world.wire.slice(wire2)).toEqual([]);
+									expect(world.children.length).toBe(child2);
+									expect(recordOf(world, id)).toEqual(sealed);
+									const lastId = pi.appendMessage({ role: "user", content: "AFTER2", timestamp: 10 });
+									world.hooks.onPrompt = () => {
+										expect(recordOf(world, id).pendingDispatch?.inputEntryIds).toEqual([lastId]);
+									};
+									const last = await turn(project());
+									if (last.type !== "done") throw Error("AFTER2 failed");
+									expect(recordOf(world, id)).toMatchObject({
+										sealedTurnId: last.message.responseId,
+										pendingDispatch: null,
+										vendorCompaction: sealed.vendorCompaction,
+									});
+									expect(world.wire.slice(wire2)).toEqual(["prompt"]);
+									expect(world.children.length).toBe(child2);
+									expect(world.prompts.slice(count).map((p) => [p.sessionId, p.blocks])).toEqual([
+										[world.prompts[0].sessionId, ["AFTER2"]],
+									]);
+								}
+							}
+						} finally {
+							stderr.mockRestore();
+						}
+					});
+
+	it("[QK:ACP-LENGTH-PRELUDE-RETRY] after a saved prelude failure the same vendor gets the two unsent inputs, once, in order", async () => {
+		for (const model of [sonnet(), agyModel()])
+			for (const failure of ["max_tokens", "unrecognized"]) {
+				const world = makeWorld();
+				const id = `length-retry-${model.id}-${failure}`;
+				if (model.id.startsWith("agy-"))
+					world.hooks.modelAnswer = (value) => ({
+						configOptions: [
+							{ id: "model", currentValue: value },
+							{ id: "thought_level", currentValue: value },
+						],
+					});
+				world.hooks.stopReason = "max_tokens";
+				const cut = await runTurn(world, transcript("initial"), id, "high", { model });
+				if (cut.type !== "done") throw Error("length birth");
+				const pi = SessionManager.inMemory();
+				pi.appendMessage({ role: "user", content: "initial", timestamp: 1 });
+				pi.appendContextEdit(pi.appendMessage(cut.message), null);
+				const turn = () => {
+					piHost.setBranch(id, pi.getBranch());
+					return runTurn(
+						world,
+						normalizeContext({ tools: PI_TOOLS, messages: convertToLlm(pi.buildSessionContext().messages) }),
+						id,
+						"high",
+						{ model },
+					);
+				};
+				const wait = await turn();
+				if (wait.type !== "error" || errorText(wait) !== ACP_STOPS.lengthWait.text) throw Error("omit-only wait");
+				pi.appendMessage(wait.error);
+				pi.appendCompaction("MANUAL", null, 1);
+				pi.appendMessage({ role: "user", content: "FIRST", timestamp: 2 });
+				world.hooks.answerFor = (p) => (isCompact(p) ? { stopReason: failure } : undefined);
+				const failed = await turn();
+				if (failed.type !== "error") throw Error("prelude failure expected");
+				expect(errorText(failed)).toBe(
+					ACP_STOPS[failure === "max_tokens" ? "vendorCompactFailed" : "vendorCompactUnknown"].text,
+				);
+				pi.appendMessage(failed.error);
+				world.hooks.answerFor = undefined;
+				world.hooks.stopReason = "end_turn";
+				pi.appendMessage({ role: "user", content: "SECOND", timestamp: 3 });
+				const next = await turn();
+				expect(next.type).toBe("done");
+				expect(world.prompts.slice(1).map((p) => p.blocks.map((x) => x.trimEnd()))).toEqual([
+					["/compact"],
+					["/compact"],
+					["FIRST", "SECOND"],
+				]);
+				expect(new Set(world.prompts.map((p) => p.sessionId)).size).toBe(1);
+			}
+	});
+
+	it("[QK:ACP-VENDOR-COMPACT-RECORD-ROUNDTRIP] every record write after the request keeps the slot: the dispatch marker and the seal of the delta", async () => {
+		const c = await compacted("vc-roundtrip");
+		let atMarker: unknown;
+		c.world.hooks.answerFor = (p) => {
+			if (!isCompact(p)) atMarker = recordOf(c.world, "vc-roundtrip").vendorCompaction;
+			return undefined;
+		};
+		const next = await c.turn();
+		expect(next.type).toBe("done");
+		const slot = { compactionEntryId: c.compactionId, acpSessionId: "ACP-1", state: "done", effect: "unconfirmed" };
+		expect(atMarker).toEqual(slot);
+		expect(recordOf(c.world, "vc-roundtrip").vendorCompaction).toEqual(slot);
+		expect(recordOf(c.world, "vc-roundtrip").pendingDispatch).toBeNull();
 	});
 });
