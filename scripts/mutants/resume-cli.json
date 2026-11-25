@@ -431,11 +431,9 @@
 			"title": "the line under the list no longer carries the chosen row's directory, so in a narrow terminal two siblings of different directories look the same",
 			"subject": "pi-extensions/lib/resume-picker.ts",
 			"find": [
-				"\t\t\t: fit(`selected: ${selected.gardenId}  in ${selected.cwd}${selected.pin === null ? \"\" : `  [${selected.pin}]`}`),"
+				"\t\tout.push(fit([...head, span(fitPath(selected.cwd, size.columns - displayWidth(joinSpans(head))), \"cwd\")]));"
 			],
-			"replace": [
-				"\t\t\t: fit(`selected: ${selected.gardenId}${selected.pin === null ? \"\" : `  [${selected.pin}]`}`),"
-			],
+			"replace": ["\t\tout.push(fit(head));"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-FRAME-INVARIANT]",
@@ -510,6 +508,89 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-DEAD-SINK-NO-UNHANDLED]",
 			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-CTRL-ALT-JK-MOVE",
+			"title": "a line feed is decoded as Enter again, so Ctrl-J — the key that moves down — reopens the citizen under the cursor",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\"\\n\": { kind: \"down\", lineFeed: true },"],
+			"replace": ["\t\"\\n\": { kind: \"enter\" },"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-CTRL-ALT-JK-MOVE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-ESC-OR-ALT-BY-WAIT",
+			"title": "a lone ESC cancels at once instead of waiting, so an Alt-J the terminal split after its ESC ends the list instead of moving",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\t\t\t\tif (PASTE_START.startsWith(rest)) {"],
+			"replace": [
+				"\t\t\t\t\tif (rest === ESC) {",
+				"\t\t\t\t\t\tkeys.push({ kind: \"cancel\" });",
+				"\t\t\t\t\t\tbreak;",
+				"\t\t\t\t\t}",
+				"\t\t\t\t\tif (PASTE_START.startsWith(rest)) {"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-ESC-OR-ALT-BY-WAIT]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-PASTED-LF-NO-MOVE",
+			"title": "a line feed beside typed text in one read still moves, so an unmarked paste's line breaks move the cursor off the row the operator was looking at",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\treturn !(withText && \"lineFeed\" in key);"],
+			"replace": ["\t\treturn true;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-PASTED-LF-NO-MOVE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-BOOKMARK-NAME-FIRST",
+			"title": "the bookmark name is never drawn in the row, so a bookmarked sibling is a bare id again and the operator must read the selected line to know who it is",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tlet name = Math.min(nameFull, Math.max(0, room - GAP.length));"],
+			"replace": ["\tlet name = 0;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-BOOKMARK-NAME-FIRST]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-SECTION-RULER",
+			"title": "a section title is drawn as a short plain line again, so it reads like a row and the sections run together",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\treturn [", "\t\tspan(\"== \", \"rule\"),"],
+			"replace": ["\treturn [", "\t\tspan(\"-- \"),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-SECTION-RULER]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-WHOLE-OR-NOTHING",
+			"title": "the activity time is drawn whether or not it fits, so a narrow terminal cuts it to a fragment like 2026-11- again",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tconst activity = room >= GAP.length + activityCells ? activityCells : 0;"],
+			"replace": ["\tconst activity = activityCells;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-WHOLE-OR-NOTHING]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-EMPTY-SAYS-NEXT",
+			"title": "the Enter line keeps promising a reopen while no row is listed, so the screen says Enter will open something when it can open nothing",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tout.push(fit([span(rows.length === 0 ? ENTER_LINE_EMPTY : ENTER_LINE[rail], \"key\")]));"],
+			"replace": ["\tout.push(fit([span(ENTER_LINE[rail], \"key\")]));"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-EMPTY-SAYS-NEXT]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
 		}
 	]
 }
