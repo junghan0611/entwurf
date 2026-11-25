@@ -344,9 +344,10 @@ export interface PickerSize {
 const HEAD_LINES = 3;
 const FOOT_LINES = 4;
 
-/** The smallest terminal the list is usable in: one body line, and wide enough for a row's marker,
- * full garden id, backend and facts (59 cells), for the sentence that says what Enter does and for
- * the compact line of keys (64 cells) — none of them cut. */
+/** The smallest terminal the list is usable in: one body line, and wide enough for an unbookmarked
+ * row's marker, full garden id, backend and facts (59 cells; a bookmarked row gives up its facts and
+ * backend for its name), for the sentence that says what Enter does and for the compact line of keys
+ * (64 cells) — none of them cut. */
 export const PICKER_MIN_SIZE: PickerSize = { columns: 64, rows: HEAD_LINES + 1 + FOOT_LINES };
 
 export function pickerFits(size: PickerSize): boolean {
@@ -529,6 +530,7 @@ interface RowColumns {
 	/** Cells of the bookmark name; 0 when this kind carries none or no cell is left for one. */
 	name: number;
 	id: number;
+	/** 0 when left out: only a bookmarked row, and only to keep its name. */
 	backend: number;
 	facts: number;
 	/** Cells of the activity time; 0 when it does not fit whole, and then nothing after it is drawn. */
@@ -537,7 +539,9 @@ interface RowColumns {
 
 /**
  * Where each field of a row goes (#176). The bookmark mark and name come first, then what must
- * never be cut — the whole garden id, the backend and the facts, which the minimum size guarantees —
+ * never be cut — the whole garden id, and on an unbookmarked row the backend and the facts, which the
+ * minimum size guarantees; a bookmarked row draws its facts and backend only where they fit after its
+ * name —
  * then the activity time, the model and the directory, each drawn whole or not at all (a cut path
  * keeps its end). A bookmarked row is found by its name and kept in bookmark order, so its name
  * takes room before its activity time does; an unbookmarked row is ordered and found by its time,
@@ -553,12 +557,23 @@ function rowColumns(texts: readonly ResumeRowText[], pinned: boolean, columns: n
 	const nameFull = pinned ? Math.min(NAME_MAX_CELLS, widest(texts.map((t) => t.pin ?? ""))) : 0;
 	// A listing with no bookmark draws no bookmark column at all.
 	if (pinned && nameFull === 0) return { pinned, name: 0, id, backend, facts, activity: 0 };
-	let room = columns - (2 + (pinned ? 2 : 0) + id + GAP.length + backend + GAP.length + facts);
+	// What is set aside before the name. An unbookmarked row has no name and keeps its backend and
+	// facts whole (the minimum size guarantees it). A bookmarked row keeps its NAME before them
+	// (#176: the name is how it is found, in a narrow Korean terminal too): only the id, its address,
+	// comes first; then the facts, then the backend, each drawn only where it still fits whole.
+	const reserved = pinned ? 0 : GAP.length + backend + GAP.length + facts;
+	let room = columns - (2 + (pinned ? 2 : 0) + id) - reserved;
 	let name = Math.min(nameFull, Math.max(0, room - GAP.length));
 	if (name < Math.min(nameFull, NAME_MIN_CELLS)) name = 0;
 	if (name > 0) room -= name + GAP.length;
+	const factsShown = !pinned || room >= GAP.length + facts;
+	if (pinned && factsShown) room -= GAP.length + facts;
+	const backendShown = !pinned || room >= GAP.length + backend;
+	if (pinned && backendShown) room -= GAP.length + backend;
+	// Nothing is drawn after a field that was left out: a time beside an id reads as the wrong column.
+	if (!factsShown || !backendShown) room = 0;
 	const activity = room >= GAP.length + activityCells ? activityCells : 0;
-	return { pinned, name, id, backend, facts, activity };
+	return { pinned, name, id, backend: backendShown ? backend : 0, facts: factsShown ? facts : 0, activity };
 }
 
 /** One row as pieces: `> ` on the cursor's row, `* ` and the name on a bookmarked one. */
@@ -568,17 +583,17 @@ function rowSpans(text: ResumeRowText, cols: RowColumns, cursor: boolean, column
 		out.push(span("* ", "pin"));
 		if (cols.name > 0) out.push(span(padCells(cutName(text.pin ?? "", cols.name), cols.name), "pin"), span(GAP));
 	}
-	out.push(
-		span(padCells(text.gardenId, cols.id), "id"),
-		span(GAP),
-		span(padCells(text.backend, cols.backend), "backend"),
-	);
-	out.push(span(GAP));
-	for (const [i, fact] of text.facts.entries()) {
-		if (i > 0) out.push(span(", "));
-		out.push(span(fact, "fact"));
+	out.push(span(padCells(text.gardenId, cols.id), "id"));
+	// A width of 0 is a column left out (a bookmarked row in a narrow terminal), never a cut one.
+	if (cols.backend > 0) out.push(span(GAP), span(padCells(text.backend, cols.backend), "backend"));
+	if (cols.facts > 0) {
+		out.push(span(GAP));
+		for (const [i, fact] of text.facts.entries()) {
+			if (i > 0) out.push(span(", "));
+			out.push(span(fact, "fact"));
+		}
+		out.push(span(" ".repeat(Math.max(0, cols.facts - displayWidth(text.facts.join(", "))))));
 	}
-	out.push(span(" ".repeat(Math.max(0, cols.facts - displayWidth(text.facts.join(", "))))));
 	if (cols.activity > 0) {
 		out.push(span(GAP), span(padCells(text.activity, cols.activity), "activity"));
 		let used = displayWidth(joinSpans(out));

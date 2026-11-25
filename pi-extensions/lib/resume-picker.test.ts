@@ -45,6 +45,9 @@
  *                                       each drawn whole or not at all (a path may keep its end)
  *   RESUMEPICK-EMPTY-SAYS-NEXT          with no row to draw the screen says what is empty and which
  *                                       keys bring rows back, and Enter says and does nothing
+ *   RESUMEPICK-NARROW-KEEPS-NAME        in a narrow terminal a bookmarked row keeps its whole name next
+ *                                       to its whole id; facts, then backend, are drawn only where
+ *                                       they fit whole; only a name past the column's cap is cut (`~`)
  *   RESUMEPICK-COLOR-BY-ROLE            with colour on, each piece is coloured by what it is — bookmark,
  *                                       id, fact state, title — the cursor's row is one reverse bar,
  *                                       and stripped of colour every line is the plain line
@@ -852,16 +855,37 @@ describe("the entwurf resume picker", () => {
 				pinnedRow(wide, 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}  pi `) &&
 				pinnedRow(wide, 5).startsWith(`  ${fact(5).gardenId}  claude-code  receiver none`) &&
 				pinnedRow(at(90), 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}`) &&
-				pinnedRow(at(72), 3).startsWith(`  * 실무코디-TE~  ${fact(3).gardenId}`) &&
+				pinnedRow(at(72), 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}`) &&
 				screenWidth.includes(`selected: ${fact(3).gardenId}  [실무코디-TERRA]  in ${HERE}`) &&
-				pinnedRow(narrow, 1).startsWith(`> * ${fact(1).gardenId}  pi-durable   receiver active`) &&
+				pinnedRow(narrow, 1).startsWith(`> * 운영코디        ${fact(1).gardenId}  receiver active`) &&
 				narrow.some((l) => l.startsWith(`selected: ${fact(1).gardenId}  [운영코디]`)) &&
 				WIDTHS.every((columns) =>
 					visibleResumeRows(SCREEN_LIKE, allRows()).every((row) => {
 						const line = pinnedRow(at(columns), Number(row.gardenId.slice(9, 15)));
-						return line.includes(`${row.gardenId}  ${row.backend}`) && line.includes(row.facts);
+						return row.pin === null
+							? line.includes(`${row.gardenId}  ${row.backend}`) && line.includes(row.facts)
+							: new RegExp(`^[> ] \\* ${row.pin} +${row.gardenId}`).test(line);
 					}),
 				),
+		);
+	});
+
+	it("[QK:RESUMEPICK-NARROW-KEEPS-NAME] in a narrow terminal a bookmarked row keeps its whole Korean name beside its whole garden id; its facts and then its backend are drawn only where they still fit whole, so they give way before the name is ever cut; only a name longer than the column's cap is cut, and then with `~`; an unbookmarked row still keeps its backend and facts", () => {
+		const at = (columns: number): string[] =>
+			renderPickerFrame(SCREEN_LIKE, allRows(), { columns, rows: 20 }, "tmux").lines;
+		const row = (lines: string[], n: number): string => lines.find((l) => l.includes(fact(n).gardenId)) ?? "";
+		const long = buildResumeListing([fact(1)], HERE, [
+			{ gardenId: fact(1).gardenId, name: "아주아주긴이름의북마크형제입니다" },
+		]);
+		const longRow = renderPickerFrame(long, INITIAL_PICKER_STATE, { columns: 64, rows: 10 }, "tmux").lines[4] ?? "";
+		ok(
+			"the name outranks the backend and the facts; the id is never cut; the cap alone cuts a name",
+			row(at(64), 3) === `  * 실무코디-TERRA  ${fact(3).gardenId}  socket dead` &&
+				row(at(64), 2) === `  * ACP 담당-ff0    ${fact(2).gardenId}  receiver inactive` &&
+				row(at(72), 3) === `  * 실무코디-TERRA  ${fact(3).gardenId}  socket dead` &&
+				row(at(80), 3) === `  * 실무코디-TERRA  ${fact(3).gardenId}  pi           socket dead` &&
+				row(at(64), 5) === `  ${fact(5).gardenId}  claude-code  receiver none` &&
+				longRow === `> * 아주아주긴이름의북마크~   ${fact(1).gardenId}  pi`,
 		);
 	});
 
