@@ -1,7 +1,7 @@
 // #175 M1/M3 — does a vendor session that was RESUMED compact itself on a `/compact` prompt sent alone, and how
 // much does its occupancy fall? NOT a gate.
 //
-//   LIVE=1 [PROBE_MODEL=<id>] [ENTWURF_RAW_FILLER_TOKENS=<n>] \
+//   LIVE=1 [PROBE_MODEL=<id>] [ENTWURF_RAW_FILLER_TOKENS=<n>] [ENTWURF_RAW_COMPACT_REPEAT=<1-3>] \
 //     scripts/raw-acp-session-measure/run.sh compact-resume <out-dir> [claude|agy]
 //
 // Raw JSON-RPC over the production overlay, adapter and enforce functions (harness.mjs), as continuity.mjs:
@@ -9,6 +9,10 @@
 //            default 40000), one short prompt (U0 = its last usage_update.used), then the production close;
 //   child 2: session/resume of that id, `/compact` as the only block of one prompt (#171 U14), a recall prompt
 //            (U1) and one more short prompt (U2).
+// ENTWURF_RAW_COMPACT_REPEAT=2 or 3 (#175 D-3) sends `/compact` alone that many times in a row on the resumed
+// session (`compact`, `compact2`, `compact3`: the later ones meet a session already compacted) and skips the
+// last short prompt; with a small filler it asks what a vendor answers when there is little or nothing left
+// to compact.
 // Recorded per prompt: stopReason, PromptResponse.usage, every compaction frame, every usage_update.used;
 // for Claude also the vendor's own transcript (assistant occupancy and compact boundaries).
 // The fixed reading (#175): GREEN when U1 <= 0.5 * U0 and U0 - U1 >= 30000, RED when U1 >= 0.9 * U0, else
@@ -53,6 +57,9 @@ const FILLER_TOKENS = Number(process.env.ENTWURF_RAW_FILLER_TOKENS ?? 40_000);
 const PARTS = Number(process.env.ENTWURF_RAW_PLANT_PARTS ?? 1);
 if (!Number.isInteger(PARTS) || PARTS < 1 || PARTS > 4)
 	throw new Error(`ENTWURF_RAW_PLANT_PARTS must be 1-4: ${PARTS}`);
+const REPEAT = Number(process.env.ENTWURF_RAW_COMPACT_REPEAT ?? 1);
+if (!Number.isInteger(REPEAT) || REPEAT < 1 || REPEAT > 3)
+	throw new Error(`ENTWURF_RAW_COMPACT_REPEAT must be 1-3: ${REPEAT}`);
 if (!Number.isInteger(FILLER_TOKENS) || FILLER_TOKENS < 1000)
 	throw new Error(`ENTWURF_RAW_FILLER_TOKENS must be an integer >= 1000: ${FILLER_TOKENS}`);
 
@@ -220,6 +227,7 @@ const summary = {
 	fillerTokensRequested: FILLER_TOKENS,
 	fillerChars: filler.length,
 	plantParts: PARTS,
+	compactRepeat: REPEAT,
 	word,
 	mtimeBefore: { claude: mt(CLAUDE_CRED), agy: mt(TOKEN) },
 	phases: {},
@@ -265,12 +273,17 @@ try {
 	};
 	if (resumed.ok) {
 		summary.run.enforce2 = await enforce(B, c2, sid, true);
-		const compact = await prompt(c2, sid, "compact", "/compact");
-		summary.phases.compact = facts(c2, "compact", compact);
+		for (let n = 1; n <= REPEAT; n++) {
+			const name = n === 1 ? "compact" : `compact${n}`;
+			const compact = await prompt(c2, sid, name, "/compact");
+			summary.phases[name] = facts(c2, name, compact);
+		}
 		const recall = await prompt(c2, sid, "recall", "What is the codeword I gave you? Reply with the codeword alone.");
 		summary.phases.recall = facts(c2, "recall", recall);
-		const after = await prompt(c2, sid, "after", "Reply with exactly: DONE");
-		summary.phases.after = facts(c2, "after", after);
+		if (REPEAT === 1) {
+			const after = await prompt(c2, sid, "after", "Reply with exactly: DONE");
+			summary.phases.after = facts(c2, "after", after);
+		}
 	}
 	summary.run.end2 = await c2.end("normal");
 

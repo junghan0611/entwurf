@@ -46,6 +46,7 @@
 #   ENTWURF_RAW_COMPACT_MODE    optional (#175): pi-compact's manual | threshold
 #   ENTWURF_RAW_FILLER_TOKENS   optional (#175): pi-compact and compact-resume filler size
 #   ENTWURF_RAW_PLANT_PARTS     optional (#175): compact-resume's number of plant prompts (1-4)
+#   ENTWURF_RAW_COMPACT_REPEAT  optional (#175 D-3): compact-resume's number of `/compact` prompts in a row (1-3)
 set -euo pipefail
 
 die() {
@@ -108,7 +109,7 @@ if [ -n "${ENTWURF_RAW_AGY_MODEL:-}" ]; then child_env+=(ENTWURF_RAW_AGY_MODEL="
 if [ -n "${ENTWURF_RAW_PI_MODEL:-}" ]; then child_env+=(ENTWURF_RAW_PI_MODEL="$ENTWURF_RAW_PI_MODEL"); fi
 if [ -n "${ENTWURF_RAW_ROWS:-}" ]; then child_env+=(ENTWURF_RAW_ROWS="$ENTWURF_RAW_ROWS"); fi
 for name in ENTWURF_RAW_PI_CLI ENTWURF_RAW_PI_RESERVE_TOKENS ENTWURF_RAW_QUIT_VARIANT ENTWURF_RAW_QUIT_KEEPALIVE \
-	ENTWURF_RAW_COMPACT_MODE ENTWURF_RAW_FILLER_TOKENS ENTWURF_RAW_PLANT_PARTS; do
+	ENTWURF_RAW_COMPACT_MODE ENTWURF_RAW_FILLER_TOKENS ENTWURF_RAW_PLANT_PARTS ENTWURF_RAW_COMPACT_REPEAT; do
 	if [ -n "${!name:-}" ]; then child_env+=("$name=${!name}"); fi
 done
 if [ -n "${ENTWURF_RAW_CLAUDE_ACP_PREFIX:-}" ]; then
