@@ -29,6 +29,14 @@
  *   RESUMEPICK-SCROLL-KEEPS-CURSOR      with hundreds of rows the cursor's row stays in the window
  *   RESUMEPICK-SCREEN-SAYS-ENTER        the frame states what Enter does on this rail, the filter and
  *                                       how to lift it, and shows the chosen row's directory
+ *   RESUMEPICK-CTRL-ALT-JK-MOVE         Ctrl-J / Alt-J move down and Ctrl-K / Alt-K move up beside the
+ *                                       arrows (#176); a line feed is Ctrl-J, never Enter, so only a
+ *                                       carriage return chooses, and the keys line names what acts
+ *   RESUMEPICK-ESC-OR-ALT-BY-WAIT       the short wait alone tells Esc from Alt-J/K: a letter within it
+ *                                       (same read or the next) moves and never cancels; an ESC that
+ *                                       nothing follows cancels and is never taken as a move
+ *   RESUMEPICK-PASTED-LF-NO-MOVE        a line feed sharing its read with typed text is a pasted line
+ *                                       break and moves nothing; line feeds on their own still move
  */
 
 import { describe, expect, it } from "vitest";
@@ -84,6 +92,11 @@ const THREE = [fact(1), fact(2), fact(3)];
 const LISTING = buildResumeListing(THREE, HERE, []);
 const ORDER = visibleResumeRows(LISTING, INITIAL_PICKER_STATE).map((r) => r.gardenId);
 const ROOMY: PickerSize = { columns: 100, rows: 20 };
+/** The keys line, written out here rather than read from the module: the wide one where it fits,
+ * else the compact one, which must fit the narrowest terminal the list is drawn in. */
+const KEYS_FULL = "Esc: open nothing | Up/Down, Ctrl-J/K, Alt-J/K, PgUp/PgDn: move | type to narrow";
+const KEYS_COMPACT = "Esc: open nothing | Up/Down, Ctrl/Alt-J/K: move | type to narrow";
+const keysAt = (columns: number): string => (columns >= KEYS_FULL.length ? KEYS_FULL : KEYS_COMPACT);
 
 interface Faults {
 	/** The index of the write that throws. */
@@ -343,7 +356,7 @@ describe("the entwurf resume picker", () => {
 						(frame.lines[frame.cursorLine] ?? "").startsWith(`> ${id}`) &&
 						(frame.lines[height - 4] ?? "").startsWith(`selected: ${id}  in /work/`) &&
 						frame.lines[height - 2] === "Enter: reopen in a new tmux window beside this one" &&
-						frame.lines[height - 1] === "Esc: open nothing | Up/Down, PgUp/PgDn: move | type to narrow";
+						frame.lines[height - 1] === keysAt(columns);
 					if (!good) broken.push(`${columns}x${height} cursor ${cursor}`);
 				}
 			}
@@ -552,7 +565,7 @@ describe("the entwurf resume picker", () => {
 						"selected: 20261101T000001-aaaaab  in /home/operator/repos/other-project  [운영코",
 						"",
 						"Enter: reopen in a new tmux window beside this one",
-						"Esc: open nothing | Up/Down, PgUp/PgDn: move | type to narrow",
+						KEYS_FULL,
 					]) &&
 				typed.kind === "continue" &&
 				visibleResumeRows(pinned, typed.state).length === 1 &&
@@ -635,7 +648,7 @@ describe("the entwurf resume picker", () => {
 			"the action, the filter, the sections, the chosen directory and the uncounted are all on screen",
 			at(tmux, 2) === "Enter: reopen in a new tmux window beside this one" &&
 				at(herdr, 2) === "Enter: reopen in a new herdr tab" &&
-				at(tmux, 1) === "Esc: open nothing | Up/Down, PgUp/PgDn: move | type to narrow" &&
+				at(tmux, 1) === KEYS_FULL &&
 				tmux[1] === `directory: ${HERE}  (Ctrl-A: all directories)` &&
 				all[1] === "all directories  (Ctrl-A: this directory only)" &&
 				tmux.includes("-- Bookmarked, other directories") &&
@@ -645,6 +658,117 @@ describe("the entwurf resume picker", () => {
 				at(tmux, 3) === "1 citizen of other backends is not listed (codex 1) | 1 bookmark has no record here" &&
 				at(all, 3) === "2 citizens of other backends are not listed (codex 2) | 1 bookmark has no record here" &&
 				tmux[0] === "entwurf resume - 2 of 2 shown",
+		);
+	});
+	it("[QK:RESUMEPICK-CTRL-ALT-JK-MOVE] Ctrl-J and Alt-J move down, Ctrl-K and Alt-K move up, beside the arrows and Ctrl-N / Ctrl-P (#176); a line feed is Ctrl-J and never chooses, so only a carriage return is Enter; and every key the keys line names acts as named", async () => {
+		const moveTo = async (keys: string[]): Promise<unknown> => {
+			const t = terminal();
+			const p = runResumePicker(LISTING, "tmux", t.io);
+			for (const key of keys) t.send(key);
+			t.send("\r");
+			return p;
+		};
+		const lf = terminal();
+		let lfDone = false;
+		const pLf = runResumePicker(LISTING, "tmux", lf.io).then((r) => {
+			lfDone = true;
+			return r;
+		});
+		lf.send("\n");
+		lf.send("\n");
+		lf.send("\n");
+		await Promise.resolve();
+		const lfOpen = !lfDone;
+		const lfCursorRow = lf.screen().find((line) => line.startsWith("> ")) ?? "";
+		lf.send("\r");
+		const at = (n: number): string => JSON.stringify({ kind: "selected", gardenId: ORDER[n] });
+		ok(
+			"each named key moves the way it says, a line feed moves and opens nothing, and CR chooses",
+			JSON.stringify(decodeOnce("\n")) === JSON.stringify([{ kind: "down", lineFeed: true }]) &&
+				JSON.stringify(decodeOnce("\x0b")) === JSON.stringify([{ kind: "up" }]) &&
+				JSON.stringify(decodeOnce("\x1bj")) === JSON.stringify([{ kind: "down" }]) &&
+				JSON.stringify(decodeOnce("\x1bk")) === JSON.stringify([{ kind: "up" }]) &&
+				JSON.stringify(decodeOnce("\r")) === JSON.stringify([{ kind: "enter" }]) &&
+				JSON.stringify(await moveTo(["\n"])) === at(1) &&
+				JSON.stringify(await moveTo(["\x1bj", "\x1bj"])) === at(2) &&
+				JSON.stringify(await moveTo(["\n", "\n", "\x0b"])) === at(1) &&
+				JSON.stringify(await moveTo(["\x1bj", "\x1bj", "\x1bk"])) === at(1) &&
+				JSON.stringify(await moveTo(["\x1b[B", "\x0e", "\x10"])) === at(1) &&
+				JSON.stringify(await moveTo(["\x1b[6~", "\x1b[5~"])) === at(0) &&
+				lfOpen &&
+				lfCursorRow.includes(ORDER[2] as string) &&
+				JSON.stringify(await pLf) === at(2),
+		);
+	});
+
+	it("[QK:RESUMEPICK-ESC-OR-ALT-BY-WAIT] the short wait alone tells Esc from Alt-J/K: an ESC whose letter arrives within the wait — in the same read or in the next one — moves and never cancels, an ESC that nothing follows within the wait cancels and is never taken as a move, and a letter after that cancel finds no list", async () => {
+		const split = terminal();
+		let splitDone = false;
+		const pSplit = runResumePicker(LISTING, "tmux", split.io).then((r) => {
+			splitDone = true;
+			return r;
+		});
+		split.send("\x1b");
+		const waitArmed = split.calls.includes(`timer:${PICKER_ESC_WAIT_MS}`);
+		split.send("j");
+		await Promise.resolve();
+		const notCancelled = !splitDone;
+		const noWaitLeft = !split.fireTimer();
+		const splitSearch = split.screen()[2];
+		split.send("\r");
+		const lone = terminal();
+		const pLone = runResumePicker(LISTING, "tmux", lone.io);
+		lone.send("\x1b[B");
+		lone.send("\x1b");
+		lone.fireTimer();
+		const loneResult = await pLone;
+		const writesAfterCancel = lone.written.length;
+		lone.send("j");
+		lone.send("\r");
+		ok(
+			"a letter inside the wait binds to the ESC; an ESC alone is Esc; nothing acts after it",
+			waitArmed &&
+				notCancelled &&
+				noWaitLeft &&
+				splitSearch === "search: " &&
+				JSON.stringify(await pSplit) === JSON.stringify({ kind: "selected", gardenId: ORDER[1] }) &&
+				JSON.stringify(loneResult) === JSON.stringify({ kind: "cancelled" }) &&
+				lone.written.length === writesAfterCancel &&
+				!lone.listening(),
+		);
+	});
+
+	it("[QK:RESUMEPICK-PASTED-LF-NO-MOVE] a line feed that shares its read with typed text is a pasted line break from a terminal that did not mark the paste: it moves nothing and chooses nothing, while line feeds with no text beside them — Ctrl-J held down — still move", async () => {
+		const t = terminal();
+		let done = false;
+		const p = runResumePicker(LISTING, "tmux", t.io).then((r) => {
+			done = true;
+			return r;
+		});
+		t.send("pro\nvider\n");
+		await Promise.resolve();
+		const open = !done;
+		const search = t.screen()[2];
+		const cursorRow = t.screen().find((line) => line.startsWith("> ")) ?? "";
+		t.send("\r");
+		ok(
+			"pasted line breaks are dropped beside text, and Ctrl-J alone in a read still moves",
+			JSON.stringify(keysOfOneRead(decodeOnce("ab\ncd\n"))) ===
+				JSON.stringify([
+					{ kind: "text", text: "ab" },
+					{ kind: "text", text: "cd" },
+				]) &&
+				JSON.stringify(keysOfOneRead(decodeOnce("\n\n"))) ===
+					JSON.stringify([
+						{ kind: "down", lineFeed: true },
+						{ kind: "down", lineFeed: true },
+					]) &&
+				JSON.stringify(keysOfOneRead(decodeOnce("x\x1b[B"))) ===
+					JSON.stringify([{ kind: "text", text: "x" }, { kind: "down" }]) &&
+				open &&
+				search === "search: provider" &&
+				cursorRow.includes(ORDER[0] as string) &&
+				JSON.stringify(await p) === JSON.stringify({ kind: "selected", gardenId: ORDER[0] }),
 		);
 	});
 });

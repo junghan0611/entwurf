@@ -9,16 +9,19 @@
  * and the keys the operator presses: no record, no socket, no lock, no launch. Esc and Ctrl-C return
  * `cancelled`. Anything else that ends the picker is a thrown error, which is neither of those.
  *
- * ENTER IS THE ONLY KEY THAT CHOOSES. There is no confirmation line, so
- * the choice is guarded where it is made:
+ * ENTER IS THE ONLY KEY THAT CHOOSES, and Enter is a carriage return (CR: what the Enter key sends
+ * in raw mode, through tmux too). A line feed (LF) is Ctrl-J, which MOVES DOWN (#176): a path that
+ * sent LF for Enter would move the cursor and open nothing, never the other way round. There is no
+ * confirmation line, so the choice is guarded where it is made:
  *   - the screen says in words what Enter will do, and Enter is honoured only while the whole frame
  *     fits — the row under the cursor with its full garden id, and that sentence. In a terminal too
  *     small for it the list says so, Enter does nothing, and only a cancel leaves;
  *   - a MARKED paste does not choose. Bracketed paste is switched on, so a paste arrives between
  *     markers and its line breaks become spaces in the search;
  *   - an UNMARKED paste is only mitigated: an Enter that arrives in the same read as any other key
- *     is dropped. That is a same-read mitigation, not proof of intent — it cannot tell who pressed
- *     an Enter that arrives alone.
+ *     is dropped, and so is a line feed that arrives in the same read as typed text (a pasted line
+ *     break, not a Ctrl-J). That is a same-read mitigation, not proof of intent — it cannot tell
+ *     who pressed an Enter that arrives alone.
  * KNOWN RESIDUAL RISK (accepted by GLG, 2026-11-24): if a terminal ignores bracketed paste AND
  * delivers a pasted text and its trailing line break in separate reads, that line break is an Enter
  * on its own and DOES choose the row the pasted text narrowed to. Nothing here can tell that Enter
@@ -102,6 +105,9 @@ export function fitToWidth(text: string, cells: number): string {
 export type PickerKey =
 	| { kind: "text"; text: string }
 	| { kind: "up" | "down" | "page-up" | "page-down" | "home" | "end" }
+	/** Ctrl-J. A move down like any other, except that a line feed sharing its read with typed text
+	 * is a pasted line break and is dropped (`keysOfOneRead`). */
+	| { kind: "down"; lineFeed: true }
 	| { kind: "backspace" | "clear" | "toggle-directories" | "enter" | "cancel" };
 
 const ESC = "\x1b";
@@ -109,6 +115,9 @@ const PASTE_START = `${ESC}[200~`;
 const PASTE_END = `${ESC}[201~`;
 
 const SEQUENCES: readonly [string, PickerKey["kind"]][] = [
+	// Alt-J / Alt-K arrive as ESC and the letter (#176). Every other Alt chord is skipped whole.
+	[`${ESC}j`, "down"],
+	[`${ESC}k`, "up"],
 	[`${ESC}[A`, "up"],
 	[`${ESC}OA`, "up"],
 	[`${ESC}[B`, "down"],
@@ -123,17 +132,19 @@ const SEQUENCES: readonly [string, PickerKey["kind"]][] = [
 	[`${ESC}[4~`, "end"],
 ];
 
-const SIMPLE_KEYS: Readonly<Record<string, PickerKey["kind"]>> = {
-	"\r": "enter",
-	"\n": "enter",
-	"\x03": "cancel",
-	"\x07": "cancel",
-	"\x7f": "backspace",
-	"\x08": "backspace",
-	"\x15": "clear",
-	"\x01": "toggle-directories",
-	"\x10": "up",
-	"\x0e": "down",
+const SIMPLE_KEYS: Readonly<Record<string, PickerKey>> = {
+	"\r": { kind: "enter" },
+	// Ctrl-J is a line feed and Ctrl-K a vertical tab: down and up (#176), beside Ctrl-N / Ctrl-P.
+	"\n": { kind: "down", lineFeed: true },
+	"\x0b": { kind: "up" },
+	"\x03": { kind: "cancel" },
+	"\x07": { kind: "cancel" },
+	"\x7f": { kind: "backspace" },
+	"\x08": { kind: "backspace" },
+	"\x15": { kind: "clear" },
+	"\x01": { kind: "toggle-directories" },
+	"\x10": { kind: "up" },
+	"\x0e": { kind: "down" },
 };
 
 /** Pasted text as search text: a line break or a tab is a space, any other control byte is gone.
@@ -162,7 +173,7 @@ function readEscape(
 		if (csi !== null) return { kind: "skip", length: 2 + csi[0].length };
 		return /^[0-9:;<=>?]*[ -/]*$/.test(rest.slice(2)) ? { kind: "unfinished" } : { kind: "skip", length: 2 };
 	}
-	// SS3 takes one more byte; ESC plus any other character is an Alt-chord, which is not a key here.
+	// SS3 takes one more byte; ESC plus any other character is an Alt chord that is not a key here.
 	if (rest[1] === "O") return rest.length >= 3 ? { kind: "skip", length: 3 } : { kind: "unfinished" };
 	return { kind: "skip", length: 2 };
 }
@@ -176,7 +187,10 @@ function readEscape(
  *   - Between the bracketed-paste markers everything is search text and nothing is a key.
  *   - A lone ESC cannot be told from the start of a split sequence until time passes: `feed` keeps
  *     it, and `flush` — called by the runner after a short wait with no further input — turns a kept
- *     lone ESC into the Esc key and drops any other unfinished sequence.
+ *     lone ESC into the Esc key and drops any other unfinished sequence. That wait is the whole rule
+ *     between Esc and Alt-J/K (#176): a letter that arrives within it — in the same read or the next —
+ *     binds to the ESC and moves; an ESC nothing follows within it is Esc, and after that cancel a
+ *     late letter has no list left to act on.
  */
 export interface PickerDecoder {
 	feed(chunk: string): PickerKey[];
@@ -251,10 +265,10 @@ export function createPickerDecoder(): PickerDecoder {
 					continue;
 				}
 				const ch = rest[0] as string;
-				const kind = SIMPLE_KEYS[ch];
-				if (kind !== undefined) {
+				const key = SIMPLE_KEYS[ch];
+				if (key !== undefined) {
 					flushText();
-					keys.push({ kind } as PickerKey);
+					keys.push(key);
 				} else if (ch >= " ") {
 					text += ch;
 				}
@@ -270,12 +284,18 @@ export function createPickerDecoder(): PickerDecoder {
 /**
  * The keys of ONE read that may act. An Enter that shares its read with any other key is dropped:
  * text with line breaks arriving at once is most likely a paste from a terminal that did not mark
- * it. Dropping errs toward opening nothing — the operator presses Enter again. A same-read
- * mitigation, not proof of intent: this looks at one read only, and a line break delivered in a
- * read of its own is an Enter (see KNOWN RESIDUAL RISK in the module header).
+ * it. Dropping errs toward opening nothing — the operator presses Enter again. For the same reason
+ * a line feed that shares its read with typed text is a pasted line break, not Ctrl-J, and moves
+ * nothing; line feeds with no text beside them (Ctrl-J held down) still move. A same-read
+ * mitigation, not proof of intent: this looks at one read only, and a carriage return delivered in
+ * a read of its own is an Enter (see KNOWN RESIDUAL RISK in the module header).
  */
 export function keysOfOneRead(keys: readonly PickerKey[]): PickerKey[] {
-	return keys.length > 1 ? keys.filter((key) => key.kind !== "enter") : [...keys];
+	const withText = keys.some((key) => key.kind === "text");
+	return keys.filter((key) => {
+		if (key.kind === "enter") return keys.length === 1;
+		return !(withText && "lineFeed" in key);
+	});
 }
 
 // ── state ──────────────────────────────────────────────────────────────────────────────────────
@@ -325,7 +345,7 @@ const FOOT_LINES = 4;
 
 /** The smallest terminal the list is usable in: one body line, and wide enough for a row's marker,
  * full garden id, backend and facts (59 cells), for the sentence that says what Enter does and for
- * the line of keys (61 cells) — none of them cut. */
+ * the compact line of keys (64 cells) — none of them cut. */
 export const PICKER_MIN_SIZE: PickerSize = { columns: 64, rows: HEAD_LINES + 1 + FOOT_LINES };
 
 export function pickerFits(size: PickerSize): boolean {
@@ -411,7 +431,15 @@ const ENTER_LINE: Record<PickerRail, string> = {
 	herdr: "Enter: reopen in a new herdr tab",
 };
 
-const KEYS_LINE = "Esc: open nothing | Up/Down, PgUp/PgDn: move | type to narrow";
+/** The keys that move and the key that leaves, always whole: the full line where it fits, else the
+ * compact one, which is exactly as wide as the narrowest terminal the list is drawn in. Every key
+ * named here acts as named; PgUp/PgDn, Home/End and Ctrl-N/P act in both. */
+const KEYS_LINE_FULL = "Esc: open nothing | Up/Down, Ctrl-J/K, Alt-J/K, PgUp/PgDn: move | type to narrow";
+const KEYS_LINE_COMPACT = "Esc: open nothing | Up/Down, Ctrl/Alt-J/K: move | type to narrow";
+
+export function keysLine(columns: number): string {
+	return columns >= KEYS_LINE_FULL.length ? KEYS_LINE_FULL : KEYS_LINE_COMPACT;
+}
 
 /** The frame of a terminal too small for the list: what is wrong, and the one key that still acts. */
 export function tooSmallLines(size: PickerSize): string[] {
@@ -495,7 +523,7 @@ export function renderPickerFrame(
 	if (ghosts > 0) notes.push(`${ghosts} ${ghosts === 1 ? "bookmark has" : "bookmarks have"} no record here`);
 	lines.push(fit(notes.join(" | ")));
 	lines.push(fit(ENTER_LINE[rail]));
-	lines.push(fit(KEYS_LINE));
+	lines.push(fit(keysLine(size.columns)));
 	return { lines, cursorLine };
 }
 
