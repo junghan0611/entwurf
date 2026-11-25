@@ -27,7 +27,7 @@ import {
 	buildResumeListing,
 	describeFacts,
 	RESUME_LISTED_BACKENDS,
-	renderResumeRow,
+	resumeRowText,
 	unlistedResumeCounts,
 	visibleResumeRows,
 } from "./resume-picker-rows.ts";
@@ -118,7 +118,7 @@ describe("the entwurf resume list", () => {
 		);
 		const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 		const withPane = fact({ gardenId: A, placement: { kind: "herdr-pane", paneId: "pane-77" } as never });
-		const rendered = renderResumeRow(buildResumeListing([withPane], HERE, []).rows[0] as never);
+		const rendered = JSON.stringify(resumeRowText(buildResumeListing([withPane], HERE, []).rows[0] as never));
 		ok(
 			"each axis only where it applies, the provider's word where neither does, and no placement",
 			describeFacts({ liveness: "dead", receiver: "n/a" }) === "socket dead" &&
@@ -141,10 +141,19 @@ describe("the entwurf resume list", () => {
 			"default hides only unpinned other-directory rows; the far pin carries its path",
 			ids(def) === [E, B, C, A].join(",") &&
 				pinned?.section === "pin-elsewhere" &&
-				renderResumeRow(pinned as never).endsWith(`[Elsewhere pin]  2026-11-01T00:00Z  provider/model-a  ${THERE}`) &&
-				!renderResumeRow(def[1] as never).includes(HERE) &&
+				JSON.stringify(resumeRowText(pinned as never)) ===
+					JSON.stringify({
+						gardenId: E,
+						backend: "pi-durable",
+						facts: ["receiver unobserved"],
+						activity: "2026-11-01T00:00Z",
+						model: "provider/model-a",
+						pin: "Elsewhere pin",
+						cwd: THERE,
+					}) &&
+				resumeRowText(def[1] as never).cwd === null &&
 				ids(all) === [E, B, C, A, D].join(",") &&
-				renderResumeRow(all[4] as never).endsWith(THERE),
+				resumeRowText(all[4] as never).cwd === THERE,
 		);
 	});
 
@@ -191,7 +200,16 @@ describe("the entwurf resume list", () => {
 			row?.gardenId === P &&
 				row.section === "pin-here" &&
 				row.facts === "receiver active" &&
-				renderResumeRow(row).endsWith("receiver active       [운영코디]  2026-11-01T00:00Z"),
+				JSON.stringify(resumeRowText(row)) ===
+					JSON.stringify({
+						gardenId: P,
+						backend: "pi-durable",
+						facts: ["receiver active"],
+						activity: "2026-11-01T00:00Z",
+						model: null,
+						pin: "운영코디",
+						cwd: null,
+					}),
 		);
 	});
 

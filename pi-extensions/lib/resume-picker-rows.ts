@@ -207,21 +207,32 @@ export function unlistedResumeCounts(listing: ResumeListing, allDirectories: boo
 	return [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
 }
 
-/**
- * One row as text, the columns that identify a citizen first so an 80-column terminal still shows
- * the bookmark name: id, backend, facts, then the name, the activity time (UTC), the model when one is
- * recorded, and the directory. The directory is printed only where it is not the operator's own: a
- * pin from elsewhere always carries its path, and so does every row of the all-directories view.
- */
-export function renderResumeRow(row: ResumeRow): string {
+/** What one row prints, field by field. Where each field sits, how wide its column is and what a
+ * narrow terminal leaves out are the picker's to decide (#176); the words are decided here. */
+export interface ResumeRowText {
+	gardenId: string;
+	backend: string;
+	/** The liveness-side facts, one entry per axis, in the provider's words (`describeFacts`). */
+	facts: string[];
+	/** The activity time the row is ordered by, in UTC, or `unknown`. */
+	activity: string;
+	model: string | null;
+	/** The bookmark's name, when this citizen is pinned. */
+	pin: string | null;
+	/** The directory, only where it is not the operator's own: a pin from elsewhere always carries
+	 * its path, and so does every row of the all-directories view. */
+	cwd: string | null;
+}
+
+export function resumeRowText(row: ResumeRow): ResumeRowText {
 	const elsewhere = row.section === "pin-elsewhere" || row.section === "elsewhere";
-	return [
-		row.gardenId,
-		row.backend.padEnd(11),
-		row.facts.padEnd(20),
-		...(row.pin === null ? [] : [`[${row.pin}]`]),
-		renderActivity(row.activityMs),
-		...(row.model === null ? [] : [row.model]),
-		...(elsewhere ? [row.cwd] : []),
-	].join("  ");
+	return {
+		gardenId: row.gardenId,
+		backend: row.backend,
+		facts: row.facts.split(", "),
+		activity: renderActivity(row.activityMs),
+		model: row.model,
+		pin: row.pin,
+		cwd: elsewhere ? row.cwd : null,
+	};
 }

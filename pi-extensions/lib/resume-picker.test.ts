@@ -37,6 +37,14 @@
  *                                       nothing follows cancels and is never taken as a move
  *   RESUMEPICK-PASTED-LF-NO-MOVE        a line feed sharing its read with typed text is a pasted line
  *                                       break and moves nothing; line feeds on their own still move
+ *   RESUMEPICK-BOOKMARK-NAME-FIRST      a bookmarked row starts with `*` and its name, before the whole
+ *                                       id; a cut name ends in `~` and the selected line has it whole
+ *   RESUMEPICK-SECTION-RULER            a section title is a rule across the whole width, never
+ *                                       shaped like a row
+ *   RESUMEPICK-WHOLE-OR-NOTHING         after the facts, the activity time, model and directory are
+ *                                       each drawn whole or not at all (a path may keep its end)
+ *   RESUMEPICK-EMPTY-SAYS-NEXT          with no row to draw the screen says what is empty and which
+ *                                       keys bring rows back, and Enter says and does nothing
  */
 
 import { describe, expect, it } from "vitest";
@@ -60,7 +68,7 @@ import {
 	settlePickerState,
 	stepPicker,
 } from "./resume-picker.ts";
-import { buildResumeListing, visibleResumeRows } from "./resume-picker-rows.ts";
+import { buildResumeListing, resumeRowText, visibleResumeRows } from "./resume-picker-rows.ts";
 
 // The label is the contract, so it travels as expect's message.
 function ok(label: string, cond: boolean): void {
@@ -348,13 +356,20 @@ describe("the entwurf resume picker", () => {
 					const state = settlePickerState({ ...INITIAL_PICKER_STATE, cursor }, rows, pickerBodyHeight(size));
 					const frame = renderPickerFrame(many, state, size, "tmux");
 					const id = rows[state.cursor]?.gardenId ?? "\u0000";
+					const cwd = rows[state.cursor]?.cwd ?? "\u0000";
+					// The directory whole, or its end after "..." when the line is too short for it.
+					const where = (frame.lines[height - 4] ?? "").split("  in ")[1] ?? "";
+					const namesDirectory =
+						where === cwd || (where.startsWith("...") && where.length > 3 && cwd.endsWith(where.slice(3)));
 					const good =
 						frame.lines.length === height &&
 						frame.lines.every((line) => displayWidth(line) <= columns) &&
 						frame.cursorLine >= 3 &&
 						frame.cursorLine < height - 4 &&
-						(frame.lines[frame.cursorLine] ?? "").startsWith(`> ${id}`) &&
-						(frame.lines[height - 4] ?? "").startsWith(`selected: ${id}  in /work/`) &&
+						(frame.lines[frame.cursorLine] ?? "").startsWith("> ") &&
+						(frame.lines[frame.cursorLine] ?? "").includes(id) &&
+						(frame.lines[height - 4] ?? "").startsWith(`selected: ${id}  `) &&
+						namesDirectory &&
 						frame.lines[height - 2] === "Enter: reopen in a new tmux window beside this one" &&
 						frame.lines[height - 1] === keysAt(columns);
 					if (!good) broken.push(`${columns}x${height} cursor ${cursor}`);
@@ -559,10 +574,10 @@ describe("the entwurf resume picker", () => {
 						"entwurf resume - 2 of 2 shown",
 						"directory: /work/project  (Ctrl-A: all directories)",
 						"search: ",
-						"-- Bookmarked, other directories",
-						"> 20261101T000001-aaaaab  claude-code  receiver inactive     [운영코디-실무담당]",
-						"-- This directory",
-						"selected: 20261101T000001-aaaaab  in /home/operator/repos/other-project  [운영코",
+						`== Bookmarked, other directories ${"=".repeat(47)}`,
+						"> * 운영코디-실무담당  20261101T000001-aaaaab  claude-code  receiver inactive",
+						`== This directory ${"=".repeat(62)}`,
+						"selected: 20261101T000001-aaaaab  [운영코디-실무담당]  in ...repos/other-project",
 						"",
 						"Enter: reopen in a new tmux window beside this one",
 						KEYS_FULL,
@@ -651,10 +666,12 @@ describe("the entwurf resume picker", () => {
 				at(tmux, 1) === KEYS_FULL &&
 				tmux[1] === `directory: ${HERE}  (Ctrl-A: all directories)` &&
 				all[1] === "all directories  (Ctrl-A: this directory only)" &&
-				tmux.includes("-- Bookmarked, other directories") &&
-				tmux.includes("-- This directory") &&
-				tmux.some((l) => l.includes("[Far]  2026-11-01T00:00Z  provider/model-a  /work/other")) &&
-				at(tmux, 4) === `selected: ${fact(2).gardenId}  in /work/other  [Far]` &&
+				tmux.some((l) => l.startsWith("== Bookmarked, other directories ==")) &&
+				tmux.some((l) => l.startsWith("== This directory ==")) &&
+				tmux.includes(
+					`> * Far  ${fact(2).gardenId}  pi  socket dead  2026-11-01T00:00Z  provider/model-a  /work/other`,
+				) &&
+				at(tmux, 4) === `selected: ${fact(2).gardenId}  [Far]  in /work/other` &&
 				at(tmux, 3) === "1 citizen of other backends is not listed (codex 1) | 1 bookmark has no record here" &&
 				at(all, 3) === "2 citizens of other backends are not listed (codex 2) | 1 bookmark has no record here" &&
 				tmux[0] === "entwurf resume - 2 of 2 shown",
@@ -769,6 +786,151 @@ describe("the entwurf resume picker", () => {
 				search === "search: provider" &&
 				cursorRow.includes(ORDER[0] as string) &&
 				JSON.stringify(await p) === JSON.stringify({ kind: "selected", gardenId: ORDER[0] }),
+		);
+	});
+	/** Rows shaped like the operator's own list on 2026-11-26 07:59 (#176 comment 7177191854): Korean
+	 * and ASCII bookmark names, three backends, the facts words it showed, and a model long enough
+	 * to be cut. */
+	const SCREEN_LIKE = buildResumeListing(
+		[
+			fact(1, { backend: "pi-durable", model: null, liveness: "unsupported", receiver: "active" }),
+			fact(2, { backend: "claude-code", model: null, liveness: "unsupported", receiver: "inactive" }),
+			fact(3, { model: "openai-codex/gpt-6-terra" }),
+			fact(4, {
+				backend: "pi-durable",
+				model: null,
+				liveness: "unsupported",
+				receiver: "active",
+				cwd: "/home/operator/repos/nixos-config",
+			}),
+			fact(5, { backend: "claude-code", model: null, liveness: "unsupported", receiver: "none" }),
+			fact(6, { model: "openai-codex/gpt-6-terra" }),
+			fact(7, { cwd: "/home/operator/repos/elsewhere-project", model: "provider/model-b" }),
+		],
+		HERE,
+		[
+			{ gardenId: fact(1).gardenId, name: "운영코디" },
+			{ gardenId: fact(2).gardenId, name: "ACP 담당-ff0" },
+			{ gardenId: fact(3).gardenId, name: "실무코디-TERRA" },
+			{ gardenId: fact(4).gardenId, name: "NIXOS-CODI" },
+		],
+	);
+	const WIDTHS = Array.from({ length: 140 - PICKER_MIN_SIZE.columns + 1 }, (_, i) => PICKER_MIN_SIZE.columns + i);
+	const allRows = (cursor = 0): PickerState => ({ ...INITIAL_PICKER_STATE, allDirectories: true, cursor });
+
+	it("[QK:RESUMEPICK-BOOKMARK-NAME-FIRST] a bookmarked row starts with `*` and its name, before its whole garden id, backend and facts; an unbookmarked row has no mark; a name too long for its column ends in `~` and the selected line carries it whole; and where no name fits the row keeps its `*`", () => {
+		const at = (columns: number, cursor = 0): string[] =>
+			renderPickerFrame(SCREEN_LIKE, allRows(cursor), { columns, rows: 20 }, "tmux").lines;
+		const wide = at(120);
+		const screenWidth = at(92, 2);
+		const narrow = at(64);
+		const pinnedRow = (lines: string[], n: number): string => lines.find((l) => l.includes(fact(n).gardenId)) ?? "";
+		ok(
+			"name first and readable without colour, the id whole, the cut marked, the selected line whole",
+			pinnedRow(wide, 1).startsWith(`> * 운영코디        ${fact(1).gardenId}  pi-durable   receiver active`) &&
+				pinnedRow(wide, 2).startsWith(`  * ACP 담당-ff0    ${fact(2).gardenId}  claude-code`) &&
+				pinnedRow(wide, 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}  pi `) &&
+				pinnedRow(wide, 5).startsWith(`  ${fact(5).gardenId}  claude-code  receiver none`) &&
+				pinnedRow(at(90), 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}`) &&
+				pinnedRow(at(72), 3).startsWith(`  * 실무코디-TE~  ${fact(3).gardenId}`) &&
+				screenWidth.includes(`selected: ${fact(3).gardenId}  [실무코디-TERRA]  in ${HERE}`) &&
+				pinnedRow(narrow, 1).startsWith(`> * ${fact(1).gardenId}  pi-durable   receiver active`) &&
+				narrow.some((l) => l.startsWith(`selected: ${fact(1).gardenId}  [운영코디]`)) &&
+				WIDTHS.every((columns) =>
+					visibleResumeRows(SCREEN_LIKE, allRows()).every((row) => {
+						const line = pinnedRow(at(columns), Number(row.gardenId.slice(9, 15)));
+						return line.includes(`${row.gardenId}  ${row.backend}`) && line.includes(row.facts);
+					}),
+				),
+		);
+	});
+
+	it("[QK:RESUMEPICK-SECTION-RULER] a section title is a rule across the whole width of the terminal — `== title ===…` — so it is never read as a row: no title line starts the way a row does, and no row line starts the way a title does", () => {
+		const broken: string[] = [];
+		for (const columns of [PICKER_MIN_SIZE.columns, 80, 92, 140]) {
+			const frame = renderPickerFrame(SCREEN_LIKE, allRows(), { columns, rows: 20 }, "tmux");
+			const body = frame.lines.slice(3, frame.lines.length - 4).filter((l) => l.length > 0);
+			const titles = body.filter((l) => l.startsWith("== "));
+			const rows = body.filter((l) => !l.startsWith("== "));
+			const good =
+				titles.length === 4 &&
+				titles.every((l) => l.length === columns && /^== [A-Z][a-z, ]+ =+$/.test(l)) &&
+				rows.every((l) => l.startsWith("> ") || l.startsWith("  ")) &&
+				titles.map((l) => l.replace(/^== | =+$/g, "")).join("|") ===
+					"Bookmarked, this directory|Bookmarked, other directories|This directory|Other directories";
+			if (!good) broken.push(`${columns}`);
+		}
+		ok(`every title is a full-width rule (broken at: ${broken.join(", ")})`, broken.length === 0);
+	});
+
+	it("[QK:RESUMEPICK-WHOLE-OR-NOTHING] after a row's facts, its activity time, model and directory are each drawn whole or not at all — never the `2026-11-` or one-letter fragment the 07:59 screen showed; a directory too long for what is left keeps its end after `...`", () => {
+		const broken: string[] = [];
+		for (const columns of WIDTHS) {
+			const frame = renderPickerFrame(SCREEN_LIKE, allRows(), { columns, rows: 20 }, "tmux");
+			for (const row of visibleResumeRows(SCREEN_LIKE, allRows())) {
+				const text = resumeRowText(row);
+				const line = frame.lines.find((l) => l.includes(row.gardenId)) ?? "";
+				const facts = text.facts.join(", ");
+				const tail = line.slice(line.indexOf(facts) + facts.length).trim();
+				const pieces = tail.length === 0 ? [] : tail.split(/ {2,}/);
+				const whole = pieces.every(
+					(piece) =>
+						piece === text.activity ||
+						piece === text.model ||
+						piece === text.cwd ||
+						(text.cwd !== null && piece.startsWith("...") && piece.length > 3 && text.cwd.endsWith(piece.slice(3))),
+				);
+				if (!whole || displayWidth(line) > columns) broken.push(`${columns}: ${line}`);
+			}
+		}
+		const at140 = renderPickerFrame(SCREEN_LIKE, allRows(), { columns: 140, rows: 20 }, "tmux").lines;
+		ok(
+			`no fragment at any width (first broken: ${broken.slice(0, 2).join(" / ")})`,
+			broken.length === 0 &&
+				at140.some((l) =>
+					l.endsWith(`socket dead        2026-11-01T00:00Z  provider/model-b  /home/operator/repos/elsewhere-project`),
+				),
+		);
+	});
+
+	it("[QK:RESUMEPICK-EMPTY-SAYS-NEXT] when no row is drawn the body says what is empty and which keys bring rows back, the Enter line says Enter has nothing to reopen, Enter chooses nothing, and Esc still leaves with nothing opened", async () => {
+		const typed = renderPickerFrame(LISTING, { ...INITIAL_PICKER_STATE, query: "zzz" }, ROOMY, "tmux").lines;
+		const typedAll = renderPickerFrame(
+			LISTING,
+			{ ...INITIAL_PICKER_STATE, query: "zzz", allDirectories: true },
+			ROOMY,
+			"herdr",
+		).lines;
+		const nothingHere = renderPickerFrame(
+			buildResumeListing([fact(1, { cwd: "/work/other" })], HERE, []),
+			INITIAL_PICKER_STATE,
+			ROOMY,
+			"tmux",
+		).lines;
+		const t = terminal();
+		let done = false;
+		const p = runResumePicker(LISTING, "tmux", t.io).then((r) => {
+			done = true;
+			return r;
+		});
+		t.send("zzz");
+		t.send("\r");
+		await Promise.resolve();
+		const stillOpen = !done;
+		t.send("\x1b");
+		t.fireTimer();
+		ok(
+			"the empty screen names the way back, and neither Enter nor Esc opens anything",
+			typed[3] === '  nothing matches "zzz"' &&
+				typed[4] === "  Backspace or Ctrl-U to widen, Ctrl-A: all directories" &&
+				typed[typed.length - 2] === "Enter: nothing to reopen while no row is listed" &&
+				typed[typed.length - 4] === "" &&
+				typedAll[4] === "  Backspace or Ctrl-U to widen" &&
+				typedAll[typedAll.length - 2] === "Enter: nothing to reopen while no row is listed" &&
+				nothingHere[3] === "  no sibling to list in this directory" &&
+				nothingHere[4] === "  Ctrl-A: all directories" &&
+				stillOpen &&
+				JSON.stringify(await p) === JSON.stringify({ kind: "cancelled" }),
 		);
 	});
 });

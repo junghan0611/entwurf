@@ -40,7 +40,7 @@ import {
 } from "./peer-presentation.ts";
 import { INITIAL_PICKER_STATE, renderPickerFrame } from "./resume-picker.ts";
 import { RESUME_BOOKMARK_MAX_BYTES, ResumeBookmarkError, readResumePins } from "./resume-picker-production.ts";
-import { buildResumeListing, hiddenResumeCounts, renderResumeRow, visibleResumeRows } from "./resume-picker-rows.ts";
+import { buildResumeListing, hiddenResumeCounts, resumeRowText, visibleResumeRows } from "./resume-picker-rows.ts";
 
 const NOW = Date.parse("2026-11-25T00:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -763,9 +763,12 @@ describe("the entwurf resume list — seven days, test rooms, bookmarks", () => 
 
 	it("[QK:PEERPRES-PICKER-ROW-ACTIVITY] a row prints the activity time it is ordered by, in UTC, and never the record's update time in its place", () => {
 		const row = listing.rows.find((r) => r.gardenId === G(8));
-		expect(renderResumeRow(row as never)).toBe(`${G(8)}  pi           socket dead           2026-11-24T23:00Z`);
+		expect(resumeRowText(row as never).activity).toBe("2026-11-24T23:00Z");
 		const unknown = listing.rows.find((r) => r.gardenId === G(3));
-		expect(renderResumeRow(unknown as never)).toBe(`${G(3)}  pi           socket dead           unknown`);
+		expect(resumeRowText(unknown as never).activity).toBe("unknown");
+		// And it is what the drawn row prints, in its own column.
+		const frame = renderPickerFrame(listing, INITIAL_PICKER_STATE, { columns: 120, rows: 14 }, "tmux").lines;
+		expect(frame.find((line) => line.includes(G(8)))?.endsWith("socket dead  2026-11-24T23:00Z")).toBe(true);
 	});
 
 	it("[QK:PEERPRES-PICKER-FRAME-64] at 64 columns the note line states what the list left out, first, as a display rule and nothing else", () => {

@@ -44,7 +44,8 @@ import {
 	type ResumeListing,
 	type ResumeRow,
 	type ResumeRowSection,
-	renderResumeRow,
+	type ResumeRowText,
+	resumeRowText,
 	unlistedResumeCounts,
 	visibleResumeRows,
 } from "./resume-picker-rows.ts";
@@ -441,6 +442,174 @@ export function keysLine(columns: number): string {
 	return columns >= KEYS_LINE_FULL.length ? KEYS_LINE_FULL : KEYS_LINE_COMPACT;
 }
 
+/** What a piece of a line is. The frame is laid out as pieces so the runner can emphasise each by
+ * what it is; a plain line — what a test reads — is the pieces' text joined. */
+export type PickerRole =
+	| "plain"
+	| "dim"
+	| "title"
+	| "rule"
+	| "header"
+	| "cursor"
+	| "pin"
+	| "id"
+	| "backend"
+	| "fact"
+	| "activity"
+	| "model"
+	| "cwd"
+	| "key";
+
+export interface PickerSpan {
+	text: string;
+	role: PickerRole;
+}
+
+const span = (text: string, role: PickerRole = "plain"): PickerSpan => ({ text, role });
+
+/** Cut pieces to at most `cells` cells, in order: a piece that does not fit whole is cut by
+ * `fitToWidth` and nothing after it is kept. */
+export function fitSpans(spans: readonly PickerSpan[], cells: number): PickerSpan[] {
+	const out: PickerSpan[] = [];
+	let left = cells;
+	for (const piece of spans) {
+		const text = fitToWidth(piece.text, left);
+		if (text.length > 0) out.push({ text, role: piece.role });
+		left -= displayWidth(text);
+		if (displayWidth(text) < displayWidth(piece.text)) break;
+	}
+	return out;
+}
+
+const joinSpans = (spans: readonly PickerSpan[]): string => spans.map((piece) => piece.text).join("");
+
+/** `text` followed by spaces up to `cells` cells (never cut here). */
+function padCells(text: string, cells: number): string {
+	return text + " ".repeat(Math.max(0, cells - displayWidth(text)));
+}
+
+/** A name in at most `cells` cells: whole, or cut with `~` as its last cell so a cut is never read
+ * as the whole name. The selected line below the list always carries it whole. */
+function cutName(name: string, cells: number): string {
+	return displayWidth(name) <= cells ? name : `${fitToWidth(name, cells - 1)}~`;
+}
+
+/** The END of `text` in at most `cells` cells, after `...`: the tail of a path is the part that
+ * tells two directories apart. */
+function cutPathStart(text: string, cells: number): string {
+	const chars = [...text];
+	let out = "";
+	let used = 3;
+	for (let i = chars.length - 1; i >= 0; i--) {
+		const cell = displayWidth(chars[i] as string);
+		if (used + cell > cells) break;
+		out = chars[i] + out;
+		used += cell;
+	}
+	return `...${out}`;
+}
+
+function widest(texts: readonly string[]): number {
+	let width = 0;
+	for (const text of texts) width = Math.max(width, displayWidth(text));
+	return width;
+}
+
+const GAP = "  ";
+/** The most cells a bookmark name takes, and the fewest worth drawing — below that the row keeps
+ * only its `*` and the selected line names it. */
+const NAME_MAX_CELLS = 24;
+const NAME_MIN_CELLS = 5;
+/** The fewest cells a cut path is drawn in; below that it is left to the selected line. */
+const PATH_MIN_CELLS = 8;
+
+/** Column widths for one kind of row — bookmarked or not — in a terminal `columns` wide. */
+interface RowColumns {
+	pinned: boolean;
+	/** Cells of the bookmark name; 0 when this kind carries none or no cell is left for one. */
+	name: number;
+	id: number;
+	backend: number;
+	facts: number;
+	/** Cells of the activity time; 0 when it does not fit whole, and then nothing after it is drawn. */
+	activity: number;
+}
+
+/**
+ * Where each field of a row goes (#176). The bookmark mark and name come first, then what must
+ * never be cut — the whole garden id, the backend and the facts, which the minimum size guarantees —
+ * then the activity time, the model and the directory, each drawn whole or not at all (a cut path
+ * keeps its end). A bookmarked row is found by its name and kept in bookmark order, so its name
+ * takes room before its activity time does; an unbookmarked row is ordered and found by its time,
+ * which comes right after its facts. Widths are measured over EVERY row of the listing, so the columns stay put
+ * while the operator narrows, scrolls or lifts the filter, and the id, backend, facts and activity
+ * columns are as wide for a bookmarked row as for any other.
+ */
+function rowColumns(texts: readonly ResumeRowText[], pinned: boolean, columns: number): RowColumns {
+	const id = widest(texts.map((t) => t.gardenId));
+	const backend = widest(texts.map((t) => t.backend));
+	const facts = widest(texts.map((t) => t.facts.join(", ")));
+	const activityCells = widest(texts.map((t) => t.activity));
+	const nameFull = pinned ? Math.min(NAME_MAX_CELLS, widest(texts.map((t) => t.pin ?? ""))) : 0;
+	// A listing with no bookmark draws no bookmark column at all.
+	if (pinned && nameFull === 0) return { pinned, name: 0, id, backend, facts, activity: 0 };
+	let room = columns - (2 + (pinned ? 2 : 0) + id + GAP.length + backend + GAP.length + facts);
+	let name = Math.min(nameFull, Math.max(0, room - GAP.length));
+	if (name < Math.min(nameFull, NAME_MIN_CELLS)) name = 0;
+	if (name > 0) room -= name + GAP.length;
+	const activity = room >= GAP.length + activityCells ? activityCells : 0;
+	return { pinned, name, id, backend, facts, activity };
+}
+
+/** One row as pieces: `> ` on the cursor's row, `* ` and the name on a bookmarked one. */
+function rowSpans(text: ResumeRowText, cols: RowColumns, cursor: boolean, columns: number): PickerSpan[] {
+	const out: PickerSpan[] = [span(cursor ? "> " : "  ", "cursor")];
+	if (cols.pinned) {
+		out.push(span("* ", "pin"));
+		if (cols.name > 0) out.push(span(padCells(cutName(text.pin ?? "", cols.name), cols.name), "pin"), span(GAP));
+	}
+	out.push(
+		span(padCells(text.gardenId, cols.id), "id"),
+		span(GAP),
+		span(padCells(text.backend, cols.backend), "backend"),
+	);
+	out.push(span(GAP));
+	for (const [i, fact] of text.facts.entries()) {
+		if (i > 0) out.push(span(", "));
+		out.push(span(fact, "fact"));
+	}
+	out.push(span(" ".repeat(Math.max(0, cols.facts - displayWidth(text.facts.join(", "))))));
+	if (cols.activity > 0) {
+		out.push(span(GAP), span(padCells(text.activity, cols.activity), "activity"));
+		let used = displayWidth(joinSpans(out));
+		if (text.model !== null && used + GAP.length + displayWidth(text.model) <= columns) {
+			out.push(span(GAP), span(text.model, "model"));
+			used += GAP.length + displayWidth(text.model);
+		}
+		if (text.cwd !== null) {
+			const room = columns - used - GAP.length;
+			if (displayWidth(text.cwd) <= room) out.push(span(GAP), span(text.cwd, "cwd"));
+			else if (room >= PATH_MIN_CELLS) out.push(span(GAP), span(cutPathStart(text.cwd, room), "cwd"));
+		}
+	}
+	// No padding after the last field: a row ends where its text does.
+	while (out.length > 0 && (out[out.length - 1] as PickerSpan).text.trim() === "") out.pop();
+	const last = out[out.length - 1];
+	if (last !== undefined) out[out.length - 1] = { ...last, text: last.text.trimEnd() };
+	return out;
+}
+
+/** A section title: a rule across the whole width, so it can never be read as a row. */
+function headerSpans(title: string, columns: number): PickerSpan[] {
+	const head = `== ${title} `;
+	return [
+		span("== ", "rule"),
+		span(title, "header"),
+		span(" "),
+		span("=".repeat(Math.max(2, columns - displayWidth(head))), "rule"),
+	];
+}
+
 /** The frame of a terminal too small for the list: what is wrong, and the one key that still acts. */
 export function tooSmallLines(size: PickerSize): string[] {
 	const fit = (line: string): string => fitToWidth(line, Math.max(1, size.columns));
@@ -452,56 +621,96 @@ export function tooSmallLines(size: PickerSize): string[] {
 	].slice(0, Math.max(1, size.rows));
 }
 
+/** What the body says when no row is drawn — what is empty, then the keys that would bring rows
+ * back. Opening nothing is the only thing Enter can do here. */
+function emptyLines(query: string, allDirectories: boolean): string[] {
+	const allKey = allDirectories ? [] : ["Ctrl-A: all directories"];
+	return query.trim().length > 0
+		? [`  nothing matches "${query}"`, `  ${["Backspace or Ctrl-U to widen", ...allKey].join(", ")}`]
+		: [`  no sibling to list${allDirectories ? "" : " in this directory"}`, ...allKey.map((key) => `  ${key}`)];
+}
+
+const DIRECTORY_KEY = "  (Ctrl-A: all directories)";
+
+/** A path in `cells` cells: whole, else its end after `...` while that leaves enough to read. */
+function fitPath(path: string, cells: number): string {
+	return displayWidth(path) <= cells || cells < PATH_MIN_CELLS ? path : cutPathStart(path, cells);
+}
+
+const ENTER_LINE_EMPTY = "Enter: nothing to reopen while no row is listed";
+
 /**
- * The whole frame as plain lines, each already cut to the terminal's width, and never more lines
- * than the terminal has. `cursorLine` is the index of the line holding the row under the cursor, or
- * -1 when no row is drawn — which is also when Enter chooses nothing. No escape codes here: how a
- * line is emphasised is the runner's business, and plain lines are what a test reads.
+ * The whole frame as lines, each already cut to the terminal's width, and never more lines than the
+ * terminal has. `lines` are plain text and `spans` the same lines as pieces that say what each part
+ * is. `cursorLine` is the index of the line holding the row under the cursor, or -1 when no row is
+ * drawn — which is also when Enter chooses nothing. No escape codes here: how a piece is emphasised
+ * is the runner's business, and plain lines are what a test reads.
  */
 export function renderPickerFrame(
 	listing: ResumeListing,
 	state: PickerState,
 	size: PickerSize,
 	rail: PickerRail,
-): { lines: string[]; cursorLine: number } {
-	if (!pickerFits(size)) return { lines: tooSmallLines(size), cursorLine: -1 };
+): { lines: string[]; spans: PickerSpan[][]; cursorLine: number } {
+	if (!pickerFits(size)) {
+		const lines = tooSmallLines(size);
+		return { lines, spans: lines.map((line) => [span(line)]), cursorLine: -1 };
+	}
 	const rows = visibleResumeRows(listing, state);
 	const total = visibleResumeRows(listing, { allDirectories: state.allDirectories, query: "" }).length;
 	const items = pickerItems(rows);
 	const bodyHeight = pickerBodyHeight(size);
-	const fit = (line: string): string => fitToWidth(line, size.columns);
+	const fit = (pieces: readonly PickerSpan[]): PickerSpan[] => fitSpans(pieces, size.columns);
+	const texts = listing.rows.map(resumeRowText);
+	const pinnedCols = rowColumns(texts, true, size.columns);
+	const plainCols = rowColumns(texts, false, size.columns);
 
-	const lines: string[] = [
-		fit(`entwurf resume - ${rows.length} of ${total} shown`),
+	// The key that lifts the filter is the line's point; a long path gives up its start instead.
+	const directoryRoom = size.columns - displayWidth("directory: ") - displayWidth(DIRECTORY_KEY);
+	const out: PickerSpan[][] = [
+		fit([span("entwurf resume", "title"), span(` - ${rows.length} of ${total} shown`)]),
 		fit(
 			state.allDirectories
-				? "all directories  (Ctrl-A: this directory only)"
-				: `directory: ${listing.callerCwd}  (Ctrl-A: all directories)`,
+				? [span("all directories"), span("  (Ctrl-A: this directory only)", "dim")]
+				: [span("directory: ", "dim"), span(fitPath(listing.callerCwd, directoryRoom)), span(DIRECTORY_KEY, "dim")],
 		),
-		fit(`search: ${state.query}`),
+		fit([span("search: ", "dim"), span(state.query)]),
 	];
 	let cursorLine = -1;
 	const body = items.slice(state.top, state.top + bodyHeight);
 	for (const item of body) {
 		if (item.kind === "header") {
-			lines.push(fit(`-- ${item.text}`));
+			out.push(fit(headerSpans(item.text, size.columns)));
 		} else {
-			if (item.index === state.cursor) cursorLine = lines.length;
-			lines.push(fit(`${item.index === state.cursor ? "> " : "  "}${renderResumeRow(item.row)}`));
+			const cursor = item.index === state.cursor;
+			if (cursor) cursorLine = out.length;
+			const text = resumeRowText(item.row);
+			out.push(fit(rowSpans(text, text.pin === null ? plainCols : pinnedCols, cursor, size.columns)));
 		}
 	}
-	if (rows.length === 0) lines.push(fit("  (nothing matches)"));
+	if (rows.length === 0) {
+		for (const line of emptyLines(state.query, state.allDirectories)) {
+			if (out.length < HEAD_LINES + bodyHeight) out.push(fit([span(line, "dim")]));
+		}
+	}
 	// The body always takes its full height, so the four lines below stay where they are.
-	while (lines.length < HEAD_LINES + bodyHeight) lines.push("");
+	while (out.length < HEAD_LINES + bodyHeight) out.push([]);
 
-	// The row under the cursor again, on a line of its own: a row's directory sits at its far end
-	// and is the first thing a narrow terminal cuts, and it is what tells two siblings apart.
+	// The row under the cursor again, on a line of its own and whole as far as the width allows: its
+	// id, its bookmark name, and its directory — what tells two siblings apart when a narrow
+	// terminal has cut the row.
 	const selected = rows[state.cursor];
-	lines.push(
-		selected === undefined
-			? ""
-			: fit(`selected: ${selected.gardenId}  in ${selected.cwd}${selected.pin === null ? "" : `  [${selected.pin}]`}`),
-	);
+	if (selected === undefined) {
+		out.push([]);
+	} else {
+		const head = [
+			span("selected: ", "dim"),
+			span(selected.gardenId, "id"),
+			...(selected.pin === null ? [] : [span("  ["), span(selected.pin, "pin"), span("]")]),
+			span("  in ", "dim"),
+		];
+		out.push(fit([...head, span(fitPath(selected.cwd, size.columns - displayWidth(joinSpans(head))), "cwd")]));
+	}
 
 	const unlisted = unlistedResumeCounts(listing, state.allDirectories);
 	const notes: string[] = [];
@@ -521,10 +730,10 @@ export function renderPickerFrame(
 	}
 	const ghosts = listing.pinsWithoutRecord.length;
 	if (ghosts > 0) notes.push(`${ghosts} ${ghosts === 1 ? "bookmark has" : "bookmarks have"} no record here`);
-	lines.push(fit(notes.join(" | ")));
-	lines.push(fit(ENTER_LINE[rail]));
-	lines.push(fit(keysLine(size.columns)));
-	return { lines, cursorLine };
+	out.push(fit([span(notes.join(" | "), "dim")]));
+	out.push(fit([span(rows.length === 0 ? ENTER_LINE_EMPTY : ENTER_LINE[rail], "key")]));
+	out.push(fit([span(keysLine(size.columns), "key")]));
+	return { lines: out.map(joinSpans), spans: out, cursorLine };
 }
 
 // ── runner ─────────────────────────────────────────────────────────────────────────────────────
