@@ -64,6 +64,7 @@ export interface ProbeAdapterSeam {
 		acpSessionId: string;
 		modelId: string;
 		nativeModelId: string;
+		resumedAttach: boolean;
 	}): Promise<void>;
 }
 
@@ -205,6 +206,8 @@ export async function driveProbeTurn(connection: AcpConnectionLike, params: Prob
 			acpSessionId,
 			modelId: params.modelId,
 			nativeModelId: params.nativeModelId,
+			// The probe only ever creates its session.
+			resumedAttach: false,
 		}),
 	);
 

@@ -6,7 +6,7 @@
 			"claim": "ACP-CLAUDE-SET-MODEL-READBACK",
 			"title": "the claude set-model answer is no longer read back — a missing model option or another row reaches the prompt, so a different model answers under the requested id",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": ["\t\tconfirmClaudeSetModelAnswer(answer, nativeModelId);"],
+			"find": ["\t\tconfirmClaudeSetModelAnswer(answer, nativeModelId, resumedAttach);"],
 			"replace": ["\t\tvoid answer;"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
@@ -843,6 +843,63 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-AGY-AUGMENT-TOOL-SPELLING]",
 			"signatureSource": "pi-extensions/lib/acp/augment.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-SET-MODEL-RESUMED-ALIAS",
+			"title": "the resumed-session alias row is read whatever the session is — a created session that answers `fable` for claude-fable-5-2 reaches the prompt",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tconst resumedAlias = resumedAttach === true ? CLAUDE_RESUMED_SET_MODEL_ALIAS_ROWS[nativeModelId] : undefined;"
+			],
+			"replace": ["\tconst resumedAlias = CLAUDE_RESUMED_SET_MODEL_ALIAS_ROWS[nativeModelId];"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-SET-MODEL-RESUMED-ALIAS]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-RESUMED-ALIAS-EXACT-ROW",
+			"title": "the resumed-session alias row is matched by its value alone — a `fable` row under another generation's name answers under claude-fable-5-2",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tselected?.name === resumedAlias.name &&"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-RESUMED-ALIAS-EXACT-ROW]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-RESUMED-ALIAS-ID-NOT-OFFERED",
+			"title": "the resumed-session alias row is accepted while the requested id is offered too — a driver that could select the id and selected the alias is not refused",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\t!rows.some((row) => row?.value === nativeModelId)"],
+			"replace": ["\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-RESUMED-ALIAS-ID-NOT-OFFERED]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-RESUME-ATTACH-REACHES-ENFORCE",
+			"title": "a successful session/resume is never told to the model check — every resumed claude-fable-5-2 session is refused before its prompt, as before #174",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tacpSessionId = attach.record.acpSessionId;", "\t\t\t\tresumedAttach = true;"],
+			"replace": ["\t\t\t\tacpSessionId = attach.record.acpSessionId;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-RESUME-ATTACH-REACHES-ENFORCE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CREATED-SESSION-REFUSES-RESUMED-ALIAS",
+			"title": "every bootstrap tells the model check its session was resumed — a session that was just created accepts the resumed-session alias row",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tlet resumedAttach = false;"],
+			"replace": ["\t\t\tlet resumedAttach = true;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CREATED-SESSION-REFUSES-RESUMED-ALIAS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

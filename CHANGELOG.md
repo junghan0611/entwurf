@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### ACP Claude — a resumed `claude-fable-5-2` session takes its prompt again (#174)
+
+- After a Pi compaction, or any other same-id `session/resume`, a `claude-fable-5-2` ACP session was refused before its prompt: claude-agent-acp 0.109.0 answers the model set of a resumed session with the alias row `fable` named `Fable 5.2` and offers no `claude-fable-5-2` row, while a created session answers the id itself. That row is now accepted, in one case only: the session was attached by a `session/resume` that succeeded in this bootstrap, the answer is that exact value and name, and the offered rows hold no row of the requested id. A created session answering the alias, another name, and a driver that offers the id and still selects the alias are refused as before; Sonnet, Opus, Fable 5.1, agy and the disabled Cortex are unchanged. The name is the measured shape of the row, not evidence of which model it resolves to (`resolvedModel` is not on the ACP wire). Five claims join the `acp-set-model-readback` mutant lane (76).
+
 ### `entwurf resume` — reopen a sibling from the terminal (#173)
 
 - New operator command `entwurf resume <garden-id>`: reopens one dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside the terminal or a new Herdr tab, and submits no prompt. It is the leaf `entwurf_resume_call` uses, through the same launcher, with no caller attribution; a live, unsupported or not provably dormant target is that leaf's refusal and nothing is opened.

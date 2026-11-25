@@ -270,6 +270,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 			acpSessionId: "sess-gate",
 			modelId: "claude-sonnet-5",
 			nativeModelId: "claude-sonnet-5",
+			resumedAttach: false,
 		},
 		"enforceModel receives the production inputs (adapter owns the wire shape)",
 	);
@@ -392,7 +393,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 			claudeAdapterSrc.includes(
 				'await setConfig.call(connection, {\n\t\t\tsessionId: acpSessionId,\n\t\t\tconfigId: "model",\n\t\t\tvalue: nativeModelId,\n\t\t});',
 			) &&
-			claudeAdapterSrc.includes("confirmClaudeSetModelAnswer(answer, nativeModelId);"),
+			claudeAdapterSrc.includes("confirmClaudeSetModelAnswer(answer, nativeModelId, resumedAttach);"),
 		'claudeAdapter.enforceModel still sends setSessionConfigOption({configId:"model"}) and reads its answer back',
 	);
 

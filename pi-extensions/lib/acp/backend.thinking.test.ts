@@ -329,11 +329,12 @@ const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 	parameters: obj({}, { open: true }),
 }));
 
-function sonnet(): Model<Api> {
-	const row = models.curatedClaudeModels().find((r) => r.id === "claude-sonnet-5-5");
-	if (!row) throw new Error("claude-sonnet-5-5 is not curated");
+function curated(id: string): Model<Api> {
+	const row = models.curatedClaudeModels().find((r) => r.id === id);
+	if (!row) throw new Error(`${id} is not curated`);
 	return { ...row, api: "entwurf", provider: "entwurf", baseUrl: "" } as Model<Api>;
 }
+const sonnet = (): Model<Api> => curated("claude-sonnet-5-5");
 
 function transcript(...userTurns: string[]): TranscriptContext {
 	const messages: Message[] = [];
@@ -420,6 +421,8 @@ function makeWorld(
 		resumeAnswer?: { sessionId?: string } | null;
 		/** Extra fields of each child's initialize answer, beside its agentInfo. */
 		initialize?: Record<string, unknown>;
+		/** The answer to a model set; unset, the requested value is echoed as the current one. */
+		modelAnswer?: (value: string) => unknown;
 	} = {};
 	// #168: these worlds take the bundled launches; an ambient operator override is cleared for this test and restored after it.
 	for (const name of ["CLAUDE_AGENT_ACP_COMMAND", "AGY_ACP_COMMAND"]) {
@@ -485,7 +488,7 @@ function makeWorld(
 					}
 					return p.configId === "effort"
 						? { configOptions: [{ id: "effort", currentValue: effortAnswer(p.value) }] }
-						: { configOptions: [{ id: "model", currentValue: p.value }] };
+						: (hooks.modelAnswer?.(p.value) ?? { configOptions: [{ id: "model", currentValue: p.value }] });
 				},
 				prompt: (p): Promise<AcpPromptResponse> => {
 					if (hooks.refuseSend) throw hooks.refuseSend;
@@ -558,12 +561,12 @@ async function runTurn(
 	context: TranscriptContext,
 	sessionId: string,
 	reasoning: string | undefined,
-	more: { options?: Record<string, unknown>; deps?: Partial<AcpTurnDeps> } = {},
+	more: { options?: Record<string, unknown>; deps?: Partial<AcpTurnDeps>; model?: Model<Api> } = {},
 ): Promise<AssistantMessageEvent> {
 	const events: AssistantMessageEvent[] = [];
 	const opts = { sessionId, reasoning, ...more.options } as Parameters<typeof backend.streamAcpTurn>[2];
 	const deps = more.deps ? { ...world.deps, ...more.deps } : world.deps;
-	for await (const event of backend.streamAcpTurn(sonnet(), context, opts, deps)) events.push(event);
+	for await (const event of backend.streamAcpTurn(more.model ?? sonnet(), context, opts, deps)) events.push(event);
 	const sealed = events.filter((e) => e.type === "done" || e.type === "error");
 	expect(sealed).toHaveLength(1);
 	return sealed[0];
@@ -1930,10 +1933,13 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 			expect(await backend.releaseAcpSessions(id), name).toBe(1);
 			arrange(world, id);
 			const before = recordBytes(world, id);
+			const askedBefore = world.log.length;
 			const stopped = await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
 			expect(errorText(stopped), name).toBe(ACP_STOPS[stop].text);
 			expect(errorText(stopped), name).not.toContain("VENDOR-SAYS-NO");
 			expect(world.prompts, name).toHaveLength(1);
+			// #174: a resume that did not succeed asks the session for nothing, a model least of all.
+			expect(world.log.slice(askedBefore), name).toEqual([]);
 			expect(
 				world.wire.filter((w) => w === "new"),
 				name,
@@ -1970,6 +1976,63 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 	});
 	it("[QK:ACP-ATTACH-SETS-EFFORT-AGAIN] a resumed session is given its effort again before the prompt", async () => {
 		await setAgainOnAttach("attach-effort-again", "set:effort=");
+	});
+
+	// --- #174: the alias row claude-agent-acp answers a model set with after session/resume --------------
+
+	const FABLE = "claude-fable-5-2";
+	/** What 0.109.0 answers after session/resume: the alias row selected, and no row of the id. */
+	const aliasAnswer = (name: string) => () => ({
+		configOptions: [
+			{
+				id: "model",
+				currentValue: "fable",
+				options: [
+					{ value: "default", name: "Default (recommended)" },
+					{ value: "fable", name },
+					{ value: "sonnet", name: "Sonnet 5.5" },
+				],
+			},
+		],
+	});
+	const aliasRefusal = /answered set-model "claude-fable-5-2" with model "fable"/;
+
+	it("[QK:ACP-CREATED-SESSION-REFUSES-RESUMED-ALIAS] a session this bootstrap created is not a resumed one: the alias row answered there is refused before the prompt", async () => {
+		const world = makeWorld();
+		world.hooks.modelAnswer = aliasAnswer("Fable 5.2");
+		const refused = await runTurn(world, transcript("FIRST"), "resumed-alias-created", "high", {
+			model: curated(FABLE),
+		});
+		expect(errorText(refused)).toMatch(aliasRefusal);
+		expect(world.wire).toEqual(["initialize", "new"]);
+		expect(world.log).toEqual([`set:model=${FABLE}`]);
+		expect(world.prompts).toHaveLength(0);
+	});
+
+	it("[QK:ACP-RESUME-ATTACH-REACHES-ENFORCE] a session resumed under its id takes the alias row as its model's answer and gets its prompt; the same row under another name is refused before the prompt", async () => {
+		const fable = curated(FABLE);
+		const world = makeWorld();
+		const id = "resumed-alias-attach";
+		expect((await runTurn(world, transcript("FIRST"), id, "high", { model: fable })).type).toBe("done");
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		world.hooks.modelAnswer = aliasAnswer("Fable 5.2");
+		const resumedAt = world.log.length;
+		const resumed = await runTurn(world, transcript("FIRST", "SECOND"), id, "high", { model: fable });
+		if (resumed.type !== "done") throw new Error(`expected done, got ${errorText(resumed)}`);
+		// One session, never a second: resumed, given its model and effort again, then prompted.
+		expect(world.wire).toEqual(["initialize", "new", "prompt", "initialize", "resume", "prompt"]);
+		expect(world.log.slice(resumedAt)).toEqual([`set:model=${FABLE}`, "set:effort=high", "prompt"]);
+		expect(world.prompts.at(-1)).toMatchObject({ sessionId: "ACP-1", blocks: ["SECOND"] });
+
+		const other = makeWorld();
+		const otherId = "resumed-alias-renamed";
+		expect((await runTurn(other, transcript("FIRST"), otherId, "high", { model: fable })).type).toBe("done");
+		expect(await backend.releaseAcpSessions(otherId)).toBe(1);
+		other.hooks.modelAnswer = aliasAnswer("Fable 6");
+		const renamed = await runTurn(other, transcript("FIRST", "SECOND"), otherId, "high", { model: fable });
+		expect(errorText(renamed)).toMatch(aliasRefusal);
+		expect(other.wire).toEqual(["initialize", "new", "prompt", "initialize", "resume"]);
+		expect(other.prompts).toHaveLength(1);
 	});
 
 	it("[QK:ACP-ATTACH-AGENT-DIES] an agent that dies while resuming stops the turn by name: nothing is sent, no session is opened, the record stays", async () => {

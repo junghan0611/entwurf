@@ -132,6 +132,9 @@ export interface AcpEnforceModelParams {
 	acpSessionId: string;
 	modelId: string;
 	nativeModelId: string;
+	/** True only when this bootstrap attached the session through a `session/resume` that succeeded
+	 *  and passed the id guard (#174). A fact of this one bootstrap: never stored, never inferred. */
+	resumedAttach: boolean;
 }
 
 /** resolveThinking input — pi's requested level and the registered row's level map. `reasoning`
@@ -648,7 +651,8 @@ export const CLAUDE_FOREGROUND_ONLY_ENV = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
  * answer the alias rows `sonnet` and `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row
  * resolves to (`ModelInfo.resolvedModel`) is not on the ACP wire, so an alias answer is accepted
  * only as the exact measured row, value AND name, declared here for the requested id. No other
- * spelling is matched.
+ * spelling is matched. After `session/resume` the same driver answers differently (#174), which is
+ * the separate table below.
  */
 export const CLAUDE_SET_MODEL_ALIAS_ROWS: Readonly<Record<string, Readonly<{ value: string; name: string }>>> =
 	Object.freeze({
@@ -656,9 +660,23 @@ export const CLAUDE_SET_MODEL_ALIAS_ROWS: Readonly<Record<string, Readonly<{ val
 		"claude-opus-5-5": Object.freeze({ value: "opus", name: "Opus 5.5" }),
 	});
 
+/**
+ * What the driver answers for an id after `session/resume`, where it differs from a created session
+ * (#174). `[측정 2026-11-24]` claude-agent-acp 0.109.0: a session created with `claude-fable-5-2`
+ * answers that id as its own row, while the same session resumed answers the alias row `fable` named
+ * `Fable 5.2` and offers no `claude-fable-5-2` row at all. The row is accepted only on a session this
+ * bootstrap resumed, as the exact measured value AND name, and only while the offered rows hold no
+ * row of the requested id: a driver that offers the id and still selects the alias is refused. The
+ * name is the measured shape of the row, not evidence of which model it resolves to.
+ */
+export const CLAUDE_RESUMED_SET_MODEL_ALIAS_ROWS: Readonly<Record<string, Readonly<{ value: string; name: string }>>> =
+	Object.freeze({
+		"claude-fable-5-2": Object.freeze({ value: "fable", name: "Fable 5.2" }),
+	});
+
 /** Refuse unless the set-model answer names the requested model. A missing model option, another
  *  row, or a row that is not the measured alias row would let a different model answer under this id. */
-export function confirmClaudeSetModelAnswer(response: unknown, nativeModelId: string): void {
+export function confirmClaudeSetModelAnswer(response: unknown, nativeModelId: string, resumedAttach: boolean): void {
 	const configOptions = (response as { configOptions?: unknown } | null | undefined)?.configOptions;
 	const modelOption = Array.isArray(configOptions)
 		? (configOptions as Array<Record<string, unknown> | null>).find((option) => option?.id === "model")
@@ -673,6 +691,15 @@ export function confirmClaudeSetModelAnswer(response: unknown, nativeModelId: st
 	const selected = typeof currentValue === "string" ? rows.find((row) => row?.value === currentValue) : undefined;
 	const alias = CLAUDE_SET_MODEL_ALIAS_ROWS[nativeModelId];
 	if (alias !== undefined && currentValue === alias.value && selected?.name === alias.name) return;
+	const resumedAlias = resumedAttach === true ? CLAUDE_RESUMED_SET_MODEL_ALIAS_ROWS[nativeModelId] : undefined;
+	if (
+		resumedAlias !== undefined &&
+		currentValue === resumedAlias.value &&
+		selected?.name === resumedAlias.name &&
+		!rows.some((row) => row?.value === nativeModelId)
+	) {
+		return;
+	}
 	const answered =
 		modelOption === undefined
 			? "no model option"
@@ -797,7 +824,7 @@ export const claudeAdapter: AcpBackendAdapter = {
 		);
 	},
 
-	async enforceModel({ connection, acpSessionId, nativeModelId, modelId }) {
+	async enforceModel({ connection, acpSessionId, nativeModelId, modelId, resumedAttach }) {
 		const setConfig = connection.setSessionConfigOption;
 		if (typeof setConfig !== "function") {
 			throw new Error(`setSessionConfigOption unsupported — cannot enforce model ${modelId}`);
@@ -807,7 +834,7 @@ export const claudeAdapter: AcpBackendAdapter = {
 			configId: "model",
 			value: nativeModelId,
 		});
-		confirmClaudeSetModelAnswer(answer, nativeModelId);
+		confirmClaudeSetModelAnswer(answer, nativeModelId, resumedAttach);
 	},
 
 	resolveThinking({ modelId, reasoning, thinkingLevelMap }) {

@@ -116,7 +116,7 @@ describe("ACP set-model readback — claude", () => {
 	const answer = (currentValue: unknown, options: unknown[] = MEASURED_ROWS) => ({
 		configOptions: [{ id: "model", type: "select", currentValue, options }],
 	});
-	const enforce = async (nativeModelId: string, response: unknown) => {
+	const enforce = async (nativeModelId: string, response: unknown, resumedAttach = false) => {
 		const sent: unknown[] = [];
 		const connection = {
 			setSessionConfigOption: async (params: unknown) => {
@@ -124,7 +124,13 @@ describe("ACP set-model readback — claude", () => {
 				return response;
 			},
 		} as never;
-		await claudeAdapter.enforceModel({ connection, acpSessionId: "S", modelId: nativeModelId, nativeModelId });
+		await claudeAdapter.enforceModel({
+			connection,
+			acpSessionId: "S",
+			modelId: nativeModelId,
+			nativeModelId,
+			resumedAttach,
+		});
 		return sent;
 	};
 
@@ -139,8 +145,8 @@ describe("ACP set-model readback — claude", () => {
 			{ sessionId: "S", configId: "model", value: "claude-fable-5-2" },
 		]);
 		const refused: Array<[string, unknown]> = [
-			// The alias `fable` also names Fable 5.2, but no alias row is declared for 5.2 and 5.1 must
-			// never be answered by it: either is a different id answering under the requested one.
+			// On a created session (this helper's default) the alias `fable` is no answer for 5.2 (the
+			// resumed-session row is its own claim below), and 5.1 must never be answered by it.
 			["claude-fable-5-2", answer("fable", [...MEASURED_ROWS, { value: "fable", name: "Fable 5.2" }])],
 			["claude-fable-5-1", answer("fable", [...MEASURED_ROWS, { value: "fable", name: "Fable 5.2" }])],
 			["claude-fable-5-2", answer("claude-fable-5-1")],
@@ -187,6 +193,70 @@ describe("ACP set-model readback — claude", () => {
 				/does not name the requested model/,
 			);
 		}
+	});
+
+	describe("the row a resumed session answers (#174)", () => {
+		// Measured 0.109.0 (2026-11-24), the rows of one session: created, then resumed.
+		const CREATED_ROWS = [
+			{ value: "default", name: "Default (recommended)" },
+			{ value: "opus", name: "Opus 5.5" },
+			{ value: "claude-fable-5-2", name: "Fable 5.2" },
+			{ value: "sonnet", name: "Sonnet 5.5" },
+			{ value: "haiku", name: "Haiku 5.5" },
+		];
+		const RESUMED_ROWS = CREATED_ROWS.map((row) =>
+			row.value === "claude-fable-5-2" ? { ...row, value: "fable" } : row,
+		);
+		const both = [...RESUMED_ROWS, { value: "claude-fable-5-2", name: "Fable 5.2" }];
+		const grouped = (rows: unknown[]) => [{ group: "all", name: "All", options: rows }];
+		const FABLE = "claude-fable-5-2";
+		const refusal = /does not name the requested model/;
+		const outcome = (id: string, response: unknown, resumedAttach: boolean) =>
+			enforce(id, response, resumedAttach).then(
+				() => "accepted",
+				(err: unknown) => (refusal.test((err as Error).message) ? "refused" : `threw ${String(err)}`),
+			);
+		/** Each row is tried on a created and on a resumed session, and must end the same way on both. */
+		const onBoth = async (expected: string, rows: Array<[string, string, unknown]>) => {
+			for (const [name, id, response] of rows) {
+				expect(await outcome(id, response, false), `created: ${name}`).toBe(expected);
+				expect(await outcome(id, response, true), `resumed: ${name}`).toBe(expected);
+			}
+		};
+
+		it("[QK:ACP-CLAUDE-SET-MODEL-RESUMED-ALIAS] the alias row a resumed session answers for claude-fable-5-2 is an answer on a resumed session and a refusal on a created one", async () => {
+			expect(await outcome(FABLE, answer("fable", RESUMED_ROWS), false)).toBe("refused");
+			expect(await outcome(FABLE, answer("fable", RESUMED_ROWS), true)).toBe("accepted");
+			expect(await outcome(FABLE, answer("fable", grouped(RESUMED_ROWS)), false)).toBe("refused");
+			expect(await outcome(FABLE, answer("fable", grouped(RESUMED_ROWS)), true)).toBe("accepted");
+			// What both kinds of session accepted before is accepted on both still.
+			await onBoth("accepted", [
+				["the id's own row", FABLE, answer(FABLE, CREATED_ROWS)],
+				["the sonnet alias row", "claude-sonnet-5-5", answer("sonnet", RESUMED_ROWS)],
+				["the opus alias row", "claude-opus-5-5", answer("opus", RESUMED_ROWS)],
+			]);
+		});
+
+		it("[QK:ACP-CLAUDE-RESUMED-ALIAS-EXACT-ROW] the resumed-session row is matched as the measured value and name together, for the one id it was measured for", async () => {
+			const renamed = RESUMED_ROWS.map((row) => (row.value === "fable" ? { ...row, name: "Fable 6" } : row));
+			await onBoth("refused", [
+				["the alias value under another name", FABLE, answer("fable", renamed)],
+				["the alias value with no row behind it", FABLE, answer("fable", [])],
+				["another alias row", FABLE, answer("opus", RESUMED_ROWS)],
+				["the measured name on another row", FABLE, answer("default", [{ value: "default", name: "Fable 5.2" }])],
+				["no model option", FABLE, { configOptions: [{ id: "effort", currentValue: "fable" }] }],
+				["no answer", FABLE, undefined],
+				["the alias answering Fable 5.1", "claude-fable-5-1", answer("fable", RESUMED_ROWS)],
+			]);
+		});
+
+		it("[QK:ACP-CLAUDE-RESUMED-ALIAS-ID-NOT-OFFERED] a driver that offers the requested id and still selects the alias row is refused, while selecting the id itself is accepted", async () => {
+			await onBoth("refused", [
+				["the id offered beside the selected alias", FABLE, answer("fable", both)],
+				["the id offered inside a group beside the selected alias", FABLE, answer("fable", grouped(both))],
+			]);
+			await onBoth("accepted", [["the id selected beside the alias row", FABLE, answer(FABLE, both)]]);
+		});
 	});
 });
 

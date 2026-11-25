@@ -725,6 +725,15 @@ its own measured answer before it ships. `check-acp-set-model-readback` holds th
 contract offline; it does not certify the installed driver's runtime, and no 5.5 prompt
 turn is claimed by this measurement.
 
+A resumed session answers differently (#174). Measured on 2026-11-24 against 0.109.0: the
+same `claude-fable-5-2` session that answered its own row when created answers the alias
+row `fable`, named `Fable 5.2`, after `session/resume`, and offers no `claude-fable-5-2`
+row. `CLAUDE_RESUMED_SET_MODEL_ALIAS_ROWS` declares that one row, and it is accepted only
+when the bootstrap attached the session through a `session/resume` that succeeded, as the
+exact value and name, while the offered rows hold no row of the requested id. A created
+session answering it is refused as before. The name is the measured shape of the row, not
+evidence of the model it resolves to.
+
 #### Claude effort (#142)
 
 Pi's thinking level is carried as the adapter's `effort` session config option. Each curated

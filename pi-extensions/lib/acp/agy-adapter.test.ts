@@ -200,6 +200,7 @@ describe("agy ACP model enforcement — the answer is read back", () => {
 			acpSessionId: "s1",
 			modelId: "agy-gemini-3.8-flash",
 			nativeModelId: "gemini-3.8-flash",
+			resumedAttach: false,
 		});
 		expect(ok.calls).toEqual([{ sessionId: "s1", configId: "model", value: "gemini-3.8-flash" }]);
 
@@ -211,6 +212,7 @@ describe("agy ACP model enforcement — the answer is read back", () => {
 					acpSessionId: "s1",
 					modelId: "agy-gemini-3.8-flash",
 					nativeModelId: "gemini-3.8-flash",
+					resumedAttach: false,
 				}),
 			).rejects.toThrow(/does not name the requested model/);
 		}
@@ -225,6 +227,7 @@ describe("agy ACP model enforcement — the answer is read back", () => {
 				acpSessionId: "s1",
 				modelId: "agy-gemini-4-hydrogen",
 				nativeModelId: "gemini-4-hydrogen",
+				resumedAttach: false,
 			}),
 		).rejects.toThrow(/Unknown model ID/);
 	});

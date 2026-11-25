@@ -3170,6 +3170,8 @@ export function streamAcpTurn(
 				}
 			}
 			let acpSessionId: string | undefined;
+			// #174: true only below, once session/resume answered and its answer passed the id guard.
+			let resumedAttach = false;
 			if (attach && adapter.resume && held) {
 				// The reader must be inside the adapter's attach range advertising resume, and the record's writer
 				// the same agent inside that range. Anything else is not tried.
@@ -3224,6 +3226,7 @@ export function streamAcpTurn(
 					throw new AcpStopSignal("resume", "the agent answered the resume with another session id");
 				}
 				acpSessionId = attach.record.acpSessionId;
+				resumedAttach = true;
 			} else {
 				const created = await withTimeout("newSession", connection.newSession(newSessionArgs), NEW_SESSION_TIMEOUT_MS);
 				acpSessionId = created?.sessionId;
@@ -3272,7 +3275,7 @@ export function streamAcpTurn(
 			// and routes it through query.setModel.
 			await withTimeout(
 				"enforceModel",
-				adapter.enforceModel({ connection, acpSessionId, modelId: model.id, nativeModelId }),
+				adapter.enforceModel({ connection, acpSessionId, modelId: model.id, nativeModelId, resumedAttach }),
 				SET_MODEL_TIMEOUT_MS,
 			);
 			// #142: the requested thinking level, set and read back before the prompt. The session keeps
