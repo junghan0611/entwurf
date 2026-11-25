@@ -591,6 +591,39 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-EMPTY-SAYS-NEXT]",
 			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-COLOR-BY-ROLE",
+			"title": "garden ids lose their colour, so with colour on the id and the bookmark name no longer stand apart from the rest of the row",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tid: \"36\","],
+			"replace": ["\tid: \"\","],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-COLOR-BY-ROLE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-NO-COLOR-PLAIN",
+			"title": "the frame is coloured whatever the terminal allows, so NO_COLOR is ignored and colour codes reach a terminal that asked for none",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tconst drawn = io.color ? styleFrame(frame, size.columns) : frame.lines;"],
+			"replace": ["\tconst drawn = styleFrame(frame, size.columns);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-NO-COLOR-PLAIN]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-NO-COLOR-ENV",
+			"title": "NO_COLOR is no longer read, so an operator who set it still gets colour",
+			"subject": "pi-extensions/lib/resume-picker-production.ts",
+			"find": ["\treturn !(env.NO_COLOR !== undefined && env.NO_COLOR !== \"\") && env.TERM !== \"dumb\";"],
+			"replace": ["\treturn env.TERM !== \"dumb\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-NO-COLOR-ENV]",
+			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
 		}
 	]
 }
