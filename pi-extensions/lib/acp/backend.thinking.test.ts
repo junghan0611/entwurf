@@ -2328,6 +2328,97 @@ describe("the dispatch marker in the record (#171 L16)", () => {
 		expect(existsSync(leaseOf(world))).toBe(false);
 	});
 
+	/** The timers as Node gave them, taken before any is watched; every watch is undone to these. */
+	const realTimers = { setTimeout, setInterval, clearTimeout, clearInterval };
+	const sleep = (ms: number): Promise<void> => new Promise((resolve) => realTimers.setTimeout(resolve, ms));
+
+	/**
+	 * Every timer made while this watches, and how many of them would still keep the event loop alive:
+	 * ref'd, not cleared, and (a timeout) not yet fired. Node ends a process whose loop holds nothing.
+	 * A second watch replaces the first.
+	 */
+	function watchTimers(): { holding: () => number } {
+		const real = realTimers;
+		const made: Array<{ handle: NodeJS.Timeout; spent: boolean }> = [];
+		const spend = (handle: unknown): void => {
+			for (const timer of made) if (timer.handle === handle) timer.spent = true;
+		};
+		const g = globalThis as unknown as Record<string, unknown>;
+		g.setTimeout = (fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const timer = { handle: undefined as unknown as NodeJS.Timeout, spent: false };
+			timer.handle = real.setTimeout(
+				(...a: unknown[]) => {
+					timer.spent = true;
+					fn(...a);
+				},
+				ms,
+				...args,
+			);
+			made.push(timer);
+			return timer.handle;
+		};
+		g.setInterval = (fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const timer = { handle: real.setInterval(fn, ms, ...args), spent: false };
+			made.push(timer);
+			return timer.handle;
+		};
+		g.clearTimeout = (handle?: NodeJS.Timeout) => {
+			spend(handle);
+			real.clearTimeout(handle);
+		};
+		g.clearInterval = (handle?: NodeJS.Timeout) => {
+			spend(handle);
+			real.clearInterval(handle);
+		};
+		onTestFinished(() => {
+			Object.assign(g, real);
+		});
+		return { holding: () => made.filter((timer) => !timer.spent && timer.handle.hasRef()).length };
+	}
+
+	it("[QK:ACP-LEASE-RELEASE-HOLDS-PROCESS] while a release proves its agent gone, something ref'd keeps the process alive: a quit with nothing else on the event loop does not end it mid-release", async () => {
+		const world = makeWorld();
+		const id = "release-holds";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		let groupEmpty = false;
+		const timers = watchTimers();
+		// #175 M4: every wait of the proof is unref'd and so is the agent it closes. Without a ref'd hold, a
+		// Pi with no control-socket server and no MCP bridge child drained here: exit 0, the lease stayed.
+		// This catches an unref'd hold only because nothing else in a release is a ref'd timer: the proof's
+		// pauses and the session/close wait are unref'd (backend.ts `proveChildGone`, `abandonRetainedSession`).
+		const pending = backend.releaseAcpSessions(id, undefined, 2_000, () => groupEmpty);
+		expect(timers.holding()).toBeGreaterThan(0);
+		await sleep(120);
+		expect(timers.holding()).toBeGreaterThan(0);
+		groupEmpty = true;
+		expect(await pending).toBe(1);
+		expect(existsSync(leaseOf(world))).toBe(false);
+	});
+
+	it("[QK:ACP-LEASE-RELEASE-HOLD-CLEARED] the hold of a release ends with it, on every way out: one that releases, one that keeps the lease, and one that throws", async () => {
+		quietStderr();
+		const world = makeWorld();
+		const id = "release-hold-cleared";
+		await runTurn(world, transcript("FIRST"), id, "high");
+		const released = watchTimers();
+		expect(await backend.releaseAcpSessions(id)).toBe(1);
+		expect(released.holding()).toBe(0);
+		// Kept: the agent's group is never seen empty within the wait.
+		await runTurn(world, transcript("FIRST", "SECOND"), id, "high");
+		const kept = watchTimers();
+		expect(await backend.releaseAcpSessions(id, undefined, 20, () => false)).toBe(0);
+		expect(existsSync(leaseOf(world))).toBe(true);
+		expect(kept.holding()).toBe(0);
+		// Thrown: the group probe fails.
+		const thrown = watchTimers();
+		await expect(
+			backend.releaseAcpSessions(id, undefined, 2_000, () => {
+				throw new Error("group probe failed");
+			}),
+		).rejects.toThrow("group probe failed");
+		expect(thrown.holding()).toBe(0);
+	});
+
 	it("[QK:ACP-ATTACH-TEXT-CHANGE-STOPS] a stored session is not resumed under a setup text other than the one it was opened with", async () => {
 		const world = makeWorld();
 		const id = "attach-text";

@@ -1464,33 +1464,47 @@ export async function releaseAcpSessions(
 			? new Set([...bridgeSessions.keys(), ...sessionAgents.keys(), ...heldLeases.keys()])
 			: new Set([`pi:${piSessionId}`]);
 	let released = 0;
-	await Promise.all(
-		[...keys].map(async (key) => {
-			// A lease that stays is said on stderr with its reason: the next Pi to open the session stops on it.
-			const kept = (why: string): void => {
-				if (heldLeases.has(key)) process.stderr.write(`[acp] holder lease kept: ${why}\n`);
-			};
-			if (inFlightKeys.has(key)) return kept("a turn is in flight");
-			const live = bridgeSessions.get(key);
-			if (live) {
-				if (live.busy) return kept("the session is busy");
-				abandonRetainedSession(live);
-			}
-			if (!(await proveAgentsGone(key, waitMs, groupGone))) {
-				const seen = [...(sessionAgents.get(key) ?? [])]
-					.map((agent) => `pid ${agent.child.pid ?? "?"} exit ${agent.exit ? "seen" : "not seen"}`)
-					.join(", ");
-				return kept(`its agent was not proven gone within ${waitMs}ms (${seen})`);
-			}
-			// A turn that began while this waited owns the key now.
-			if (inFlightKeys.has(key) || bridgeSessions.has(key) || sessionAgents.has(key)) return;
-			try {
-				if (releaseHeldLease(key, probe)) released++;
-			} catch (error) {
-				process.stderr.write(`[acp] holder lease not released: ${thrownText(error)}\n`);
-			}
-		}),
-	);
+	// #175: this process is kept alive for the release itself. Every timer the proof below waits on is
+	// unref'd and the agent it closes is unref'd (`teardownChild`), so on a quit where nothing else holds
+	// the event loop (no control-socket server, no MCP bridge child) Node drained it in the middle of this
+	// handler: exit 0, Pi's own process.exit never reached, the lease left standing and nothing said
+	// (measured, #175 M4). NOT unref'd, deliberately. It lasts as long as the proof below: one deadline of
+	// `waitMs` for exit and group together, keys and agents in parallel (not a strict wall-clock bound: timer
+	// scheduling and the lease's synchronous file work come on top). Cleared on every way out. Recorded limit:
+	// a key whose proof throws ends the hold early for the keys still waiting; only an injected `groupGone`
+	// throws here (`processGroupGone`, `releaseHeldLease`'s caller and `connection.close` all catch).
+	const hold = setInterval(() => {}, 1_000);
+	try {
+		await Promise.all(
+			[...keys].map(async (key) => {
+				// A lease that stays is said on stderr with its reason: the next Pi to open the session stops on it.
+				const kept = (why: string): void => {
+					if (heldLeases.has(key)) process.stderr.write(`[acp] holder lease kept: ${why}\n`);
+				};
+				if (inFlightKeys.has(key)) return kept("a turn is in flight");
+				const live = bridgeSessions.get(key);
+				if (live) {
+					if (live.busy) return kept("the session is busy");
+					abandonRetainedSession(live);
+				}
+				if (!(await proveAgentsGone(key, waitMs, groupGone))) {
+					const seen = [...(sessionAgents.get(key) ?? [])]
+						.map((agent) => `pid ${agent.child.pid ?? "?"} exit ${agent.exit ? "seen" : "not seen"}`)
+						.join(", ");
+					return kept(`its agent was not proven gone within ${waitMs}ms (${seen})`);
+				}
+				// A turn that began while this waited owns the key now.
+				if (inFlightKeys.has(key) || bridgeSessions.has(key) || sessionAgents.has(key)) return;
+				try {
+					if (releaseHeldLease(key, probe)) released++;
+				} catch (error) {
+					process.stderr.write(`[acp] holder lease not released: ${thrownText(error)}\n`);
+				}
+			}),
+		);
+	} finally {
+		clearInterval(hold);
+	}
 	return released;
 }
 

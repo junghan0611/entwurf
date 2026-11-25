@@ -814,6 +814,28 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-LEASE-RELEASE-WAITS-FOR-GROUP]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-RELEASE-HOLDS-PROCESS",
+			"title": "the release keeps nothing ref'd while it proves the agent gone: on a quit with no control socket and no bridge child Node drains the loop mid-release, exit 0, and the lease stays (#175 M4)",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tconst hold = setInterval(() => {}, 1_000);"],
+			"replace": ["\tconst hold = setInterval(() => {}, 1_000).unref();"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-RELEASE-HOLDS-PROCESS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-LEASE-RELEASE-HOLD-CLEARED",
+			"title": "the release's hold outlives it: a Pi that has left its sessions is kept alive by a timer nobody clears",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tclearInterval(hold);"],
+			"replace": ["\t\tvoid hold;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-LEASE-RELEASE-HOLD-CLEARED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }
