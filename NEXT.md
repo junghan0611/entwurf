@@ -1,6 +1,6 @@
-# NEXT — 0.63.0 출하(npm latest), Herdr re-pin
+# NEXT — 0.63.0 출하 완료(npm latest, Herdr snapshot)
 
-**현재 (2026-11-26 02:2x KST):** 0.63.0을 npm `latest`로 출하했다(GLG publish, #173·#174·#175). 다음은 16: Herdr re-pin의 push·exact-SHA CI·snapshot tag. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
+**현재 (2026-11-26 02:3x KST):** 0.63.0을 npm `latest`로 출하했다(GLG publish, #173·#174·#175). Herdr snapshot `v2026.11.26-herdr.0.63.0`까지 끝났다. 다음 레일은 GLG가 고른다(17). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
 
 # RAIL — 현재 좌표
 
@@ -13,7 +13,8 @@
 - [x] **13. prepare 0.63.0.** `1f0d95e1`. 앞선 커밋 `ecb55abc`(setup 문서 한 문장), `6fb7e128`(Herdr checkout carrier, check-dep-versions PARTIAL 12/12). seal `46eeb628e93f28c5`: P4 check:full 1197s exit 0. P5 2차 MUST 23/0/2, BEHAVIOR 1/0, `cut: BLOCKED (MUST SKIP)`. SKIP 2개(`smoke-codex-fresh-live`, `check-openclaw-home-receipt`)는 GLG가 이번 cut에서 뺐다(openclaw·codex 경로 변경 0개, 호스트 자원). P5 1차는 운영 OMP receiver가 낡아 `smoke-omp-receive-live` FAIL이었고, `install-omp-receive`로 올렸다. 증거와 PARTIAL 28줄은 CHANGELOG 0.63.0 Release evidence에 있다. 로그는 `~/.local/share/entwurf-lab/063/`.
 - [x] **14. make 0.63.0.** M0 check:full 1188s exit 0. exact-SHA CI run 45637943500 4/4. Windows preview run 45640893928(build-addon·pack·preview success). 후보 `~/.local/state/entwurf-releases/0.63.0-1f0d95e15f9a/candidate.79ztOn/junghanacs-entwurf-0.63.0.tgz` sha256 `eb0af196e2a769a4add68f00333c853d6491488ce693597b2bd9997297f37e96`. container 수용 node:24-bookworm image `sha256:50761d4a62ac…` repoDigest `node@sha256:9d266751ca3d…`. tag `v0.63.0` = `1f0d95e1`. U0 receipt `publish-u0.cFOufj`(그 후보 옆, latest 0.62.0, repair 0.12.8-repair.1, 2026-11-25T15:09:38Z).
 - [x] **15. GLG publish.** U2: `latest`=0.63.0, `repair`=0.12.8-repair.1 유지(U0 receipt `publish-u0.cFOufj` 대조). registry tarball sha256 = 후보 `eb0af196…`, sha512·sha1 = `dist.integrity`·`dist.shasum`. U3: sandbox registry 설치(host Pi 1.6.0)에서 entwurf 6행, provider 오류 없음(`~/.local/share/entwurf-lab/063/publish/u3.log`). GLG의 새 노트북에는 0.63.0 registry(소비자) 버전만 설치한다. 그것이 installed-consumer LIVE(Pi 1.6.0)의 첫 측정이다. 형제 재시작: 새 버전이 필요한 것은 ACP 세션을 이어 가는 형제뿐이다. 0.62.x writer는 `vendorCompaction` 칸을 다시 쓸 때 지우므로, 그 세션을 이어 가기 전에 ACP writer를 먼저 올린다.
-- [ ] **16. Herdr re-pin.** ← CURRENT. `runtime-lock.json` npm 0.63.0(registry sha512 = integrity), `VERSION-MENTIONS-HERDR-LOCK` npm 버전 형태 복귀(PARTIAL check-dep-versions 12/12, receipt `c7564d955968`). 남은 것: push → exact-SHA CI → snapshot tag `v2026.11.26-herdr.0.63.0` + GitHub release(Latest는 v0.63.0 유지) → P9.
+- [x] **16. Herdr re-pin.** `581d0b53`: `runtime-lock.json` npm 0.63.0(registry sha512 = integrity), `VERSION-MENTIONS-HERDR-LOCK` npm 버전 형태 복귀(PARTIAL check-dep-versions 12/12, receipt `c7564d955968`). exact-SHA CI run 45662577079 4/4. snapshot tag + GitHub release `v2026.11.26-herdr.0.63.0`(Latest는 v0.63.0 유지). P9: 이번 P5의 `/tmp/entwurf-s2b-overlay-*` 2개(48K)만 회수했다. 이전 lane의 `/tmp/entwurf-qualify-*` 4개(11/16–11/22)는 범위 밖이라 두었다. reparented `/tmp` holder 1개는 운영 agent emacs daemon이다.
+- [ ] **17. 다음 레일.** ← CURRENT. GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
 
 # 열린 관찰 (일을 열지 않음)
 
