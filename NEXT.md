@@ -16,7 +16,7 @@
 
 # 열린 관찰 (일을 열지 않음)
 
-- **낡은 운영 writer 3개 (2026-11-25, 0.63.0 cut).** `26f14eda`(#173)가 `meta-session.ts`를 바꾼 뒤 `doctor-meta-bridge`(Claude Code hook), `doctor-omp-bridge`, `doctor-copilot-receive`가 STALE writer를 보고한다. 운영 hook·extension이라 cut에서 건드리지 않았다. 해결은 `install-meta-bridge`, `install-omp-bridge`, `install-copilot-receive`이고, 할지는 GLG가 정한다. `install-omp-receive`만 P5 때문에 올렸다.
+- **낡은 운영 writer 2개 (2026-11-25, 0.63.0 cut).** `26f14eda`(#173)가 `meta-session.ts`를 바꾼 뒤 `doctor-omp-bridge`, `doctor-copilot-receive`가 STALE writer를 보고한다. 운영 extension이라 cut에서 건드리지 않았고, GLG가 2026-11-26에 Claude Code만 올리라고 정했으므로 그대로 둔다(해결은 `install-omp-bridge`, `install-copilot-receive`). `install-omp-receive`는 P5 때문에, `install-meta-bridge`는 GLG 결정으로 올렸다(01bbe9c3 checkout, `.assembled`에서 `lib/meta-session.ts` 하나만 바뀜, `~/.claude/settings.json` 바이트 동일, `doctor-meta-bridge` FAIL→PASS; `~/.local/share/entwurf-lab/063/writers/`).
 - **PARTIAL 러너 (2026-11-25, #175 인수).** 러너 self-test는 동시에 돌리면 안전하지 않다. `cloneDirs()`가 전역 tmpdir을 세므로, 두 group을 동시에 시작하면 `QK:ORACLE-RUNS-TARGET-BYTES`가 mutant 실행 전에 실패한다. bound 60s mutant의 여유는 약 1.7배다(대조 실행 36.7s, 중간 kill 34s). 부하가 쌓인 끝 구간에서는 대조 실행이 50.7s가 되고, 8개가 bound를 넘었다(`accept/run1/NOTE.md`).
 - **Pi summary 비용은 한계로만 둔다.** GLG는 pi에 PR을 하지 않는다. CHANGELOG #175 항목의 "Pi summary generation still has a cost"가 그 기록이다.
 - **#174 실패 경로 정리.** resume 뒤 enforce가 던지는 경로에서는 quit 뒤에도 lease와 claude child(ppid 1)가 남았다. 측정 run이 끝날 때는 sweep clean이었다(#174 댓글 7147841663).
