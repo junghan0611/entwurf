@@ -15,7 +15,7 @@
 
 # 열린 관찰 (일을 열지 않음)
 
-- **ACP holder lease가 rpc quit 뒤 남는다 (2026-11-25, 측정, 원인 진단 중).** pi-smoke에서 `leaseReleasedOnQuit`가 Fable·sonnet·agy 세 run 모두 false였고, stderr에는 아무것도 남지 않았다. #171 영수증(`0d8c22d9`, Pi 1.5.2)은 `[]`였다. 다음 Pi는 takeover로 정상 resume한다. 운영 HOME에는 죽은 holder lease가 없었다. #173 P1(26f14eda)은 읽어 보니 self start key 경로에 닿지 않는다. 가설은 Pi 1.6.0 shutdown 대기 상한과 `CHILD_GONE_WAIT_MS` 5000ms의 충돌이다(Fable 측정 중). 0.62.0 이전부터 있던 것이면 기존 결함으로 두고 GLG가 이슈를 정한다. #173/#174가 원인이면 0.63.0 전에 고친다.
+- **ACP holder lease가 rpc quit 뒤 남는다 (2026-11-25, 기존 결함, 0.63.0 blocker 아님).** pi-smoke에서 `leaseReleasedOnQuit`가 Fable·sonnet·agy 세 run 모두 false였고, stderr에는 아무것도 남지 않았다. #171 영수증(`0d8c22d9`)은 `[]`였다. 다음 Pi는 takeover로 정상 resume한다. Fable의 sandbox 측정: Pi rpc EOF quit은 ref된 타이머라면 6s도 끝까지 기다린다. `unref()`된 타이머만 남으면 핸들러 도중 exit 0으로 끝나고, 1.5.2와 1.6.0 모두 같았다. 제품 코드(읽음)는 proveChildGone의 `pause()`(backend.ts:1396–1399, #171 bcfe98ee)와 teardown·close 대기에서 타이머를 unref한다. 따라서 child 종료를 기다리는 동안 loop를 붙잡는 다른 ref 핸들이 없으면 lease가 남는다(강한 추정, 제품 경로를 직접 계측하지는 않음). 0d8c22d9에서는 왜 풀렸는지 가르지 못했다. 범위는 `0d8c22d9..e2cb4709`이고 v0.61.0·v0.62.0을 포함한다. #173/#174 커밋은 이 코드에 닿지 않는다. 운영 TUI quit에서는 죽은 lease가 남지 않았다. 수정 후보: quit 경로의 증명 대기 타이머를 ref로 두기(대기는 이미 5000ms로 유계)와 rpc EOF quit 테스트. 이슈를 열지는 GLG가 정한다.
 - **거부가 보낸 쪽에 돌아가지 않는다 (2026-11-25, 오토비 지적).** `entwurf_v2` 영수증은 도착까지만 말한다. 6f4ebe는 `sent` 뒤 prompt 전에 거부했고, 그 사실은 그 창에만 남았다. prompt 전에 거부하는 다른 guard가 생기면 같은 일이 반복된다. 이슈로 올릴지 ROADMAP 방향으로 둘지는 GLG가 정한다.
 - **#174 실패 경로 정리.** resume 뒤 enforce가 던지는 경로에서는 quit 뒤에도 lease와 claude child(ppid 1)가 남았다. 측정 run이 끝날 때는 sweep clean이었다(#174 댓글 7147841663).
 - **#174 후속 미측정.** Fable 5.1과 agy Gemini 4의 resume readback. 더 새 Fable이 나오면 드라이버는 5.2를 full id로 두고, 그 답은 canonical 경로가 받는다(코드 읽음).
