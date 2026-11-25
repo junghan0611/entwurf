@@ -15,6 +15,12 @@
 // 107 bytes): `pi-1.events.ndjson` / `pi-1.screen.log` show `listen EINVAL` when it could not, and then
 // neither the socket server nor the MCP bridge child exists.
 //
+// Leftover processes are looked for by group, independently of the lease: right before the quit, every
+// process group of the Pi tree (the Pi process, `script` in `tui`, the agent and what it started) and the
+// agent named by each held lease are taken; right after it, `groupsAfterQuit` lists whatever still runs in
+// any of them. (Before #175 25a it listed only the groups of the leases left after the quit, so a released
+// lease made it `[]` whatever was still running.)
+//
 // Every observation goes to summary.json; exit 0 when the run reached its end, 3 when Pi could not be driven.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -77,7 +83,43 @@ function launchTui() {
 		writeFileSync(join(RUN, "pi-1.screen.log"), screen);
 		return end;
 	};
-	return { type, quit };
+	return { type, quit, pid: child.pid };
+}
+
+/** Every process, as `ps` reads it now. */
+function psRows() {
+	return spawnSync("ps", ["-eo", "pid,ppid,pgid,stat,etimes,args"], { encoding: "utf8" })
+		.stdout.split("\n")
+		.slice(1)
+		.filter((l) => l.trim() !== "")
+		.map((l) => {
+			const [pid, ppid, pgid] = l.trim().split(/\s+/).map(Number);
+			return { pid, ppid, pgid, line: l.slice(0, 220) };
+		});
+}
+
+/** The process groups of `rootPid` and every descendant, and of each held lease's agent, before the quit. */
+function groupsBeforeQuit(rootPid) {
+	const rows = psRows();
+	const groups = new Set();
+	const root = rows.find((r) => r.pid === rootPid);
+	if (root) groups.add(root.pgid);
+	const pending = [rootPid];
+	const seen = new Set(pending);
+	while (pending.length > 0) {
+		const parent = pending.pop();
+		for (const r of rows) {
+			if (r.ppid !== parent || seen.has(r.pid)) continue;
+			seen.add(r.pid);
+			groups.add(r.pgid);
+			pending.push(r.pid);
+		}
+	}
+	for (const f of leases()) {
+		const pid = JSON.parse(readFileSync(join(AGENT, "entwurf-acp-holders", f), "utf8")).child?.pid;
+		if (Number.isInteger(pid)) groups.add(pid);
+	}
+	return [...groups].sort((x, y) => x - y);
 }
 
 const summary = { backend, model: MODEL, variant: VARIANT, keepalive: KEEPALIVE, piCli, steps, checks: {}, run: {} };
@@ -93,6 +135,7 @@ try {
 		birthDone = await until(() => records().some((r) => typeof r.sealedTurnId === "string"), TURN_MS);
 		await sleep(1_000);
 		summary.run.leasesBeforeQuit = leases();
+		summary.run.groupsBeforeQuit = groupsBeforeQuit(a.pid);
 		const quitAt = Date.now();
 		summary.run.quit = await a.quit();
 		summary.run.quitMs = Date.now() - quitAt;
@@ -108,6 +151,7 @@ try {
 			await a.turn("after-compaction", "Reply with exactly: AGAIN");
 		}
 		summary.run.leasesBeforeQuit = leases();
+		summary.run.groupsBeforeQuit = groupsBeforeQuit(a.child.pid);
 		const quitAt = Date.now();
 		summary.run.quit = await a.quit();
 		summary.run.quitMs = Date.now() - quitAt;
@@ -117,13 +161,10 @@ try {
 	summary.run.leaseAfterQuit = summary.run.leasesAfterQuit.map((f) =>
 		JSON.parse(readFileSync(join(AGENT, "entwurf-acp-holders", f), "utf8")),
 	);
-	const ps = spawnSync("ps", ["-eo", "pid,ppid,pgid,stat,etimes,args"], { encoding: "utf8" }).stdout;
-	summary.run.groupsAfterQuit = summary.run.leaseAfterQuit.map((lease) =>
-		ps
-			.split("\n")
-			.filter((l) => l.trim().split(/\s+/)[2] === String(lease.child?.pid))
-			.map((l) => l.slice(0, 220)),
-	);
+	const after = psRows();
+	summary.run.groupsAfterQuit = summary.run.groupsBeforeQuit
+		.map((pgid) => ({ pgid, left: after.filter((r) => r.pgid === pgid).map((r) => r.line) }))
+		.filter((g) => g.left.length > 0);
 	const trace = existsSync(TRACE)
 		? readFileSync(TRACE, "utf8")
 				.split("\n")
@@ -144,6 +185,7 @@ try {
 		birthDone,
 		leaseHeldBeforeQuit: summary.run.leasesBeforeQuit.length === 1,
 		leaseReleasedOnQuit: summary.run.leasesAfterQuit.length === 0,
+		noGroupLeftAfterQuit: summary.run.groupsBeforeQuit.length > 0 && summary.run.groupsAfterQuit.length === 0,
 		piCalledProcessExit: summary.run.trace.processExit !== null,
 		loopDrainedBeforeExit: summary.run.trace.beforeExit !== null,
 	};
