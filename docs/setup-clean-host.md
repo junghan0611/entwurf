@@ -1241,7 +1241,7 @@ knobs. One fixed exception on the Claude ACP rail: its adapter's idle `/compact`
 turn on an idle session) is turned off inline (`settings.idleCompaction: false`), because pi would
 not see that turn; in-prompt auto-compaction stays the backend's, and a managed settings tier would
 still win over the inline value ([rail §Capability posture](./acp-backend-rail.md#capability-posture)).
-Pi's own summaries on a Claude ACP model (`/compact`, the threshold, overflow recovery, `/tree`) are not that backend compaction: each runs as a one-shot tool-less turn on a new child, and the session's retained child is closed after a compaction ([rail §11-10](./acp-backend-rail.md)).
+Pi's own summaries on a Claude ACP model (`/compact`, the threshold, overflow recovery, `/tree`) are not that backend compaction: each runs as a one-shot tool-less turn on a new child, and the session's retained child is closed after a compaction ([rail §11-10](./acp-backend-rail.md)). Since #175, the first input after a Pi compaction is preceded by one lone `/compact` to the same vendor session, so the vendor compacts its own transcript; Pi's summary is never sent to it ([rail §11-8-b](./acp-backend-rail.md)).
 The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
 session included) with `[entwurf:usage]` diagnostics. Near limit choose a visible
 action: clear, open a new session with a different model, or let the backend
