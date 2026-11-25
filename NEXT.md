@@ -1,27 +1,28 @@
-# NEXT — 0.62.0 shipped (Pi SDK 1.6.0, #172); Herdr pinned to 0.62.0
+# NEXT — 0.63.0 cut (#173 entwurf resume CLI + #174 resumed Fable alias)
 
-**현재 (2026-11-23):** #172(Pi SDK 1.6.0 + pi-durable carrier)가 main에 들어왔고(브랜치 fast-forward, 마지막 코드 커밋 `9d7aa52e`), 운영 창 2부도 끝났다. 0.62.0이 npm `latest`이고 Herdr lock도 0.62.0을 가리킨다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), main writer·릴리스 실무 `20261113T043350-ff08d4`, prepare 실무 Opus `20261120T213316-793499`, 설계·수정 Fable `20261121T180949-b6d8f7`, 리뷰 Sol `20261121T135110-09fa15`.
+**현재 (2026-11-25):** #173(`entwurf resume` CLI, peers 정렬, owner pid ps 생략)은 main `e2cb4709`에 들어갔고 이슈는 닫혔다. #174(Pi ACP Fable 5.2가 vendor 세션 resume 뒤 모든 턴을 거부)는 GLG 결정으로 0.63.0에 함께 묶는다. 0.63.1은 만들지 않는다. npm publish는 GLG가 직접 한다. 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`, 구현 Fable `20261125T030604-77623e`(Claude Code), 리뷰 Sol `20261124T210505-d9ef5c`, 문서 검수 Gemini 4 `20261124T225217-566f7c`. 옛 writer Pi ACP Fable `20261124T210459-6f4ebe`는 #174로 멈췄고 retire하지 않았다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. #171 병합.** `0d8c22d9`(exact-SHA CI run 44978371312 4/4, #171 닫힘). U4·U16은 #156으로 미뤘다(댓글 7069232824). 커밋된 main sandbox LIVE: Claude·agy 각 pi-smoke 15/15, pi-unknown 12/12(n=1, `~/.local/share/entwurf-lab/171/main-cover/`).
-- [x] **2. 문서 검토.** `d40a8779`(Sonnet 가독성 + Sol 코드 대조 D1–D6), Herdr checkout carrier `2c6df36e`.
-- [x] **3. prepare 0.61.0.** 첫 후보 `2c6df36e`는 P5 MUST 23/2/0으로 red(`smoke-mux-lifecycle-live` pi-acp 행: 턴 중 창을 닫으면 죽은 holder lease로 재부팅 전까지 STOP / S2d smoke가 #171 host 계약 이전). Fable 수정 `12e54b5c`(증명된 죽은 holder·agent·process group이면 lease 인계, 같은 machine·boot·pidNs)·`2b31b8c6`·`bc88aa91`·`213be3a3`(lane inventory 66→69), Sol 수락. 재후보 `e1e43354`: FULL 1156s, P5 MUST 25/0/0 BEHAVIOR 1/0/0, OpenClaw home receipt `receipt-0.61.0-213be3a3`, GLG 사용 시나리오 LIVE n=1(`171/f12/f15-two-send.log`). 증거는 CHANGELOG 0.61.0 Release evidence.
-- [x] **4. make → publish.** exact-SHA CI run 45003209370, Windows preview run 45004229146, candidate sha256 `3bfe8a55…fbfe1a`(container 수용), tag `v0.61.0`, GitHub release. GLG npm publish; U2 latest=0.61.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
-- [x] **5. Herdr re-pin.** `df92c155`(`runtime-lock.json` npm 0.61.0, registry sha512 = integrity), exact-SHA CI run 45007351262 4/4, snapshot `v2026.11.22-herdr.0.61.0` GitHub release(latest는 v0.61.0 유지).
-- [x] **6. #172 Pi SDK 1.6.0 + pi-durable.** 구현 Fable, 리뷰 Sol 3회, durable 판독 Opus. frozen FULL `9d7aa52e` 1151s. PARTIAL은 dep-versions 12/12, pack-pin-matcher 2/2, acp-prompt-lifecycle 15/15, acp-set-model-readback 206/206(`2c59d4a0`), pi-durable-carrier 65/65(`3dfd0ead` work surface `8508192d…`). M1 fixture `pi-extensions/lib/fixtures/pi-durable-sdk152/`. 영수증 `~/.local/share/entwurf-lab/172/`, #172 댓글.
-  - **운영 창 2부 (2026-11-23 07:05 KST, GLG 승인):**
-    - 전역 pi: `pi update --self`로 1.5.2→1.6.0, exit 0. updater가 `minimumReleaseAge=0`을 스스로 넘긴다. 이때 SDK는 약 59시간 된 상태였다.
-    - 점검: `doctor-pi-package` owned, `doctor-pi-provider` ok.
-    - durable 저장소: 열기 직전 manifest가 백업과 같았다(`3bff6531ece1260b`).
-    - 68bd94: `entwurf pi-durable --session <native id> --native-module …/agent-config/pi-durable/index.mjs`로 같은 id로 재오픈했다. `entwurf_resume_call`은 module을 빼고 연다. `entwurf_self` 왕복은 13초였다(n=1).
-- [x] **7. 0.62.0 cut.** prepare `9dfe3fa0`: FULL 1160s, P5 MUST 25/0/0 BEHAVIOR 1/0/0(Codex managed daemon 381279 재사용, GLG 지시), OpenClaw home receipt `receipt-0.62.0-0dbcf114`, dep-versions PARTIAL 12/12. README에 ACP 꼭지(Fable·Sol·68bd94·Opus 리뷰). make: exact-SHA CI run 45086261925 4/4, Windows preview run 45087432832, candidate sha256 `2220d0cb…`(container 수용), tag `v0.62.0`, GitHub release. GLG npm publish; U2 latest=0.62.0/repair 유지, U3 registry 설치 6행. gog 알림은 토큰 만료로 실패.
-- [x] **8. Herdr re-pin 0.62.0.** `805fce26`(`runtime-lock.json` npm 0.62.0, registry sha512 = integrity; 0.61.0 region은 이전 pin으로 유지; setup guide·ACP/mux rail·ROADMAP floor 줄의 "미출하 후보" 문구 정리), exact-SHA CI run 45090634277 4/4, snapshot `v2026.11.23-herdr.0.62.0` GitHub release(latest는 v0.62.0 유지).
-- [ ] **9. 0.62.0 뒷정리.** ← CURRENT. 고칠 후보 수정과 측정은 CHANGELOG `## Unreleased`에 있다(테스트 잔여물 3파일, ACP check 5종의 births 디렉터리, chain·memguard smoke, release skill P9 목록, rail 673행, `[QK:ACP-SUMMARY-FAILURE-KEEPS-WORDS]`, RPC switch/fork 0-token, provider 소켓 source 판독). 영수증 `~/.local/share/entwurf-lab/062/measure/`.
-  - 남은 것: PARTIAL `check-acp-set-model-readback`(mutant 추가, test 변경; 약 1.6시간) 그리고 resume 테스트 두 파일의 그룹. PARTIAL은 공유 checkout에 mutant를 심으므로 이 checkout에서 pi를 띄우지 않는 창에서만 돈다.
-  - 미측정: installed-consumer LIVE(Pi 1.6.0) — GLG 노트북 소비자 설치가 첫 측정.
-  - GLG 관측(2026-11-23 11:08 KST, n=1, agy 1.5.14, 대화 관측이며 LIVE gate는 아님): 첫 turn은 새 agy 세션을 열었다. pi를 다시 연 뒤(pi pid 시작 11:09:03, 두 turn 사이) 둘째 turn이 기록된 세션을 resume(`[acp: resuming agy session]`)했고 답을 받았다. 1.5.14는 attach 범위 [1.5.9, 1.6.0) 안이다. LIVE에서 잰 agy 버전은 아직 1.5.13이다.
-  - 관찰: `pi-durable-owner-fence.test.ts`는 `afterEach`로 지우는데도 floor 두 번에 `pdf-*` 하나가 남았다(원인 미확인).
+- [x] **1–8. 0.61.0·0.62.0 cut과 Herdr re-pin.** 증거는 CHANGELOG 0.61.0·0.62.0 Release evidence와 Herdr snapshot 항목에 있다.
+- [x] **9. 0.62.0 뒷정리.** 수정은 CHANGELOG `## Unreleased`에 있다. 남아 있던 PARTIAL은 뒤 후보에서 측정했다: set-model-readback 212/212 @`4e6045e5`(acp-step8 mutant 포함), visible-resume 137/137 @`d379a6f0`(herdr·mux resume 테스트 포함), mux-resume-call @`52c95685`.
+- [x] **10. #173 resume CLI.** main `e2cb4709`. C1–C4, P1(owner pid가 없으면 ps 생략, peer-facts 약 9s→0.72s), P2(peers·선택기에서 북마크·live·activity 우선, test room과 넘친 행은 수만), mutant 정정 `d379a6f0`, smoke-pi-attach 격리 `e2cb4709`. PARTIAL 8 group green(`~/.local/share/entwurf-lab/173/receipts/`). 동결 FULL `e2cb4709` 1177s exit 0. A7 LIVE는 #173 댓글 7147835601에 있다.
+- [x] **11. #174 resumed Fable alias.** main `4e6045e5`. Sol GO(Blocker 0, Defect 0). PARTIAL set-model-readback 212/212, probe-ordering 1/1 @`4e6045e5`(receipts `~/.local/share/entwurf-lab/174/receipts/`). 나머지 13 group은 바뀐 subject에서 find 불일치 0건이라 돌리지 않았다. 동결 FULL `4e6045e5` 1173s exit 0(dist는 같은 SHA에서 빌드). 제품 LIVE pi-smoke Fable: after-compaction과 reopen 모두 `resuming → session ready model=claude-fable-5-2 → sending prompt`, acpSessionId 하나, 14/15(`174/green/`). 수정 전 RED는 #174 댓글 7147841663. 대조군 agy Gemini 4 pi-smoke: compaction→resume에서 readback 거부가 없었다(n=1, `174/control-agy/`). value 비교 삭제 mutant는 정적으로는 잡히지만 측정하지 않았다(Sol).
+- [ ] **12. 형제 재시작 창 (GLG).** ← CURRENT. #174가 main에 들어간 뒤 GLG가 형제를 모두 내렸다가 올린다(GLG 요청에 따라 DM으로 알린다). 꼭 필요한 대상은 Pi ACP Fable `6f4ebe`이고, `entwurf resume 20261124T210459-6f4ebe` 뒤 첫 턴이 통과하는지 확인한다. 재시작 중에는 PARTIAL을 돌리지 않는다.
+- [ ] **13. prepare 0.63.0.** `/entwurf-release prepare 0.63.0`. P5 Codex는 운영 managed daemon(Codex 0.172.0, 시작 시점의 pid를 그때 기록)을 쓴다. GLG가 2026-11-25에 A안으로 결정했다. 모델은 `gpt-6.1-terra`, pi 쪽은 `openai-codex/gpt-6.1-terra`. 전용 app-server는 daemon과 같은 control socket을 쓰므로(`scripts/codex-app-server-launch.sh:8`) daemon을 멈추지 않고는 띄울 수 없다. Earlier-candidate PARTIAL은 영수증 하나에 한 줄씩 적는다.
+- [ ] **14. make 0.63.0.** exact-SHA CI 4/4, candidate, tag, GitHub release, stamp. publish는 하지 않는다. 끝나면 GLG에게 DM 한 번.
+- [ ] **15. GLG publish 뒤.** GLG의 새 노트북에는 0.63.0 registry(소비자) 버전만 설치한다. 그것이 installed-consumer LIVE(Pi 1.6.0)의 첫 측정이다.
+
+# 열린 관찰 (일을 열지 않음)
+
+- **ACP holder lease가 rpc quit 뒤 남는다 (2026-11-25, 측정, 원인 진단 중).** pi-smoke에서 `leaseReleasedOnQuit`가 Fable·sonnet·agy 세 run 모두 false였고, stderr에는 아무것도 남지 않았다. #171 영수증(`0d8c22d9`, Pi 1.5.2)은 `[]`였다. 다음 Pi는 takeover로 정상 resume한다. 운영 HOME에는 죽은 holder lease가 없었다. #173 P1(26f14eda)은 읽어 보니 self start key 경로에 닿지 않는다. 가설은 Pi 1.6.0 shutdown 대기 상한과 `CHILD_GONE_WAIT_MS` 5000ms의 충돌이다(Fable 측정 중). 0.62.0 이전부터 있던 것이면 기존 결함으로 두고 GLG가 이슈를 정한다. #173/#174가 원인이면 0.63.0 전에 고친다.
+- **거부가 보낸 쪽에 돌아가지 않는다 (2026-11-25, 오토비 지적).** `entwurf_v2` 영수증은 도착까지만 말한다. 6f4ebe는 `sent` 뒤 prompt 전에 거부했고, 그 사실은 그 창에만 남았다. prompt 전에 거부하는 다른 guard가 생기면 같은 일이 반복된다. 이슈로 올릴지 ROADMAP 방향으로 둘지는 GLG가 정한다.
+- **#174 실패 경로 정리.** resume 뒤 enforce가 던지는 경로에서는 quit 뒤에도 lease와 claude child(ppid 1)가 남았다. 측정 run이 끝날 때는 sweep clean이었다(#174 댓글 7147841663).
+- **#174 후속 미측정.** Fable 5.1과 agy Gemini 4의 resume readback. 더 새 Fable이 나오면 드라이버는 5.2를 full id로 두고, 그 답은 canonical 경로가 받는다(코드 읽음).
+- **resume 거부 문구.** 거부 문구가 agent 호출자를 전제로 쓰여 있다(`entwurf_resume_call rejected`, `send to it with entwurf_v2`). C4에서는 한 hint만 사람용으로 고쳤다.
+- **team.json 이름.** GLG는 운영 `team.json`을 "entwurf.json"이라 부른다. 이름을 바꿀지는 GLG가 정한다.
+- **0.62.0 뒷정리에서 넘어온 관찰.** GLG 대화 관측(2026-11-23, agy 1.5.14, n=1): pi를 다시 연 뒤 둘째 turn이 기록된 agy 세션을 resume했다. LIVE에서 잰 agy 버전은 1.5.13이다. `pi-durable-owner-fence.test.ts`는 floor를 두 번 돌리는 동안 `pdf-*` 하나를 남겼다(원인 미확인).
+- **시험 형제.** `20261125T084440-d8233a`(#173 A7 LIVE)는 dormant로 남겨 두었다. retire는 GLG가 요청할 때만 한다.
 
 **0.62.0 cut 관찰:** U3 registry 설치에서 npm 11.16.0이 `allow-scripts` 정책으로 entwurf `postinstall`(chmod)을 돌리지 않았다. tarball이 이미 실행 비트를 갖고 있어 영향은 없었다.
 
@@ -39,7 +40,7 @@
 
 # NOW
 
-- **역할 (2026-11-20):** 운영코디 68bd94, ff08d4 main writer·릴리스 실무.
+- **역할:** 맨 위 "현재" 줄을 따른다.
 - **운영 관찰:**
   - oracle의 pi는 이 checkout을 package로 로드한다(`pi.extensions`가 `.ts` 소스). 새로 뜨는 pi는 미커밋 작업트리를 그대로 쓰고, 편집 중간 상태에서 뜨면 entwurf provider 전체가 등록에 실패할 수 있다. MCP bridge는 dist라 `build-bridge` 전까지 src/dist가 어긋난다(#167 리뷰 895788 관찰, #165 맥락).
   - 새 backend를 store에 처음 쓰기 전에는 installed writer 전부(`doctor-codex-birth`는 helper bytes staleness를 보지 않으므로 `install-state.json`의 unit 버전도), omp·copilot doctor를 확인한다. 0.55.0 cut에서 Codex birth helper(0.41.1)·OMP·Copilot receive가 `openclaw` record를 보고 store 쓰기를 거절했다.
