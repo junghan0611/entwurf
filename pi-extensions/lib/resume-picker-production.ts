@@ -217,6 +217,15 @@ export function resumePickerHasTerminal(
 	return stdin.isTTY === true && stderr.isTTY === true;
 }
 
+/**
+ * May the list be drawn in colour here? Not when `NO_COLOR` is set to anything but the empty string
+ * (no-color.org), and not on a `dumb` terminal. Read from the environment only: no theme, setting or
+ * terminal query, and nothing is written anywhere.
+ */
+export function pickerColorEnabled(env: NodeJS.ProcessEnv): boolean {
+	return !(env.NO_COLOR !== undefined && env.NO_COLOR !== "") && env.TERM !== "dumb";
+}
+
 /** Signals that end the list. SIGINT is here for one sent from outside (`kill -INT`): in raw mode
  * Ctrl-C is a byte the picker reads, not a signal. */
 const TERMINATING_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"];
@@ -233,7 +242,7 @@ export interface PickerProcess {
 }
 
 /**
- * The real terminal: keys from stdin, the list on stderr, size from stderr.
+ * The real terminal: keys from stdin, the list on stderr, size from stderr, colour from `env`.
  *
  * Input is decoded as a UTF-8 STREAM: a Korean character is three bytes and a read may end between
  * them, so decoding each read on its own would turn a typed search word into replacement characters.
@@ -251,7 +260,7 @@ export interface PickerProcess {
  * with the picker's own answer, and it is all that is promised about a dead terminal — the restore
  * is attempted and the exit code is right, while the text of the error may have nowhere to go.
  */
-export function processPickerIo(proc: PickerProcess = process): PickerIo {
+export function processPickerIo(proc: PickerProcess = process, env: NodeJS.ProcessEnv = process.env): PickerIo {
 	const { stdin, stderr } = proc;
 	let reportError: ((err: Error) => void) | null = null;
 	/** The late echo of a failure the picker already acted on. See A STREAM REPORTS ONE FAILURE TWICE. */
@@ -329,5 +338,6 @@ export function processPickerIo(proc: PickerProcess = process): PickerIo {
 			});
 		},
 		size: () => ({ columns: stderr.columns ?? 80, rows: stderr.rows ?? 24 }),
+		color: pickerColorEnabled(env),
 	};
 }

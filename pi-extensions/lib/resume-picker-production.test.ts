@@ -27,6 +27,8 @@
  *                                    the real callback/event timing and that listener's presence;
  *                                    the test's own recording listener also handles the event, so
  *                                    its zero-uncaught count is not what would catch a regression
+ *   RESUMEPICK-NO-COLOR-ENV          colour is off when NO_COLOR is set to anything non-empty or the
+ *                                    terminal is `dumb`, read from the environment handed in
  */
 
 import { EventEmitter } from "node:events";
@@ -41,6 +43,7 @@ import { RESUME_CLI_EXIT, runResumeCli } from "./resume-cli.ts";
 import { runResumePicker } from "./resume-picker.ts";
 import {
 	type PickerProcess,
+	pickerColorEnabled,
 	processPickerIo,
 	RESUME_BOOKMARK_FILE,
 	ResumeBookmarkError,
@@ -389,6 +392,20 @@ describe("the entwurf resume picker's real terminal wiring", () => {
 				uncaught.length === 0 &&
 				sink.listenerCount("error") === 2 &&
 				f.stdin.listenerCount("error") === 1,
+		);
+	});
+
+	it("[QK:RESUMEPICK-NO-COLOR-ENV] the list is drawn without colour when NO_COLOR is set to anything but the empty string (no-color.org) or the terminal is `dumb`, and with colour otherwise — decided from the environment handed to the terminal wiring, nothing else", () => {
+		const f = fakeProcess();
+		ok(
+			"NO_COLOR non-empty or TERM=dumb turns colour off; unset or empty NO_COLOR leaves it on",
+			pickerColorEnabled({}) &&
+				pickerColorEnabled({ NO_COLOR: "", TERM: "xterm-256color" }) &&
+				!pickerColorEnabled({ NO_COLOR: "1" }) &&
+				!pickerColorEnabled({ NO_COLOR: "0" }) &&
+				!pickerColorEnabled({ TERM: "dumb" }) &&
+				processPickerIo(f.proc, { NO_COLOR: "1" }).color === false &&
+				processPickerIo(f.proc, { TERM: "tmux-256color" }).color === true,
 		);
 	});
 });

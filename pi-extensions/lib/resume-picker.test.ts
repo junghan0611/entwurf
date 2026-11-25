@@ -45,6 +45,11 @@
  *                                       each drawn whole or not at all (a path may keep its end)
  *   RESUMEPICK-EMPTY-SAYS-NEXT          with no row to draw the screen says what is empty and which
  *                                       keys bring rows back, and Enter says and does nothing
+ *   RESUMEPICK-COLOR-BY-ROLE            with colour on, each piece is coloured by what it is — bookmark,
+ *                                       id, fact state, title — the cursor's row is one reverse bar,
+ *                                       and stripped of colour every line is the plain line
+ *   RESUMEPICK-NO-COLOR-PLAIN           with colour off the terminal receives no colour or emphasis
+ *                                       code at all; `>`, `*` and the rules still say it all
  */
 
 import { describe, expect, it } from "vitest";
@@ -67,6 +72,7 @@ import {
 	runResumePicker,
 	settlePickerState,
 	stepPicker,
+	styleFrame,
 } from "./resume-picker.ts";
 import { buildResumeListing, resumeRowText, visibleResumeRows } from "./resume-picker-rows.ts";
 
@@ -97,6 +103,12 @@ function fact(n: number, over: Partial<PeerFact> = {}): PeerFact {
 }
 
 const THREE = [fact(1), fact(2), fact(3)];
+/** A running pi-durable, a dormant pi and a dormant Claude Code citizen: one of each fact state. */
+const THREE_SHAPES = [
+	fact(1, { backend: "pi-durable", model: null, liveness: "unsupported", receiver: "active" }),
+	fact(2),
+	fact(3, { backend: "claude-code", model: null, liveness: "unsupported", receiver: "inactive" }),
+];
 const LISTING = buildResumeListing(THREE, HERE, []);
 const ORDER = visibleResumeRows(LISTING, INITIAL_PICKER_STATE).map((r) => r.gardenId);
 const ROOMY: PickerSize = { columns: 100, rows: 20 };
@@ -114,7 +126,7 @@ interface Faults {
 
 /** A recording terminal. Nothing happens on its own: input, resize, signals, errors and timers are
  * all delivered by the test. */
-function terminal(size: PickerSize = ROOMY, faults: Faults = {}) {
+function terminal(size: PickerSize = ROOMY, faults: Faults = {}, color = true) {
 	const calls: string[] = [];
 	const written: string[] = [];
 	let input: ((chunk: string) => void) | null = null;
@@ -176,6 +188,7 @@ function terminal(size: PickerSize = ROOMY, faults: Faults = {}) {
 			if (text.includes("\x1b[?2004l")) calls.push("paste:off");
 		},
 		size: () => current,
+		color,
 	};
 	return {
 		io,
@@ -215,6 +228,13 @@ function stripEscapes(text: string): string {
 	}
 	return out;
 }
+
+/** Does `text` carry a colour or emphasis code (CSI … m)? A scan for the same reason as above. */
+const hasSgr = (text: string): boolean =>
+	text
+		.split("\x1b[")
+		.slice(1)
+		.some((rest) => /^[0-9;]*m/.test(rest));
 
 const count = (calls: string[], what: string): number => calls.filter((c) => c === what).length;
 /** Raw mode, the alternate screen and bracketed paste each switched on once and off once, and
@@ -931,6 +951,57 @@ describe("the entwurf resume picker", () => {
 				nothingHere[4] === "  Ctrl-A: all directories" &&
 				stillOpen &&
 				JSON.stringify(await p) === JSON.stringify({ kind: "cancelled" }),
+		);
+	});
+
+	it("[QK:RESUMEPICK-COLOR-BY-ROLE] with colour on, each piece is coloured by what it is in the terminal's own colours — bookmark mark and name, garden id, a fact by whether it says running, not running or not known, a section title — the cursor's row is one reverse-video bar across the width, and every line stripped of colour is exactly the plain line", () => {
+		const listing = buildResumeListing(
+			[
+				...THREE_SHAPES,
+				fact(9, { backend: "claude-code", model: null, liveness: "unsupported", receiver: "unobserved" }),
+			],
+			HERE,
+			[{ gardenId: fact(1).gardenId, name: "운영코디" }],
+		);
+		// Rows: the bookmark, then 9, 3, 2 by recency; the cursor rests on 3.
+		const state = { ...INITIAL_PICKER_STATE, cursor: 2 };
+		const frame = renderPickerFrame(listing, state, { columns: 120, rows: 14 }, "tmux");
+		const styled = styleFrame(frame, 120);
+		const row = (n: number): string => styled.find((l) => l.includes(fact(n).gardenId)) ?? "";
+		const cursorText = frame.lines[frame.cursorLine] ?? "";
+		ok(
+			"colour by role, a full-width bar for the cursor, and nothing but colour added",
+			row(1).startsWith("  \x1b[35m* \x1b[0m\x1b[35m운영코디\x1b[0m  \x1b[36m") &&
+				row(1).includes(`\x1b[32mreceiver active\x1b[0m`) &&
+				row(9).includes(`\x1b[33mreceiver unobserved\x1b[0m`) &&
+				row(2).includes("pi           socket dead") &&
+				styled.some((l) => l.includes("\x1b[1;34mBookmarked, this directory\x1b[0m")) &&
+				(styled[frame.cursorLine] ?? "") ===
+					`\x1b[1;7m${cursorText}${" ".repeat(120 - displayWidth(cursorText))}\x1b[0m` &&
+				styled.every((l, i) => i === frame.cursorLine || stripEscapes(l) === frame.lines[i]) &&
+				styled.every((l) => displayWidth(stripEscapes(l)) <= 120),
+		);
+	});
+
+	it("[QK:RESUMEPICK-NO-COLOR-PLAIN] with colour off (NO_COLOR) the terminal receives no colour or emphasis code at all — only the screen's own control — and the frame still says everything: `>` on the cursor's row, `*` on a bookmark, a rule for each section", async () => {
+		const listing = buildResumeListing(THREE_SHAPES, HERE, [{ gardenId: fact(1).gardenId, name: "운영코디" }]);
+		const plain = terminal(ROOMY, {}, false);
+		const pPlain = runResumePicker(listing, "tmux", plain.io);
+		plain.send("\x1b[B");
+		const plainScreen = plain.screen();
+		plain.send("\x03");
+		await pPlain;
+		const coloured = terminal(ROOMY, {}, true);
+		const pColoured = runResumePicker(listing, "tmux", coloured.io);
+		coloured.send("\x03");
+		await pColoured;
+		ok(
+			"no SGR without colour, the marks and rules still drawn; with colour, SGR is there",
+			plain.written.every((w) => !hasSgr(w)) &&
+				plainScreen.some((l) => l.startsWith(`> ${fact(3).gardenId}`)) &&
+				plainScreen.some((l) => l.startsWith(`  * 운영코디  ${fact(1).gardenId}`)) &&
+				plainScreen.some((l) => l.startsWith("== Bookmarked, this directory ==")) &&
+				coloured.written.some((w) => hasSgr(w)),
 		);
 	});
 });

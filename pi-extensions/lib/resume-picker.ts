@@ -736,6 +736,65 @@ export function renderPickerFrame(
 	return { lines: out.map(joinSpans), spans: out, cursorLine };
 }
 
+// ── colour ─────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How each piece is emphasised when colour is allowed (#176). Only the terminal's own sixteen colours
+ * and reverse video: they follow whatever theme the terminal has — light or dark, Dracula or not —
+ * so nothing here assumes a background, and no theme or setting is read. Under a Dracula terminal
+ * the ids are its cyan, bookmarks its pink, section titles its purple. Colour only repeats what the
+ * text already says; with it off the frame reads the same.
+ */
+const ROLE_SGR: Record<PickerRole, string> = {
+	plain: "",
+	dim: "90",
+	title: "1",
+	rule: "90",
+	header: "1;34",
+	cursor: "1",
+	pin: "35",
+	id: "36",
+	backend: "",
+	fact: "",
+	activity: "90",
+	model: "90",
+	cwd: "",
+	key: "",
+};
+
+/** A fact word's colour says only which of three it is — running, not running, or not known —
+ * never whether the citizen can be reopened (the leaf decides that). */
+function factSgr(fact: string): string {
+	const word = fact.slice(fact.lastIndexOf(" ") + 1);
+	if (word === "alive" || word === "active") return "32";
+	if (word === "dead" || word === "inactive" || word === "none") return "";
+	return "33";
+}
+
+const sgr = (codes: string, text: string): string => (codes === "" ? text : `${ESC}[${codes}m${text}${ESC}[0m`);
+
+/**
+ * The frame's lines with colour: each piece by what it is, and the cursor's row in reverse video
+ * across the whole width so it reads as one bar. Escape codes take no cells, so the lines still fit
+ * exactly where the plain ones did; stripped of them, each line is the plain line.
+ */
+export function styleFrame(frame: { spans: PickerSpan[][]; cursorLine: number }, columns: number): string[] {
+	return frame.spans.map((pieces, i) => {
+		if (i === frame.cursorLine) {
+			const text = joinSpans(pieces);
+			return sgr("1;7", text + " ".repeat(Math.max(0, columns - displayWidth(text))));
+		}
+		return pieces
+			.map((piece) =>
+				// Blank pieces carry no code: nothing to see, and fewer bytes per frame.
+				piece.text.trim() === ""
+					? piece.text
+					: sgr(piece.role === "fact" ? factSgr(piece.text) : ROLE_SGR[piece.role], piece.text),
+			)
+			.join("");
+	});
+}
+
 // ── runner ─────────────────────────────────────────────────────────────────────────────────────
 
 /** The terminal, as much of it as the picker needs. Production wires stdin/stderr/process. */
@@ -759,6 +818,9 @@ export interface PickerIo {
 	/** Pass a received signal on, after the terminal was restored. */
 	reraise(signal: string): void;
 	size(): PickerSize;
+	/** May the frame be drawn in colour? False draws it with no colour or emphasis at all (NO_COLOR):
+	 * the `>` of the cursor's row, the `*` of a bookmark and the section rules carry it alone. */
+	readonly color: boolean;
 }
 
 export type PickerResult = { kind: "selected"; gardenId: string } | { kind: "cancelled" };
@@ -773,11 +835,12 @@ const PASTE_OFF = `${ESC}[?2004l`;
 export const PICKER_ESC_WAIT_MS = 50;
 
 function paint(io: PickerIo, listing: ResumeListing, state: PickerState, rail: PickerRail): void {
-	const { lines, cursorLine } = renderPickerFrame(listing, state, io.size(), rail);
+	const size = io.size();
+	const frame = renderPickerFrame(listing, state, size, rail);
+	const drawn = io.color ? styleFrame(frame, size.columns) : frame.lines;
 	// Home, then each line followed by erase-to-end-of-line, then erase everything below: one write,
 	// so a resize or a shorter list leaves no stale row behind.
-	const drawn = lines.map((line, i) => (i === cursorLine ? `${ESC}[7m${line}${ESC}[0m` : line)).join(`${ESC}[K\r\n`);
-	io.write(`${ESC}[H${drawn}${ESC}[K${ESC}[J`);
+	io.write(`${ESC}[H${drawn.join(`${ESC}[K\r\n`)}${ESC}[K${ESC}[J`);
 }
 
 /**
