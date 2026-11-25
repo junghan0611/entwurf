@@ -14,11 +14,11 @@
 
 - [x] **0. 착수.** 역할은 위와 같다.
 - [x] **1. 측정 (M1–M4).** 수동 compact는 vendor를 줄이지 않는다(RED), 단독 `/compact`는 줄인다. lease 잔존 조건은 "quit 정리 동안 loop를 붙잡는 ref handle이 없음"이다. 사실 원장 v2에서 세 형제 모두 이의가 없었다.
-- [ ] **2. B1 (lease).** 구현과 리뷰를 마쳤다(Sonnet, Sol). Claude·agy 긴 경로 quit 그룹 2→0을 재측정했다. 영향 PARTIAL(`check-acp-set-model-readback`)은 105/214 KILLED, 그 밖 0에서 중단했다(`175/partial/STOPPED.md`). A1과 C가 같은 group을 바꾸므로 7에서 최종 후보로 다시 돈다. B1 mutant 2개는 그 run에 도달하지 못했고, 지금 근거는 focused 수동 적용뿐이다. → B1 checkpoint 커밋 ← **NOW**
+- [x] **2. B1 (lease)** — dcd126f1. 구현과 리뷰를 마쳤다(Sonnet, Sol). Claude·agy 긴 경로 quit 그룹 2→0을 재측정했다. 영향 PARTIAL(`check-acp-set-model-readback`)은 105/214 KILLED, 그 밖 0에서 중단했다(`175/partial/STOPPED.md`). A1과 C가 같은 group을 바꾸므로 7에서 최종 후보로 다시 돈다. B1 mutant 2개는 그 run에 도달하지 못했고, 지금 근거는 focused 수동 적용뿐이다.
 - [x] **3. A1 설계 확정.** v2.1(Sonnet, Sol 합의). D-3 측정(`175/d3/RESULT.md`, n=1 each): Claude 무frame end_turn 0/2, agy는 frame 없이 다음 턴에 0.58×. GLG D-3 결정은 대칭안 (α)다. `done`과 별도로 effect `confirmed | unconfirmed`를 두고, 상충 신호는 fail-closed다(issuecomment-7153167281).
-- [ ] **4. A1 구현** (Opus) → 리뷰 → 수정 묶음 하나 → 커밋. 그 뒤 writer 차례를 Astra에게 넘긴다.
+- [x] **4. A1 구현** — 039699c5. 리뷰 `reviews/24–27`(Sonnet, Sol), 수정 묶음 r2와 r3. QK 30, acp-step8 mutant 103은 손으로 확인했고, PARTIAL은 7로 미룬다. QK13은 7의 LIVE threshold 시뮬레이션으로 옮겼다. writer 차례는 Astra다.
 - [x] **5. C 설계.** 최종 결정 문서 `reviews/22`(C3: Pi의 length/omit/compaction은 그대로 두고, sealed length anchor의 정확한 null omission만 증명해 다음 실제 입력을 같은 vendor id로 보낸다)이고 경계는 바뀌지 않는다. 합성 feasibility GO(Claude, agy), TUI 실측. genuine: ACP `result.stopReason=max_tokens`는 두 rail 모두 미관측이다. Claude의 실제 소진은 RPC -32603 `max_output_tokens`에서 #171 unknown 경로로 가고, 제품 Pi 1회에서 다음 질문이 같은 id로 resume·회상됐다(`175/c/evidence-summary.md`).
-- [ ] **6. C 구현** (Astra) → 리뷰 → 수정 묶음 → 커밋.
+- [ ] **6. C 구현** (Astra) → 리뷰 → 수정 묶음 → 커밋. QK14 OVERFLOW-FAIL-CLOSED는 C3 기대값으로 뒤집는다(Sol `reviews/25`). CHANGELOG에는 C 한계 줄을 넣는다. ← **NOW**
 - [ ] **7. 인수.** 바뀐 lane의 PARTIAL, 동결 FULL, 제품 LIVE(Fable·sonnet·agy 수동 compact RED→GREEN과 회상, threshold 시뮬레이션은 "소비된 새 boundary마다 1회", 긴 경로 pi-smoke 15/15, C는 합성 대칭과 "genuine 미측정" 명시. B1 mutant 2개를 포함한다).
 - [ ] **8. docs** (`docs/acp-backend-rail.md`의 compaction 절과 Claude/agy 열, CHANGELOG Unreleased, 0.63.0 노트의 skew 한 줄). BASELINE·VERIFY·acp-client-baseline은 늘리지 않는다. 그 다음 이 파일을 지우고 main에 merge, push, 그리고 main NEXT 13(prepare 0.63.0)으로 돌아간다. 형제 재시작 시점은 GLG에게 알린다.
 
