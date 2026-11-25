@@ -22,7 +22,22 @@ const RECORDS = join(AGENT, "cache", "entwurf", "sessions");
 mkdirSync(WORK, { recursive: true });
 // The sandbox's own Pi settings: keep almost nothing on compaction, so this short session has something to
 // summarise (the default keeps the last 20k tokens and would refuse it as too small).
-writeFileSync(join(AGENT, "settings.json"), `${JSON.stringify({ compaction: { keepRecentTokens: 1 } })}\n`);
+// #175: ENTWURF_RAW_PI_RESERVE_TOKENS raises Pi's reserve, which lowers its threshold compaction to
+// `contextWindow - reserve` — a simulation of the threshold path at a small context, never the 1M one.
+const RESERVE = process.env.ENTWURF_RAW_PI_RESERVE_TOKENS;
+if (RESERVE !== undefined && !/^[1-9][0-9]*$/.test(RESERVE))
+	throw new Error(`ENTWURF_RAW_PI_RESERVE_TOKENS must be a positive integer: ${RESERVE}`);
+export const reserveTokens = RESERVE === undefined ? null : Number(RESERVE);
+writeFileSync(
+	join(AGENT, "settings.json"),
+	`${JSON.stringify({ compaction: { keepRecentTokens: 1, ...(reserveTokens ? { reserveTokens } : {}) } })}\n`,
+);
+// #175: ENTWURF_RAW_PI_CLI runs that Pi `dist/bundle/cli.js` with node instead of `pi` on PATH (a Pi runtime
+// of another version, with this checkout's extension).
+const PI_CLI = process.env.ENTWURF_RAW_PI_CLI;
+if (PI_CLI !== undefined && (!PI_CLI.startsWith("/") || !existsSync(PI_CLI)))
+	throw new Error(`ENTWURF_RAW_PI_CLI must be an existing absolute path: ${PI_CLI}`);
+export const piCli = PI_CLI ?? null;
 if (!existsSync(join(HOME, ".claude"))) symlinkSync(REAL_CLAUDE, join(HOME, ".claude"));
 if (!existsSync(join(HOME, ".gemini"))) symlinkSync(REAL_GEMINI, join(HOME, ".gemini"));
 
@@ -37,7 +52,7 @@ export function launch(sessionFile, env = {}) {
 	const args = ["--no-extensions", "-e", "builtin:mcp", "-e", REPO, "--entwurf-control"];
 	if (sessionFile) args.push("--session", sessionFile);
 	args.push("--provider", "entwurf", "--model", MODEL, "--mode", "rpc");
-	const child = spawn("pi", args, {
+	const child = spawn(PI_CLI ? process.execPath : "pi", PI_CLI ? [PI_CLI, ...args] : args, {
 		cwd: WORK,
 		stdio: ["pipe", "pipe", "pipe"],
 		detached: true,
@@ -110,6 +125,8 @@ export function launch(sessionFile, env = {}) {
 				.join("")
 				.slice(0, 400),
 			diagnostics: (last?.diagnostics ?? []).map((d) => d.type),
+			// #175: Pi's usage of the answer; `totalTokens` is the child's occupancy (`used`) on this rail.
+			usage: last?.usage ?? null,
 			assistantMessages: seen.filter((e) => e.type === "message_end" && e.message?.role === "assistant").length,
 		};
 		steps.push(step);
@@ -128,7 +145,7 @@ export function launch(sessionFile, env = {}) {
 		writeFileSync(join(RUN, `${name}.events.ndjson`), events.map((e) => JSON.stringify(e)).join("\n"));
 		return end;
 	};
-	return { name, command, turn, quit, child };
+	return { name, command, turn, quit, child, events, waitFor };
 }
 
 export const list = (dir) => {

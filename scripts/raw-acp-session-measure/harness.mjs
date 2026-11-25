@@ -151,6 +151,11 @@ export function startChild(B, tag, { env, command, args } = {}) {
 					n.toolCallId = u.toolCallId;
 					if (u.rawInput !== undefined) n.input = trunc(u.rawInput, 600);
 				}
+				// #175: the occupancy a usage_update reports, for the probes that compare it across a compaction.
+				if (u.sessionUpdate === "usage_update") {
+					n.used = u.used ?? null;
+					n.size = u.size ?? null;
+				}
 				if (String(u.sessionUpdate).startsWith("compaction"))
 					n.compaction = trunc(Object.fromEntries(Object.entries(u).filter(([k]) => k !== "content")), 400);
 				notes.push(n);
@@ -442,7 +447,14 @@ export function promptStart(c, sid, phase, blocks, ms = 300000) {
 		(r) => {
 			c.setPhase(`${phase}:after`);
 			const d = digest(c.notes, phase);
-			return { ok: true, frame: "result", stopReason: r?.stopReason ?? null, ms: Date.now() - t0, d };
+			return {
+				ok: true,
+				frame: "result",
+				stopReason: r?.stopReason ?? null,
+				usage: r?.usage ?? null,
+				ms: Date.now() - t0,
+				d,
+			};
 		},
 		(e) => {
 			c.setPhase(`${phase}:after`);
