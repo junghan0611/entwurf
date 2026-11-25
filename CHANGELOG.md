@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.26-herdr.0.63.0 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.63.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.62.0 (`v2026.11.23-herdr.0.62.0`) on the same Pi 1.6.0 SDK set, so step 1 of the install keeps host Pi `>=1.6.0 <1.7`. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `eb0af196e2a769a4add68f00333c853d6491488ce693597b2bd9997297f37e96` matches the accepted core artifact byte for byte; independently computed sha512 and sha1 match the npm integrity and shasum, and the sha512 matches this lock. The publication moved `latest` to 0.63.0 and left `repair` at the value recorded before publication (`0.12.8-repair.1`, U0 receipt `publish-u0.cFOufj` beside the candidate). Core `v0.63.0` is `1f0d95e1` (exact-SHA CI run 45637943500, Windows preview run 45640893928).
+- In a private sandbox (private HOME, XDG roots and agent directory) with host Pi 1.6.0, `pi install npm:@junghanacs/entwurf@0.63.0` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the three Claude rows and the three agy rows with no provider error. The install printed the same peerDependencies warning and the same npm 11.16.0 `allow-scripts` notice for the package's `postinstall` as 0.62.0.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.63.0, a source swap, a real Herdr registration, public-ref installation, a vendor model turn, an operating-host upgrade, or 0.63.0 inside Orca. The nine install steps were not re-recorded on the Pi 1.6.0 pairing.
+- Mutant `VERSION-MENTIONS-HERDR-LOCK` (`scripts/mutants/pi-floor.json`) returns to its npm form: it finds `"version": "0.63.0"` in the lock and plants 0.62.0, the previous pin, against a README that names 0.63.0. The SDK set did not change, so no setup or durable doc anchor moved. PARTIAL `["bash","run.sh","check-dep-versions"]` 12/12 killed, control ok (head 61894137905b surface bc74631481fc receipt c7564d955968). On the same uncommitted tree the nine Herdr gates, `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` and lint were green. Exact pushed-SHA CI requires its own receipt.
+
 ## 0.63.0 — 2026-11-25
 
 ### What an npm user gets

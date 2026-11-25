@@ -37,15 +37,10 @@
 		},
 		{
 			"claim": "VERSION-MENTIONS-HERDR-LOCK",
-			"title": "the lock switches to npm but the README does not declare an active npm pin",
+			"title": "the Herdr runtime lock moves without its README npm pin, leaving the installation description on the previous artifact",
 			"subject": "plugins/herdr/runtime-lock.json",
-			"find": ["\"source\": \"herdr-checkout\",", "\t\"repository\": \"junghan0611/entwurf\""],
-			"replace": [
-				"\"source\": \"npm\",",
-				"\t\"name\": \"@junghanacs/entwurf\",",
-				"\t\"version\": \"0.62.0\",",
-				"\t\"integrity\": \"sha512-iIO9moVlUaxD25ALtpzHsedOOyZAkmkhjAt3oBsSL2vGNGSFRiCoL8ADiGyQL9wNl5azjjstGAh9niSiNf0iPA==\""
-			],
+			"find": ["\"version\": \"0.63.0\""],
+			"replace": ["\"version\": \"0.62.0\""],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:VERSION-MENTIONS-HERDR-LOCK]",
