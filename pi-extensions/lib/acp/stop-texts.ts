@@ -144,6 +144,18 @@ export const ACP_STOPS = {
 		text: "entwurf: this turn's input includes a shell or extension message this ACP session cannot place, so nothing was sent",
 		exit: NEW_SESSION,
 	},
+	// #175: the agent was asked to compact its own session (a lone `/compact`) and did not answer that it
+	// did. This turn's input was not sent; the next provider call asks for the compaction again, and the
+	// input not sent here goes with it. Repeating stops the same way: the way out is a new session, or a
+	// Pi branch without that compaction.
+	vendorCompactFailed: {
+		text: "entwurf: the ACP agent answered its own compaction request without completing it, so this turn's input was not sent",
+		exit: "send again; if it repeats, start a new session with /new",
+	},
+	vendorCompactUnknown: {
+		text: "entwurf: the ACP agent's own compaction has no confirmed outcome, so this turn's input was not sent",
+		exit: "send again; if it repeats, start a new session with /new",
+	},
 } as const satisfies Record<string, AcpStop>;
 
 export type AcpStopId = keyof typeof ACP_STOPS;

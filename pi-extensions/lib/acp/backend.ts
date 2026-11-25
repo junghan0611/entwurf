@@ -146,10 +146,19 @@ import {
 	type SessionRecord,
 	sessionRecordPath,
 	type UnsealedDispatch,
+	type VendorCompaction,
+	withVendorCompaction,
 	writeSessionRecord,
 } from "./session-store.js";
 import { ACP_STOPS, type AcpStopId, acpStopExitNotice } from "./stop-texts.js";
 import { assertExcludeToolsHonored, isPiSummaryRequest } from "./tool-surface.js";
+import {
+	judgeVendorCompaction,
+	noShrinkDiagnostic,
+	planVendorCompaction,
+	VendorCompactionEvidence,
+	type VendorCompactionPlan,
+} from "./vendor-compaction.js";
 
 // Bootstrap boundaries ONLY. initialize / newSession / set-model are handshake
 // steps that make no model progress, so a stuck one is a dead session and a cold
@@ -388,6 +397,8 @@ interface BridgeSession {
 	sealOwed?: boolean;
 	/** #171 step 8: every dispatch since the last seal whose outcome is unknown, as the record lists it. */
 	unsealed: UnsealedDispatch[];
+	/** #175: the record's vendor compaction slot as this process last read or wrote it. */
+	vendorCompaction?: VendorCompaction;
 	/** #171 step 8: the parts `bridgeConfigSignature` was taken from. */
 	config: ConfigParts;
 	/** #171 step 8: this process's holder lease for the vendor session, once it has one. */
@@ -1077,6 +1088,9 @@ export const ACP_RECORD_DEGRADED_NOTICE = "session record not saved — live reu
 export const ACP_RECORD_UNREADABLE_MESSAGE = ACP_STOPS.unreadable.text;
 export const ACP_DISPATCH_MARKER_NOT_SAVED =
 	"entwurf: the dispatch marker was not saved, so nothing was sent this turn";
+/** #175: the `sent` state of the vendor's compaction request is written before the request; failing that, nothing is sent. */
+export const ACP_VENDOR_COMPACTION_NOT_SAVED =
+	"entwurf: the state of the agent's compaction request was not saved, so nothing was sent this turn";
 /** #171 step 8 (decision 17): a turn that failed after its marker leaves the record, marker included. */
 /**
  * #171 step 8: the stops made where no vendor session can have been reached by this turn — no
@@ -1146,7 +1160,13 @@ export const ACP_SUMMARY_CANCELLED_MESSAGE =
 async function awaitAcpPromptTurn(
 	session: BridgeSession,
 	promptArgs: { sessionId: string; prompt: AcpTextBlock[] },
-	opts: { signal?: AbortSignal; graceMs: number; onWindow?: (open: boolean) => void },
+	opts: {
+		signal?: AbortSignal;
+		graceMs: number;
+		onWindow?: (open: boolean) => void;
+		/** #175: false for Entwurf's own `/compact` prompt, which is no turn a steer belongs to. */
+		steer?: boolean;
+	},
 ): Promise<AcpPromptResponse> {
 	let rejectLifecycle: ((err: Error) => void) | undefined;
 	const lifecycle = new Promise<never>((_, reject) => {
@@ -1187,11 +1207,14 @@ async function awaitAcpPromptTurn(
 	}
 
 	// #163 S7: the prompt is on the wire from here — a remote steer may reach this turn until it ends.
-	const closeSteerWindow = openAcpSteerWindow(session.key, {
-		connection: session.connection,
-		acpSessionId: promptArgs.sessionId,
-		steering: session.steeringSupported === true,
-	});
+	const closeSteerWindow =
+		opts.steer === false
+			? () => {}
+			: openAcpSteerWindow(session.key, {
+					connection: session.connection,
+					acpSessionId: promptArgs.sessionId,
+					steering: session.steeringSupported === true,
+				});
 	// #163 S8: the same window bounds what counts as THIS prompt's compaction. A record of an
 	// earlier prompt still here was never taken by a message_end, so it is dropped (and said so).
 	discardStrandedCompactionRecords(session.key);
@@ -1668,6 +1691,7 @@ function writeRecordFor(session: BridgeSession, deps: AcpTurnDeps, pendingDispat
 			sealedTurnId: session.sealedTurnId,
 			unsealed: session.unsealed,
 			config: session.config,
+			vendorCompaction: session.vendorCompaction,
 		},
 		deps.now(),
 	);
@@ -1822,6 +1846,8 @@ interface CheckedDelta {
 	inputEntryIds: string[];
 	/** Every dispatch since the anchor whose outcome is unknown, as it stood before this turn. */
 	unknown: UnsealedDispatch[];
+	/** #175: the vendor is asked to compact its own session before this delta. */
+	vendorCompaction?: Extract<VendorCompactionPlan, { ask: true }>;
 }
 
 /** A stored session to resume (#171 step 8). */
@@ -1839,6 +1865,24 @@ class AcpStopSignal extends Error {
 		this.name = "AcpStopSignal";
 		this.stop = stop;
 		this.why = why;
+	}
+}
+
+/**
+ * #175: the vendor's own compaction before a turn's input was not accepted, so none of that input was
+ * sent and the record keeps `sent`. `answered`: the agent ended the `/compact` prompt, so its session is
+ * where its own history says and is kept; otherwise the session cannot be trusted and is closed.
+ */
+class VendorCompactStop extends Error {
+	readonly stop: "vendorCompactFailed" | "vendorCompactUnknown";
+	readonly why: string;
+	readonly answered: boolean;
+	constructor(stop: "vendorCompactFailed" | "vendorCompactUnknown", why: string, answered: boolean) {
+		super(ACP_STOPS[stop].text);
+		this.name = "VendorCompactStop";
+		this.stop = stop;
+		this.why = why;
+		this.answered = answered;
 	}
 }
 
@@ -1920,6 +1964,8 @@ export function streamAcpTurn(
 	}
 	/** #163 S8: set once this turn's records were deposited (a seal followed by a catch is two calls). */
 	let compactionDeposited = false;
+	/** #175: the records of the vendor's compaction asked for before this turn's input, deposited with the turn's. */
+	let vendorCompactionRecords: { key: string; records: AcpCompactionRecord[] } | undefined;
 	/** #163 S8: after finalize — keep this prompt's records for its message_end, report what was not kept. */
 	function depositCompaction(): void {
 		if (compactionDeposited) return;
@@ -1927,6 +1973,10 @@ export function streamAcpTurn(
 		const fenced = state.compactionFencedOut ?? 0;
 		if (fenced > 0) {
 			process.stderr.write(`[acp] ignored ${fenced} compaction update(s) outside the prompt window\n`);
+		}
+		// #175: kept to here, so the prompt window of this turn's input could not drop them; a stopped turn keeps them too.
+		if (vendorCompactionRecords && vendorCompactionRecords.records.length > 0) {
+			depositAcpCompactionRecords(vendorCompactionRecords.key, vendorCompactionRecords.records);
 		}
 		const collector = state.compaction;
 		if (!collector || !compactionKey) return;
@@ -2293,6 +2343,140 @@ export function streamAcpTurn(
 		if (!marker) return;
 		pushAcpLifecycleNotice(state, `${describeDispatchRange(marker)} may have run`);
 		pushAcpLifecycleNotice(state, ACP_RECORD_KEPT_NOTICE);
+	}
+
+	/**
+	 * #175: replace only the record's vendor compaction slot. The record is read again here, under the
+	 * lease this turn holds, and must still name this vendor session; its marker and its unknown
+	 * dispatches are written back exactly as they are (a sealing write would clear them). Throws.
+	 */
+	function saveVendorCompaction(session: BridgeSession, value: VendorCompaction): void {
+		const found = readSessionRecord(session.key, deps.sessionDir);
+		if (found.status !== "found") throw new Error(`the session record is ${found.status}`);
+		if (found.record.acpSessionId !== session.acpSessionId) {
+			throw new Error("the session record names another vendor session");
+		}
+		writeSessionRecord(withVendorCompaction(found.record, value, deps.now()), deps.sessionDir);
+		session.vendorCompaction = { ...value };
+	}
+
+	/**
+	 * #175 A1: ask the vendor to compact its own session — one prompt whose only block is the adapter's
+	 * command, before this turn's input and after its model and effort are set. Its updates go to a
+	 * scratch of their own: its text, usage and cost are not this turn's output, and its occupancy is
+	 * carried nowhere. The `sent` state is in the record before the request leaves; `done` only after the
+	 * answer is accepted. Returns the effect; throws `VendorCompactStop` when the answer is not accepted
+	 * (nothing of the input is sent) and the store refusal when `sent` cannot be written (nothing is sent).
+	 * No retry here: a request not accepted is asked again on the next provider call.
+	 */
+	async function runVendorCompaction(
+		session: BridgeSession,
+		adapter: AcpBackendAdapter,
+		plan: Extract<VendorCompactionPlan, { ask: true }>,
+	): Promise<"confirmed" | "unconfirmed"> {
+		const command = adapter.compactCommand;
+		if (!command) throw new Error("entwurf: a vendor compaction was planned for a backend that offers none");
+		const sent: VendorCompaction = {
+			compactionEntryId: plan.compactionEntryId,
+			acpSessionId: session.acpSessionId,
+			state: "sent",
+		};
+		try {
+			saveVendorCompaction(session, sent);
+		} catch (error) {
+			const code = storeErrorCode(error);
+			process.stderr.write(`[acp] vendor compaction state not saved: code=${code} ${thrownText(error)}\n`);
+			const refusal = acpStoreRefusal(ACP_VENDOR_COMPACTION_NOT_SAVED, "compaction request state not saved", code);
+			pushAcpLifecycleNotice(state, refusal.notice);
+			throw new Error(refusal.errorMessage);
+		}
+		pushAcpLifecycleNotice(state, `asking the ${adapter.backend} agent to compact its session`);
+		const evidence = new VendorCompactionEvidence();
+		const collector = new AcpCompactionCollector({
+			collect: session.key.startsWith("pi:"),
+			promptWasCompactCommand: true,
+			source: "prelude",
+			now: Date.now,
+			emitLine: (text) => pushAcpLifecycleNotice(state, text),
+		});
+		vendorCompactionRecords = { key: session.key, records: [] };
+		session.activePromptHandler = (event) => {
+			if (event.type !== "session_notification" || !collector.windowOpen) return;
+			if (event.sessionId && session.acpSessionId && event.sessionId !== session.acpSessionId) return;
+			const update = event.update;
+			if (!update) return;
+			if (update.sessionUpdate === "compaction_update" || update.sessionUpdate === "compaction_summary_chunk") {
+				collector.onUpdate(update);
+				evidence.onUpdate(update);
+			} else if (update.sessionUpdate === "usage_update" && typeof update.used === "number") {
+				collector.onUsage(update.used);
+			}
+		};
+		let result: AcpPromptResponse;
+		try {
+			result = await awaitAcpPromptTurn(
+				session,
+				{ sessionId: session.acpSessionId, prompt: [{ type: "text", text: command }] },
+				{
+					signal,
+					graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
+					onWindow: (open) => {
+						collector.windowOpen = open;
+					},
+					steer: false,
+				},
+			);
+		} catch (error) {
+			process.stderr.write(`[acp] vendor compaction request got no answer: ${thrownText(error)}\n`);
+			throw new VendorCompactStop(
+				"vendorCompactUnknown",
+				signal?.aborted
+					? "the compaction request was cancelled with no answer"
+					: "the compaction request got no answer",
+				false,
+			);
+		} finally {
+			session.activePromptHandler = undefined;
+			vendorCompactionRecords.records = collector.close();
+		}
+		const verdict = judgeVendorCompaction(result?.stopReason, evidence);
+		if (verdict.kind === "failed") throw new VendorCompactStop("vendorCompactFailed", verdict.why, true);
+		if (verdict.kind === "unknown") throw new VendorCompactStop("vendorCompactUnknown", verdict.why, verdict.answered);
+		try {
+			saveVendorCompaction(session, { ...sent, state: "done", effect: verdict.effect });
+		} catch (error) {
+			// The command ended; its outcome is not in the record, which still says `sent`: the next call asks again.
+			process.stderr.write(`[acp] vendor compaction result not saved: code=${storeErrorCode(error)}\n`);
+			throw new VendorCompactStop("vendorCompactUnknown", "the compaction outcome could not be saved", true);
+		}
+		// What the vendor held before is no measure of the session now: Pi estimates until the next report.
+		session.contextOccupancyTokens = undefined;
+		session.priorTurnInputOutputSum = undefined;
+		session.priorTurnSealedAtMs = undefined;
+		if (verdict.effect === "unconfirmed") {
+			pushAcpLifecycleNotice(
+				state,
+				`${adapter.backend} agent ended /compact with no report; its effect is unconfirmed`,
+			);
+		}
+		if (adapter.sealsTurnAccounting)
+			pushAcpLifecycleNotice(state, "this turn's cost may include the agent's compaction");
+		return verdict.effect;
+	}
+
+	/** #175: seal a turn whose vendor compaction was not accepted. None of its input was sent. */
+	function sealVendorCompactStop(err: VendorCompactStop, aborted: boolean, lifecycle: string | undefined): void {
+		if (aborted) pushAcpLifecycleNotice(state, "this turn was aborted during the compaction request");
+		pushAcpLifecycleNotice(state, err.why);
+		if (lifecycle) pushAcpLifecycleNotice(state, lifecycle.split("\n", 1)[0]);
+		pushAcpLifecycleNotice(
+			state,
+			err.answered
+				? "nothing of this turn's input was sent; this session is kept"
+				: "nothing of this turn's input was sent; this session was closed",
+		);
+		pushStopExit(err.stop);
+		finishError(new Error(ACP_STOPS[err.stop].text), aborted);
 	}
 
 	function finishError(
@@ -2765,6 +2949,19 @@ export function streamAcpTurn(
 					chosen.send.length > 0
 						? (positionOf.get(chosen.send[0].entryId) ?? context.messages.length)
 						: context.messages.length;
+				// #175: a Pi compaction after the anchor asks the vendor to compact its own session before this
+				// delta. The slot suppresses only `done` for this boundary on this vendor session.
+				const plan: VendorCompactionPlan = adapter.compactCommand
+					? planVendorCompaction(
+							walk,
+							live ? live.vendorCompaction : record?.vendorCompaction,
+							live ? live.acpSessionId : (record?.acpSessionId ?? ""),
+						)
+					: { ask: false };
+				if (plan.ask === "stop") {
+					finishStop("changed", plan.why);
+					return;
+				}
 				// Pi hands the provider its own message objects, and an extension that kept the context can change
 				// one while this turn awaits. What was just compared is what is sent and what the marker names.
 				// An input that renders to no block is not sent, so the marker does not name it either.
@@ -2776,6 +2973,7 @@ export function streamAcpTurn(
 					range: { start: first, count: context.messages.length - first },
 					inputEntryIds: sent.map((input) => input.entryId),
 					unknown,
+					...(plan.ask ? { vendorCompaction: plan } : {}),
 				};
 				if (verdict.kind === "reuse" && verdict.textDrift && live && !live.textDriftSaid) {
 					pushAcpLifecycleNotice(state, "the setup text changed; this session keeps the one it was opened with");
@@ -3090,6 +3288,7 @@ export function streamAcpTurn(
 				unsealed: attach
 					? attach.checked.unknown.map((u) => ({ turnId: u.turnId, inputEntryIds: [...u.inputEntryIds] }))
 					: [],
+				...(attach?.record.vendorCompaction ? { vendorCompaction: { ...attach.record.vendorCompaction } } : {}),
 				sealedTurnId: attach?.record.sealedTurnId,
 				lease: held,
 				// Named from the adapter until `initialize` answers; nothing is recorded before that. An attach
@@ -3314,6 +3513,19 @@ export function streamAcpTurn(
 			// its history and the first-user augment already: it is sent the checked delta and nothing else.
 			const basePrompt = attach?.checked.prompt ?? birth?.prompt ?? buildAcpPrompt(context, "new");
 			if (basePrompt.length === 0) throw new Error("empty pi context — nothing to prompt");
+			// #175: the resumed session compacts itself before it is sent this delta. It is a prompt: from here an
+			// abort is a protocol cancel first (the bootstrap teardown listener is handed over now).
+			const vendorPlan = attach?.checked.vendorCompaction;
+			let vendorEffect: "confirmed" | "unconfirmed" | undefined;
+			if (vendorPlan) {
+				if (signal && onAbort) {
+					signal.removeEventListener("abort", onAbort);
+					onAbort = undefined;
+				}
+				vendorEffect = await runVendorCompaction(session, adapter, vendorPlan);
+				if (signal?.aborted) throw new Error("aborted after the agent's compaction");
+				session.activePromptHandler = makePromptHandler(session);
+			}
 			// S2d-1c: prepend the rich first-user augment (bridge identity + ~/AGENTS.md
 			// + cwd/AGENTS.md + pi base + tool surface) on the WIRE only — never into
 			// the pi Context, so it stays out of contextMessageSignatures (NEXT §S2d
@@ -3366,6 +3578,10 @@ export function streamAcpTurn(
 			// #171 step 8: a response that is not an answer leaves the marker standing, like a prompt that never
 			// returned: the catch seals it `unknown` and closes this session.
 			if (marker && !isAnsweredAcpStop(promptResult?.stopReason)) throw new AcpUnansweredStop(promptResult?.stopReason);
+			if (vendorEffect === "unconfirmed") {
+				const line = noShrinkDiagnostic(vendorPlan?.anchorUsedTokens, state.observedContextOccupancyTokens);
+				if (line) process.stderr.write(line);
+			}
 
 			session.activePromptHandler = undefined;
 			session.busy = false;
@@ -3422,6 +3638,28 @@ export function streamAcpTurn(
 			}
 		} catch (err) {
 			const aborted = Boolean(signal?.aborted);
+			if (err instanceof VendorCompactStop && session) {
+				// #175: none of this delta was sent. An agent that answered the request keeps its session, live,
+				// with its anchor where the record has it (this turn sealed nothing); the next call asks again.
+				session.activePromptHandler = undefined;
+				session.busy = false;
+				const keep = err.answered && session.alive && params.lifecyclePolicy === "process-scoped";
+				if (keep) {
+					bridgeSessions.set(sessionKey, session);
+					retainedChildren.add(session.child);
+					registerGlobalCleanup();
+					unrefRetainedChild(session.child);
+				} else if (bridgeSessions.get(sessionKey) === session) bridgeSessions.delete(sessionKey);
+				const lifecycle = keep ? undefined : await diagnoseTransportClosure({ err, session, phase: "prompt", aborted });
+				sealVendorCompactStop(err, aborted, lifecycle);
+				if (!keep) {
+					session.retiring = true;
+					retainedChildren.delete(session.child);
+					session.connection.close?.(err);
+					teardownChild(session.child);
+				}
+				return;
+			}
 			if (session) {
 				session.activePromptHandler = undefined;
 				session.busy = false;
@@ -3536,6 +3774,12 @@ export function streamAcpTurn(
 			// The blocks the branch gate compared, not a second rendering of a context that may have moved.
 			const prompt = checked.prompt;
 			if (prompt.length === 0) throw new Error("empty delta — a reuse turn has no new user message");
+			// #175: the live session compacts itself before it is sent this delta (after the effort set above).
+			let vendorEffect: "confirmed" | "unconfirmed" | undefined;
+			if (checked.vendorCompaction) {
+				vendorEffect = await runVendorCompaction(session, adapter, checked.vendorCompaction);
+				if (signal?.aborted) throw new Error("aborted after the agent's compaction");
+			}
 
 			// S2f visibility: about to send the delta to the resident child.
 			pushAcpLifecycleNotice(state, "sending prompt");
@@ -3562,6 +3806,13 @@ export function streamAcpTurn(
 			});
 			// #171 step 8: as on a new turn — a response that is not an answer leaves the marker standing.
 			if (!isAnsweredAcpStop(promptResult?.stopReason)) throw new AcpUnansweredStop(promptResult?.stopReason);
+			if (vendorEffect === "unconfirmed") {
+				const line = noShrinkDiagnostic(
+					checked.vendorCompaction?.anchorUsedTokens,
+					state.observedContextOccupancyTokens,
+				);
+				if (line) process.stderr.write(line);
+			}
 
 			session.activePromptHandler = undefined;
 			session.busy = false;
@@ -3583,6 +3834,20 @@ export function streamAcpTurn(
 			const aborted = Boolean(signal?.aborted);
 			session.activePromptHandler = undefined;
 			session.busy = false;
+			if (err instanceof VendorCompactStop) {
+				// #175: none of this delta was sent. An agent that answered the request keeps this live session.
+				const keep = err.answered && session.alive;
+				if (!keep && bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
+				const lifecycle = keep ? undefined : await diagnoseTransportClosure({ err, session, phase: "prompt", aborted });
+				sealVendorCompactStop(err, aborted, lifecycle);
+				if (!keep) {
+					session.retiring = true;
+					retainedChildren.delete(session.child);
+					session.connection.close?.(err);
+					teardownChild(session.child);
+				}
+				return;
+			}
 			// #171 step 8: a turn refused before its marker sent nothing, so the live session is as it was and
 			// is kept; only this turn fails. Its answer carries a turn id the session never sealed, so the
 			// branch gate stops later turns until the unsent input can be placed.

@@ -836,6 +836,454 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-LEASE-RELEASE-HOLD-CLEARED]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-ORDER",
+			"title": "a reuse turn sends its delta without asking the live vendor session to compact first",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tif (checked.vendorCompaction) {",
+				"\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, checked.vendorCompaction);",
+				"\t\t\t\tif (signal?.aborted) throw new Error(\"aborted after the agent's compaction\");",
+				"\t\t\t}"
+			],
+			"replace": ["\t\t\tvoid checked.vendorCompaction;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-ORDER]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-ORDER-ATTACH",
+			"title": "an attach sends its delta without asking the resumed vendor session to compact first",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tconst vendorPlan = attach?.checked.vendorCompaction;"],
+			"replace": ["\t\t\tconst vendorPlan = birth ? attach?.checked.vendorCompaction : undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-ORDER-ATTACH]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-MARKER-AFTER",
+			"title": "a reuse turn writes its dispatch marker before the compaction request, so a request that fails leaves this turn's marker standing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tif (checked.vendorCompaction) {",
+				"\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, checked.vendorCompaction);",
+				"\t\t\t\tif (signal?.aborted) throw new Error(\"aborted after the agent's compaction\");",
+				"\t\t\t}",
+				"",
+				"\t\t\t// S2f visibility: about to send the delta to the resident child.",
+				"\t\t\tpushAcpLifecycleNotice(state, \"sending prompt\");",
+				"\t\t\t// #63: same hook boundary as a new turn — the reuse delta is the wire",
+				"\t\t\t// params here. The recheck keeps an abort raised during a slow handler",
+				"\t\t\t// ahead of the wire write; the prompt driver then owns the abort surface.",
+				"\t\t\tconst built = { sessionId: session.acpSessionId, prompt: wireTextBlocks(prompt, adapter) };",
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, built, model, true);",
+				"\t\t\tif (signal?.aborted) throw new Error(\"aborted during payload hook\");",
+				"\t\t\t// #171 L16: the marker, immediately before the prompt. A reused session is always process-scoped.",
+				"\t\t\t// A failed write throws here: nothing is sent, and this session is dropped like any pre-prompt failure.",
+				"\t\t\tmarker = markDispatch(session, ctxSigs, checked.range, checked.inputEntryIds);"
+			],
+			"replace": [
+				"\t\t\t// S2f visibility: about to send the delta to the resident child.",
+				"\t\t\tpushAcpLifecycleNotice(state, \"sending prompt\");",
+				"\t\t\t// #63: same hook boundary as a new turn — the reuse delta is the wire",
+				"\t\t\t// params here. The recheck keeps an abort raised during a slow handler",
+				"\t\t\t// ahead of the wire write; the prompt driver then owns the abort surface.",
+				"\t\t\tconst built = { sessionId: session.acpSessionId, prompt: wireTextBlocks(prompt, adapter) };",
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, built, model, true);",
+				"\t\t\tif (signal?.aborted) throw new Error(\"aborted during payload hook\");",
+				"\t\t\t// #171 L16: the marker, immediately before the prompt. A reused session is always process-scoped.",
+				"\t\t\t// A failed write throws here: nothing is sent, and this session is dropped like any pre-prompt failure.",
+				"\t\t\tmarker = markDispatch(session, ctxSigs, checked.range, checked.inputEntryIds);",
+				"\t\t\tif (checked.vendorCompaction) {",
+				"\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, checked.vendorCompaction);",
+				"\t\t\t\tif (signal?.aborted) throw new Error(\"aborted after the agent's compaction\");",
+				"\t\t\t}"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-MARKER-AFTER]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-MARKER-AFTER-ATTACH",
+			"title": "an attach writes its dispatch marker before the compaction request, so a request that fails leaves this turn's marker standing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tconst vendorPlan = attach?.checked.vendorCompaction;"],
+			"replace": [
+				"\t\t\tif (attach) marker = markDispatch(session, ctxSigs, attach.checked.range, attach.checked.inputEntryIds);",
+				"\t\t\tconst vendorPlan = attach?.checked.vendorCompaction;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-MARKER-AFTER-ATTACH]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-NONE-WITHOUT-BOUNDARY",
+			"title": "a reuse turn with an empty delta still asks the vendor to compact, and changes the record's slot, before it refuses",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tif (prompt.length === 0) throw new Error(\"empty delta — a reuse turn has no new user message\");",
+				"\t\t\t// #175: the live session compacts itself before it is sent this delta (after the effort set above).",
+				"\t\t\tlet vendorEffect: \"confirmed\" | \"unconfirmed\" | undefined;",
+				"\t\t\tif (checked.vendorCompaction) {",
+				"\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, checked.vendorCompaction);",
+				"\t\t\t\tif (signal?.aborted) throw new Error(\"aborted after the agent's compaction\");",
+				"\t\t\t}"
+			],
+			"replace": [
+				"\t\t\t// #175: the live session compacts itself before it is sent this delta (after the effort set above).",
+				"\t\t\tlet vendorEffect: \"confirmed\" | \"unconfirmed\" | undefined;",
+				"\t\t\tif (checked.vendorCompaction) {",
+				"\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, checked.vendorCompaction);",
+				"\t\t\t\tif (signal?.aborted) throw new Error(\"aborted after the agent's compaction\");",
+				"\t\t\t}",
+				"\t\t\tif (prompt.length === 0) throw new Error(\"empty delta — a reuse turn has no new user message\");"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-NONE-WITHOUT-BOUNDARY]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-SUCCESS-NOT-ANSWERED",
+			"title": "an agent that answered the request without completing it is taken as compacted, and the input goes out",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tif (verdict.kind === \"failed\") throw new VendorCompactStop(\"vendorCompactFailed\", verdict.why, true);"
+			],
+			"replace": ["\t\tif (verdict.kind === \"failed\") return \"unconfirmed\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-SUCCESS-NOT-ANSWERED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-STOP-PASSES-GATE",
+			"title": "the stop seals as an ordinary answer, so the next call reads a turn id this session never sealed and stops as changed",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tfinishError(new Error(ACP_STOPS[err.stop].text), aborted);"],
+			"replace": [
+				"\t\tfinishError(new Error(ACP_STOPS[err.stop].text), aborted);",
+				"\t\tstate.output.stopReason = \"stop\";"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-STOP-PASSES-GATE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-RETRY-NEXT-CALL",
+			"title": "a request still `sent` is read as done: the next call never asks again and the vendor keeps its uncompacted session",
+			"subject": "pi-extensions/lib/acp/vendor-compaction.ts",
+			"find": [
+				"\tif (slot?.state === \"done\" && slot.compactionEntryId === compactionEntryId && slot.acpSessionId === acpSessionId) {"
+			],
+			"replace": [
+				"\tif (slot !== undefined && slot.compactionEntryId === compactionEntryId && slot.acpSessionId === acpSessionId) {"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-RETRY-NEXT-CALL]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-NO-LEAK",
+			"title": "the request's updates go to this turn's own stream too: its text and thinking become the turn's output",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tsession.activePromptHandler = (event) => {",
+				"\t\t\tif (event.type !== \"session_notification\" || !collector.windowOpen) return;"
+			],
+			"replace": [
+				"\t\tconst turnHandler = makePromptHandler(session);",
+				"\t\tsession.activePromptHandler = (event) => {",
+				"\t\t\tturnHandler(event);",
+				"\t\t\tif (event.type !== \"session_notification\" || !collector.windowOpen) return;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-NO-LEAK]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-OCCUPANCY-CLEARED",
+			"title": "the occupancy from before the compaction stays on the session, so a delta that reports none seals it and Pi compacts again at once",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tsession.contextOccupancyTokens = undefined;"],
+			"replace": ["\t\tvoid session.contextOccupancyTokens;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-OCCUPANCY-CLEARED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-DONE-SUPPRESSES",
+			"title": "a live session ignores the done it holds: every reuse after a compaction asks the vendor again",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\t\t\t\tlive ? live.vendorCompaction : record?.vendorCompaction,"],
+			"replace": ["\t\t\t\t\t\t\tlive ? undefined : record?.vendorCompaction,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-DONE-SUPPRESSES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-SENT-NOT-SAVED",
+			"title": "a `sent` state that cannot be written is swallowed and the request goes out unrecorded",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tpushAcpLifecycleNotice(state, refusal.notice);",
+				"\t\t\tthrow new Error(refusal.errorMessage);",
+				"\t\t}",
+				"\t\tpushAcpLifecycleNotice(state, `asking the ${adapter.backend} agent to compact its session`);"
+			],
+			"replace": [
+				"\t\t\tpushAcpLifecycleNotice(state, refusal.notice);",
+				"\t\t}",
+				"\t\tpushAcpLifecycleNotice(state, `asking the ${adapter.backend} agent to compact its session`);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-SENT-NOT-SAVED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-DONE-NOT-SAVED",
+			"title": "a `done` that cannot be written is ignored and the turn goes on as if it were saved",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tthrow new VendorCompactStop(\"vendorCompactUnknown\", \"the compaction outcome could not be saved\", true);"
+			],
+			"replace": ["\t\t\treturn verdict.effect;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-DONE-NOT-SAVED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-CLAUDE-EVIDENCE",
+			"title": "the request's compaction reports are not read: a completed one is unconfirmed and a failed one is accepted",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tevidence.onUpdate(update);"],
+			"replace": ["\t\t\t\tvoid evidence;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-CLAUDE-EVIDENCE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-CLAUDE-MEASURED",
+			"title": "the request's own `used` is not given to its compaction record, so the measured after (1006) is lost",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tcollector.onUsage(update.used);"],
+			"replace": ["\t\t\t\tvoid update.used;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-CLAUDE-MEASURED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-SUMMARY-NONE",
+			"title": "Pi's summary request is routed as a conversation turn, so a pending Pi compaction asks the vendor to compact inside it",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (summaryTurn) {"],
+			"replace": ["\t\tif (summaryTurn && process.argv.length < 0) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-SUMMARY-NONE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-AGY-END-TURN",
+			"title": "agy offers no compaction command, so after a Pi compaction its session keeps growing",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t// and no text; its effect shows only in the next turn's `used`.", "\tcompactCommand: \"/compact\","],
+			"replace": ["\t// and no text; its effect shows only in the next turn's `used`."],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-AGY-END-TURN]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-COST",
+			"title": "the request's cumulative cost is taken into the baseline, so the compaction's cost is in no turn",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tcollector.onUsage(update.used);"],
+			"replace": [
+				"\t\t\t\tcollector.onUsage(update.used);",
+				"\t\t\t\tconst amount = (update as { cost?: { amount?: unknown } }).cost?.amount;",
+				"\t\t\t\tif (typeof amount === \"number\") session.sdkCumulativeCostUsd = amount;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-COST]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-ABORT",
+			"title": "the request ignores the turn's abort: no cancel is sent while the vendor compacts",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\t\tsignal,",
+				"\t\t\t\t\tgraceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,",
+				"\t\t\t\t\tonWindow: (open) => {"
+			],
+			"replace": [
+				"\t\t\t\t\tsignal: undefined,",
+				"\t\t\t\t\tgraceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,",
+				"\t\t\t\t\tonWindow: (open) => {"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-ABORT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-ABORT-ATTACH",
+			"title": "an attach keeps its bootstrap teardown armed through the request, so an abort while the vendor compacts tears the resumed session down instead of cancelling",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\tif (signal && onAbort) {",
+				"\t\t\t\t\tsignal.removeEventListener(\"abort\", onAbort);",
+				"\t\t\t\t\tonAbort = undefined;",
+				"\t\t\t\t}",
+				"\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, vendorPlan);"
+			],
+			"replace": ["\t\t\t\tvendorEffect = await runVendorCompaction(session, adapter, vendorPlan);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-ABORT-ATTACH]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-ANCHOR-STAYS",
+			"title": "an attach whose request was answered closes its session anyway, so the next call resumes again",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tconst keep = err.answered && session.alive && params.lifecyclePolicy === \"process-scoped\";"],
+			"replace": ["\t\t\t\tconst keep = false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-ANCHOR-STAYS]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-RECORDED",
+			"title": "the request's compaction records are dropped instead of deposited",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tdepositAcpCompactionRecords(vendorCompactionRecords.key, vendorCompactionRecords.records);"],
+			"replace": ["\t\t\tvoid vendorCompactionRecords.records;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-RECORDED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-RECORD-ROUNDTRIP",
+			"title": "the record writers drop the slot: the dispatch marker and the seal erase what the request wrote",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tvendorCompaction: session.vendorCompaction,"],
+			"replace": ["\t\t\tvendorCompaction: undefined,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-RECORD-ROUNDTRIP]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-PLAN",
+			"title": "a done for another vendor session suppresses the request on this one",
+			"subject": "pi-extensions/lib/acp/vendor-compaction.ts",
+			"find": [
+				"\tif (slot?.state === \"done\" && slot.compactionEntryId === compactionEntryId && slot.acpSessionId === acpSessionId) {"
+			],
+			"replace": ["\tif (slot?.state === \"done\" && slot.compactionEntryId === compactionEntryId) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-PLAN]",
+			"signatureSource": "pi-extensions/lib/acp/vendor-compaction.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-SINGLE-SLOT",
+			"title": "a done for any boundary suppresses every later one, as if the slot were a lifetime ledger",
+			"subject": "pi-extensions/lib/acp/vendor-compaction.ts",
+			"find": [
+				"\tif (slot?.state === \"done\" && slot.compactionEntryId === compactionEntryId && slot.acpSessionId === acpSessionId) {"
+			],
+			"replace": ["\tif (slot?.state === \"done\" && slot.acpSessionId === acpSessionId) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-SINGLE-SLOT]",
+			"signatureSource": "pi-extensions/lib/acp/vendor-compaction.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-VERDICT",
+			"title": "an exhausted request budget (`max_turn_requests`) is read as an unknown answer and closes the session",
+			"subject": "pi-extensions/lib/acp/vendor-compaction.ts",
+			"find": [
+				"const ANSWERED_NOT_DONE: ReadonlySet<string> = new Set([\"cancelled\", \"refusal\", \"max_tokens\", \"max_turn_requests\"]);"
+			],
+			"replace": [
+				"const ANSWERED_NOT_DONE: ReadonlySet<string> = new Set([\"cancelled\", \"refusal\", \"max_tokens\"]);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-VERDICT]",
+			"signatureSource": "pi-extensions/lib/acp/vendor-compaction.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-CONFLICT-STICKY",
+			"title": "a later different terminal for the same compaction is dropped, so completed then failed is accepted as confirmed",
+			"subject": "pi-extensions/lib/acp/vendor-compaction.ts",
+			"find": [
+				"\t\t\telse if (first !== status) this.conflicting ??= `the agent reported its compaction ${first}, then ${status}`;"
+			],
+			"replace": ["\t\t\telse void status;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-CONFLICT-STICKY]",
+			"signatureSource": "pi-extensions/lib/acp/vendor-compaction.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-NO-SHRINK",
+			"title": "the no-shrink line stays silent at exactly 90% of the anchor's occupancy",
+			"subject": "pi-extensions/lib/acp/vendor-compaction.ts",
+			"find": ["\tif (firstUsed < 0.9 * anchorUsedTokens) return null;"],
+			"replace": ["\tif (firstUsed <= 0.9 * anchorUsedTokens) return null;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-NO-SHRINK]",
+			"signatureSource": "pi-extensions/lib/acp/vendor-compaction.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-RECORD-PARSE",
+			"title": "a `done` without an effect is read as valid instead of making the record invalid",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\t\t} else if (v.state === \"done\") return undefined;"],
+			"replace": ["\t\t}"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-RECORD-PARSE]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-VENDOR-COMPACT-OVERFLOW-FAIL-CLOSED",
+			"title": "the branch gate walks past a context_edit, so Pi's overflow continuation reaches the vendor and is asked to compact",
+			"subject": "pi-extensions/lib/acp/branch-gate.ts",
+			"find": [
+				"\t\tif (type !== \"message\") return { ok: false, stop: \"changed\", why: `a ${type} entry after the last answer` };"
+			],
+			"replace": [
+				"\t\tif (type === \"context_edit\") continue;",
+				"\t\tif (type !== \"message\") return { ok: false, stop: \"changed\", why: `a ${type} entry after the last answer` };"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-VENDOR-COMPACT-OVERFLOW-FAIL-CLOSED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

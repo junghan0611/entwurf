@@ -49,7 +49,7 @@ it("[QK:ACP-STOP-TEXT-NO-REPLAY] no stop text reads as transient or as an overfl
 	);
 	expect(isContextOverflow(probe("prompt is too long: 250000 tokens > 200000 maximum"), CONTEXT_WINDOW)).toBe(true);
 
-	expect(ids.length).toBe(29);
+	expect(ids.length).toBe(31);
 	for (const id of ids) {
 		const { text } = ACP_STOPS[id];
 		expect(isRetryableAssistantError(probe(text)), id).toBe(false);

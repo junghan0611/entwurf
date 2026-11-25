@@ -46,8 +46,9 @@ export interface FailedTurn {
 export type DeltaItem =
 	| ({ kind: "input" } & DeltaInput)
 	| ({ kind: "failed" } & FailedTurn)
-	/** A Pi compaction after the anchor. It is Pi's own view of the conversation and is not sent. */
-	| { kind: "compaction"; summary: string; firstKeptEntryId: string | undefined };
+	/** A Pi compaction after the anchor. It is Pi's own view of the conversation and is not sent.
+	 *  `entryId`: the compaction entry's own id, which keys the vendor's compaction of it (#175). */
+	| { kind: "compaction"; summary: string; firstKeptEntryId: string | undefined; entryId: string | undefined };
 
 /**
  * The user message Pi puts at the head of a compacted context (pi-coding-agent dist/core/messages.js
@@ -68,8 +69,9 @@ export type DeltaWalk =
 			 * The latest compaction after the anchor, as Pi projects it (pi-coding-agent session-manager.js
 			 * `buildContextEntries`): its summary first, then the branch from `firstKeptEntryId` on.
 			 * `anchorKept`: that kept range reaches back to the anchor, so the context still shows it.
+			 * `entryId`: that compaction entry's id (#175: the boundary a vendor compaction is asked for).
 			 */
-			compacted?: { summary: string; anchorKept: boolean };
+			compacted?: { summary: string; anchorKept: boolean; entryId: string | undefined };
 	  }
 	| { ok: false; stop: Extract<AcpStopId, "changed" | "laterAnswer" | "shellInput">; why: string };
 
@@ -146,6 +148,7 @@ export function walkDelta(anchorTurnId: string | undefined, branch: readonly unk
 				kind: "compaction",
 				summary,
 				firstKeptEntryId: typeof firstKept === "string" ? firstKept : undefined,
+				entryId: typeof entryId === "string" && entryId !== "" ? entryId : undefined,
 			});
 			continue;
 		}
@@ -174,7 +177,7 @@ export function walkDelta(anchorTurnId: string | undefined, branch: readonly unk
 		// (a refusal), and it is still the answer the session gave last.
 		const turnId = field(message, "responseId");
 		if (typeof anchorTurnId === "string" && anchorTurnId.length > 0 && turnId === anchorTurnId) {
-			let compacted: { summary: string; anchorKept: boolean } | undefined;
+			let compacted: { summary: string; anchorKept: boolean; entryId: string | undefined } | undefined;
 			const last = items.map((item) => item.kind).lastIndexOf("compaction");
 			const latest = items[last];
 			if (latest?.kind === "compaction") {
@@ -187,7 +190,7 @@ export function walkDelta(anchorTurnId: string | undefined, branch: readonly unk
 				if (items.some((item, k) => item.kind === "input" && at[k] < keptFrom)) {
 					return { ok: false, stop: "changed", why: "an input this session never received was compacted away" };
 				}
-				compacted = { summary: latest.summary, anchorKept: keptFrom <= i };
+				compacted = { summary: latest.summary, anchorKept: keptFrom <= i, entryId: latest.entryId };
 			}
 			return {
 				ok: true,

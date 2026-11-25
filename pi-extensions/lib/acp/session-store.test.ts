@@ -26,6 +26,7 @@ import {
 	readSessionRecord,
 	resolveLifecyclePolicy,
 	sessionRecordPath,
+	withVendorCompaction,
 	writeSessionRecord,
 } from "./session-store.ts";
 
@@ -140,6 +141,41 @@ it("[QK:ACP-L16-OUTDATED] a record written before the marker existed reads as ou
 		expect(readSessionRecord("test", dir)).toEqual({ status: "invalid" });
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+it("[QK:ACP-VENDOR-COMPACT-RECORD-PARSE] the vendor compaction slot round-trips; a value this build does not know makes the record invalid; no slot is a valid record", () => {
+	const slotted = withVendorCompaction(
+		record,
+		{ compactionEntryId: "c-1", acpSessionId: "acp", state: "done", effect: "unconfirmed" },
+		"2026-11-25T00:00:00Z",
+	);
+	expect(parseSessionRecord(JSON.parse(JSON.stringify(slotted)), "test")).toEqual(slotted);
+	const sent = withVendorCompaction(record, { compactionEntryId: "c-1", acpSessionId: "acp", state: "sent" }, "t");
+	expect(parseSessionRecord(JSON.parse(JSON.stringify(sent)), "test")?.vendorCompaction).toEqual({
+		compactionEntryId: "c-1",
+		acpSessionId: "acp",
+		state: "sent",
+	});
+	// The builder every writer goes through carries it too.
+	const { version: _v, provider: _p, updatedAt: _u, ...facts } = slotted;
+	expect(buildSessionRecord(facts, "2026-11-25T00:00:00Z")).toEqual(slotted);
+	// Absent: a record of an older writer, or one an older reader rewrote. Valid, with nothing suppressed.
+	expect(parseSessionRecord(JSON.parse(JSON.stringify(record)), "test")?.vendorCompaction).toBeUndefined();
+	for (const bad of [
+		{ compactionEntryId: "c-1", acpSessionId: "acp", state: "queued" },
+		{ compactionEntryId: "c-1", acpSessionId: "acp", state: "done" },
+		{ compactionEntryId: "c-1", acpSessionId: "acp", state: "sent", effect: "confirmed" },
+		{ compactionEntryId: "c-1", acpSessionId: "acp", state: "done", effect: "maybe" },
+		{ compactionEntryId: "", acpSessionId: "acp", state: "sent" },
+		{ compactionEntryId: "c-1", state: "sent" },
+		"done",
+		null,
+	]) {
+		expect(
+			parseSessionRecord({ ...JSON.parse(JSON.stringify(record)), vendorCompaction: bad }, "test"),
+			JSON.stringify(bad),
+		).toBeUndefined();
 	}
 });
 

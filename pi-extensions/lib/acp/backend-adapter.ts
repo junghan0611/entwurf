@@ -304,6 +304,12 @@ export interface AcpBackendAdapter {
 	 *  ABSENT means no summary mode is declared, so backend.ts refuses the summary turn by name. */
 	summaryTurnMode?: AcpSummaryTurnMode;
 
+	/** OPTIONAL (#175): this backend compacts its own session when sent a prompt whose only block is
+	 *  this command. After a Pi compaction, a resumed or reused session is sent it alone before the
+	 *  turn's input (#171 U14: as the first of two blocks Claude ran no compaction). ABSENT: nothing is
+	 *  asked of the vendor and its session keeps all it holds (#171 decision 16 as before). */
+	compactCommand?: "/compact";
+
 	/** OPTIONAL (#171 L18): what this backend needs between the text blocks of one prompt. agy hands
 	 *  its model the blocks joined with nothing between them — measured in its own transcript, where
 	 *  "…reply with only DONE." and "What does…" touch — so two user messages, or the augment and
@@ -874,6 +880,10 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// buildSessionMeta ([QK:ACP-SUMMARY-TURN-TOOLLESS]).
 	summaryTurnMode: "toolless",
 
+	// #175: measured 2026-11-25 (d3, n=1): a lone `/compact` on a resumed session answers `end_turn` with
+	// compaction_update in_progress → completed inside the prompt, also on a session already compacted.
+	compactCommand: "/compact",
+
 	// #127: claude-agent-acp 0.85.0+ rejects an `end_turn` with unanswered foreground tools as
 	// -32603 `incomplete_tool_call` (upstream #1212). Its raw text reads as transient to pi.
 	readPromptRejection: readClaudePromptRejection,
@@ -1225,6 +1235,10 @@ export const agyAdapter: AcpBackendAdapter = {
 	// #168: agy takes no tool list on session/new, so the model still sees tool schemas; summary
 	// turns run in an isolated per-turn root with a `v1:deny-all` PreToolUse hook and neutral cwd.
 	summaryTurnMode: "execution-denied",
+
+	// #175: measured 2026-11-25 (d3, n=1): a lone `/compact` answers `end_turn` with no compaction_update
+	// and no text; its effect shows only in the next turn's `used`.
+	compactCommand: "/compact",
 };
 
 // ---------------------------------------------------------------------------

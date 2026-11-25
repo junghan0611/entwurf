@@ -54,8 +54,18 @@
 			"claim": "ACP-L16-WRITE-FAIL-ZERO-SENDS",
 			"title": "a marker that cannot be written is swallowed and the prompt is sent anyway",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\t\tthrow new Error(refusal.errorMessage);"],
-			"replace": ["\t\t\tvoid refusal;"],
+			"find": [
+				"\t\t\tpushAcpLifecycleNotice(state, refusal.notice);",
+				"\t\t\tthrow new Error(refusal.errorMessage);",
+				"\t\t}",
+				"\t\treturn marker;"
+			],
+			"replace": [
+				"\t\t\tpushAcpLifecycleNotice(state, refusal.notice);",
+				"\t\t\tvoid refusal;",
+				"\t\t}",
+				"\t\treturn marker;"
+			],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-L16-WRITE-FAIL-ZERO-SENDS]",
