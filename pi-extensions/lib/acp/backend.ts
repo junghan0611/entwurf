@@ -126,6 +126,7 @@ import {
 	readLeaseScope,
 	releaseHolderLease,
 } from "./holder-lease.js";
+import { lengthOmission } from "./length-omission.js";
 import {
 	bridgeConfigParts,
 	bridgeConfigSignature,
@@ -2833,7 +2834,10 @@ export function streamAcpTurn(
 					},
 					compacted: () => {
 						reading = "entries";
-						const walk = walkDelta(existing?.sealedTurnId, piSession?.getBranch() ?? []);
+						const branch = piSession?.getBranch() ?? [];
+						const walk =
+							lengthOmission(piSession, branch, existing?.sealedTurnId, model.id, context.messages)?.walk ??
+							walkDelta(existing?.sealedTurnId, branch);
 						return walk.ok && walk.items.some((item) => item.kind === "compaction");
 					},
 				});
@@ -2904,7 +2908,9 @@ export function streamAcpTurn(
 					}
 					unknown.push({ turnId: standing.turnId, inputEntryIds: standing.inputEntryIds });
 				}
-				const walk = walkDelta(anchor, piSession?.getBranch() ?? []);
+				const branch = piSession?.getBranch() ?? [];
+				const omission = lengthOmission(piSession, branch, anchor, model.id, context.messages);
+				const walk = omission?.walk ?? walkDelta(anchor, branch);
 				if (!walk.ok) {
 					finishStop(walk.stop, walk.why);
 					return;
@@ -2917,13 +2923,15 @@ export function streamAcpTurn(
 				}
 				// Pi transforms the context before the provider sees it; a dropped, replaced or added input stops
 				// here instead of leaving the conversation without a word. Only text inputs are admitted.
-				const carried = contextCarries(
-					walk,
-					context.messages,
-					anchor ?? "",
-					(content) => textInputBlocks([content]),
-					isDeepStrictEqual,
-				);
+				const carried =
+					omission?.carried ??
+					contextCarries(
+						walk,
+						context.messages,
+						anchor ?? "",
+						(content) => textInputBlocks([content]),
+						isDeepStrictEqual,
+					);
 				if (!carried.ok) {
 					process.stderr.write(`[acp] delta refused: ${carried.why}\n`);
 					finishStop("changed", "this turn's inputs are not the ones the Pi session shows after the last answer");
@@ -2968,6 +2976,10 @@ export function streamAcpTurn(
 				const sent = chosen.send
 					.map((input) => ({ entryId: input.entryId, blocks: textInputBlocks([input.content]) ?? [] }))
 					.filter((input) => input.blocks.length > 0);
+				if (omission && sent.length === 0) {
+					finishStop("lengthWait", "the session is waiting for new input");
+					return;
+				}
 				checked = {
 					prompt: sent.flatMap((input) => input.blocks),
 					range: { start: first, count: context.messages.length - first },

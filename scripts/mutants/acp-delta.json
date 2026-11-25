@@ -37,12 +37,10 @@
 		},
 		{
 			"claim": "ACP-DELTA-MAX-TOKENS",
-			"title": "an entry after the last answer that is neither an input nor a turn is walked past — the edit that hides a length-cut answer no longer stops the turn by its own name",
-			"subject": "pi-extensions/lib/acp/branch-gate.ts",
-			"find": [
-				"\t\tif (type !== \"message\") return { ok: false, stop: \"changed\", why: `a ${type} entry after the last answer` };"
-			],
-			"replace": ["\t\tif (type !== \"message\") continue;"],
+			"title": "the resident ignores an exact omission when no new compaction follows it",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const walk = omission?.walk ?? walkDelta(anchor, branch);"],
+			"replace": ["const walk = omission?.walk.compacted ? omission.walk : walkDelta(anchor, branch);"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-DELTA-MAX-TOKENS]",

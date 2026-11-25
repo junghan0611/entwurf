@@ -16,6 +16,7 @@
 // no assistant), so an answer there carries the turn id it was sealed with. Where a gate's context
 // has an assistant in the place of a logged Entwurf answer, the turn is given the logged one.
 
+import { buildSessionProjection, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { AcpSessionReader } from "../../pi-extensions/lib/acp-host-facts.ts";
 
 type Turn = (model: unknown, context: unknown, options?: unknown, deps?: unknown) => unknown;
@@ -151,7 +152,9 @@ export function fakePiHost(): FakePiHost {
 						const logged = entry.message as { provider?: unknown } | undefined;
 						if (roleOf(entry) === "assistant" && logged?.provider === "entwurf") answerAfter.set(users, logged);
 					}
-					if (answerAfter.size > 0) {
+					// A projected omission is already built from real Pi entries; raw user ordinals
+					// are no longer the ordinals of projected answers after a compaction.
+					if (answerAfter.size > 0 && !branch.some((entry) => (entry.type as string) === "context_edit")) {
 						let seenUsers = 0;
 						let swapped = false;
 						const faithful = messages.map((m) => {
@@ -163,7 +166,12 @@ export function fakePiHost(): FakePiHost {
 						});
 						if (swapped) context = { ...(context as object), messages: faithful };
 					}
-					current = { getSessionId: () => sessionId, getBranch: () => branch, getEntries: () => branch };
+					current = {
+						getSessionId: () => sessionId,
+						getBranch: () => branch,
+						getEntries: () => branch,
+						buildSessionProjection: () => buildSessionProjection(branch as SessionEntry[]),
+					};
 				}
 				// The backend reads the reader synchronously at the top of the call.
 				const stream = inner(model, context, options, deps) as {

@@ -80,6 +80,10 @@ export const ACP_STOPS = {
 		text: "entwurf: the first prompt of this ACP session has no confirmed answer, so nothing was sent; start a new session explicitly",
 		exit: NEW_SESSION,
 	},
+	lengthWait: {
+		text: "entwurf: the previous answer was cut short; nothing new was sent",
+		exit: NEXT_INPUT,
+	},
 	changed: {
 		text: "entwurf: the conversation changed since this ACP session last answered, so nothing was sent",
 		exit: NEW_SESSION,

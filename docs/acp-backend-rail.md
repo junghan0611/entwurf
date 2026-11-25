@@ -1270,10 +1270,7 @@ restart of every citizen is needed. A 0.62.x writer that rewrites the same recor
 drops the slot, and a newer reader after it may send `/compact` once more for the same boundary: roll
 the loaded ACP writer forward before that session is continued.
 
-**Overflow stays closed.** Pi's overflow continuation (a length answer hidden by a `context_edit`,
-then a compaction) still stops as `changed` before any request, in all eight shapes of anchor kept or
-not, session live or closed, continue or new input (`[QK:ACP-VENDOR-COMPACT-OVERFLOW-FAIL-CLOSED]`).
-Opening it is #175 C, which moves this oracle with it.
+**Truncated answers wait for new input.** For a sealed length answer containing only text or thinking blocks that Pi hid with a matching null edit, an empty continuation sends nothing; the next verified input goes to the same vendor session. Only a stored compaction after the answer calls for the vendor prelude. Entwurf neither finishes the answer automatically nor sends Pi's summary; generating that summary still costs a Pi turn. Native tool-call/result blocks are not admitted. ACP tool updates appear as text notices, not native tool calls. Before new input, repeated waits and manual compactions use the latest saved boundary. A failed vendor prelude sends no delta: a later verified input can retry the prelude with the unsent inputs still pending. Both adapters' ACP `max_tokens` path has synthetic evidence only. In the measured Claude exhaustion, the vendor returned a JSON-RPC error instead: #171's unknown-dispatch handling kept the record and the next question resumed the same session without replay.
 
 **Not measured here.** A LIVE product turn through Pi (manual `/compact` and threshold) and the 1M
 window.

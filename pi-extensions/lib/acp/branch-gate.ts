@@ -81,7 +81,7 @@ export const ACP_PROMPT_REJECTION_DIAGNOSTIC_TYPE = "entwurf_acp_prompt_rejectio
 export const ACP_SKIP_NOTICE_DIAGNOSTIC = "entwurf_acp_skip_notice";
 
 /** Entry types that carry nothing into the model context (pi-coding-agent session-manager `messagesFromEntry`). */
-const CONTENTLESS: ReadonlySet<string> = new Set([
+export const CONTENTLESS: ReadonlySet<string> = new Set([
 	"custom",
 	"model_change",
 	"thinking_level_change",

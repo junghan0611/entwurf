@@ -737,15 +737,19 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 	it("[QK:ACP-DELTA-BASH-NEXT] forwards bash output and the following human prompt", async () => {
 		await trailingUsers("delta-bash", "Ran `echo BASH-OUTPUT`", "NEXT-U11-bash");
 	});
-	it("[QK:ACP-DELTA-MAX-TOKENS] after Pi hides a length-cut answer the next turn stops: the session is kept and nothing is sent twice", async () => {
+	it.each([
+		"[QK:ACP-DELTA-MAX-TOKENS]",
+		"[QK:ACP-LENGTH-PREFIX-MISS]",
+	])("%s omit-only rejects prefix drift and sends only verified new input", async (claim) => {
+		const id = claim.includes("PREFIX") ? "delta-length-prefix" : "delta-length";
 		const world = makeWorld();
-		await runTurn(world, transcript("seed"), "delta-length", "high");
+		await runTurn(world, transcript("seed"), id, "high");
 		world.hooks.stopReason = "max_tokens";
-		const cut = await runTurn(world, transcript("seed", "BRAVO-q72"), "delta-length", "high");
+		const cut = await runTurn(world, transcript("seed", "BRAVO-q72"), id, "high");
 		world.hooks.stopReason = "end_turn";
 		if (cut.type !== "done") throw new Error(`length cut sealed as ${cut.type}`);
 		expect(cut.reason).toBe("length");
-		// Pi 1.5.2 treats this answer as a recoverable length stop (zero usage: output 0 < maxTokens,
+		// Pi 1.6.0 treats this answer as a recoverable length stop (zero usage: output 0 < maxTokens,
 		// pi-ai utils/overflow.js:177-178) and persists a context_edit with a null replacement for it
 		// (agent-session.js:2533, :2564, :924). That edit, not the message projection, removes it:
 		// convertToLlm keeps a length-stopped assistant.
@@ -762,15 +766,25 @@ describe("ACP reuse projected multi-user wire (#171)", () => {
 		session.appendMessage({ role: "user", content: "NEXT-U12-max-tokens", timestamp: 4 });
 		const context = project();
 		expect(context.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "user", "user"]);
-		// The branch holds the cut answer and the edit that hides it; the context shows neither. What the
-		// session holds of the cut prompt cannot be told from here, so the turn stops and the session stays.
-		piHost.setBranch("delta-length", session.getBranch());
-		const stopped = await runTurn(world, context, "delta-length", "high");
-		expect(errorText(stopped)).toBe(ACP_STOPS.changed.text);
-		// What stops it is the edit itself: an entry after the last answer that is neither an input nor a turn.
-		expect(sealedNotices(stopped).join("\n")).toContain("a context_edit entry after the last answer");
+		// An otherwise exact omit-only witness is not permission to ignore a retained
+		// session's prefix mismatch. Change the same earlier user on BOTH sides.
+		const drift = structuredClone(context);
+		const raw = structuredClone(session.getBranch());
+		const head = raw.find((e) => e.type === "message" && e.message.role === "user");
+		const shown = drift.messages.find((m) => m.role === "user");
+		if (head?.type !== "message" || head.message.role !== "user" || !shown) throw Error("missing seed");
+		head.message.content = shown.content = "different seed";
+		piHost.setBranch(id, raw);
+		const before = world.wire.length;
+		expect(errorText(await runTurn(world, drift, id, "high"))).toBe(ACP_STOPS.changed.text);
+		expect(world.wire.length).toBe(before);
+		piHost.setBranch(id, session.getBranch());
+		const next = await runTurn(world, context, id, "high");
+		expect(next.type).toBe("done");
 		expect(world.children).toHaveLength(1);
-		expect(world.prompts).toHaveLength(2);
+		expect(world.prompts.slice(2).map((p) => [p.sessionId, p.blocks])).toEqual([
+			[world.prompts[0].sessionId, ["NEXT-U12-max-tokens"]],
+		]);
 		expect(world.lifecycle).toEqual([]);
 	});
 	it("[QK:ACP-COMPACT-KEEPS-SESSION] after a Pi compaction the same session is asked to compact itself and then gets the next input alone, whether Pi kept the last answer or only its summary", async () => {
@@ -3692,50 +3706,271 @@ describe("#175 the vendor's own compaction after a Pi compaction", () => {
 		expect(backend.takeAcpCompactionRecords("vc-recorded-agy").records).toEqual([]);
 	});
 
-	it("[QK:ACP-VENDOR-COMPACT-OVERFLOW-FAIL-CLOSED] Pi's overflow continuation (a length answer hidden by a context_edit, then a compaction) still stops as changed: no /compact, no prompt, no new child, in all eight shapes", async () => {
-		// The shape Pi 1.6.0 stores for a recoverable length stop (agent-session.js _omitRecoveryAttempt): the
-		// answer stays, a context_edit hides it, then the overflow compaction. #175 C owns opening this path;
-		// until it lands this oracle is the fail-closed boundary, and moves with C.
-		const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-		try {
-			for (const kept of [true, false])
-				for (const closed of [false, true])
-					for (const next of ["continue", "new-input"] as const) {
-						const label = `kept=${kept} closed=${closed} ${next}`;
-						const world = makeWorld();
-						const id = `vc-overflow-${kept}-${closed}-${next}`;
-						const seed = await runTurn(world, transcript("seed"), id, "high");
-						if (seed.type !== "done") throw new Error("seed");
-						world.hooks.stopReason = "max_tokens";
-						const cut = await runTurn(world, transcript("seed", "BRAVO"), id, "high");
-						world.hooks.stopReason = "end_turn";
-						if (cut.type !== "done") throw new Error(`cut sealed as ${cut.type}`);
-						const pi = SessionManager.inMemory();
-						pi.appendMessage({ role: "user", content: "seed", timestamp: 0 });
-						pi.appendMessage(seed.message);
-						const bravoId = pi.appendMessage({ role: "user", content: "BRAVO", timestamp: 2 });
-						const cutId = pi.appendMessage(cut.message);
-						pi.appendContextEdit(cutId, null);
-						pi.appendCompaction("SUMMARY-OF-OVERFLOW", kept ? bravoId : null, 1000);
-						if (next === "new-input") pi.appendMessage({ role: "user", content: "AFTER", timestamp: 9 });
-						piHost.setBranch(id, pi.getBranch());
-						const context = normalizeContext({
-							tools: PI_TOOLS,
-							messages: convertToLlm(pi.buildSessionContext().messages),
-						});
-						if (closed) expect(backend.closeRetainedAcpSession(id), label).toBe(true);
-						const wire = world.wire.length;
-						const prompts = world.prompts.length;
-						const children = world.children.length;
-						const result = await runTurn(world, context, id, "high");
-						expect(errorText(result), label).toBe(ACP_STOPS.changed.text);
-						expect(world.wire.slice(wire), label).toEqual([]);
-						expect(world.prompts.length - prompts, label).toBe(0);
-						expect(world.children.length - children, label).toBe(0);
-					}
-		} finally {
-			stderr.mockRestore();
-		}
+	const overflowClaims = [
+		"[QK:ACP-VENDOR-COMPACT-OVERFLOW]",
+		"[QK:ACP-LENGTH-MARKER]",
+		"[QK:ACP-LENGTH-DISPATCH]",
+		"[QK:ACP-LENGTH-CAPTURE]",
+		"[QK:ACP-LENGTH-READER-PRE]",
+		"[QK:ACP-LENGTH-NO-REPLAY]",
+		"",
+		"[QK:ACP-LENGTH-SECOND-CUT]",
+		"",
+		"[QK:ACP-LENGTH-WAIT-AGAIN]",
+		"",
+		"[QK:ACP-LENGTH-READER-MAIN]",
+		"",
+		"",
+		"",
+		"",
+	];
+	let cell = 0;
+	for (const rail of ["claude", "agy"])
+		for (const kept of [true, false])
+			for (const closed of [false, true])
+				for (const next of ["continue", "new-input"] as const)
+					it(`${overflowClaims[cell++]} C3 ${rail} kept=${kept} closed=${closed} ${next}`, async () => {
+						const model = rail === "claude" ? sonnet() : agyModel();
+						// Use Pi's public entry writer and projection, not a fabricated summary in provider context.
+						const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+						try {
+							{
+								const label = `kept=${kept} closed=${closed} ${next}`;
+								const world = makeWorld();
+								const id = `vc-overflow-${model.id}-${kept}-${closed}-${next}`;
+								if (model.id.startsWith("agy-"))
+									world.hooks.modelAnswer = (value) => ({
+										configOptions: [
+											{ id: "model", currentValue: value },
+											{ id: "thought_level", currentValue: value },
+										],
+									});
+								const turn = (ctx: TranscriptContext) => runTurn(world, ctx, id, "high", { model });
+								const seed = await turn(transcript("seed"));
+								if (seed.type !== "done") throw new Error("seed");
+								world.hooks.stopReason = "max_tokens";
+								const cut = await turn(transcript("seed", "BRAVO"));
+								world.hooks.stopReason = "end_turn";
+								if (cut.type !== "done") throw new Error(`cut sealed as ${cut.type}`);
+								const pi = SessionManager.inMemory();
+								pi.appendMessage({ role: "user", content: "seed", timestamp: 0 });
+								pi.appendMessage(seed.message);
+								const bravoId = pi.appendMessage({ role: "user", content: "BRAVO", timestamp: 2 });
+								const observation = {
+									v: 1,
+									compactionId: "S8-completed",
+									status: "completed",
+									source: "prelude",
+									promptWasCompactCommand: true,
+									startedObservedAt: null,
+									endedObservedAt: new Date(0).toISOString(),
+									observedIntervalMs: null,
+									tokensBefore: null,
+									tokensAfter: null,
+									recordedAt: new Date(0).toISOString(),
+								};
+								pi.appendCustomEntry("entwurf-acp-compaction", observation);
+								const cutId = pi.appendMessage({
+									...cut.message,
+									content: [{ type: "thinking", thinking: "considering" }, ...cut.message.content],
+								});
+								pi.appendCustomEntry("entwurf-acp-compaction", observation);
+								pi.appendContextEdit(cutId, null);
+								pi.appendCustomEntry("entwurf-acp-compaction", observation);
+								pi.appendCompaction("SUMMARY-OF-OVERFLOW", kept ? bravoId : null, 1000);
+								const afterId =
+									next === "new-input" ? pi.appendMessage({ role: "user", content: "BRAVO", timestamp: 9 }) : undefined;
+								piHost.setBranch(id, pi.getBranch());
+								const context = structuredClone(
+									normalizeContext({
+										tools: PI_TOOLS,
+										messages: convertToLlm(pi.buildSessionContext().messages),
+									}),
+								);
+								if (closed) expect(backend.closeRetainedAcpSession(id), label).toBe(true);
+								const wire = world.wire.length;
+								const prompts = world.prompts.length;
+								const children = world.children.length;
+								const before = recordOf(world, id);
+								if (closed) {
+									store.writeSessionRecord(
+										{
+											...before,
+											unsealed: [{ turnId: "entwurf-turn:missing-input", inputEntryIds: ["not-on-this-branch"] }],
+										},
+										world.sessionDir,
+									);
+									piHost.setBranch(id, pi.getBranch());
+									expect(errorText(await turn(context))).toBe(ACP_STOPS.changed.text);
+									expect(world.wire.length).toBe(wire);
+									store.writeSessionRecord(before, world.sessionDir);
+								}
+								if (kept) {
+									for (const drift of ["alter", "add", "drop"]) {
+										const altered = structuredClone(context);
+										const pos = altered.messages.findIndex((m) => m.role === "user" && m.content === "BRAVO");
+										expect(pos).toBeGreaterThan(0);
+										altered.messages.splice(
+											pos,
+											drift === "add" ? 0 : 1,
+											...(drift === "drop" ? [] : [{ role: "user" as const, content: "tampered", timestamp: 1 }]),
+										);
+										piHost.setBranch(id, pi.getBranch());
+										expect(errorText(await turn(altered)), drift).toBe(ACP_STOPS.changed.text);
+										expect(world.wire.length).toBe(wire);
+									}
+								}
+								piHost.setBranch(id, pi.getBranch());
+								let marker: unknown;
+								world.hooks.answerFor = (p) => {
+									if (isCompact(p)) {
+										const last = context.messages.at(-1);
+										if (last?.role === "user") last.content = "CHANGED DURING PRELUDE";
+										return undefined;
+									}
+									marker = recordOf(world, id).pendingDispatch?.inputEntryIds;
+									return { stopReason: "max_tokens" };
+								};
+								// On attach there is only the main proof. Change the provider-side copy just after
+								// its final comparison, before rendering: only the selected raw input is authoritative.
+								if (closed && next === "new-input") {
+									const read = world.deps.sessionReader;
+									world.deps.sessionReader = () => {
+										const session = read();
+										if (!session?.buildSessionProjection) return session;
+										return {
+											...session,
+											buildSessionProjection: () => {
+												const projection = session.buildSessionProjection!();
+												const rows = projection.entries.slice();
+												projection.entries[Symbol.iterator] = function* () {
+													yield* rows;
+													const last = context.messages.at(-1);
+													if (last?.role === "user") last.content = "NOT RAW";
+													return undefined;
+												};
+												return projection;
+											},
+										};
+									};
+								}
+								const result = await turn(context);
+								if (next === "continue") {
+									expect(recordOf(world, id)).toEqual(before);
+									expect(errorText(result), label).toBe(ACP_STOPS.lengthWait.text);
+									expect(world.wire.slice(wire), label).toEqual([]);
+									expect(world.children.length - children, label).toBe(0);
+								} else {
+									expect(result.type, label).toBe("done");
+									expect(
+										world.prompts.slice(prompts).map((p) => [p.sessionId, p.blocks]),
+										label,
+									).toEqual([
+										[world.prompts[0].sessionId, ["/compact"]],
+										[world.prompts[0].sessionId, ["BRAVO"]],
+									]);
+									expect(marker).toEqual([afterId]);
+									if (result.type !== "done" || result.reason !== "length") throw Error("second cut expected");
+									world.hooks.answerFor = undefined;
+									pi.appendContextEdit(pi.appendMessage(result.message), null);
+									const project = () => {
+										piHost.setBranch(id, pi.getBranch());
+										return normalizeContext({
+											tools: PI_TOOLS,
+											messages: convertToLlm(pi.buildSessionContext().messages),
+										});
+									};
+									const count = world.prompts.length;
+									const sealed = recordOf(world, id),
+										wire2 = world.wire.length,
+										child2 = world.children.length;
+									const wait = await turn(project());
+									expect(errorText(wait)).toBe(ACP_STOPS.lengthWait.text);
+									expect(world.prompts.length).toBe(count);
+									if (wait.type !== "error") throw Error("wait expected");
+									pi.appendMessage(wait.error);
+									const repeat = await turn(project());
+									expect(errorText(repeat)).toBe(ACP_STOPS.lengthWait.text);
+									if (repeat.type !== "error") throw Error("repeat wait");
+									pi.appendMessage(repeat.error);
+									expect(world.wire.slice(wire2)).toEqual([]);
+									expect(world.children.length).toBe(child2);
+									expect(recordOf(world, id)).toEqual(sealed);
+									const lastId = pi.appendMessage({ role: "user", content: "AFTER2", timestamp: 10 });
+									world.hooks.onPrompt = () => {
+										expect(recordOf(world, id).pendingDispatch?.inputEntryIds).toEqual([lastId]);
+									};
+									const last = await turn(project());
+									if (last.type !== "done") throw Error("AFTER2 failed");
+									expect(recordOf(world, id)).toMatchObject({
+										sealedTurnId: last.message.responseId,
+										pendingDispatch: null,
+										vendorCompaction: sealed.vendorCompaction,
+									});
+									expect(world.wire.slice(wire2)).toEqual(["prompt"]);
+									expect(world.children.length).toBe(child2);
+									expect(world.prompts.slice(count).map((p) => [p.sessionId, p.blocks])).toEqual([
+										[world.prompts[0].sessionId, ["AFTER2"]],
+									]);
+								}
+							}
+						} finally {
+							stderr.mockRestore();
+						}
+					});
+
+	it("[QK:ACP-LENGTH-PRELUDE-RETRY] after a saved prelude failure the same vendor gets the two unsent inputs, once, in order", async () => {
+		for (const model of [sonnet(), agyModel()])
+			for (const failure of ["max_tokens", "unrecognized"]) {
+				const world = makeWorld();
+				const id = `length-retry-${model.id}-${failure}`;
+				if (model.id.startsWith("agy-"))
+					world.hooks.modelAnswer = (value) => ({
+						configOptions: [
+							{ id: "model", currentValue: value },
+							{ id: "thought_level", currentValue: value },
+						],
+					});
+				world.hooks.stopReason = "max_tokens";
+				const cut = await runTurn(world, transcript("initial"), id, "high", { model });
+				if (cut.type !== "done") throw Error("length birth");
+				const pi = SessionManager.inMemory();
+				pi.appendMessage({ role: "user", content: "initial", timestamp: 1 });
+				pi.appendContextEdit(pi.appendMessage(cut.message), null);
+				const turn = () => {
+					piHost.setBranch(id, pi.getBranch());
+					return runTurn(
+						world,
+						normalizeContext({ tools: PI_TOOLS, messages: convertToLlm(pi.buildSessionContext().messages) }),
+						id,
+						"high",
+						{ model },
+					);
+				};
+				const wait = await turn();
+				if (wait.type !== "error" || errorText(wait) !== ACP_STOPS.lengthWait.text) throw Error("omit-only wait");
+				pi.appendMessage(wait.error);
+				pi.appendCompaction("MANUAL", null, 1);
+				pi.appendMessage({ role: "user", content: "FIRST", timestamp: 2 });
+				world.hooks.answerFor = (p) => (isCompact(p) ? { stopReason: failure } : undefined);
+				const failed = await turn();
+				if (failed.type !== "error") throw Error("prelude failure expected");
+				expect(errorText(failed)).toBe(
+					ACP_STOPS[failure === "max_tokens" ? "vendorCompactFailed" : "vendorCompactUnknown"].text,
+				);
+				pi.appendMessage(failed.error);
+				world.hooks.answerFor = undefined;
+				world.hooks.stopReason = "end_turn";
+				pi.appendMessage({ role: "user", content: "SECOND", timestamp: 3 });
+				const next = await turn();
+				expect(next.type).toBe("done");
+				expect(world.prompts.slice(1).map((p) => p.blocks.map((x) => x.trimEnd()))).toEqual([
+					["/compact"],
+					["/compact"],
+					["FIRST", "SECOND"],
+				]);
+				expect(new Set(world.prompts.map((p) => p.sessionId)).size).toBe(1);
+			}
 	});
 
 	it("[QK:ACP-VENDOR-COMPACT-RECORD-ROUNDTRIP] every record write after the request keeps the slot: the dispatch marker and the seal of the delta", async () => {
