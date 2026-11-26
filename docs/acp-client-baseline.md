@@ -15,7 +15,7 @@ is host-local; its decisive lines are pasted into #171. The continuity rules are
 4. Done: initialize facts and the version guard (L1, V5), and this split of the document.
 5. Done: the L16 base, record v2 and the marker. Its stop and drop rules are replaced by decision 17.
 6. Done: the continuity design (decisions 15–18); this table follows it.
-7. Done: the re-measurement command and the pins (Claude 0.109.0, agy 1.5.13, SDK 2.8.0); LIVE measured U9, U12, U14, U15.
+7. Done: the re-measurement command and #171 pins (Claude 0.109.0, agy 1.5.13, SDK 2.8.0); LIVE measured U9, U12, U14, U15.
 8. Done: L8 and the continuity rules under the version guard (L7, L11, L14, P1, Z3, V1, V2, V3, Z6); L9 and Z4 declined.
 9. Done: #171 landed on main (0d8c22d9). Left for #156: U4, U16.
 

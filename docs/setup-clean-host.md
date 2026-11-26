@@ -1141,6 +1141,12 @@ retired bundled `session-bridge` entry. It is not a general MCP catalog.
 user augment. Large Claude `_meta.systemPrompt` carriers can route OAuth sessions
 to metered “extra usage” billing.
 
+Guides through 0.63.0 showed `"mcp__*"` here. claude-agent-acp 0.112.0 skips that rule, so a settings
+file that still holds it now fails to load and names the entry (#176). Replace that one entry in place
+with `"mcp__entwurf-bridge__*"` and change nothing else: a stored Claude session taken under the old
+rule is read as if taken under the new one only for a list changed exactly that way, and any other
+edit is compared as written and may stop the resume with `config`.
+
 `tools`, `permissionAllow`, `disallowedTools`, `settingSources`, `skillPlugins`
 and `appendSystemPrompt` are Claude's declaration surface. `mcpServers` carries
 explicit servers. `compaction` is a **top-level pi key**, not a backend knob.

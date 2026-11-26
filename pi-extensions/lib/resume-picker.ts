@@ -23,9 +23,10 @@
  *     break, not a Ctrl-J). That is a same-read mitigation, not proof of intent — it cannot tell
  *     who pressed an Enter that arrives alone.
  * KNOWN RESIDUAL RISK (accepted by GLG, 2026-11-24): if a terminal ignores bracketed paste AND
- * delivers a pasted text and its trailing line break in separate reads, that line break is an Enter
- * on its own and DOES choose the row the pasted text narrowed to. Nothing here can tell that Enter
- * from a typed one. The beside test records this behaviour as it is.
+ * delivers a pasted text and its trailing line break in separate reads, a CR line break (tmux's
+ * default paste turns LF into CR) is an Enter on its own and DOES choose the row the pasted text
+ * narrowed to; an LF moves one row (#176). Nothing here can tell that Enter from a typed one.
+ * The beside test records this behaviour as it is.
  *
  * THE TERMINAL IS GIVEN BACK ON EVERY EXIT. Raw mode, the alternate screen, the hidden cursor and
  * bracketed paste are undone by one `restore` that a selection, a cancel, an error and a signal all
