@@ -284,7 +284,7 @@ session 디렉터리 스캔이 symlink를 허용하게 된 것(identity minting�
 
 ### 읽은 근거
 
-`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 supported range 는 `>=1.6.0 <1.7` (#172, 0.62.0부터 공개; 0.52.0–0.61.0은 SDK 1.5.2; 운영 수용 아님) — 아래 0.84.x 재확인 문단들은 그 시점의 측정이다) 패키지 루트(pnpm global store).
+`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 supported range 는 `>=1.6.1 <1.7` (#176 source candidate의 선언; 0.62.0–0.63.0은 SDK 1.6.0, 0.52.0–0.61.0은 SDK 1.5.2; 운영 수용 아님) — 아래 0.84.x 재확인 문단들은 그 시점의 측정이다) 패키지 루트(pnpm global store).
 아래 표에서 출처가 `(0.83.0)`으로 적힌 행은 **앵커 시점의 역사적 표본**이고, 그 행의 사실이 0.84.0에서도
 성립하는지는 위 재실측 문단이 따로 진다. 접두사 없는
 경로는 이 repo 기준이다.

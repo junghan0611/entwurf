@@ -18,7 +18,7 @@
  * the file a read-only 1.5 open left; it refused the file the first 1.5 write left, at its first pi.live read) are
  * generation-time measurements on the SDK pair the manifest names. This file certifies only that its own run leaves
  * each file's documents as those receipts were taken on, and its tasks as that state with the root SDK's own task
- * versions where it wrote a task again (#172: the root SDK is 1.6.0, the receipts are 1.5.0's).
+ * versions where it wrote a task again (#176: the root SDK is 1.6.1, the receipts are 1.5.0's).
  *
  * Conformance of SDK-owned behavior against independent oracles, not a new Entwurf contract: there is no local
  * subject to mutate and no kill-power claim. What the carrier shows of a migrated session is the carrier test's.
@@ -72,7 +72,8 @@ const HELD = { close: "pending", kill: "running" } as const;
 const VERSION_15: Record<string, number> = { "pi.live": 3, "pi.generation": 2, "pi.tool": 3, "pi.compaction": 1 };
 /**
  * The root SDK's definition versions (#172). SDK 1.6.0 moved pi.generation to 3 and pi.tool to 4 (inherited:
- * dist/harness/{generation,tool}.js of 1.6.0); a task the root SDK stores again carries its writer's version.
+ * dist/harness/{generation,tool}.js of 1.6.0) and 1.6.1 keeps both (read 2026-11-26, #176); a task the root SDK
+ * stores again carries its writer's version.
  */
 const VERSION_ROOT: Record<string, number> = { ...VERSION_15, "pi.generation": 3, "pi.tool": 4 };
 /**

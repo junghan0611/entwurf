@@ -23,7 +23,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-This package uses the exact Pi 1.6.0 SDK set and host Pi `>=1.6.0 <1.7` (#172), first published as 0.62.0. The `package.json` `version` and `dependencies` of the package you hold are the authority for the current pairing. Published 0.52.0 through 0.61.0 shipped the Pi 1.5.2 SDK set (#158; 0.53.0 was tagged but never published to npm) and 0.51.0 the 1.5.0 set. The marked 0.61.0 / SDK 1.5.2 examples below describe the last package on that set and remain bound to its own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
+This package uses the exact Pi 1.6.1 SDK set and host Pi `>=1.6.1 <1.7` (#176). The `package.json` `version` and `dependencies` of the package you hold are the authority for the current pairing. Published 0.62.0 and 0.63.0 shipped the Pi 1.6.0 SDK set (#172), 0.52.0 through 0.61.0 the Pi 1.5.2 set (#158; 0.53.0 was tagged but never published to npm) and 0.51.0 the 1.5.0 set. The marked 0.63.0 / SDK 1.6.0 examples below describe the last package on that set and remain bound to its own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
 
 The validation TGZ installed in #155's operating window before the D1 display repair is an earlier, separate artifact, not the published one; see the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below.
 
@@ -35,8 +35,8 @@ The older package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4.x 
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence — this package: `>=1.6.0 <1.7`; previous 0.61.0: <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`>=1.5.2 <1.6`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.6.0 in this package; 1.5.2 in published 0.52.0 through 0.61.0; 1.5.0 in historical 0.51.0) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
+| pi | optional-by-presence — this package: `>=1.6.1 <1.7`; previous 0.63.0: <!-- entwurf:published @junghanacs/entwurf@0.63.0 pi 1.6.0 -->`>=1.6.0 <1.7`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.6.1 in this package; 1.6.0 in published 0.62.0 and 0.63.0; 1.5.2 in published 0.52.0 through 0.61.0; 1.5.0 in historical 0.51.0) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -225,10 +225,10 @@ on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
 `setup` names the pi row FAIL with the §1 Darwin wording.
 
 For this package, install its exact host Pi floor and wire the project as shown below.
-This package's floor is Pi 1.6.0 (#172); published 0.52.0 through 0.61.0 use the Pi 1.5.2 floor and 0.51.0 the Pi 1.5.0 floor, each named in its own setup guide:
+This package's floor is Pi 1.6.1 (#176); published 0.62.0 and 0.63.0 use the Pi 1.6.0 floor, 0.52.0 through 0.61.0 the Pi 1.5.2 floor and 0.51.0 the Pi 1.5.0 floor, each named in its own setup guide:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@1.6.0
+npm install -g @earendil-works/pi-coding-agent@1.6.1
 pi --version
 
 cd ~/entwurf-smoke
@@ -236,12 +236,12 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported host Pi range for this package is `>=1.6.0 <1.7`.
+The supported host Pi range for this package is `>=1.6.1 <1.7`.
 A detected host outside that range is refused for Pi wiring; Entwurf does not upgrade it.
 Align the host explicitly, for example with the exact npm command above, before wiring Pi. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
 
-This package requires host Pi `>=1.6.0 <1.7`; `setup` reports a detected older host as FAIL. Prepare host Pi 1.6.0 before wiring, and use the checkout path rather than the global npm package when running a checkout directly. Range eligibility does not replace installation, validation or operating approval. Ordinary Pi 1.5.2 defaults its global `cacheWarming` setting to `idle`, which may send additional provider requests (read at 1.5.2, not read again at 1.6.0); pi-durable does not map that setting. See the [#158 durable boundary](./durable-native-support.md#sdk-152-candidate-boundary-158).
+This package requires host Pi `>=1.6.1 <1.7`; `setup` reports a detected older host as FAIL. Prepare host Pi 1.6.1 before wiring, and use the checkout path rather than the global npm package when running a checkout directly. Range eligibility does not replace installation, validation or operating approval. Ordinary Pi 1.5.2 defaults its global `cacheWarming` setting to `idle`, which may send additional provider requests (read at 1.5.2, not read again since); pi-durable does not map that setting. See the [#158 durable boundary](./durable-native-support.md#sdk-152-candidate-boundary-158).
 
 For daily garden-native pi sessions:
 
@@ -346,9 +346,9 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 What the Entwurf package supplies:
 
 1. **The pi SDK set** — this package supplies `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
-   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.6.0`, plus
-   `proper-lockfile`, as production dependencies. Model data rides `pi-ai@1.6.0`, not a catalog copy.
-   Published 0.61.0 used <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`@earendil-works/pi-ai@1.5.2`<!-- /entwurf:published -->; historical 0.51.0 used the 1.5.0 set.
+   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.6.1`, plus
+   `proper-lockfile`, as production dependencies. Model data rides `pi-ai@1.6.1`, not a catalog copy.
+   Published 0.63.0 used <!-- entwurf:published @junghanacs/entwurf@0.63.0 pi 1.6.0 -->`@earendil-works/pi-ai@1.6.0`<!-- /entwurf:published -->; 0.52.0 through 0.61.0 used the 1.5.2 set and historical 0.51.0 the 1.5.0 set.
    The [SDK pin](../pi/pi-durable/overlay/upstream-pin.json) and [package manifest](../package.json)
    describe the checkout you hold, not immutable published bytes.
 2. **The native app/TUI carrier** — upstream does not publish the experimental durable
@@ -360,7 +360,7 @@ What the Entwurf package supplies:
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
    own `dist/` as installed — never through a source checkout.
 
-The upstream library guide for the published 0.51.0 pairing is [v1.5.0](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md); for the set published in 0.52.0 through 0.61.0 it is [v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/durable/README.md); for this package's SDK APIs use [v1.6.0](https://github.com/earendil-works/pi/blob/v1.6.0/packages/durable/README.md).
+The upstream library guide for the published 0.51.0 pairing is [v1.5.0](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md); for the set published in 0.52.0 through 0.61.0 it is [v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/durable/README.md); for 0.62.0 and 0.63.0 it is [v1.6.0](https://github.com/earendil-works/pi/blob/v1.6.0/packages/durable/README.md); for this package's SDK APIs use [v1.6.1](https://github.com/earendil-works/pi/blob/v1.6.1/packages/durable/README.md).
 The [experimental app guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/experimental/durable/README.md)
 (last published at v1.1.0) records the app's origin: Entwurf's maintained app source, not a newer upstream app, is the current composition authority. Both guides describe what the carrier is. Running the bare upstream app does not attach Entwurf's
 garden contact. Entwurf does not rebuild the controller/model/auth/storage system or
@@ -375,7 +375,7 @@ carrier file, the license, the resolver and its relocation grammar are present
 (`pi-durable-carrier-drift`); every declared SDK package resolves from the carrier
 (`pi-durable-sdk-absent`); and every reachable physical edge — from the carrier to each package,
 and from every package copy it reaches, at any depth, to its own `@earendil-works` dependencies —
-lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the published 1.5.0 set and, measured on the registry tarballs, in the 1.5.2 set (#158) and the 1.6.0 set (#172); even so, the physical package each import binds must be checked. Sharing
+lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the published 1.5.0 set and, measured on the registry tarballs, in the 1.5.2 set (#158), the 1.6.0 set (#172) and the 1.6.1 set (#176, read from the installed packages); even so, the physical package each import binds must be checked. Sharing
 one copy with an aligned host install of the same version is an ordinary layout. A mixed
 tree (for example an override that binds pi-durable's `pi-ai` to an older published version) still
 *imports* — which is why the edge check exists — and is refused by name.
@@ -457,7 +457,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2; previous 0.61.0 range <!-- entwurf:published @junghanacs/entwurf@0.61.0 pi 1.5.2 -->`>=1.5.2 <1.6`<!-- /entwurf:published -->, this package's range `>=1.6.0 <1.7`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2; previous 0.63.0 range <!-- entwurf:published @junghanacs/entwurf@0.63.0 pi 1.6.0 -->`>=1.6.0 <1.7`<!-- /entwurf:published -->, this package's range `>=1.6.1 <1.7`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. The native harnesses own credentials, model settings and their respective session stores — ordinary Pi JSONL and pi-durable SQLite; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -503,7 +503,7 @@ Push, release/tag/npm publication and retirement of any other citizen retain the
 
 The owned canonical app/TUI source is production responsibility; the SDK owns the execution engine. In independent upgrade review, compare old and new app-visible payload semantics against known fixtures and a separate official SDK oracle: more than 50 active entries on reopen and same-process conversation switch, head/reset and background-compaction retention, and the distinction from model memory. API names, typechecks or a QK that only fixes the new SDK's window can all be green while older display compatibility regresses. When official emission changes a generated digest, check its pin-linked mutant find literal and the existing manifest inventory together; this is not a new gate.
 
-Freeze for sequential independent review, then affected PARTIAL groups, frozen FULL and applicable scripted/native-H carrier cells. Accept the **same reviewed validation TGZ** in the Linux container and rehearse ownership refusal/takeover in isolation. Measure SDK publication age early to plan the window, then recheck it fresh before installation; never automatically exempt the global policy. Any operator-approved exception must name the exact packages and versions and be recorded with that upgrade's decision; it is not a standing patch-release exemption and not permission for an operating cutover. For #158 the operator explicitly approved the exact SDK 1.5.2 release-age exception on 2026-11-11: only those ten member/version terms are added to `minimumReleaseAgeExclude`, and the global policy and every other dependency remain subject to their own checks. That differs from #155's dated no-exception installation and authorises no operating write or publication.
+Freeze for sequential independent review, then affected PARTIAL groups, frozen FULL and applicable scripted/native-H carrier cells. Accept the **same reviewed validation TGZ** in the Linux container and rehearse ownership refusal/takeover in isolation. Measure SDK publication age early to plan the window, then recheck it fresh before installation; never automatically exempt the global policy. Any operator-approved exception must name the exact packages and versions and be recorded with that upgrade's decision; it is not a standing patch-release exemption and not permission for an operating cutover. For #158 the operator explicitly approved the exact SDK 1.5.2 release-age exception on 2026-11-11: only those ten member/version terms are added to `minimumReleaseAgeExclude`, and the global policy and every other dependency remain subject to their own checks. That differs from #155's dated no-exception installation and authorises no operating write or publication. For #176 the operator approved the exact SDK 1.6.1 exception on 2026-11-26 in the same form (the ten member terms gain `1.6.1`); the cutover stays the operator's own exit and reopen.
 
 In the named operating window, identify owners, obtain their normal exit and prove it, then take a consistent complete session backup including WAL/SHM before the first new-SDK write. Install a coherent host and validation TGZ, verify installed global root (GR), runtime and ownership independently, and perform only the approved takeover. Reopen the same identities with their original explicitly named native modules and existing auth; observe real turns and round trips before the Native LIVE floor. Public pi-durable `entwurf_resume_call` is bridge-only: it does not save or restore operator native modules. If one is needed, use the original explicit CLI entry; do not infer a profile or kill a citizen automatically. One approval can cover the named scope, sibling roles and fixture work, but not bypass normal exit, the first-write decision, or separate push/npm authority.
 
@@ -779,7 +779,7 @@ as a note rather than a fault.
 
 **entwurf sets no OMP version floor in code, and will not grow one on schedule.** Detection is
 presence-only (`command -v "${OMP_BIN:-omp}"`); there is no `entwurf.ompFloor`, no coherence
-gate, and no exact pin — unlike Node (`engines.node`), pi (this checkout's predicate, `>=1.6.0 <1.7`) and Claude Code
+gate, and no exact pin — unlike Node (`engines.node`), pi (this checkout's predicate, `>=1.6.1 <1.7`) and Claude Code
 (`entwurf.claudeCodeFloor`), each of which has an enforcement point. That asymmetry is a
 decision, not an omission. A floor is the answer to a vendor that fails SILENTLY — Claude Code
 earned one because an older binary validates the exec manifest, drops `args` at runtime, and

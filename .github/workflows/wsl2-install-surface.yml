@@ -234,8 +234,8 @@ jobs:
       - name: cell 2 — zero-token pi citizen inside WSL2
         timeout-minutes: 10
         env:
-          PI_VERSION: 1.6.0
-          PI_INTEGRITY: sha512-zX1BVEsshx7A2MRuQ6jfr3RJGWw4Wn+vLq5ZfmlvS1RskhRmByaSZVXH/zcwRrWHO7qPgs98pNCbPOEti/t0fQ==
+          PI_VERSION: 1.6.1
+          PI_INTEGRITY: sha512-+VSb95N4PB+G7TLceg7wkbJT31BEeIBnUT9500g9a1rOsCx78CUw1YFGtLcRhS6jj8pdfm0fFwrakrMLu6lVAQ==
         run: |
           set -euo pipefail
           T="$(cygpath -u "$RUNNER_TEMP")"
