@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.26-herdr.0.64.0 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.64.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.63.0 (`v2026.11.26-herdr.0.63.0`) on the Pi 1.6.0 SDK set; 0.64.0 carries the Pi 1.6.1 SDK set, so step 1 of the install takes host Pi `>=1.6.1 <1.7`, and activation refuses a Pi 1.6.0 host by name. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `99d6932cc23f43637839d3ed39a7a8755e97cc947042cef2e6c30bbfd540afc6` matches the accepted core artifact byte for byte; independently computed sha512 and sha1 match the npm integrity and shasum, and the sha512 matches this lock. The publication moved `latest` to 0.64.0 and left `repair` at the value recorded before publication (`0.12.8-repair.1`, U0 receipt `publish-u0.w0n7Nk` beside the candidate). Core `v0.64.0` is `5d265634` (exact-SHA CI run 45824698457, Windows preview run 45827121941).
+- In a private sandbox (private HOME, XDG roots and agent directory) with host Pi 1.6.1, `pi install npm:@junghanacs/entwurf@0.64.0` installed from the registry, the ACP bridge resolved to that install root, and `pi --list-models entwurf` listed the three Claude rows and the three agy rows with no provider error. The install printed the same peerDependencies warning and the same npm 11.16.0 `allow-scripts` notice for the package's `postinstall` as 0.63.0.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.64.0, a source swap, a real Herdr registration, public-ref installation, a vendor model turn, or 0.64.0 inside Orca. The nine install steps were not re-recorded on the Pi 1.6.1 pairing.
+- Mutant `VERSION-MENTIONS-HERDR-LOCK` (`scripts/mutants/pi-floor.json`) returns to its npm form: it finds `"version": "0.64.0"` in the lock and plants 0.63.0, the previous pin, against a README that names 0.64.0. The marked 0.63.0 / SDK 1.6.0 regions stay as the previous published pairing, bound to the unchanged frozen 0.63.0 manifest; the Herdr nine-step block leaves its region and takes the 1.6.1 range. The setup guide, the ACP and mux rails and ROADMAP's floor line no longer call SDK 1.6.1 an unpublished source candidate, and the ACP rail no longer calls the 0.112.0 adapter set unreleased. The durable support guide's SDK paragraph, still naming 1.6.0 as this package's pin and missing 0.62.0 and 0.63.0 (found after prepare, recorded in the 0.64.0 evidence), now names 1.6.1. PARTIAL `["bash","run.sh","check-dep-versions"]` 12/12 killed, control ok (head 5d265634d7a6 surface ffcefe5549ae receipt a5ec45428a9c). On the same uncommitted tree the nine Herdr gates, `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` and lint were green. Exact pushed-SHA CI requires its own receipt.
+
 ## 0.64.0 — 2026-11-26
 
 ### What an npm user gets

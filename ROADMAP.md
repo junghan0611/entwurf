@@ -399,7 +399,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **1.6.1** (`>=1.6.1 <1.7`, next-minor 상한; #176 개발 checkout의 선언, 미출하; 0.62.0–0.63.0은 SDK 1.6.0, 0.52.0–0.61.0은 SDK 1.5.2; 운영 수용과 별개).
+  public export → TS 직접 import(재구현 불필요). floor = **1.6.1** (`>=1.6.1 <1.7`, next-minor 상한; #176, 0.64.0부터 출하; 0.62.0–0.63.0은 SDK 1.6.0, 0.52.0–0.61.0은 SDK 1.5.2; 운영 수용과 별개).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상

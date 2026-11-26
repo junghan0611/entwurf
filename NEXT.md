@@ -1,6 +1,6 @@
-# NEXT — #176 main 안착, 0.64.0 cut
+# NEXT — 0.64.0 shipped (#176); Herdr pinned to 0.64.0
 
-**현재 (2026-11-26 19:5x KST):** #176(선택기, Claude ACP 0.112.0, Pi SDK 1.6.1)을 main에 올리고 0.64.0을 cut한다(GLG 2026-11-26 "커밋푸시하고 main 안착. 릴리즈 가자"). oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
+**현재 (2026-11-26 22:5x KST):** #176(선택기, Claude ACP 0.112.0, Pi SDK 1.6.1)이 0.64.0으로 출하됐다. npm `latest`=0.64.0이고 Herdr lock도 0.64.0을 가리킨다. 다음 레일은 GLG가 고른다. oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
 
 # RAIL — 현재 좌표
 
@@ -15,11 +15,11 @@
 - [x] **15. GLG publish.** U2: `latest`=0.63.0, `repair`=0.12.8-repair.1 유지(U0 receipt `publish-u0.cFOufj` 대조). registry tarball sha256 = 후보 `eb0af196…`, sha512·sha1 = `dist.integrity`·`dist.shasum`. U3: sandbox registry 설치(host Pi 1.6.0)에서 entwurf 6행, provider 오류 없음(`~/.local/share/entwurf-lab/063/publish/u3.log`). GLG의 새 노트북에는 0.63.0 registry(소비자) 버전만 설치한다. 그것이 installed-consumer LIVE(Pi 1.6.0)의 첫 측정이다. 형제 재시작: 새 버전이 필요한 것은 ACP 세션을 이어 가는 형제뿐이다. 0.62.x writer는 `vendorCompaction` 칸을 다시 쓸 때 지우므로, 그 세션을 이어 가기 전에 ACP writer를 먼저 올린다.
 - [x] **16. Herdr re-pin.** `581d0b53`: `runtime-lock.json` npm 0.63.0(registry sha512 = integrity), `VERSION-MENTIONS-HERDR-LOCK` npm 버전 형태 복귀(PARTIAL check-dep-versions 12/12, receipt `c7564d955968`). exact-SHA CI run 45662577079 4/4. snapshot tag + GitHub release `v2026.11.26-herdr.0.63.0`(Latest는 v0.63.0 유지). P9: 이번 P5의 `/tmp/entwurf-s2b-overlay-*` 2개(48K)만 회수했다. 이전 lane의 `/tmp/entwurf-qualify-*` 4개(11/16–11/22)는 범위 밖이라 두었다. reparented `/tmp` holder 1개는 운영 agent emacs daemon이다.
 - [x] **17. #176.** 브랜치 `feat/176-picker-pi161-acp0112` 17커밋. frozen floor @`0d512d35`: PARTIAL check-dep-versions 12/12, check-pack-pin-matcher 2/2, check-peer-presentation 30/30, check-acp-vendor-rejection 9/9, check-acp-set-model-readback 263/263, check-entwurf-v2-visible-resume 151/151(receipts `~/.local/share/entwurf-lab/176/final/`), FULL exit 0 1185s. 리뷰 Codex `20261126T090855-59b82c`, 885314. 운영 컷오버 영수증 `~/.local/share/entwurf-lab/176/cutover/receipt.md`.
-- [ ] **18. land.** main fast-forward, push, exact-SHA CI 4/4. ← CURRENT
-- [ ] **19. prepare 0.64.0.** CHANGELOG 승격, version, FULL, LIVE release gate `--cut`, P9.
-- [ ] **20. make 0.64.0.** push, exact-SHA CI, 후보 수용, tag, GitHub release.
-- [ ] **21. GLG publish와 Herdr re-pin.**
-- [ ] **22. 다음 레일.** GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
+- [x] **18. land.** `e98584dc` fast-forward push, exact-SHA CI run 45803408131 4/4.
+- [x] **19. prepare 0.64.0.** `5d265634`. 앞선 커밋 `c37f3c77`(Herdr checkout carrier; 빠뜨려서 첫 P4가 `HPB-DEFAULT-LOCK-READ`로 잡았다). seal `2e47e332497ec0b7`: P4 check:full 1182s exit 0. P5 2차 MUST 25/0/0, BEHAVIOR 1/0, `cut: OK`. 1차는 managed Codex daemon의 seat가 죽은 tmux 좌표라 `smoke-codex-fresh-live` FAIL이었고, GLG가 daemon을 내린 뒤 전용 tmux의 `entwurf codex-app-server`(gpt-6.1-terra)로 다시 쟀다. OpenClaw home receipt `receipt-0.64.0-c37f3c77`. 증거는 CHANGELOG 0.64.0 Release evidence, 로그는 `~/.local/share/entwurf-lab/176/prepare/`.
+- [x] **20. make 0.64.0.** M0 check:full 1180s exit 0. exact-SHA CI run 45824698457 4/4. Windows preview run 45827121941. 후보 `~/.local/state/entwurf-releases/0.64.0-5d265634d7a6/candidate.OHNqPz/junghanacs-entwurf-0.64.0.tgz` sha256 `99d6932c…`, container 수용(node:24-bookworm). tag `v0.64.0`, GitHub release. U0 receipt `publish-u0.w0n7Nk`.
+- [x] **21. GLG publish와 Herdr re-pin.** U2 `latest`=0.64.0, `repair` 유지. registry tarball sha256 = 후보, sha512·sha1 = integrity·shasum. U3 sandbox registry 설치(host Pi 1.6.1) entwurf 6행, provider 오류 없음. Herdr re-pin은 CHANGELOG `v2026.11.26-herdr.0.64.0` 항목. `docs/durable-native-support.md` SDK 문단(B 🌀 발견)도 같이 고쳤다. Codex managed daemon은 되살리지 않는다(GLG 2026-11-26).
+- [ ] **22. 다음 레일.** ← CURRENT. GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
 
 # 열린 관찰 (일을 열지 않음)
 
@@ -32,6 +32,8 @@
 - **team.json 이름.** GLG는 운영 `team.json`을 "entwurf.json"이라 부른다. 기술적 필요는 없고, hard cut이면 옛 이름을 읽는 경로가 사라진다(Hard Rule 1). ff08d4는 지금 이름을 유지하자고 권했다. GLG 답을 기다린다.
 - **0.62.0 뒷정리에서 넘어온 관찰.** GLG 대화 관측(2026-11-23, agy 1.5.14, n=1): pi를 다시 연 뒤 둘째 turn이 기록된 agy 세션을 resume했다. LIVE에서 잰 agy 버전은 1.5.13이다. `pi-durable-owner-fence.test.ts`는 floor를 두 번 돌리는 동안 `pdf-*` 하나를 남겼다(원인 미확인).
 - **시험 형제.** `20261125T084440-d8233a`(#173 A7 LIVE)는 dormant로 남겨 두었다. retire는 GLG가 요청할 때만 한다.
+
+**0.64.0 cut 관찰:** prepare가 Herdr lock 전환을 또 빠뜨렸다(0.60.0 관찰과 같은 자리). `/tmp/smoke-pi-durable-fresh-live-<ISO 시각>`은 이름에 mkdtemp 접미사가 없어 P9 OWNED 목록에 걸리지 않고, P5마다 하나씩 쌓였다(10-26부터 27개; 이번 정리에서 회수).
 
 **0.62.0 cut 관찰:** U3 registry 설치에서 npm 11.16.0이 `allow-scripts` 정책으로 entwurf `postinstall`(chmod)을 돌리지 않았다. tarball이 이미 실행 비트를 갖고 있어 영향은 없었다.
 
@@ -54,7 +56,7 @@
   - oracle의 pi는 이 checkout을 package로 로드한다(`pi.extensions`가 `.ts` 소스). 새로 뜨는 pi는 미커밋 작업트리를 그대로 쓰고, 편집 중간 상태에서 뜨면 entwurf provider 전체가 등록에 실패할 수 있다. MCP bridge는 dist라 `build-bridge` 전까지 src/dist가 어긋난다(#167 리뷰 895788 관찰, #165 맥락).
   - 새 backend를 store에 처음 쓰기 전에는 installed writer 전부(`doctor-codex-birth`는 helper bytes staleness를 보지 않으므로 `install-state.json`의 unit 버전도), omp·copilot doctor를 확인한다. 0.55.0 cut에서 Codex birth helper(0.41.1)·OMP·Copilot receive가 `openclaw` record를 보고 store 쓰기를 거절했다.
   - `doctor-omp-receive`는 receive 로그에 남은 `arm-gave-up` 줄을 평생 센다. 한 번의 실패가 영구 RED가 된다(0.55.0 cut에서 로그를 보존용 이름으로 바꿔 넘김).
-  - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정한다. daemon 복원은 GLG가 결정한다.
+  - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정하고, 끝나면 내린다. GLG는 managed daemon을 되살리지 않기로 했다(2026-11-26); 그 pid-update-loop 375485는 남아 있다.
   - `check-acp-backend-preflight`가 thinking level 없이 backend를 부른다(b3 O1).
   - `*resume-call.test.ts`가 `/tmp`에 디렉터리를 남긴다(P9).
   - U3 registry 설치 경고: host-provided pi 패키지는 `"*"` peerDependencies여야 한다는 pi 경고. 기록만 했다.
