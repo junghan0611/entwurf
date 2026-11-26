@@ -376,28 +376,47 @@ export function validateSkillPluginPaths(paths: readonly string[], filePath: str
 }
 
 /**
- * Validate `permissionAllow` MCP entries (#176). The bundled Claude runtime (claude-agent-sdk 0.3.331,
- * Claude Code 2.1.331) skips an allow rule whose MCP server position holds a wildcard — `mcp__*` — and
- * writes its warning into the agent's answer text instead of failing (`[측정 2026-11-26]` raw-acp rail0:
- * the warning came before the answer on every new, loaded and resumed session). An allow rule must name
- * the server it widens; a glob is accepted only after a literal `mcp__<server>__` prefix
- * (`mcp__entwurf-bridge__*`). So a server-position wildcard fails here, by name, like `skillPlugins`.
+ * Validate `permissionAllow` against the two rule classes the bundled Claude runtime skips when they
+ * widen tool scope (#176). claude-agent-sdk 0.3.331 (Claude Code 2.1.331) skips such a rule and writes
+ * its warning into the agent's answer text instead of failing (`[측정 2026-11-26]` raw-acp rail0: with
+ * `mcp__*` the warning was in the answer of every Claude client run). Its allow validator, read in
+ * sdk.mjs (`d9`, `Hc`, `lx`):
+ *   - a tool name holding `*` is accepted only as an MCP name with a non-empty literal server
+ *     (`mcp__<server>__…`, the wildcard after it): `mcp__*`, `mcp____*`, `Read*`, `*` are skipped;
+ *   - an MCP rule takes no `(pattern)`: `mcp__bridge(*)`, `mcp__bridge__get(*)` are skipped.
+ * The tool name is the text before the first `(`. Other malformed rules stay the runtime's to judge.
  */
 export function validatePermissionAllow(rules: readonly string[], filePath: string): void {
 	for (let index = 0; index < rules.length; index++) {
 		const rule = rules[index];
-		if (!rule.startsWith("mcp__")) continue;
-		const rest = rule.slice("mcp__".length);
-		const end = rest.indexOf("__");
-		const server = end < 0 ? rest : rest.slice(0, end);
-		if (server.includes("*")) {
+		const open = rule.indexOf("(");
+		const toolName = open < 0 ? rule : rule.slice(0, open);
+		const server = literalMcpServer(toolName);
+		const label = `permissionAllow[${index}] ${JSON.stringify(rule)}`;
+		if (server !== undefined && open >= 0) {
 			throw settingsConfigError(
 				filePath,
-				`permissionAllow[${index}] ${JSON.stringify(rule)} puts a wildcard in the MCP server position, which Claude skips. ` +
+				`${label} gives an MCP rule a (pattern), which Claude skips. ` +
+					`Name the tool, or use "mcp__${server}__*" for every tool of that server.`,
+			);
+		}
+		if (toolName.includes("*") && (server === undefined || server.includes("*"))) {
+			throw settingsConfigError(
+				filePath,
+				`${label} puts a wildcard outside the tool position of a literal mcp__<server>__ prefix, which Claude skips. ` +
 					`Name the server and put the wildcard after it, for example "mcp__entwurf-bridge__*".`,
 			);
 		}
 	}
+}
+
+/** The server of an MCP tool name, as the runtime reads it: `mcp__` then a non-empty server, ended
+ *  by the next `__` or the end of the name. `undefined` when the name is not such an MCP name. */
+function literalMcpServer(toolName: string): string | undefined {
+	if (!toolName.startsWith("mcp__")) return undefined;
+	const end = toolName.indexOf("__", "mcp__".length);
+	const server = end < 0 ? toolName.slice("mcp__".length) : toolName.slice("mcp__".length, end);
+	return server === "" ? undefined : server;
 }
 
 /**

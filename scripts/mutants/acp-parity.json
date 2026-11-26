@@ -498,11 +498,22 @@
 			"claim": "ACP-PERMISSION-ALLOW-NAMES-SERVER",
 			"title": "a wildcard in the MCP server position of an allow rule passes the check",
 			"subject": "pi-extensions/lib/acp/config.ts",
-			"find": ["\t\tif (server.includes(\"*\")) {"],
-			"replace": ["\t\tif (server.includes(\"**\")) {"],
+			"find": ["\t\tif (toolName.includes(\"*\") && (server === undefined || server.includes(\"*\"))) {"],
+			"replace": ["\t\tif (toolName.includes(\"*\") && server === undefined) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-PERMISSION-ALLOW-NAMES-SERVER]",
+			"signatureSource": "pi-extensions/lib/acp/config.permission-allow.test.ts"
+		},
+		{
+			"claim": "ACP-PERMISSION-ALLOW-MCP-NO-PATTERN",
+			"title": "an MCP allow rule with a (pattern) passes the check",
+			"subject": "pi-extensions/lib/acp/config.ts",
+			"find": ["\t\tif (server !== undefined && open >= 0) {"],
+			"replace": ["\t\tif (server !== undefined && open > rule.length) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-PERMISSION-ALLOW-MCP-NO-PATTERN]",
 			"signatureSource": "pi-extensions/lib/acp/config.permission-allow.test.ts"
 		},
 		{
