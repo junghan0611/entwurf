@@ -380,27 +380,30 @@ export function validateSkillPluginPaths(paths: readonly string[], filePath: str
  * widen tool scope (#176). claude-agent-sdk 0.3.331 (Claude Code 2.1.331) skips such a rule and writes
  * its warning into the agent's answer text instead of failing (`[측정 2026-11-26]` raw-acp rail0: with
  * `mcp__*` the warning was in the answer of every Claude client run). Its allow validator, read in
- * sdk.mjs (`d9`, `Hc`, `lx`):
+ * sdk.mjs (`Mk`, `a4`, `Hc`, `d9`, `lx`):
+ *   - a rule is `Tool` or `Tool(content)`, where `(` is the first and `)` the last parenthesis not
+ *     escaped by an odd run of backslashes and `)` ends the rule; any other placement is malformed;
+ *   - an MCP rule takes no `(pattern)`: `mcp__bridge(*)`, `mcp__bridge__get(*)` are skipped;
  *   - a tool name holding `*` is accepted only as an MCP name with a non-empty literal server
- *     (`mcp__<server>__…`, the wildcard after it): `mcp__*`, `mcp____*`, `Read*`, `*` are skipped;
- *   - an MCP rule takes no `(pattern)`: `mcp__bridge(*)`, `mcp__bridge__get(*)` are skipped.
- * The tool name is the text before the first `(`. Other malformed rules stay the runtime's to judge.
+ *     (`mcp__<server>__…`, the wildcard after it): `mcp__*`, `mcp____*`, `Read*`, `*` are skipped.
+ * An empty, malformed or empty-parenthesis rule, and every other check, stay the runtime's to judge.
  */
 export function validatePermissionAllow(rules: readonly string[], filePath: string): void {
 	for (let index = 0; index < rules.length; index++) {
 		const rule = rules[index];
-		const open = rule.indexOf("(");
-		const toolName = open < 0 ? rule : rule.slice(0, open);
-		const server = literalMcpServer(toolName);
+		const shape = allowRuleShape(rule);
+		if (shape === undefined) continue;
+		const server = literalMcpServer(shape.toolName);
 		const label = `permissionAllow[${index}] ${JSON.stringify(rule)}`;
-		if (server !== undefined && open >= 0) {
+		if (server !== undefined && shape.call) {
+			const fix = server.includes("*") ? 'for example "mcp__entwurf-bridge__*"' : `"mcp__${server}__*"`;
 			throw settingsConfigError(
 				filePath,
 				`${label} gives an MCP rule a (pattern), which Claude skips. ` +
-					`Name the tool, or use "mcp__${server}__*" for every tool of that server.`,
+					`Name the tool, or use ${fix} for every tool of one named server.`,
 			);
 		}
-		if (toolName.includes("*") && (server === undefined || server.includes("*"))) {
+		if (shape.toolName.includes("*") && (server === undefined || server.includes("*"))) {
 			throw settingsConfigError(
 				filePath,
 				`${label} puts a wildcard outside the tool position of a literal mcp__<server>__ prefix, which Claude skips. ` +
@@ -408,6 +411,32 @@ export function validatePermissionAllow(rules: readonly string[], filePath: stri
 			);
 		}
 	}
+}
+
+/** The tool name of an allow rule and whether it carries `(content)`, as the runtime parses it;
+ *  `undefined` for an empty, malformed or empty-parenthesis rule, which this check leaves alone. */
+function allowRuleShape(rule: string): { toolName: string; call: boolean } | undefined {
+	if (rule.trim() === "") return undefined;
+	const open = unescapedIndex(rule, "(", false);
+	const close = unescapedIndex(rule, ")", true);
+	if (open < 0 && close < 0) return { toolName: rule, call: false };
+	const head = rule.slice(0, open);
+	if (open < 0 || close <= open || close !== rule.length - 1 || /[()]/.test(head)) return undefined;
+	if (close === open + 1) return undefined;
+	// `(*)` with no tool name reads as the whole rule, as the runtime's `a4` does.
+	return { toolName: head === "" ? rule : head, call: head !== "" };
+}
+
+/** The first (or last) index of `ch` not escaped by an odd run of backslashes, else -1. */
+function unescapedIndex(rule: string, ch: string, fromEnd: boolean): number {
+	for (let step = 0; step < rule.length; step++) {
+		const at = fromEnd ? rule.length - 1 - step : step;
+		if (rule[at] !== ch) continue;
+		let slashes = 0;
+		for (let back = at - 1; back >= 0 && rule[back] === "\\"; back--) slashes++;
+		if (slashes % 2 === 0) return at;
+	}
+	return -1;
 }
 
 /** The server of an MCP tool name, as the runtime reads it: `mcp__` then a non-empty server, ended
