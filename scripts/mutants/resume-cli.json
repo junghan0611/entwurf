@@ -624,6 +624,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-NO-COLOR-ENV]",
 			"signatureSource": "pi-extensions/lib/resume-picker-production.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-NARROW-KEEPS-NAME",
+			"title": "a bookmarked row sets its backend and facts aside before its name again, so in a narrow terminal the name is cut or dropped and the row is a bare id",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tconst reserved = pinned ? 0 : GAP.length + backend + GAP.length + facts;"],
+			"replace": ["\tconst reserved = GAP.length + backend + GAP.length + facts;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-NARROW-KEEPS-NAME]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
 		}
 	]
 }
