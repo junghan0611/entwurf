@@ -35,22 +35,30 @@
  *   RESUMEPICK-ESC-OR-ALT-BY-WAIT       the short wait alone tells Esc from Alt-J/K: a letter within it
  *                                       (same read or the next) moves and never cancels; an ESC that
  *                                       nothing follows cancels and is never taken as a move
+ *   RESUMEPICK-ESC-WAIT-50              that wait is 50 ms, pinned here as a literal and not read back
+ *                                       from the production constant
  *   RESUMEPICK-PASTED-LF-NO-MOVE        a line feed sharing its read with typed text is a pasted line
  *                                       break and moves nothing; line feeds on their own still move
  *   RESUMEPICK-BOOKMARK-NAME-FIRST      a bookmarked row starts with `*` and its name, before the whole
  *                                       id; a cut name ends in `~` and the selected line has it whole
+ *                                       where the width allows
+ *   RESUMEPICK-SELECTED-LINE-FITS       a name the selected line cannot hold whole is cut there with
+ *                                       `~` inside its brackets; the id stays whole and the directory
+ *                                       keeps its end, at the minimum size too
  *   RESUMEPICK-SECTION-RULER            a section title is a rule across the whole width, never
  *                                       shaped like a row
  *   RESUMEPICK-WHOLE-OR-NOTHING         after the facts, the activity time, model and directory are
  *                                       each drawn whole or not at all (a path may keep its end)
  *   RESUMEPICK-EMPTY-SAYS-NEXT          with no row to draw the screen says what is empty and which
  *                                       keys bring rows back, and Enter says and does nothing
+ *   RESUMEPICK-EMPTY-MIN-KEYS           at the minimum size the one body line keeps those keys
  *   RESUMEPICK-NARROW-KEEPS-NAME        in a narrow terminal a bookmarked row keeps its whole name next
  *                                       to its whole id; facts, then backend, are drawn only where
  *                                       they fit whole; only a name past the column's cap is cut (`~`)
  *   RESUMEPICK-COLOR-BY-ROLE            with colour on, each piece is coloured by what it is — bookmark,
  *                                       id, fact state, title — the cursor's row is one reverse bar,
- *                                       and stripped of colour every line is the plain line
+ *                                       and stripped of colour every other line is the plain line (the
+ *                                       cursor's is the plain line padded with spaces to the width)
  *   RESUMEPICK-NO-COLOR-PLAIN           with colour off the terminal receives no colour or emphasis
  *                                       code at all; `>`, `*` and the rules still say it all
  */
@@ -778,6 +786,15 @@ describe("the entwurf resume picker", () => {
 		);
 	});
 
+	it("[QK:RESUMEPICK-ESC-WAIT-50] the wait that tells Esc from Alt-J/K is 50 ms, pinned here as a literal rather than read back from the production constant: a longer wait delays every Esc, a shorter one splits an Alt-J a terminal sent in two reads", () => {
+		const t = terminal();
+		void runResumePicker(LISTING, "tmux", t.io);
+		t.send("\x1b");
+		const armed = t.calls.filter((call) => call.startsWith("timer:"));
+		t.fireTimer();
+		ok("one wait of exactly 50 ms is armed for a lone ESC", JSON.stringify(armed) === JSON.stringify(["timer:50"]));
+	});
+
 	it("[QK:RESUMEPICK-PASTED-LF-NO-MOVE] a line feed that shares its read with typed text is a pasted line break from a terminal that did not mark the paste: it moves nothing and chooses nothing, while line feeds with no text beside them — Ctrl-J held down — still move", async () => {
 		const t = terminal();
 		let done = false;
@@ -841,7 +858,7 @@ describe("the entwurf resume picker", () => {
 	const WIDTHS = Array.from({ length: 140 - PICKER_MIN_SIZE.columns + 1 }, (_, i) => PICKER_MIN_SIZE.columns + i);
 	const allRows = (cursor = 0): PickerState => ({ ...INITIAL_PICKER_STATE, allDirectories: true, cursor });
 
-	it("[QK:RESUMEPICK-BOOKMARK-NAME-FIRST] a bookmarked row starts with `*` and its name, before its whole garden id, backend and facts; an unbookmarked row has no mark; a name too long for its column ends in `~` and the selected line carries it whole; and where no name fits the row keeps its `*`", () => {
+	it("[QK:RESUMEPICK-BOOKMARK-NAME-FIRST] a bookmarked row starts with `*` and its name, before its whole garden id, backend and facts; an unbookmarked row has no mark; a name too long for its column ends in `~` and the selected line carries it whole where the width allows; and where no name fits the row keeps its `*`", () => {
 		const at = (columns: number, cursor = 0): string[] =>
 			renderPickerFrame(SCREEN_LIKE, allRows(cursor), { columns, rows: 20 }, "tmux").lines;
 		const wide = at(120);
@@ -867,6 +884,29 @@ describe("the entwurf resume picker", () => {
 							: new RegExp(`^[> ] \\* ${row.pin} +${row.gardenId}`).test(line);
 					}),
 				),
+		);
+	});
+
+	it("[QK:RESUMEPICK-SELECTED-LINE-FITS] a bookmark name the selected line cannot hold whole beside the id and a readable directory is cut there with `~` inside its brackets; the garden id is always whole, the closing bracket stays, and the directory keeps its end after `...` — at the minimum size too; a wide terminal carries the same name whole", () => {
+		const long = "한".repeat(20);
+		const listing = buildResumeListing([fact(1), fact(2, { cwd: "/home/operator/repos/elsewhere-project" })], HERE, [
+			{ gardenId: fact(1).gardenId, name: long },
+			{ gardenId: fact(2).gardenId, name: long },
+		]);
+		const selectedAt = (size: PickerSize, cursor: number): string =>
+			renderPickerFrame(listing, { ...INITIAL_PICKER_STATE, allDirectories: true, cursor }, size, "tmux").lines.find(
+				(l) => l.startsWith("selected: "),
+			) ?? "";
+		const here = selectedAt(PICKER_MIN_SIZE, 0);
+		const elsewhere = selectedAt(PICKER_MIN_SIZE, 1);
+		const wide = selectedAt({ columns: 140, rows: 10 }, 1);
+		ok(
+			"the id whole, the name cut and marked inside its brackets, the directory's end kept, all in the width",
+			here === `selected: ${fact(1).gardenId}  [${"한".repeat(7)}~]  in ...oject` &&
+				elsewhere === `selected: ${fact(2).gardenId}  [${"한".repeat(7)}~]  in ...oject` &&
+				displayWidth(here) <= PICKER_MIN_SIZE.columns &&
+				displayWidth(elsewhere) <= PICKER_MIN_SIZE.columns &&
+				wide === `selected: ${fact(2).gardenId}  [${long}]  in /home/operator/repos/elsewhere-project`,
 		);
 	});
 
@@ -978,7 +1018,35 @@ describe("the entwurf resume picker", () => {
 		);
 	});
 
-	it("[QK:RESUMEPICK-COLOR-BY-ROLE] with colour on, each piece is coloured by what it is in the terminal's own colours — bookmark mark and name, garden id, a fact by whether it says running, not running or not known, a section title — the cursor's row is one reverse-video bar across the width, and every line stripped of colour is exactly the plain line", () => {
+	it("[QK:RESUMEPICK-EMPTY-MIN-KEYS] at the minimum size the body has one line, and with no row to draw that line names the keys that bring rows back rather than what is empty: the search line still shows what was typed and the Enter line says no row is listed", () => {
+		const MIN = PICKER_MIN_SIZE;
+		const smallest = renderPickerFrame(LISTING, { ...INITIAL_PICKER_STATE, query: "zzz" }, MIN, "tmux").lines;
+		const smallestAll = renderPickerFrame(
+			LISTING,
+			{ ...INITIAL_PICKER_STATE, query: "zzz", allDirectories: true },
+			MIN,
+			"tmux",
+		).lines;
+		const smallestNothingHere = renderPickerFrame(
+			buildResumeListing([fact(1, { cwd: "/work/other" })], HERE, []),
+			INITIAL_PICKER_STATE,
+			MIN,
+			"tmux",
+		).lines;
+		ok(
+			"at 64x8 the one empty line is the way back",
+			MIN.columns === 64 &&
+				MIN.rows === 8 &&
+				smallest.length === 8 &&
+				smallest[2] === "search: zzz" &&
+				smallest[3] === "  Backspace or Ctrl-U to widen, Ctrl-A: all directories" &&
+				smallest[6] === "Enter: nothing to reopen while no row is listed" &&
+				smallestAll[3] === "  Backspace or Ctrl-U to widen" &&
+				smallestNothingHere[3] === "  Ctrl-A: all directories",
+		);
+	});
+
+	it("[QK:RESUMEPICK-COLOR-BY-ROLE] with colour on, each piece is coloured by what it is in the terminal's own colours — bookmark mark and name, garden id, a fact by whether it says running, not running or not known, a section title — the cursor's row is one reverse-video bar across the width, and every other line stripped of colour is exactly the plain line, while the cursor's is the plain line followed by the spaces that carry the bar to the width", () => {
 		const listing = buildResumeListing(
 			[
 				...THREE_SHAPES,
@@ -994,7 +1062,7 @@ describe("the entwurf resume picker", () => {
 		const row = (n: number): string => styled.find((l) => l.includes(fact(n).gardenId)) ?? "";
 		const cursorText = frame.lines[frame.cursorLine] ?? "";
 		ok(
-			"colour by role, a full-width bar for the cursor, and nothing but colour added",
+			"colour by role, a full-width bar for the cursor, and nothing but colour (and the bar's spaces) added",
 			row(1).startsWith("  \x1b[35m* \x1b[0m\x1b[35m운영코디\x1b[0m  \x1b[36m") &&
 				row(1).includes(`\x1b[32mreceiver active\x1b[0m`) &&
 				row(9).includes(`\x1b[33mreceiver unobserved\x1b[0m`) &&

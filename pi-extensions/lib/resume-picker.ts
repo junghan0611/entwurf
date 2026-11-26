@@ -490,7 +490,8 @@ function padCells(text: string, cells: number): string {
 }
 
 /** A name in at most `cells` cells: whole, or cut with `~` as its last cell so a cut is never read
- * as the whole name. The selected line below the list always carries it whole. */
+ * as the whole name. The selected line below the list carries it whole wherever the width allows
+ * (see there). */
 function cutName(name: string, cells: number): string {
 	return displayWidth(name) <= cells ? name : `${fitToWidth(name, cells - 1)}~`;
 }
@@ -637,12 +638,16 @@ export function tooSmallLines(size: PickerSize): string[] {
 }
 
 /** What the body says when no row is drawn — what is empty, then the keys that would bring rows
- * back. Opening nothing is the only thing Enter can do here. */
-function emptyLines(query: string, allDirectories: boolean): string[] {
+ * back. Opening nothing is the only thing Enter can do here. A body of fewer lines (one, at the
+ * minimum size) keeps the keys: the search line still shows what was typed and the Enter line below
+ * already says that no row is listed, while nothing else names the way back. */
+function emptyLines(query: string, allDirectories: boolean, height: number): string[] {
 	const allKey = allDirectories ? [] : ["Ctrl-A: all directories"];
-	return query.trim().length > 0
-		? [`  nothing matches "${query}"`, `  ${["Backspace or Ctrl-U to widen", ...allKey].join(", ")}`]
-		: [`  no sibling to list${allDirectories ? "" : " in this directory"}`, ...allKey.map((key) => `  ${key}`)];
+	const lines =
+		query.trim().length > 0
+			? [`  nothing matches "${query}"`, `  ${["Backspace or Ctrl-U to widen", ...allKey].join(", ")}`]
+			: [`  no sibling to list${allDirectories ? "" : " in this directory"}`, ...allKey.map((key) => `  ${key}`)];
+	return lines.slice(Math.max(0, lines.length - height));
 }
 
 const DIRECTORY_KEY = "  (Ctrl-A: all directories)";
@@ -704,25 +709,31 @@ export function renderPickerFrame(
 		}
 	}
 	if (rows.length === 0) {
-		for (const line of emptyLines(state.query, state.allDirectories)) {
-			if (out.length < HEAD_LINES + bodyHeight) out.push(fit([span(line, "dim")]));
+		for (const line of emptyLines(state.query, state.allDirectories, bodyHeight)) {
+			out.push(fit([span(line, "dim")]));
 		}
 	}
 	// The body always takes its full height, so the four lines below stay where they are.
 	while (out.length < HEAD_LINES + bodyHeight) out.push([]);
 
-	// The row under the cursor again, on a line of its own and whole as far as the width allows: its
-	// id, its bookmark name, and its directory — what tells two siblings apart when a narrow
-	// terminal has cut the row.
+	// The row under the cursor again, on a line of its own: its id, its bookmark name and its
+	// directory — what tells two siblings apart when a narrow terminal has cut the row. The id is
+	// always whole. The name is whole unless the line cannot hold it beside the id and a readable
+	// directory; then it is cut with `~` inside its brackets. The directory is whole, or its end after
+	// `...`; it keeps at least PATH_MIN_CELLS of the line (all of a shorter one).
 	const selected = rows[state.cursor];
 	if (selected === undefined) {
 		out.push([]);
 	} else {
+		const where = span("  in ", "dim");
+		const pathCells = Math.min(displayWidth(selected.cwd), PATH_MIN_CELLS);
+		const fixed = displayWidth(`selected: ${selected.gardenId}  []${where.text}`) + pathCells;
+		const nameCells = Math.max(NAME_MIN_CELLS, size.columns - fixed);
 		const head = [
 			span("selected: ", "dim"),
 			span(selected.gardenId, "id"),
-			...(selected.pin === null ? [] : [span("  ["), span(selected.pin, "pin"), span("]")]),
-			span("  in ", "dim"),
+			...(selected.pin === null ? [] : [span("  ["), span(cutName(selected.pin, nameCells), "pin"), span("]")]),
+			where,
 		];
 		out.push(fit([...head, span(fitPath(selected.cwd, size.columns - displayWidth(joinSpans(head))), "cwd")]));
 	}
@@ -791,7 +802,8 @@ const sgr = (codes: string, text: string): string => (codes === "" ? text : `${E
 /**
  * The frame's lines with colour: each piece by what it is, and the cursor's row in reverse video
  * across the whole width so it reads as one bar. Escape codes take no cells, so the lines still fit
- * exactly where the plain ones did; stripped of them, each line is the plain line.
+ * exactly where the plain ones did. Stripped of them, each line is the plain line — except the
+ * cursor's, which is the plain line followed by the spaces that carry its bar to the full width.
  */
 export function styleFrame(frame: { spans: PickerSpan[][]; cursorLine: number }, columns: number): string[] {
 	return frame.spans.map((pieces, i) => {
