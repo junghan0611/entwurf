@@ -3519,7 +3519,7 @@ let manifestCount: number;
 		"pi-package-ownership": 8,
 		"qualification-ledger": 42,
 		"mux-resume-call": 20,
-		"resume-cli": 54,
+		"resume-cli": 57,
 		"omp-birth": 13,
 		"omp-fresh": 25,
 		"omp-receive": 11,

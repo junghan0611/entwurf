@@ -635,6 +635,41 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-NARROW-KEEPS-NAME]",
 			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-EMPTY-MIN-KEYS",
+			"title": "an empty body of one line keeps its description instead of its keys again, so at the minimum size nothing names the way back",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\treturn lines.slice(Math.max(0, lines.length - height));"],
+			"replace": ["\treturn lines.slice(0, height);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-EMPTY-MIN-KEYS]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-SELECTED-LINE-FITS",
+			"title": "the selected line prints a long bookmark name whole again, so at the minimum size the line is cut inside the name and loses its bracket and directory",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": [
+				"\t\t\t...(selected.pin === null ? [] : [span(\"  [\"), span(cutName(selected.pin, nameCells), \"pin\"), span(\"]\")]),"
+			],
+			"replace": ["\t\t\t...(selected.pin === null ? [] : [span(\"  [\"), span(selected.pin, \"pin\"), span(\"]\")]),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-SELECTED-LINE-FITS]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-ESC-WAIT-50",
+			"title": "the wait that tells Esc from Alt-J/K drifts from 50 ms to 51 ms, so every Esc waits longer than its contract",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["export const PICKER_ESC_WAIT_MS = 50;"],
+			"replace": ["export const PICKER_ESC_WAIT_MS = 51;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-ESC-WAIT-50]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
 		}
 	]
 }
