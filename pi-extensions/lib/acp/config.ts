@@ -110,7 +110,13 @@ export interface ResolvedAcpConfig {
 // two in lockstep behaviorally; a drift would diverge the resolved default
 // surface from the declared one.
 const DEFAULT_TOOLS: readonly string[] = ["Read", "Bash", "Edit", "Write"];
-const DEFAULT_PERMISSION_ALLOW: readonly string[] = ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"];
+const DEFAULT_PERMISSION_ALLOW: readonly string[] = [
+	"Read(*)",
+	"Bash(*)",
+	"Edit(*)",
+	"Write(*)",
+	"mcp__entwurf-bridge__*",
+];
 const DEFAULT_DISALLOWED_TOOLS: readonly string[] = [
 	"AskUserQuestion",
 	"CronCreate",
@@ -370,6 +376,31 @@ export function validateSkillPluginPaths(paths: readonly string[], filePath: str
 }
 
 /**
+ * Validate `permissionAllow` MCP entries (#176). The bundled Claude runtime (claude-agent-sdk 0.3.331,
+ * Claude Code 2.1.331) skips an allow rule whose MCP server position holds a wildcard — `mcp__*` — and
+ * writes its warning into the agent's answer text instead of failing (`[측정 2026-11-26]` raw-acp rail0:
+ * the warning came before the answer on every new, loaded and resumed session). An allow rule must name
+ * the server it widens; a glob is accepted only after a literal `mcp__<server>__` prefix
+ * (`mcp__entwurf-bridge__*`). So a server-position wildcard fails here, by name, like `skillPlugins`.
+ */
+export function validatePermissionAllow(rules: readonly string[], filePath: string): void {
+	for (let index = 0; index < rules.length; index++) {
+		const rule = rules[index];
+		if (!rule.startsWith("mcp__")) continue;
+		const rest = rule.slice("mcp__".length);
+		const end = rest.indexOf("__");
+		const server = end < 0 ? rest : rest.slice(0, end);
+		if (server.includes("*")) {
+			throw settingsConfigError(
+				filePath,
+				`permissionAllow[${index}] ${JSON.stringify(rule)} puts a wildcard in the MCP server position, which Claude skips. ` +
+					`Name the server and put the wildcard after it, for example "mcp__entwurf-bridge__*".`,
+			);
+		}
+	}
+}
+
+/**
  * Read + validate the `entwurfProvider` block of one settings file. Returns BOTH
  * the typed (common) `settings` and the `raw` untyped block — the raw block feeds
  * `adapter.resolveAdapterSettings` so a backend can read its OWN keys (which the
@@ -431,6 +462,8 @@ export function readProviderSettingsFile(filePath: string): {
 
 	const skillPlugins = parseStringArray(settings, "skillPlugins", filePath);
 	if (skillPlugins) validateSkillPluginPaths(skillPlugins, filePath);
+	const permissionAllow = parseStringArray(settings, "permissionAllow", filePath);
+	if (permissionAllow) validatePermissionAllow(permissionAllow, filePath);
 
 	return {
 		settings: {
@@ -442,7 +475,7 @@ export function readProviderSettingsFile(filePath: string): {
 			mcpServers,
 			tools: parseStringArray(settings, "tools", filePath),
 			skillPlugins,
-			permissionAllow: parseStringArray(settings, "permissionAllow", filePath),
+			permissionAllow,
 			disallowedTools: parseStringArray(settings, "disallowedTools", filePath),
 		},
 		raw: settings,

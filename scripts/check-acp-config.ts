@@ -78,7 +78,10 @@ try {
 		assert.equal(c.showToolNotifications, true, "showToolNotifications defaults to true");
 		assert.deepEqual(c.mcpServers, [], "mcpServers defaults to []");
 		assert.deepEqual(c.tools, DEFAULT_TOOLS, "tools defaults to the pi baseline");
-		assert.ok(c.permissionAllow.includes("mcp__*"), "permissionAllow defaults include mcp__*");
+		assert.ok(
+			c.permissionAllow.includes("mcp__entwurf-bridge__*"),
+			"permissionAllow defaults include mcp__entwurf-bridge__*",
+		);
 		assert.ok(c.disallowedTools.includes("WebSearch"), "disallowedTools defaults applied");
 		assert.deepEqual(c.skillPlugins, [], "skillPlugins defaults to []");
 		// Amber drift-lock (GPT `…2f9325`): config.ts mirrors the defaults as local

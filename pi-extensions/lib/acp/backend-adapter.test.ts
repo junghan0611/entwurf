@@ -367,15 +367,15 @@ describe("the shared admission rule (#168)", () => {
 });
 
 /**
- * #171 L1 and V5. The two answers below are the `initialize` results the vendors gave on 2026-11-21
- * (receipts all-claude-20261121T065930Z/experiments-claude-20261121T070023Z/claude-02-l11-new.wire-in.ndjson
- * and all-agy-20261121T071252Z/experiments-agy-20261121T071413Z/agy-01-z2.wire-in.ndjson; protocolVersion,
+ * #171 L1 and V5. The two answers below are the `initialize` results the vendors gave, Claude 0.112.0 on
+ * 2026-11-26 (#176) and agy on 2026-11-21 (receipts all-claude-20261125T234759Z/experiments-claude-20261125T234847Z/
+ * claude-02-l11-new.wire-in.ndjson and all-agy-20261121T071252Z/experiments-agy-20261121T071413Z/agy-01-z2.wire-in.ndjson; protocolVersion,
  * promptCapabilities and the fields the reader does not read left out), copied as literals so the reader
  * cannot move its own oracle. The judgement is checked against those facts with the shipped pins.
  */
 const CLAUDE_R1 = {
 	protocolVersion: 1,
-	agentInfo: { name: "@agentclientprotocol/claude-agent-acp", title: "Claude Agent", version: "0.109.0" },
+	agentInfo: { name: "@agentclientprotocol/claude-agent-acp", title: "Claude Agent", version: "0.112.0" },
 	agentCapabilities: {
 		loadSession: true,
 		sessionCapabilities: {
@@ -410,7 +410,7 @@ const at = (answer: { agentInfo: { name: string } }, version: string): AcpAgentF
 describe("the child's initialize facts and the attach judgement (#171 L1, V5)", () => {
 	it("[QK:ACP-L1-FACTS-READ] reads name, version, loadSession, session capabilities and auth method ids as answered, and nothing it was not told", () => {
 		expect(readAgentFacts(CLAUDE_R1)).toEqual({
-			agent: { name: "@agentclientprotocol/claude-agent-acp", version: "0.109.0" },
+			agent: { name: "@agentclientprotocol/claude-agent-acp", version: "0.112.0" },
 			loadSession: true,
 			sessionCapabilities: [
 				"additionalDirectories",
@@ -465,13 +465,13 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 	it("[QK:ACP-V5-ATTACH-OUT-OF-RANGE] an admitted server outside the attach range may not attach — agy 1.6.0 and later, a newer Claude behind CLAUDE_AGENT_ACP_COMMAND, any version that is not X.Y.Z", () => {
 		const saved = process.env.CLAUDE_AGENT_ACP_COMMAND;
 		try {
-			process.env.CLAUDE_AGENT_ACP_COMMAND = "/opt/claude-agent-acp-0.110.0";
+			process.env.CLAUDE_AGENT_ACP_COMMAND = "/opt/claude-agent-acp-0.113.0";
 			const cells = [
 				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: AGY_ACP_AGENT.attachBelow },
 				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "1.6.1" },
 				{ answer: AGY_R1, adapter: agyAdapter, agent: AGY_ACP_AGENT, version: "2.0.0" },
-				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.110.0" },
-				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.109.1" },
+				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.113.0" },
+				{ answer: CLAUDE_R1, adapter: claudeAdapter, agent: CLAUDE_ACP_AGENT, version: "0.112.1" },
 			];
 			for (const cell of cells) {
 				const answer = { ...cell.answer, agentInfo: { ...cell.answer.agentInfo, version: cell.version } };

@@ -261,8 +261,8 @@ function stderrLines(run: () => Promise<unknown>) {
 
 describe("the ACP child's compactions through the turn driver (#163 S8)", () => {
 	it("[QK:ACP-COMPACT-FIRST-USER-BLOCK] attributes the command only to the first delta block, where Claude ACP reads a command", async () => {
-		// claude-agent-acp 0.109.0 takes a command from the first text block (prompt-to-claude.js:31,36-39,
-		// v1/acp-agent.js:1147,1152-1153); a session-info line after it must not hide the command.
+		// claude-agent-acp 0.112.0 takes a command from the first text block (prompt-to-claude.js:31,36-39,
+		// v1/acp-agent.js:1274,1279-1280); a session-info line after it must not hide the command.
 		const first = makeWorld({ prompt: c2Frames("first-compact") });
 		await first.turn({ sessionId: "first-compact", texts: ["/compact", "device=oracle time_kst=20261121T091435"] });
 		expect(backend.takeAcpCompactionRecords("first-compact").records[0]?.promptWasCompactCommand).toBe(true);

@@ -156,7 +156,7 @@ const DEFAULT_RESOLVED_CONFIG: any = {
 	mcpServersHash: EMPTY_MCP_HASH,
 	tools: ["Read", "Bash", "Edit", "Write"],
 	skillPlugins: [],
-	permissionAllow: ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"],
+	permissionAllow: ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__entwurf-bridge__*"],
 	disallowedTools: [],
 };
 

@@ -1123,7 +1123,7 @@ A minimum declaration:
     "showToolNotifications": true,
     "tools": ["Read", "Bash", "Edit", "Write"],
     "skillPlugins": [],
-    "permissionAllow": ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"],
+    "permissionAllow": ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__entwurf-bridge__*"],
     "mcpServers": {
       "entwurf-bridge": {
         "command": "/path/to/entwurf/mcp/entwurf-bridge/start.sh",

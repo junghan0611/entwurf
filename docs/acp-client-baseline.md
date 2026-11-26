@@ -120,7 +120,7 @@ Observed once, or not yet. Each row names its parent; an unmeasured row says why
 3. A birth id or a dispatch marker that cannot be saved stops the turn before the send (17); a failed save after an answer keeps the turn and owes the seal; live reuse retries it first.
 4. Permission: the first allow option, else the first option, else cancel; narrowing it is later work.
 5. Declined: authenticate, protocol v2, client fs write and terminal, the optional verbs; `session/list` for now.
-6. Version guard: writer and reader in the pin's range, Claude 0.109.0, agy 1.5.9 to <1.6.0 (V5).
+6. Version guard: writer and reader in the pin's range, Claude 0.112.0, agy 1.5.9 to <1.6.0 (V5).
 7. Reuse delta: send the inputs after the last sealed answer, matched by turn id (a cancel or refusal the vendor answered counts), custom messages included; `/compact` is read from the first block.
 8. (Replaced by 17.)
 9. (Replaced by 17.)
@@ -146,6 +146,6 @@ Observed once, or not yet. Each row names its parent; an unmeasured row says why
 
 ## Receipts
 
-Receipts R1–R10 were measured on 2026-11-20, once each, and re-measured on 2026-11-21 with `scripts/raw-acp-session-measure/run.sh all` (last run at cfd3436c), once each, on claude-agent-acp 0.109.0 (`claude-sonnet-5-5`, effort `low`) and agy 1.5.13 (`gemini-3.8-flash`, `thought_level low`): no stored value differed, Claude's R10 S-kill rows were inconclusive (the kill landed after `session/new` answered; a standalone z5 then matched 13 of 13), and `continuity` exited 4 because its U26 inputs were not given. The versions here change only with a re-measurement through `scripts/raw-acp-session-measure/`.
+Receipts R1–R10 were measured on 2026-11-20, once each, and re-measured with `scripts/raw-acp-session-measure/run.sh all`, once each, on claude-agent-acp 0.112.0 (`claude-sonnet-5-5`, effort `low`; 2026-11-26, #176) and agy 1.5.13 (`gemini-3.8-flash`, `thought_level low`; 2026-11-21): no stored value differed, Claude's R10 S-kill rows were inconclusive (the kill landed after `session/new` answered; a standalone z5 then matched 13 of 13), and `continuity` exited 4 because its U26 inputs were not given. The versions here change only with a re-measurement through `scripts/raw-acp-session-measure/`.
 
 R11 and R12 (2026-11-21) are offline checks, not vendor runs. The full receipts live in the full document and are pasted into #171 at close.

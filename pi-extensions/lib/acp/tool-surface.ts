@@ -33,13 +33,14 @@
  */
 export const DEFAULT_CLAUDE_TOOLS: readonly string[] = ["Read", "Bash", "Edit", "Write"];
 
-/** Permission allow list = the baseline surface + `mcp__*` (bridge MCP auto-allow). */
+/** Permission allow list = the baseline surface + every entwurf-bridge MCP tool (`mcp__entwurf-bridge__*`).
+ *  The server is named: Claude skips a wildcard in the server position (#176, `config.ts` validatePermissionAllow). */
 export const DEFAULT_CLAUDE_PERMISSION_ALLOW: readonly string[] = [
 	"Read(*)",
 	"Bash(*)",
 	"Edit(*)",
 	"Write(*)",
-	"mcp__*",
+	"mcp__entwurf-bridge__*",
 ];
 
 /**

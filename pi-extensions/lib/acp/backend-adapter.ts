@@ -389,9 +389,9 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
  *  1.5 line from the floor, measured or not; 1.6.0 waits for a review (GLG 2026-11-22). */
 export const CLAUDE_ACP_AGENT = Object.freeze({
 	name: "@agentclientprotocol/claude-agent-acp",
-	floor: "0.109.0",
-	measured: "0.109.0",
-	attachBelow: "0.109.1",
+	floor: "0.112.0",
+	measured: "0.112.0",
+	attachBelow: "0.112.1",
 });
 export const AGY_ACP_AGENT = Object.freeze({
 	name: "Antigravity ACP Server",
@@ -891,7 +891,7 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// #168: the server that answered initialize must be claude-agent-acp at the bundled pin or newer.
 	admitAgent: (answer) =>
 		admitAcpAgent(answer, "claude", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, "CLAUDE_AGENT_ACP_COMMAND"),
-	// #171 step 7 receipts: 0.109.0 resumes its own sessions, and the attach range is that pin alone. A
+	// #171 step 7 receipts, re-measured on 0.112.0 for #176: the pin resumes its own sessions, and the attach range is that pin alone. A
 	// record an earlier version wrote names no last answer and never reaches this judgement (GLG
 	// 2026-11-22). An input of an unanswered prompt may be in the session's history (G2a), so it is
 	// never sent twice.
