@@ -126,12 +126,12 @@ These notes cover what an operator sees differently on the 1.5.0 set. They are r
 
 ## SDK 1.6.1 boundary (#176)
 
-What moving the SDK set from 1.6.0 to 1.6.1 changes for a stored pi-durable session. The readings compare the published 1.6.0 package (installed in a lab prefix) with the 1.6.1 package installed in this checkout, 2026-11-26; nothing here is an operating-host acceptance.
+What moving the SDK set from 1.6.0 to 1.6.1 changes for a stored pi-durable session. The readings compare the published 1.6.0 package (installed in a lab prefix) with the 1.6.1 package installed in this checkout, 2026-11-26. Only the operating-host line comes from the host, and one reopen is not an acceptance.
 
 - **Storage.** `dist/storage/sqlite/migrations.js` is byte-identical, so the schema stays at version 2 and an open runs no migration. `storage.js` changes only the in-memory form of a commit result (now tagged `stored` or `refused`).
 - **Task records.** `pi.tool` stays at version 4 and `pi.generation` at 3 (read: `dist/harness/tool.js`, `generation.js`), so the task kinds are stored at the versions 1.6.0 defines. The stored waiting/sleeping state, `pi.live`'s slots and signal memos keep their shape; upstream's breaking changes tag in-memory API values (tool parks, wraps, hook results, `SignalState`, `CommitResult`, `admit`), and Entwurf's carrier and contact tools return no park (typecheck and a source search).
 - **Measured on the synthetic fixtures.** The SDK 1.4/1.5.0 and 1.5.2 mid-run goldens open under the root SDK 1.6.1 with the stored projection those tests expect, the task versions 1.6.0 introduced included (`pi-durable-sdk14-migration`, `pi-durable-sdk152-migration`; 12 durable test files, 283 tests).
-- **Not measured.** A real reopen in either direction (a session 1.6.0 wrote opened by 1.6.1, or the reverse), and any operating session. The [SDK upgrade radius](./setup-clean-host.md#default-radius-for-a-requested-pi-sdk-upgrade) still owns the exit, backup and reopen.
+- **Operating host, n=1.** One operating session 1.6.0 wrote was reopened by 1.6.1 on oracle after a matched backup (2026-11-26, [CHANGELOG](../CHANGELOG.md)): it answered one `entwurf_v2` round trip and recalled earlier conversation. Not measured: the bytes that process loaded, a task run, and a session 1.6.1 wrote opened by 1.6.0. The [SDK upgrade radius](./setup-clean-host.md#default-radius-for-a-requested-pi-sdk-upgrade) still owns the exit, backup and reopen.
 
 ## SDK 1.6.0 boundary (#172)
 

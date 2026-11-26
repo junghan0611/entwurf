@@ -1,6 +1,6 @@
-# NEXT — 0.63.0 출하 완료(npm latest, Herdr snapshot)
+# NEXT — #176 main 안착, 0.64.0 cut
 
-**현재 (2026-11-26 02:3x KST):** 0.63.0을 npm `latest`로 출하했다(GLG publish, #173·#174·#175). Herdr snapshot `v2026.11.26-herdr.0.63.0`까지 끝났다. 다음 레일은 GLG가 고른다(17). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
+**현재 (2026-11-26 19:5x KST):** #176(선택기, Claude ACP 0.112.0, Pi SDK 1.6.1)을 main에 올리고 0.64.0을 cut한다(GLG 2026-11-26 "커밋푸시하고 main 안착. 릴리즈 가자"). oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
 
 # RAIL — 현재 좌표
 
@@ -14,7 +14,12 @@
 - [x] **14. make 0.63.0.** M0 check:full 1188s exit 0. exact-SHA CI run 45637943500 4/4. Windows preview run 45640893928(build-addon·pack·preview success). 후보 `~/.local/state/entwurf-releases/0.63.0-1f0d95e15f9a/candidate.79ztOn/junghanacs-entwurf-0.63.0.tgz` sha256 `eb0af196e2a769a4add68f00333c853d6491488ce693597b2bd9997297f37e96`. container 수용 node:24-bookworm image `sha256:50761d4a62ac…` repoDigest `node@sha256:9d266751ca3d…`. tag `v0.63.0` = `1f0d95e1`. U0 receipt `publish-u0.cFOufj`(그 후보 옆, latest 0.62.0, repair 0.12.8-repair.1, 2026-11-25T15:09:38Z).
 - [x] **15. GLG publish.** U2: `latest`=0.63.0, `repair`=0.12.8-repair.1 유지(U0 receipt `publish-u0.cFOufj` 대조). registry tarball sha256 = 후보 `eb0af196…`, sha512·sha1 = `dist.integrity`·`dist.shasum`. U3: sandbox registry 설치(host Pi 1.6.0)에서 entwurf 6행, provider 오류 없음(`~/.local/share/entwurf-lab/063/publish/u3.log`). GLG의 새 노트북에는 0.63.0 registry(소비자) 버전만 설치한다. 그것이 installed-consumer LIVE(Pi 1.6.0)의 첫 측정이다. 형제 재시작: 새 버전이 필요한 것은 ACP 세션을 이어 가는 형제뿐이다. 0.62.x writer는 `vendorCompaction` 칸을 다시 쓸 때 지우므로, 그 세션을 이어 가기 전에 ACP writer를 먼저 올린다.
 - [x] **16. Herdr re-pin.** `581d0b53`: `runtime-lock.json` npm 0.63.0(registry sha512 = integrity), `VERSION-MENTIONS-HERDR-LOCK` npm 버전 형태 복귀(PARTIAL check-dep-versions 12/12, receipt `c7564d955968`). exact-SHA CI run 45662577079 4/4. snapshot tag + GitHub release `v2026.11.26-herdr.0.63.0`(Latest는 v0.63.0 유지). P9: 이번 P5의 `/tmp/entwurf-s2b-overlay-*` 2개(48K)만 회수했다. 이전 lane의 `/tmp/entwurf-qualify-*` 4개(11/16–11/22)는 범위 밖이라 두었다. reparented `/tmp` holder 1개는 운영 agent emacs daemon이다.
-- [ ] **17. 다음 레일.** ← CURRENT. GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
+- [x] **17. #176.** 브랜치 `feat/176-picker-pi161-acp0112` 17커밋. frozen floor @`0d512d35`: PARTIAL check-dep-versions 12/12, check-pack-pin-matcher 2/2, check-peer-presentation 30/30, check-acp-vendor-rejection 9/9, check-acp-set-model-readback 263/263, check-entwurf-v2-visible-resume 151/151(receipts `~/.local/share/entwurf-lab/176/final/`), FULL exit 0 1185s. 리뷰 Codex `20261126T090855-59b82c`, 885314. 운영 컷오버 영수증 `~/.local/share/entwurf-lab/176/cutover/receipt.md`.
+- [ ] **18. land.** main fast-forward, push, exact-SHA CI 4/4. ← CURRENT
+- [ ] **19. prepare 0.64.0.** CHANGELOG 승격, version, FULL, LIVE release gate `--cut`, P9.
+- [ ] **20. make 0.64.0.** push, exact-SHA CI, 후보 수용, tag, GitHub release.
+- [ ] **21. GLG publish와 Herdr re-pin.**
+- [ ] **22. 다음 레일.** GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
 
 # 열린 관찰 (일을 열지 않음)
 
@@ -66,6 +71,7 @@
 - **D1(다음 레일):** AGENTS.md Rule 11의 "run_ts is the sole TS crossing"과 `mcp/entwurf-bridge/start.sh:47-68`이 어긋난다. start.sh는 소스 체크아웃에서 src를 strip-types로 실행한다. 문안은 GLG가 정한다. 같은 owner 체크아웃에서 ACP 쪽 bridge는 src를 쓰고 Pi 내장은 dist를 써서, dist가 낡으면 둘이 갈라질 수 있다(미측정).
 - **O3(다음 레일):** R2R에서 summary에는 옛 사실만 있었고, 갱신된 사실은 kept tail이 운반했다. 다음 VERIFY 다이어트 후보는 §1A Layers 1–4다.
 - **run.sh:7787 주석:** "VERIFY.md:61"은 낡았다. 다만 check-install-surface S9h가 검토된 dispatch case를 바이트로 비교하므로, 고칠 때는 S9h의 reviewed 바이트와 함께 고친다.
+- **ROADMAP 원장 빈칸(#176에서 발견):** #171의 claude-agent-acp 0.109.0 bump 항목이 ROADMAP 원장에 없다. 0.61.0 CHANGELOG에는 있다.
 - **GLG 결정 대기:**
   - #161 판단.
   - 형제 262958과 b3e007 처리.
