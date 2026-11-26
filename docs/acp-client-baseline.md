@@ -120,11 +120,11 @@ Observed once, or not yet. Each row names its parent; an unmeasured row says why
 3. A birth id or a dispatch marker that cannot be saved stops the turn before the send (17); a failed save after an answer keeps the turn and owes the seal; live reuse retries it first.
 4. Permission: the first allow option, else the first option, else cancel; narrowing it is later work.
 5. Declined: authenticate, protocol v2, client fs write and terminal, the optional verbs; `session/list` for now.
-6. Version guard: writer and reader in the pin's range, Claude 0.112.0, agy 1.5.9 to <1.6.0 (V5).
+6. Version guard: reader in the pin's range, Claude 0.112.0, agy 1.5.9 to <1.6.0; writer too, or Claude 0.109.0 (V5).
 7. Reuse delta: send the inputs after the last sealed answer, matched by turn id (a cancel or refusal the vendor answered counts), custom messages included; `/compact` is read from the first block.
 8. (Replaced by 17.)
 9. (Replaced by 17.)
-10. Claude gets the same version guard, because the command override is checked only against the floor.
+10. Claude gets the same guard: its command override is checked only against the floor.
 11. Z5 and V4 are declined (measured in R10).
 12. Re-measurement came before L8 and L9: one command compares fresh runs with R1–R10; only a changed line needs a person.
 13. Z7 is declined, since Pi resume is the recovery path.

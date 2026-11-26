@@ -439,11 +439,59 @@
 			"claim": "ACP-L1-RESUME-ALLOWED",
 			"title": "a stored session is resumed whatever version of the agent wrote it",
 			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
-			"find": ["\tif (writer.name !== resume.agent.name || !inAttachRange(writer.version, resume.agent)) {"],
+			"find": [
+				"\tif (writer.name !== resume.agent.name || !(inAttachRange(writer.version, resume.agent) || upgrade)) {"
+			],
 			"replace": ["\tif (writer.name !== resume.agent.name) {"],
 			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-L1-RESUME-ALLOWED]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-RESUME-UPGRADE-WRITER",
+			"title": "a session the previous Claude pin wrote stops after the bump",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tupgradesFrom: Object.freeze([\"0.109.0\"]),"],
+			"replace": ["\t\tupgradesFrom: Object.freeze([]),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-RESUME-UPGRADE-WRITER]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-RESUME-BEFORE-176-ALLOW",
+			"title": "a stored session opened under mcp__* stops on its configuration after the bump",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\tif (drift === \"other\" && which === \"stored\" && params.before176) {"],
+			"replace": ["\tif (drift === \"other\" && which === \"live\" && params.before176) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-RESUME-BEFORE-176-ALLOW]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-RESUME-BEFORE-176-EXACT",
+			"title": "any configuration change is waved through once the respelling is tried",
+			"subject": "pi-extensions/lib/acp/session-store.ts",
+			"find": ["\t\tif (before !== \"other\") drift = before;"],
+			"replace": ["\t\tdrift = \"same\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-RESUME-BEFORE-176-EXACT]",
+			"signatureSource": "pi-extensions/lib/acp/session-store.test.ts"
+		},
+		{
+			"claim": "ACP-RESUME-UPGRADE-EXACT",
+			"title": "an upgrade writer is matched by its minor line, so an unmeasured 0.109.x is resumed",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tconst upgrade = resume.upgradesFrom?.includes(writer.version) === true;"],
+			"replace": [
+				"\tconst upgrade = resume.upgradesFrom?.some((v) => writer.version.startsWith(v.split(\".\").slice(0, 2).join(\".\"))) === true;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-RESUME-UPGRADE-EXACT]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
 		},
 		{

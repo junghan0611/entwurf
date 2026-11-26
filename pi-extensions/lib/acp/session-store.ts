@@ -219,6 +219,9 @@ export interface ExistingSession extends SessionCompatFacts {
 /** What this turn asks of a session: the compat facts and the parts its signature was taken from. */
 export interface ResidentParams extends SessionCompatFacts {
 	config: ConfigParts;
+	/** #176: the signature and parts of this turn's configuration with its allow list as a build before
+	 *  #176 wrote it (`residentConfigFacts`). Read for a stored record only. */
+	before176?: { bridgeConfigSignature: string; config: ConfigParts };
 }
 
 function sessionCacheDir(): string {
@@ -253,6 +256,33 @@ export function bridgeConfigSignature(input: BridgeConfigInput): string {
 			extra: input.extra ?? {},
 		}),
 	);
+}
+
+/** #176: the entwurf-bridge allow rule, and how a build before #176 spelled it (the default through
+ *  v0.63.0, which claude-agent-acp 0.112.0 skips). */
+const BRIDGE_ALLOW = "mcp__entwurf-bridge__*";
+const BRIDGE_ALLOW_BEFORE_176 = "mcp__*";
+
+/**
+ * The configuration facts a turn asks a session with: the signature and its parts, and (#176) the same
+ * configuration with `mcp__entwurf-bridge__*` spelled `mcp__*`, as a build before #176 wrote it. A stored
+ * signature taken under that spelling is read as if taken under this one, and any other difference is
+ * judged as before (GLG 2026-11-26: a version bump alone does not ask for `/new`). A one-way reading of
+ * the stored signature, not a claim that the two rules allow the same tools. Pure.
+ */
+export function residentConfigFacts(
+	input: BridgeConfigInput,
+): Pick<ResidentParams, "bridgeConfigSignature" | "config" | "before176"> {
+	const facts = { bridgeConfigSignature: bridgeConfigSignature(input), config: bridgeConfigParts(input) };
+	if (!input.permissionAllow.includes(BRIDGE_ALLOW)) return facts;
+	const before = {
+		...input,
+		permissionAllow: input.permissionAllow.map((rule) => (rule === BRIDGE_ALLOW ? BRIDGE_ALLOW_BEFORE_176 : rule)),
+	};
+	return {
+		...facts,
+		before176: { bridgeConfigSignature: bridgeConfigSignature(before), config: bridgeConfigParts(before) },
+	};
 }
 
 /** The three digests of `ConfigParts`, from the same input as `bridgeConfigSignature`. Pure. */
@@ -695,7 +725,13 @@ function compatibility(
 	if (was.modelId !== params.modelId)
 		return { kind: "stop", stop: "model", why: `the ${which} session has another model` };
 	if (was.cwd !== params.cwd) return { kind: "stop", stop: "cwd", why: `the ${which} session has another directory` };
-	const drift = configDrift(was, params);
+	let drift = configDrift(was, params);
+	// #176: a stored signature taken under the earlier spelling of the bridge allow rule is read as if taken
+	// under this one; whatever else differs is judged as before (an MCP server change alone resumes).
+	if (drift === "other" && which === "stored" && params.before176) {
+		const before = configDrift(was, params.before176);
+		if (before !== "other") drift = before;
+	}
 	if (drift === "other") return { kind: "stop", stop: "config", why: "the session configuration changed" };
 	return { drift };
 }

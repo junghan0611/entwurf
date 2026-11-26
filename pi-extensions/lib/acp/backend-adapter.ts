@@ -344,12 +344,15 @@ export interface AcpBackendAdapter {
 	 * id. ABSENT: a stored session of this backend stops.
 	 * - `agent`: the pin whose attach range `[floor, attachBelow)` holds both the reader that may attach
 	 *   and the writers whose sessions it may resume (`attachAllowed`, `resumeAllowed`);
+	 * - `upgradesFrom`: earlier writers of the same agent, each by exact version, whose sessions a reader
+	 *   in the range resumes as well; each one a measured upgrade crossing (writer → reader). ABSENT: none;
 	 * - `unknownDispatch`: what to do with inputs of a prompt whose outcome is unknown. `skip`: never
 	 *   send them again (the agent may hold them). `resend`: send every input after the last answer
 	 *   again (the agent keeps nothing of an unanswered prompt).
 	 */
 	resume?: Readonly<{
 		agent: AcpAgentPin;
+		upgradesFrom?: readonly string[];
 		unknownDispatch: "skip" | "resend";
 	}>;
 }
@@ -385,7 +388,8 @@ export const ACP_AGY_VERSION_UNSUPPORTED = "acp-agy-version-unsupported";
  *  the receipts named in docs/acp-client-baseline.md measured; a gate binds it to the version the
  *  Receipts paragraph names (receipt-versions.ts). `[floor, attachBelow)` is the range whose readers
  *  may attach a stored session and whose writers' sessions they may resume (#171 V5). Claude's range is
- *  its bundled pin alone (decision 10, GLG 2026-11-21). agy updates itself often, so its range is the
+ *  its bundled pin alone (decision 10, GLG 2026-11-21); the earlier writers it resumes are named one by
+ *  one in `resume.upgradesFrom` (#176). agy updates itself often, so its range is the
  *  1.5 line from the floor, measured or not; 1.6.0 waits for a review (GLG 2026-11-22). */
 export const CLAUDE_ACP_AGENT = Object.freeze({
 	name: "@agentclientprotocol/claude-agent-acp",
@@ -529,7 +533,7 @@ export const ACP_PROMPT_REJECTION_DIAGNOSTIC = "entwurf_acp_prompt_rejection";
 /**
  * May the session a record names be resumed on this child (#171 step 8)? The reader must be inside the
  * adapter's attach range advertising resume (`attachAllowed`), and the record's writer must be the
- * same agent inside the same range. Pure.
+ * same agent inside the same range, or at a version `upgradesFrom` names exactly (#176). Pure.
  */
 export function resumeAllowed(
 	facts: AcpAgentFacts,
@@ -538,7 +542,8 @@ export function resumeAllowed(
 ): AcpAttachJudgement | { allowed: false; reason: "writer-out-of-range" } {
 	const reader = attachAllowed(facts, resume.agent, "resume");
 	if (!reader.allowed) return reader;
-	if (writer.name !== resume.agent.name || !inAttachRange(writer.version, resume.agent)) {
+	const upgrade = resume.upgradesFrom?.includes(writer.version) === true;
+	if (writer.name !== resume.agent.name || !(inAttachRange(writer.version, resume.agent) || upgrade)) {
 		return { allowed: false, reason: "writer-out-of-range" };
 	}
 	return { allowed: true };
@@ -892,11 +897,15 @@ export const claudeAdapter: AcpBackendAdapter = {
 	admitAgent: (answer) =>
 		admitAcpAgent(answer, "claude", ACP_CLAUDE_VERSION_UNSUPPORTED, CLAUDE_ACP_AGENT, "CLAUDE_AGENT_ACP_COMMAND"),
 	// #171 step 7 receipts, re-measured on 0.112.0 for #176: the pin resumes its own sessions, and the attach range is that pin alone. A
-	// record an earlier version wrote names no last answer and never reaches this judgement (GLG
+	// record an earlier Entwurf build wrote names no last answer and never reaches this judgement (GLG
 	// 2026-11-22). An input of an unanswered prompt may be in the session's history (G2a), so it is
 	// never sent twice.
 	resume: Object.freeze({
 		agent: CLAUDE_ACP_AGENT,
+		// A session the previous pin wrote is resumed, not refused: a version bump alone does not ask for
+		// `/new` (GLG 2026-11-26). `[측정 2026-11-26]` U26, 0.109.0 built and 0.112.0 resumed the same id
+		// and recalled its word (#176 continuity-20261126T022437Z). Another version is not measured.
+		upgradesFrom: Object.freeze(["0.109.0"]),
 		unknownDispatch: "skip",
 	}),
 };

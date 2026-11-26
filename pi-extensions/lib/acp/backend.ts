@@ -128,8 +128,6 @@ import {
 } from "./holder-lease.js";
 import { lengthOmission } from "./length-omission.js";
 import {
-	bridgeConfigParts,
-	bridgeConfigSignature,
 	buildSessionRecord,
 	type ConfigParts,
 	contextMessageSignatures,
@@ -143,6 +141,7 @@ import {
 	type RecordWriter,
 	type ResidentParams,
 	readSessionRecord,
+	residentConfigFacts,
 	resolveLifecyclePolicy,
 	type SessionRecord,
 	sessionRecordPath,
@@ -2774,14 +2773,12 @@ export function streamAcpTurn(
 			disallowedTools: [...config.disallowedTools],
 			extra: adapter.configSignatureFields(config.adapterSettings),
 		};
-		const configSig = bridgeConfigSignature(configInput);
 		const ctxSigs = contextMessageSignatures(context);
 		const params: TurnParams = {
 			cwd,
 			modelId: model.id,
-			bridgeConfigSignature: configSig,
 			contextMessageSignatures: ctxSigs,
-			config: bridgeConfigParts(configInput),
+			...residentConfigFacts(configInput),
 			lifecyclePolicy: policy,
 		};
 
@@ -3400,7 +3397,8 @@ export function streamAcpTurn(
 			let resumedAttach = false;
 			if (attach && adapter.resume && held) {
 				// The reader must be inside the adapter's attach range advertising resume, and the record's writer
-				// the same agent inside that range. Anything else is not tried.
+				// the same agent inside that range or at a version its `upgradesFrom` names (#176). Anything else
+				// is not tried.
 				const allowed = resumeAllowed(session.agentFacts, adapter.resume, attach.record.writer);
 				if (!allowed.allowed) {
 					throw new AcpStopSignal(

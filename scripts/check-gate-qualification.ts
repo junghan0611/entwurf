@@ -3445,7 +3445,7 @@ let manifestCount: number;
 		"acp-l15": 6,
 		"acp-l16": 11,
 		"acp-oracle": 8,
-		"acp-parity": 44,
+		"acp-parity": 48,
 		"acp-prompt-lifecycle": 15,
 		"acp-set-model-readback": 76,
 		"acp-steer": 16,

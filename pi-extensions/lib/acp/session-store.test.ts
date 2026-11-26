@@ -24,11 +24,13 @@ import {
 	hasAcpTrace,
 	parseSessionRecord,
 	readSessionRecord,
+	residentConfigFacts,
 	resolveLifecyclePolicy,
 	sessionRecordPath,
 	withVendorCompaction,
 	writeSessionRecord,
 } from "./session-store.ts";
+import { DEFAULT_CLAUDE_PERMISSION_ALLOW } from "./tool-surface.ts";
 
 const record = buildSessionRecord(
 	{
@@ -455,5 +457,85 @@ describe("what a resident's turn may do (#171 step 8, decision 17)", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("a stored session a build before #176 opened under mcp__* (GLG 2026-11-26: a bump alone asks for no /new)", () => {
+	// Oracle: the allow lists as written, copied rather than derived: v0.63.0's default
+	// (`git show v0.63.0:pi-extensions/lib/acp/config.ts:113`) and this build's. The #176 review composed the
+	// stop this resolves (2026-11-26): a 0.109.0 record under the first met the second with `stop: "config"`.
+	const V063_DEFAULT_ALLOW = ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"];
+	const NOW_DEFAULT_ALLOW = ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__entwurf-bridge__*"];
+	const TOOLS = ["Read", "Bash", "Edit", "Write"];
+	const input = (
+		permissionAllow: string[],
+		tools: string[] = TOOLS,
+		over: { appendSystemPrompt?: string; mcpServersHash?: string } = {},
+	) => ({
+		backend: "claude",
+		modelId: "claude-sonnet-5-5",
+		nativeModelId: "claude-sonnet-5-5",
+		appendSystemPrompt: over.appendSystemPrompt ?? "carrier",
+		mcpServersHash: over.mcpServersHash ?? "servers",
+		settingSources: [],
+		strictMcpConfig: true,
+		tools,
+		skillPlugins: [],
+		permissionAllow,
+		disallowedTools: ["AskUserQuestion"],
+		extra: {},
+	});
+	const storedUnder = (allow: string[]) => {
+		const was = residentConfigFacts(input(allow));
+		return {
+			status: "found",
+			record: { ...record, bridgeConfigSignature: was.bridgeConfigSignature, config: was.config },
+		} as const;
+	};
+	const turn = (now: ReturnType<typeof input>, stored: ReturnType<typeof storedUnder>) =>
+		decideResident({ ...facts, ...residentConfigFacts(now) }, { record: stored, reserved: no, hasTrace: no });
+
+	it("[QK:ACP-RESUME-BEFORE-176-ALLOW] a stored session opened under mcp__* is resumed under mcp__entwurf-bridge__*, Skill(*) and all", () => {
+		expect([...DEFAULT_CLAUDE_PERMISSION_ALLOW]).toEqual(NOW_DEFAULT_ALLOW);
+		expect(turn(input(NOW_DEFAULT_ALLOW), storedUnder(V063_DEFAULT_ALLOW))).toMatchObject({ kind: "attach" });
+		expect(
+			turn(input([...NOW_DEFAULT_ALLOW, "Skill(*)"]), storedUnder([...V063_DEFAULT_ALLOW, "Skill(*)"])),
+		).toMatchObject({ kind: "attach" });
+		// What this build writes is attached as before.
+		expect(turn(input(NOW_DEFAULT_ALLOW), storedUnder(NOW_DEFAULT_ALLOW))).toMatchObject({ kind: "attach" });
+	});
+
+	it("[QK:ACP-RESUME-BEFORE-176-EXACT] only that respelling is read away: every other difference is judged as before, and a live session never reads it", () => {
+		const now = input(NOW_DEFAULT_ALLOW);
+		// Judged as before: an MCP server change alone resumes with the new set; a changed carrier stops.
+		expect(
+			turn(input(NOW_DEFAULT_ALLOW, TOOLS, { mcpServersHash: "servers-2" }), storedUnder(V063_DEFAULT_ALLOW)),
+		).toMatchObject({ kind: "attach", mcpServersChanged: true });
+		expect(
+			turn(input(NOW_DEFAULT_ALLOW, TOOLS, { appendSystemPrompt: "carrier-2" }), storedUnder(V063_DEFAULT_ALLOW)),
+		).toMatchObject({ kind: "stop", stop: "config" });
+		expect(turn(input(NOW_DEFAULT_ALLOW, [...TOOLS, "Skill"]), storedUnder(V063_DEFAULT_ALLOW))).toMatchObject({
+			kind: "stop",
+			stop: "config",
+		});
+		expect(turn(now, storedUnder(["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__github__*"]))).toMatchObject({
+			kind: "stop",
+			stop: "config",
+		});
+		// Nothing to respell without the bridge rule.
+		expect(residentConfigFacts(input(["Read(*)"])).before176).toBeUndefined();
+		// A live session was opened by this build: the respelling is never read for it.
+		const liveBefore = {
+			...facts,
+			...residentConfigFacts(input(V063_DEFAULT_ALLOW)),
+			contextMessageSignatures: ["a"],
+			alive: true,
+		};
+		expect(
+			decideResident(
+				{ ...facts, ...residentConfigFacts(now) },
+				{ existing: liveBefore, record: storedUnder(V063_DEFAULT_ALLOW), reserved: no, hasTrace: no },
+			),
+		).toMatchObject({ kind: "stop", stop: "config" });
 	});
 });

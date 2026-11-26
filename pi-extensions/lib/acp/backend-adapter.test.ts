@@ -569,6 +569,39 @@ describe("the child's initialize facts and the attach judgement (#171 L1, V5)", 
 		});
 	});
 
+	// Oracle for both: the U26 upgrade crossing of 2026-11-26 (#176 continuity-20261126T022437Z): 0.109.0
+	// built a session and 0.112.0 resumed the same id and recalled its word; no other writer was measured.
+	const upgradeWriter = (version: string, name: string = CLAUDE_ACP_AGENT.name) => ({ name, version });
+
+	it("[QK:ACP-RESUME-UPGRADE-WRITER] a Claude reader in range resumes a session the previous pin wrote", () => {
+		const claude = claudeAdapter.resume;
+		if (!claude) throw new Error("the claude adapter carries resume data");
+		expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, upgradeWriter("0.109.0"))).toEqual({ allowed: true });
+	});
+
+	it("[QK:ACP-RESUME-UPGRADE-EXACT] only that exact writer version: another one, another agent or a reader out of range still stops", () => {
+		const claude = claudeAdapter.resume;
+		if (!claude) throw new Error("the claude adapter carries resume data");
+		const writer = upgradeWriter;
+		for (const version of ["0.109.1", "0.110.0", "0.111.0", "0.108.0", "0.109.0-beta.1", "0.109"]) {
+			expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, writer(version)), version).toEqual({
+				allowed: false,
+				reason: "writer-out-of-range",
+			});
+		}
+		// The writer's name still has to be the pinned agent's, and the reader's own refusals come first.
+		expect(resumeAllowed(readAgentFacts(CLAUDE_R1), claude, writer("0.109.0", AGY_ACP_AGENT.name))).toEqual({
+			allowed: false,
+			reason: "writer-out-of-range",
+		});
+		expect(resumeAllowed(at(CLAUDE_R1, "0.109.0"), claude, writer("0.109.0"))).toEqual({
+			allowed: false,
+			reason: "version-out-of-range",
+		});
+		// agy's range already holds the writers it resumes; it names no upgrade.
+		expect(agyAdapter.resume?.upgradesFrom).toBeUndefined();
+	});
+
 	it("a pinned attach range that is not two ascending X.Y.Z versions crashes rather than judging", () => {
 		for (const bad of [
 			{ ...AGY_ACP_AGENT, attachBelow: "1.6" },
