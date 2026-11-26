@@ -24,6 +24,8 @@
 //
 //   optional env (run.sh passes it through):
 //   ENTWURF_RAW_CLAUDE_ACP_PREFIX  measure claude-agent-acp from that prefix; U26 then builds on the pin
+//   ENTWURF_RAW_U26_CLAUDE_PAIR    the Claude version pair U26 must cross, "<stored>:<launched>": the pin
+//                                  then the prefix (the default), or the prefix then the pin (an upgrade)
 //   ENTWURF_RAW_U26_AGY_SOURCE     a stored `agy` scenario run dir; U26 resumes a COPY of its session
 //   ENTWURF_RAW_U26_AGY_PAIR       the agy version pair U26 must cross, "<stored>:<launched>"
 //   ENTWURF_RAW_AGY_MODEL          agy's model (default gemini-3.8-flash)
@@ -909,18 +911,30 @@ async function runBackend(B) {
 			if (!process.env.ENTWURF_RAW_CLAUDE_ACP_PREFIX) return inconclusive("no prefix given: nothing to cross");
 			const pinned = summary.provenance?.pinnedClaudeAcp?.version ?? null;
 			const measured = summary.provenance?.claudeAcp?.version ?? null;
-			f.namedPair = [pinned, measured];
 			if (pinned === null || measured === null || pinned === measured)
 				return inconclusive("provenance does not name two different versions");
+			// The pair, "<stored>:<launched>", picks the direction: the pin builds and the prefix resumes, or
+			// (an upgrade, #176) the prefix builds and the pin resumes. Any other pair is not this sample.
+			const named = process.env.ENTWURF_RAW_U26_CLAUDE_PAIR;
+			const upgrade = named === `${measured}:${pinned}`;
+			f.namedPair = upgrade ? [measured, pinned] : [pinned, measured];
+			if (named && !upgrade && named !== `${pinned}:${measured}`)
+				return inconclusive(`the named pair ${named} is not the pin ${pinned} and the prefix ${measured}`);
 			const n = nonce("XV");
-			const c1 = startChild(B, "u26-pinned", { args: B.pinnedArgs });
+			const c1 = upgrade ? startChild(B, "u26-measured") : startChild(B, "u26-pinned", { args: B.pinnedArgs });
 			const made = await newSession(B, c1);
 			rec.plant = await prompt(c1, made.sid, "plant", `Remember this word: ${n}. Reply with only OK.`);
 			await c1.end("normal");
 			if (!ended(rec.plant)) return inconclusive(`the build did not end_turn (${stop(rec.plant)})`);
-			const { c, r, version: to } = await resumeIn(B, "u26-measured", made.sid, "resume");
+			const {
+				c,
+				r,
+				version: to,
+			} = upgrade
+				? await resumeIn(B, "u26-pinned", made.sid, "resume", { args: B.pinnedArgs })
+				: await resumeIn(B, "u26-measured", made.sid, "resume");
 			f.versionPair = [made.version, to];
-			f.pairAsNamed = made.version === pinned && to === measured;
+			f.pairAsNamed = made.version === f.namedPair[0] && to === f.namedPair[1];
 			f["resume.ok"] = r.ok;
 			f["resume.code"] = r.code ?? null;
 			f["resume.echoedId"] = r.echoedId ?? null;

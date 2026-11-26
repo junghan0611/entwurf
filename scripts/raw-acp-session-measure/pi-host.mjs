@@ -46,10 +46,11 @@ export const mtimeBefore = { claude: mt(CLAUDE_CRED), agy: mt(TOKEN) };
 export const steps = [];
 let launches = 0;
 
-/** One Pi resident in rpc mode. `sessionFile`: reopen that session. `env`: added to the sandbox environment. */
-export function launch(sessionFile, env = {}) {
+/** One Pi resident in rpc mode. `sessionFile`: reopen that session. `env`: added to the sandbox environment.
+ *  `extension`: the Entwurf package Pi loads (default: this checkout; #176 pi-upgrade: an earlier build). */
+export function launch(sessionFile, env = {}, extension = REPO) {
 	const name = `pi-${++launches}`;
-	const args = ["--no-extensions", "-e", "builtin:mcp", "-e", REPO, "--entwurf-control"];
+	const args = ["--no-extensions", "-e", "builtin:mcp", "-e", extension, "--entwurf-control"];
 	if (sessionFile) args.push("--session", sessionFile);
 	args.push("--provider", "entwurf", "--model", MODEL, "--mode", "rpc");
 	const child = spawn(PI_CLI ? process.execPath : "pi", PI_CLI ? [PI_CLI, ...args] : args, {

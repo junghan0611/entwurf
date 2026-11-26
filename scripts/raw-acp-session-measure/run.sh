@@ -5,7 +5,7 @@
 #
 #   LIVE=1 scripts/raw-acp-session-measure/run.sh <scenario> <out-dir> [claude|agy]
 #
-#   scenario  rail0 | agy | resume-unknown | experiments | z5 | continuity | pi-smoke | pi-unknown |
+#   scenario  rail0 | agy | resume-unknown | experiments | z5 | continuity | pi-smoke | pi-upgrade | pi-unknown |
 #             pi-quit | pi-compact | compact-resume | all
 #   out-dir   an EXISTING directory outside this repository; each run gets a new subdirectory
 #   claude|agy  optional backend filter: experiments, z5, continuity and all
@@ -36,11 +36,15 @@
 #   ENTWURF_RAW_U26_AGY_SOURCE  optional: a stored `agy` scenario run directory; continuity's agy U26
 #                           resumes a COPY of its session
 #   ENTWURF_RAW_U26_AGY_PAIR    "<stored>:<launched>": the agy version pair U26 must cross
+#   ENTWURF_RAW_U26_CLAUDE_PAIR "<stored>:<launched>": the Claude pair U26 must cross, pin and prefix
+#                           in either order (default: the pin, then the prefix)
 #   ENTWURF_RAW_AGY_MODEL       optional: continuity's agy model (default gemini-3.8-flash)
 #   ENTWURF_RAW_ROWS            optional: continuity's rows, a comma list (default every row)
 #   PROBE_MODEL, PROBE_EFFORT  optional, rail0 and agy only
 #   ENTWURF_RAW_PI_MODEL        optional: the Pi scenarios' entwurf model
 #   ENTWURF_RAW_PI_CLI          optional (#175): an absolute Pi dist/bundle/cli.js run instead of `pi`
+#   ENTWURF_RAW_PI_EARLIER      pi-upgrade (#176): an installed earlier Entwurf package OUTSIDE the
+#                           repository; it births the session that this checkout then reopens
 #   ENTWURF_RAW_PI_RESERVE_TOKENS  optional (#175): the sandbox Pi's compaction.reserveTokens
 #   ENTWURF_RAW_QUIT_VARIANT, ENTWURF_RAW_QUIT_KEEPALIVE  optional (#175): pi-quit's variant
 #   ENTWURF_RAW_COMPACT_MODE    optional (#175): pi-compact's manual | threshold
@@ -54,7 +58,7 @@ die() {
 	exit 2
 }
 
-SCENARIOS="rail0|agy|resume-unknown|experiments|z5|continuity|pi-smoke|pi-unknown|pi-quit|pi-compact|compact-resume|all"
+SCENARIOS="rail0|agy|resume-unknown|experiments|z5|continuity|pi-smoke|pi-upgrade|pi-unknown|pi-quit|pi-compact|compact-resume|all"
 [ "${LIVE:-}" = "1" ] || die "set LIVE=1 to drive real vendor ACP agents (spends subscription turns)."
 [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: LIVE=1 $0 <$SCENARIOS> <out-dir> [claude|agy]"
 
@@ -65,14 +69,14 @@ OUT_ARG="$2"
 ONLY="${3:-}"
 
 case "$SCENARIO" in
-rail0 | agy | resume-unknown | experiments | z5 | continuity | pi-smoke | pi-unknown | pi-quit | pi-compact | compact-resume | all) ;;
+rail0 | agy | resume-unknown | experiments | z5 | continuity | pi-smoke | pi-upgrade | pi-unknown | pi-quit | pi-compact | compact-resume | all) ;;
 *) die "unknown scenario: $SCENARIO" ;;
 esac
 case "$ONLY" in
 "") ;;
 claude | agy)
 	case "$SCENARIO" in
-	experiments | z5 | continuity | pi-smoke | pi-unknown | pi-quit | pi-compact | compact-resume | all) ;;
+	experiments | z5 | continuity | pi-smoke | pi-upgrade | pi-unknown | pi-quit | pi-compact | compact-resume | all) ;;
 	*) die "only experiments, z5, continuity, the pi-* scenarios, compact-resume and all take a backend filter" ;;
 	esac
 	;;
@@ -112,6 +116,13 @@ for name in ENTWURF_RAW_PI_CLI ENTWURF_RAW_PI_RESERVE_TOKENS ENTWURF_RAW_QUIT_VA
 	ENTWURF_RAW_COMPACT_MODE ENTWURF_RAW_FILLER_TOKENS ENTWURF_RAW_PLANT_PARTS ENTWURF_RAW_COMPACT_REPEAT; do
 	if [ -n "${!name:-}" ]; then child_env+=("$name=${!name}"); fi
 done
+if [ -n "${ENTWURF_RAW_PI_EARLIER:-}" ]; then
+	EARLIER="$(outside_repo ENTWURF_RAW_PI_EARLIER "$ENTWURF_RAW_PI_EARLIER")"
+	[ -f "$EARLIER/package.json" ] || die "ENTWURF_RAW_PI_EARLIER must be an installed Entwurf package: $EARLIER"
+	child_env+=(ENTWURF_RAW_PI_EARLIER="$EARLIER")
+elif [ "$SCENARIO" = pi-upgrade ]; then
+	die "pi-upgrade needs ENTWURF_RAW_PI_EARLIER: the earlier Entwurf package that births the session"
+fi
 if [ -n "${ENTWURF_RAW_CLAUDE_ACP_PREFIX:-}" ]; then
 	case "$ENTWURF_RAW_CLAUDE_ACP_PREFIX" in
 	/*) ;;
@@ -133,6 +144,12 @@ if [ -n "${ENTWURF_RAW_U26_AGY_PAIR:-}" ]; then
 	[[ "$ENTWURF_RAW_U26_AGY_PAIR" =~ ^[^:]+:[^:]+$ ]] ||
 		die "ENTWURF_RAW_U26_AGY_PAIR must be <stored>:<launched>: $ENTWURF_RAW_U26_AGY_PAIR"
 	child_env+=(ENTWURF_RAW_U26_AGY_PAIR="$ENTWURF_RAW_U26_AGY_PAIR")
+fi
+if [ -n "${ENTWURF_RAW_U26_CLAUDE_PAIR:-}" ]; then
+	[[ "$ENTWURF_RAW_U26_CLAUDE_PAIR" =~ ^[^:]+:[^:]+$ ]] ||
+		die "ENTWURF_RAW_U26_CLAUDE_PAIR must be <stored>:<launched>: $ENTWURF_RAW_U26_CLAUDE_PAIR"
+	[ -n "$PREFIX" ] || die "ENTWURF_RAW_U26_CLAUDE_PAIR needs ENTWURF_RAW_CLAUDE_ACP_PREFIX: U26 crosses the pin and the prefix"
+	child_env+=(ENTWURF_RAW_U26_CLAUDE_PAIR="$ENTWURF_RAW_U26_CLAUDE_PAIR")
 fi
 
 # One probe run in a new sandboxed directory under <parent>, then the sweep. Sets RUN and SWEEP_STATUS;
