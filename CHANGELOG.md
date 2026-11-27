@@ -4,6 +4,35 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.64.2 — 2026-11-28
+
+### What an npm user gets
+
+No code, schema, guard, routing or wire change since 0.64.1, on the same Pi SDK 1.6.1 set and host Pi `>=1.6.1 <1.7`. The tool guidance a model reads is product guidance revision 25 (`854da09a`), ten leaves of `ENTWURF.json`:
+
+- `entwurf_v2`: the `intent` description now opens by saying it is always the literal `fire-and-forget`, and `message` opens by saying it is required and carries the text, a reply included. A pi-durable citizen had put the body in `intent` and left `message` out in 4 of 70 calls on the revision 24 schema.
+- `entwurf_peers` names the bookmark exception for test rooms; the durable `entwurf_inbox_read` variant says an empty drain stamps nothing; both `entwurf_fresh_call` placement leaves say no tmux session is created.
+- The reject hints `native-push-target-dead`, `target-backend-unsupported`, `target-locked` and the resume `runtime-unresolved` now say what their producers do.
+
+The revision 25 layer is a reviewed old/new literal fixture beside the earlier ones; the guidance test learns a dotted nested parameter field, and the placement contract test and the revision mutant follow the new literals.
+
+### Herdr (repository only, not in the package)
+
+- The Herdr plugin pinned the published 0.64.1 runtime (`bd378b08`, snapshot `v2026.11.27-herdr.0.64.1`); for this cut the lock holds the checkout carrier again (`86471960`).
+
+### Release evidence
+
+The candidate tree is `86471960` (main, one commit ahead of `origin/main` `854da09a` at prepare time) plus this section's release-prep edits: CHANGELOG and `package.json` (0.64.2). `854da09a` has its own exact-SHA CI (run 46004078564, four required jobs success); the commit after it holds the Herdr runtime lock on the checkout carrier (`86471960`). The seal is the sha256 of HEAD + `git diff HEAD --binary` + the untracked file list, first 16 hex; this evidence block was written after the seal.
+
+- P3: the bump changed only `"version"` in `package.json`; `pnpm install --lockfile-only` left the lockfile unchanged; frozen offline install sync rc=0. The Herdr lock check then refused, as designed: `runtime-lock-incoherent: the lock names @junghanacs/entwurf@0.64.1 but this checkout is @junghanacs/entwurf@0.64.2`. The release-prep edits were set aside and the carrier bundle was committed alone (`86471960`, the same three files as `fcaac7b9`; the nine Herdr gates, `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` and lint exit 0 on those bytes), and its PARTIAL ran on that clean commit. With the edits back and the install re-synced, the check read `herdr-checkout` and passed. `pnpm run build-bridge` rc=0; the compiled bridge equals the pre-build copy byte for byte (117 files).
+- P4 (deterministic floor) on seal `0b28a3224b9b1557`: `check:full` exit 0, 1166s, seal before = after. Log SHA-256 `741b868347d0be4f84594bddd64daf22aa6bdc1a9acfd91a13e026a6c50a1291`.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-28 06:43–07:07 KST: MUST 25 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0, seal before = after. Log SHA-256 `b7f0ae376d542385096df576013d5bdcea2136d374efc05074b2cf5cecc01581`; scratch `/tmp/entwurf-release-gate-0.64.2.lKaEy5`. It ran from its own tmux session with the ambient identity carriers unset and both verify-deps settings `error`.
+  - `smoke-codex-fresh-live` (MUST): 66 assertions ok against an app-server started for this cut with `entwurf codex-app-server` in its own detached tmux session (pid 34720, Codex 0.172.0), Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`. The first start refused with `codex-app-server-already-listening`: Codex's own managed app-server daemon (0.172.0, with its pid-update loop) held the control socket. With GLG's explicit approval the two daemon processes, re-identified by pid, start time and socket ownership, were stopped by SIGTERM, the socket was confirmed released, and the cut's app-server was started. It was stopped after the run; this cut did not restart the managed daemon.
+  - `check-openclaw-home-receipt` (MUST, VERIFY criterion 11) read `~/.local/share/entwurf-lab/160/receipt-0.64.2-86471960/receipt.json` (sha256 `2bb786d864c5…`) for home `oracle/main/agent:main:entwurf#20261115T215046-12438c`, measured 2026-11-28 02:07–02:09 KST after the candidate commit (02:04 KST), OpenClaw 2026.11.10: five refusal probes refused by name; the desk made the three asked calls (enqueued / enqueued / `bad-target`) and sent their results back verbatim; the closed declaration refused on both sides for about 8 s and was restored to its original sha256; no send-path client remained; compact-reset unmeasured.
+- P9 after the run: 0 reclaimable roots. The P5 left one empty `entwurf-s2b-overlay-*` and one `smoke-pi-durable-fresh-live-*` root, younger than the reclaim window and recorded. One reparented `/tmp` process, the Emacs daemon from November 9. `~/.pi/agent/entwurf-acp-holders/claude/` holds one lease whose holder is an operator Pi session started before the gate (2026-11-27 21:11 KST) with its live Claude ACP child; it is not gate residue and was left alone.
+- Kill-power re-measured at this shipped SHA: none (all 2159 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 864719608347 surface cab46942df88 -- ["bash","run.sh","check-dep-versions"] 12/12 receipt 99ac2fcb22f3 (the prepare commit's parent; the prepare diff touches CHANGELOG.md and package.json only)
+
 ## v2026.11.27-herdr.0.64.1 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.64.1` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.64.0 (`v2026.11.26-herdr.0.64.0`) on the same Pi 1.6.1 SDK set, so step 1 of the install keeps host Pi `>=1.6.1 <1.7`. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate. This is the first re-pin run from the release skill's separate re-pin section (`4b1e6099`).
