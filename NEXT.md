@@ -1,6 +1,6 @@
-# NEXT — 0.64.0 shipped (#176); Herdr pinned to 0.64.0
+# NEXT — 0.64.1 shipped (release-procedure check); Herdr pinned to 0.64.1
 
-**현재 (2026-11-26 22:5x KST):** #176(선택기, Claude ACP 0.112.0, Pi SDK 1.6.1)이 0.64.0으로 출하됐다. npm `latest`=0.64.0이고 Herdr lock도 0.64.0을 가리킨다. 다음 레일은 GLG가 고른다. oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable), 실무코디·main writer·릴리스 `20261113T043350-ff08d4`. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
+**현재 (2026-11-27 14:xx KST):** 0.64.1(코드 변경 없는 문서·release 절차 패치)이 출하됐다. GLG가 보강한 release 스킬(P3 Herdr lock 확인, U3 뒤 별도 re-pin)이 실제 컷에서 깨지는지 보려고 낸 버전이다. npm `latest`=0.64.1이고 Herdr lock도 0.64.1을 가리킨다. 다음 레일은 GLG가 고른다. oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable). 0.64.1 release 절차 보강과 컷은 `20261126T081804-885314`(Claude Code)가 실무코디로 맡았고 검수는 Sol `d85cad`(대기 중, retire는 GLG 요청 때만). 0.64.0까지의 실무코디·main writer·릴리스 `20261113T043350-ff08d4`는 68bd94에 따르면 지금 비활성이다. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
 
 # RAIL — 현재 좌표
 
@@ -19,7 +19,8 @@
 - [x] **19. prepare 0.64.0.** `5d265634`. 앞선 커밋 `c37f3c77`(Herdr checkout carrier; 빠뜨려서 첫 P4가 `HPB-DEFAULT-LOCK-READ`로 잡았다). seal `2e47e332497ec0b7`: P4 check:full 1182s exit 0. P5 2차 MUST 25/0/0, BEHAVIOR 1/0, `cut: OK`. 1차는 managed Codex daemon의 seat가 죽은 tmux 좌표라 `smoke-codex-fresh-live` FAIL이었고, GLG가 daemon을 내린 뒤 전용 tmux의 `entwurf codex-app-server`(gpt-6.1-terra)로 다시 쟀다. OpenClaw home receipt `receipt-0.64.0-c37f3c77`. 증거는 CHANGELOG 0.64.0 Release evidence, 로그는 `~/.local/share/entwurf-lab/176/prepare/`.
 - [x] **20. make 0.64.0.** M0 check:full 1180s exit 0. exact-SHA CI run 45824698457 4/4. Windows preview run 45827121941. 후보 `~/.local/state/entwurf-releases/0.64.0-5d265634d7a6/candidate.OHNqPz/junghanacs-entwurf-0.64.0.tgz` sha256 `99d6932c…`, container 수용(node:24-bookworm). tag `v0.64.0`, GitHub release. U0 receipt `publish-u0.w0n7Nk`.
 - [x] **21. GLG publish와 Herdr re-pin.** U2 `latest`=0.64.0, `repair` 유지. registry tarball sha256 = 후보, sha512·sha1 = integrity·shasum. U3 sandbox registry 설치(host Pi 1.6.1) entwurf 6행, provider 오류 없음. Herdr re-pin은 CHANGELOG `v2026.11.26-herdr.0.64.0` 항목. `docs/durable-native-support.md` SDK 문단(B 🌀 발견)도 같이 고쳤다. Codex managed daemon은 되살리지 않는다(GLG 2026-11-26).
-- [ ] **22. 다음 레일.** ← CURRENT. GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
+- [x] **22. 0.64.1 cut.** release 스킬 보강 `4b1e6099`(exact-SHA CI run 45925165905 4/4). P3의 새 lock 확인이 `runtime-lock-incoherent`로 설계대로 멈췄고 carrier `fcaac7b9`(check-dep-versions PARTIAL 12/12, receipt `15dfb0eeaaeb`)를 따로 커밋했다. prepare `bc16e414`: P4 1187s exit 0, P5 MUST 25/0/0, BEHAVIOR 1/0, `cut: OK`(OpenClaw receipt `receipt-0.64.1-fcaac7b9`). make: M0 1176s exit 0, exact-SHA CI run 45933185199 4/4, Windows preview run 45934342102, 후보 `~/.local/state/entwurf-releases/0.64.1-bc16e4149e25/candidate.Wrc9kg/junghanacs-entwurf-0.64.1.tgz` sha256 `e891572f…`, tag `v0.64.1`, GitHub release. GLG publish 뒤 U2 `latest`=0.64.1, `repair` 유지; U3 sandbox registry 설치 entwurf 6행. Herdr re-pin은 CHANGELOG `v2026.11.27-herdr.0.64.1` 항목.
+- [ ] **23. 다음 레일.** ← CURRENT. GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
 
 # 열린 관찰 (일을 열지 않음)
 
@@ -32,6 +33,8 @@
 - **team.json 이름.** GLG는 운영 `team.json`을 "entwurf.json"이라 부른다. 기술적 필요는 없고, hard cut이면 옛 이름을 읽는 경로가 사라진다(Hard Rule 1). ff08d4는 지금 이름을 유지하자고 권했다. GLG 답을 기다린다.
 - **0.62.0 뒷정리에서 넘어온 관찰.** GLG 대화 관측(2026-11-23, agy 1.5.14, n=1): pi를 다시 연 뒤 둘째 turn이 기록된 agy 세션을 resume했다. LIVE에서 잰 agy 버전은 1.5.13이다. `pi-durable-owner-fence.test.ts`는 floor를 두 번 돌리는 동안 `pdf-*` 하나를 남겼다(원인 미확인).
 - **시험 형제.** `20261125T084440-d8233a`(#173 A7 LIVE)는 dormant로 남겨 두었다. retire는 GLG가 요청할 때만 한다.
+
+**0.64.1 cut 관찰:** 새 P3 lock 확인은 첫 실전에서 설계대로 멈췄고, carrier 커밋과 re-pin이 스킬 문구대로 이어졌다. P5가 `/tmp/smoke-pi-durable-fresh-live-2026-11-27T02-52-28-276Z`(320K) 하나를 남겼다. 아래 0.64.0 관찰의 이름 문제와 같아 P9 목록에 잡히지 않았고, 회수하지 않았다.
 
 **0.64.0 cut 관찰:** prepare가 Herdr lock 전환을 또 빠뜨렸다(0.60.0 관찰과 같은 자리). (2026-11-27 닫음) release 스킬이 P3 끝, P4 동결 전에 production lock 판정으로 확인하고, re-pin은 U3 뒤 별도 요청으로 둔다(`.claude/skills/entwurf-release/SKILL.md`, 검수 Sol d85cad GO). `/tmp/smoke-pi-durable-fresh-live-<ISO 시각>`은 이름에 mkdtemp 접미사가 없어 P9 OWNED 목록에 걸리지 않고, P5마다 하나씩 쌓였다(10-26부터 27개; 이번 정리에서 회수).
 

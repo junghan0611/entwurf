@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.27-herdr.0.64.1 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.64.1` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.64.0 (`v2026.11.26-herdr.0.64.0`) on the same Pi 1.6.1 SDK set, so step 1 of the install keeps host Pi `>=1.6.1 <1.7`. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate. This is the first re-pin run from the release skill's separate re-pin section (`4b1e6099`).
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `e891572f7b284d7e92a6b743bd6fde7d93f5ea9866bfbd241faa28cd6e357ae9` matches the accepted core artifact byte for byte; independently computed sha512 and sha1 match the npm integrity and shasum, and the sha512 matches this lock. The publication moved `latest` to 0.64.1 and left `repair` at the value recorded before publication (`0.12.8-repair.1`, U0 receipt `publish-u0.5ZiOJe` beside the candidate). Core `v0.64.1` is `bc16e414` (exact-SHA CI run 45933185199, Windows preview run 45934342102).
+- In a private sandbox (private HOME, XDG roots and agent directory) with host Pi 1.6.1, `pi install npm:@junghanacs/entwurf@0.64.1` installed from the registry, `scripts/resolve-acp-bridge.ts` resolved the bridge to that install root (its `package.json` is byte-identical to the registry tarball's), and `pi --list-models entwurf` loaded that package and listed the three Claude rows and the three agy rows with no provider error. Model listing is registration only, not an ACP stream. Receipt `~/.local/share/entwurf-lab/0641/publish/u3-rerun.log`, rerun after review because the first run's logs kept only the install and the model list. npm 11.16.0 printed the same `allow-scripts` notice for the package's `postinstall` as 0.63.0 and 0.64.0.
+- Not measured for this snapshot: the Herdr runtime helper acquiring npm 0.64.1, a source swap, a real Herdr registration, public-ref installation, a vendor model turn, or 0.64.1 inside Orca. The nine install steps were not re-recorded on the Pi 1.6.1 pairing.
+- Mutant `VERSION-MENTIONS-HERDR-LOCK` (`scripts/mutants/pi-floor.json`) returns to its npm form: it finds `"version": "0.64.1"` in the lock and plants 0.64.0, the previous pin, against a README that names 0.64.1. The setup guide, the durable support guide, the ACP and mux rails and ROADMAP's floor line say the 1.6.1 set was first published in 0.64.0, which stays true, so they are unchanged.
+
 ## 0.64.1 — 2026-11-27
 
 ### What an npm user gets
