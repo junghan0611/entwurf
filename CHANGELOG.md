@@ -4,6 +4,33 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.64.1 — 2026-11-27
+
+### What an npm user gets
+
+No code change since 0.64.0, on the same Pi SDK 1.6.1 set and host Pi `>=1.6.1 <1.7`. The packaged setup guide and ACP rail no longer call the Pi 1.6.1 SDK set and the claude-agent-acp 0.112.0 adapter set unpublished; 0.64.0 shipped the wording written before its own publication.
+
+### Docs
+
+- `docs/setup-clean-host.md` and `docs/acp-backend-rail.md` say the Pi 1.6.1 SDK set and the 0.112.0 adapter set were first published in 0.64.0 (`8696f62e`). ROADMAP, the mux rail and the durable support guide changed in the same commit; they are not in the package.
+
+### Release procedure (repository only, not in the package)
+
+- The release skill checks the Herdr runtime lock against the bumped version at the end of P3, before the floor is frozen, by calling the plugin's own lock reader and coherence check. Only `runtime-lock-incoherent` stops the cut and leads to the checkout-carrier commit. Publish reports what the resolved Herdr ref's lock selects, and the npm re-pin is a separate request after U3 (`4b1e6099`). This cut is the first to run it.
+
+### Release evidence
+
+The candidate tree is `fcaac7b9` (main, one commit ahead of `origin/main` `4b1e6099` at prepare time) plus this section's release-prep edits: CHANGELOG and `package.json` (0.64.1). `4b1e6099` has its own exact-SHA CI (run 45925165905, four required jobs success); the commit after it holds the Herdr runtime lock on the checkout carrier (`fcaac7b9`). The seal is the sha256 of HEAD + `git diff HEAD --binary` + the untracked file list, first 16 hex; this evidence block was written after the seal.
+
+- P3: `npm version 0.64.1` changed only `"version"`; `pnpm install --lockfile-only` left the lockfile unchanged; frozen offline install sync (`--ignore-scripts`) rc=0. The release skill's new Herdr lock check then refused, as designed: `runtime-lock-incoherent: the lock names @junghanacs/entwurf@0.64.0 but this checkout is @junghanacs/entwurf@0.64.1`. The release-prep edits were stashed and the carrier bundle was committed alone (`fcaac7b9`; the nine Herdr gates, `check-dep-versions`, `check-gate-manifests`, `check-install-surface`, `check-pack` and lint exit 0 on those bytes), and its PARTIAL ran on that clean commit. With the edits back and the install re-synced, the check read `herdr-checkout` and passed. `pnpm run build-bridge` rc=0; the compiled bridge equals the pre-build copy byte for byte (117 files).
+- P4 (deterministic floor) on seal `f3bfa5d89709a83e`: `check:full` exit 0, 1187s, seal before = after. Log SHA-256 `09c66e34863a357a4253284d4860581ac8ebed346d6e93134d29c7f7476775cd`.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-27 11:28–11:53 KST: MUST 25 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0, seal before = after. Log SHA-256 `00d08507b5b26b1c22f0e505a6531e09c795d694a0ce82877d6aab07804e5d1b`; scratch `/tmp/entwurf-release-gate-0.64.1.k7UuU0`. It ran from its own tmux session with the ambient identity carriers unset and both verify-deps settings `error`.
+  - `smoke-codex-fresh-live` (MUST): 66 assertions ok against an app-server started for this cut with `entwurf codex-app-server` in its own detached tmux session (pid 3123485, Codex 0.171.0), Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`. It was stopped after the run.
+  - `check-openclaw-home-receipt` (MUST, VERIFY criterion 11) read `~/.local/share/entwurf-lab/160/receipt-0.64.1-fcaac7b9/receipt.json` (sha256 `f3959f4641ad…`) for home `oracle/main/agent:main:entwurf#20261115T215046-12438c`, measured 2026-11-27 11:08–11:10 KST after the candidate commit (11:05 KST), OpenClaw 2026.11.10: five refusal probes refused by name; the desk made the three asked calls (enqueued / enqueued / `bad-target`) and sent their results back verbatim; the closed declaration refused on both sides for about 7.5 s and was restored to its original sha256; no send-path client remained; compact-reset unmeasured.
+- P9 after the run: 0 reclaimable roots. The P5 left one `entwurf-s2b-overlay-*` and one `smoke-pi-durable-fresh-live-*` root, younger than the reclaim window and recorded. One reparented `/tmp` process, the Emacs daemon from November 9. `~/.pi/agent/entwurf-acp-holders/claude/` is empty.
+- Kill-power re-measured at this shipped SHA: none (all 2159 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head fcaac7b96718 surface 5bd33c9d93d5 -- ["bash","run.sh","check-dep-versions"] 12/12 receipt 15dfb0eeaaeb (the prepare commit's parent; the prepare diff touches CHANGELOG.md and package.json only)
+
 ## v2026.11.26-herdr.0.64.0 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.64.0` runtime and its measured npm sha512; it is not a new core release. The previous pin is 0.63.0 (`v2026.11.26-herdr.0.63.0`) on the Pi 1.6.0 SDK set; 0.64.0 carries the Pi 1.6.1 SDK set, so step 1 of the install takes host Pi `>=1.6.1 <1.7`, and activation refuses a Pi 1.6.0 host by name. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm still needs explicit deactivate/activate.
