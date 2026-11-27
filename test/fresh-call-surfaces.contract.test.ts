@@ -247,7 +247,7 @@ describe("the one fresh-call surface — contracts every caller relies on", () =
 		}
 		for (const desc of [String(mcpPlacement?.description ?? "")]) {
 			expect(desc).toContain("EXISTING");
-			expect(desc).toContain("Nothing is ever created");
+			expect(desc).toContain("No tmux session is ever created");
 			expect(desc).toContain("Independent of cwd");
 			expect(desc).toContain("expert seat override");
 			// The omitted-seat rule, stated for every caller. It is deliberately

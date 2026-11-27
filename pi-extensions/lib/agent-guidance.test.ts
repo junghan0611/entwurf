@@ -252,6 +252,26 @@ const reviewedR21 = JSON.parse(
 const reviewedR24 = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-24.json", import.meta.url), "utf8"),
 ) as ReviewedAmendmentLayer & { previousRevision: number };
+// Revision 25: a narrow wording bundle (ten leaves) after repeated entwurf_v2 argument errors on a
+// pi-durable citizen — six tool leaves and four static hints. Its old values are revision 24 exactly;
+// its new literals were written in the same pass and are reviewed afterwards. The README paragraph owns
+// that provenance.
+const reviewedR25 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-25.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: { key: string[]; old: string; new: string }[];
+};
+const reviewedToolsR25: ReviewedAmendmentLayer = {
+	revision: reviewedR25.revision,
+	amendments: reviewedR25.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
+};
+/** The two parameter leaves outside entwurf_v2 that a reviewed layer may amend, and only in revision 25. */
+const R25_PARAMETER_KEYS: readonly string[] = [
+	"tools.entwurf_fresh_call.parameters.placement",
+	"tools.entwurf_fresh_call.parameters.placement.tmuxSession",
+];
 // #151 R-2: the first layer that ADDS keys to existing hint families — two reject hints for a record
 // mid-/renew. It changes no existing leaf; each addition carries only its new literal, and the family
 // expectation checks the key was absent before. The README paragraph owns that provenance.
@@ -390,6 +410,29 @@ function applyR23(family: string, expected: Record<string, string>): void {
 	}
 }
 
+function applyR25(family: string, expected: Record<string, string>): void {
+	expect(reviewedR25.amendments).toHaveLength(10);
+	expect(reviewedR25.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"rejectHints.native-push-target-dead",
+		"resumeLaunchRejectHints.runtime-unresolved",
+		"resumeRejectHints.target-backend-unsupported",
+		"resumeRejectHints.target-locked",
+		"tools.entwurf_fresh_call.parameters.placement",
+		"tools.entwurf_fresh_call.parameters.placement.tmuxSession",
+		"tools.entwurf_inbox_read.descriptions.durable",
+		"tools.entwurf_peers.descriptions.mcp",
+		"tools.entwurf_v2.parameters.intent",
+		"tools.entwurf_v2.parameters.message",
+	]);
+	for (const amendment of reviewedR25.amendments) {
+		if (amendment.key[0] === "tools" || amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+}
+
 function applyR19(family: string, expected: Record<string, string>): void {
 	expect(reviewedR19.amendments).toHaveLength(3);
 	expect(reviewedR19.amendments.map((a) => a.key.join(".")).sort()).toEqual([
@@ -458,6 +501,14 @@ function currentExpectations() {
 		"tools.entwurf_v2.parameters.mode",
 	]);
 	expect(reviewedR24.amendments.map((a) => a.key.join("."))).toEqual(["tools.entwurf_peers.descriptions.mcp"]);
+	expect(reviewedToolsR25.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_fresh_call.parameters.placement",
+		"tools.entwurf_fresh_call.parameters.placement.tmuxSession",
+		"tools.entwurf_inbox_read.descriptions.durable",
+		"tools.entwurf_peers.descriptions.mcp",
+		"tools.entwurf_v2.parameters.intent",
+		"tools.entwurf_v2.parameters.message",
+	]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -473,6 +524,7 @@ function currentExpectations() {
 		reviewedR20,
 		reviewedR21,
 		reviewedR24,
+		reviewedToolsR25,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -496,7 +548,8 @@ function currentExpectations() {
 					name === "entwurf_v2" ||
 						(layer === reviewedR13 && amendment.key.join(".") === R13_PARAMETER_KEY) ||
 						(layer === reviewedR16 && amendment.key.join(".") === R16_PARAMETER_KEY) ||
-						(layer === reviewedToolsR17 && amendment.key.join(".") === R17_PARAMETER_KEY),
+						(layer === reviewedToolsR17 && amendment.key.join(".") === R17_PARAMETER_KEY) ||
+						(layer === reviewedToolsR25 && R25_PARAMETER_KEYS.includes(amendment.key.join("."))),
 				).toBe(true);
 				for (const rail of ["mcp", "durable"] as const) {
 					const parameter = metadata[rail]
@@ -507,8 +560,18 @@ function currentExpectations() {
 				}
 				const schema = metadata.schemas[name] as ToolSchema;
 				for (const expected of [mcp.inputSchema, schema]) {
-					expect(expected.properties[field].description).toBe(amendment.old);
-					expected.properties[field].description = amendment.new;
+					// A dotted field names a nested property (revision 25's placement.tmuxSession). Exactly one
+					// or two segments: a deeper path fails here rather than being read as its first two.
+					const segments = field.split(".");
+					expect(segments.length === 1 || segments.length === 2, `${field}: one or two segments`).toBe(true);
+					const [outer, inner] = segments;
+					const property =
+						inner === undefined
+							? expected.properties[outer]
+							: (expected.properties[outer] as unknown as ToolSchema).properties?.[inner];
+					expect(property, `${name}.${field} names a schema property`).toBeDefined();
+					expect(property.description).toBe(amendment.old);
+					property.description = amendment.new;
 				}
 			}
 		}
@@ -519,7 +582,9 @@ function currentExpectations() {
 	// (revision 12); its resume target parameter is a new key. Revision 18's four descriptions were all already in
 	// the union, so it adds none. Revision 19's two resume descriptions were too, so it adds none either.
 	// Revision 21's mcp description was already in the union; its mode parameter is a new key.
-	expect(declaredKeys.size).toBe(18);
+	// Revision 25's intent, message and peers mcp leaves were already in the union; the durable
+	// inbox_read description and the two fresh_call placement parameters are three new keys.
+	expect(declaredKeys.size).toBe(21);
 	return { metadata, runtime, declaredKeys };
 }
 
@@ -568,7 +633,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR23.revision).toBe(23);
 		expect(reviewedR24.previousRevision).toBe(reviewedR23.revision);
 		expect(reviewedR24.revision).toBe(24);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR24.revision);
+		expect(reviewedR25.previousRevision).toBe(reviewedR24.revision);
+		expect(reviewedR25.revision).toBe(25);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR25.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments and the reviewed revision-22 addition", () => {
@@ -586,6 +653,7 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR10("rejectHints", expected);
 		applyR11("rejectHints", expected);
 		applyR22("rejectHints", expected);
+		applyR25("rejectHints", expected);
 		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
@@ -609,6 +677,7 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR17("resumeRejectHints", expected);
 		applyR18("resumeRejectHints", expected);
 		applyR22("resumeRejectHints", expected);
+		applyR25("resumeRejectHints", expected);
 		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
@@ -627,6 +696,8 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR19("resumeLaunchRejectHints", expectedResume);
 		// Revision 23 (#173): no-tmux-context names the caller, not an agent.
 		applyR23("resumeLaunchRejectHints", expectedResume);
+		// Revision 25: runtime-unresolved names entwurf, the runtime a pi-durable resume resolves.
+		applyR25("resumeLaunchRejectHints", expectedResume);
 		for (const [actualFamily, expected] of [
 			[ENTWURF_FRESH_LAUNCH_REJECT_HINTS, originalLaunchRejectHints.fresh],
 			[ENTWURF_RESUME_LAUNCH_REJECT_HINTS, expectedResume],
@@ -720,8 +791,8 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		}
 		expect([...changed].sort()).toEqual([...declaredKeys].sort());
 		expect(allKeys.size).toBe(34);
-		expect(changed.size).toBe(18);
-		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(16);
+		expect(changed.size).toBe(21);
+		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(13);
 	});
 
 	it("[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS] actual tools/list matches reviewed descriptions with original full structures/schema/annotations and no metadata", async () => {
