@@ -33,13 +33,13 @@
 - **0.62.0 뒷정리에서 넘어온 관찰.** GLG 대화 관측(2026-11-23, agy 1.5.14, n=1): pi를 다시 연 뒤 둘째 turn이 기록된 agy 세션을 resume했다. LIVE에서 잰 agy 버전은 1.5.13이다. `pi-durable-owner-fence.test.ts`는 floor를 두 번 돌리는 동안 `pdf-*` 하나를 남겼다(원인 미확인).
 - **시험 형제.** `20261125T084440-d8233a`(#173 A7 LIVE)는 dormant로 남겨 두었다. retire는 GLG가 요청할 때만 한다.
 
-**0.64.0 cut 관찰:** prepare가 Herdr lock 전환을 또 빠뜨렸다(0.60.0 관찰과 같은 자리). `/tmp/smoke-pi-durable-fresh-live-<ISO 시각>`은 이름에 mkdtemp 접미사가 없어 P9 OWNED 목록에 걸리지 않고, P5마다 하나씩 쌓였다(10-26부터 27개; 이번 정리에서 회수).
+**0.64.0 cut 관찰:** prepare가 Herdr lock 전환을 또 빠뜨렸다(0.60.0 관찰과 같은 자리). (2026-11-27 닫음) release 스킬이 P3 끝, P4 동결 전에 production lock 판정으로 확인하고, re-pin은 U3 뒤 별도 요청으로 둔다(`.claude/skills/entwurf-release/SKILL.md`, 검수 Sol d85cad GO). `/tmp/smoke-pi-durable-fresh-live-<ISO 시각>`은 이름에 mkdtemp 접미사가 없어 P9 OWNED 목록에 걸리지 않고, P5마다 하나씩 쌓였다(10-26부터 27개; 이번 정리에서 회수).
 
 **0.62.0 cut 관찰:** U3 registry 설치에서 npm 11.16.0이 `allow-scripts` 정책으로 entwurf `postinstall`(chmod)을 돌리지 않았다. tarball이 이미 실행 비트를 갖고 있어 영향은 없었다.
 
 **0.61.0 cut 관찰:** 턴 중에 창을 닫은 LIVE 실행 두 번이 operator HOME에 fixture holder lease를 남겼다(`~/.pi/agent/entwurf-acp-holders/claude/` `e505…`·`f531…`, 지우지 않음; `e505…`는 pidNs 없는 옛 형식이라 재부팅 전까지 인계되지 않는다). 두 P5가 각각 `/tmp/entwurf-s2b-overlay-*` 한 개를 남겼다(P9에서 회수). (2026-11-25 정정) PARTIAL은 mutant를 공유 checkout이 아니라 임시 snapshot에 심는다(`mutation-qualify.ts:14-17`, `:875`). 다만 시작과 끝에 원본 HEAD와 작업 표면 해시가 같은지 단언하므로, 도는 동안 트리를 바꾸지 않는다. 같은 host의 부하는 bound를 넘기게 할 수 있다(위 PARTIAL 러너 관찰).
 
-**0.60.0 cut 관찰:** `pi-extensions/lib/acp/agy-adapter.test.ts:320`이 `/tmp/acp-agy-thinking-*` sandbox를 지우지 않는다(P9에서 112개). prepare 체크리스트에서 Herdr lock 전환과 `docs/setup-clean-host.md`·`docs/durable-native-support.md` 버전 문구가 빠지기 쉽다(이번에 둘 다 놓침; 후자는 `PI-FLOOR-PUBLISHED-SCOPE` mutant 앵커와 묶여 있다).
+**0.60.0 cut 관찰:** `pi-extensions/lib/acp/agy-adapter.test.ts:320`이 `/tmp/acp-agy-thinking-*` sandbox를 지우지 않는다(P9에서 112개). prepare 체크리스트에서 Herdr lock 전환과 `docs/setup-clean-host.md`·`docs/durable-native-support.md` 버전 문구가 빠지기 쉽다(이번에 둘 다 놓침; 후자는 `PI-FLOOR-PUBLISHED-SCOPE` mutant 앵커와 묶여 있다). Herdr lock 전환은 위 0.64.0 관찰에서 닫았다. 버전 문구는 열려 있다.
 
 # #164 Orca 증거 (노트북 lane에서 승격, oracle은 Orca를 설치하지 않는다)
 

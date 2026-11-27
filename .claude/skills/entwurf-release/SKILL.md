@@ -313,6 +313,36 @@ keeps every lifecycle script out of this sync, `prepare` (`build-bridge`) and
 `postinstall` alike; the builds the FULL floor and the LIVE gate perform themselves
 still follow the dist-preservation and `with-dist-lock` rules.
 
+### Herdr runtime lock before the floor
+
+Before freezing for P4, ask the Herdr plugin's own lock reader whether the committed
+runtime lock agrees with the bumped version. This reuses the production judgement
+(`certifyLockCoherence` in `scripts/herdr-runtime.mjs`); it does not restate it:
+
+```bash
+node --input-type=module -e 'import * as h from "./scripts/herdr-runtime.mjs"; const l = h.readRuntimeLock(h.defaultPluginDir()); if (l.source === "npm") h.certifyLockCoherence(l, h.readCheckoutPackageSpec(h.defaultCheckoutRoot())); console.log("herdr lock ok:", l.source, l.version ?? "")'
+```
+
+An npm lock names the last published version, so after the P3 bump it refuses with
+`runtime-lock-incoherent`, and P4 would go red at `[QK:HPB-DEFAULT-LOCK-READ]` (the
+0.55.0, 0.60.0 and 0.64.0 release evidence records that red). A valid
+`herdr-checkout` lock needs no npm coherence check. Any other refusal is its own
+defect, not a reason to switch.
+
+On `runtime-lock-incoherent`, stop before P4. With GLG's approval, commit only the
+checkout-carrier bundle, keeping the version bump and release notes out of that commit;
+`c37f3c77` (0.64.0) is the template. The bundle is `plugins/herdr/runtime-lock.json`,
+the `plugins/herdr/README.md` regions that name the unpublished candidate beside the
+last published npm pin, and the `VERSION-MENTIONS-HERDR-LOCK` anchor in
+`scripts/mutants/pi-floor.json`. That mutant edit is a gate change: run the affected
+PARTIAL (`["bash","run.sh","check-dep-versions"]`) once on the reviewed carrier
+candidate, then run the check above again on the bumped tree before P4.
+
+This switch edits committed repository bytes only. It runs no `herdr plugin install`
+and no `herdr-plugin-deactivate`, and it moves no host's Herdr installation between
+sources; that is a separate operator act under the plugin README. The carrier is
+verification-only: no npm SRI, and no evidence of acquisition, activation or LIVE.
+
 ## P4. Run the deterministic floor
 
 The `--ignore-scripts` sync above builds nothing, and the floor judges the
@@ -465,6 +495,8 @@ git diff-index --quiet HEAD --
 Report:
 
 - prepared version and commit SHA
+- the Herdr runtime lock check before P4: the source it read, and the carrier commit
+  if one was made
 - `pnpm run check:full` result
 - release-gate scratch, log, and artifact paths
 - actual `MUST: PASS=n FAIL=0 SKIP=n` (no qualification step: the body is not a release axis, #144)
@@ -1138,6 +1170,11 @@ Then run **P9** again on this host: `publish` runs a registry install and a pi
 session of its own, and the release is not finished while its leftovers are still
 on the disk.
 
+If this cut used the P3 carrier, report what the resolved Herdr ref's lock currently
+selects (plugin README: an unversioned install follows the lock at that ref). npm
+publication does not change that lock or prove an install. Re-pinning is not part of
+`publish`; it is the separate request below.
+
 For the current #51 contract, the final Linux recovery proof remains:
 
 1. Install the approved package on the maintainer and target host.
@@ -1145,6 +1182,32 @@ For the current #51 contract, the final Linux recovery proof remains:
 3. Restart every already-open Claude Code session.
 4. Open a new session with its live MCP child.
 5. Require installed `entwurf doctor-meta-bridge` to pass.
+
+## Herdr re-pin (separate request, not a mode)
+
+Only when GLG asks for it after U3 is green. A commit needs its own request; push, the
+exact-SHA CI run and the Herdr snapshot tag and release (`tag-release`,
+`vYYYY.M.D-herdr.<version>`) keep their own approvals. `8696f62e` (0.64.0) is the
+template:
+
+1. Bytes: the registry tarball's SHA-256 equals the accepted candidate's, and its
+   independently computed sha512 equals `dist.integrity`. That sha512 goes into the lock.
+2. `plugins/herdr/runtime-lock.json` returns to `source: npm` with that name, version
+   and integrity; the plugin README names the new pin and keeps the previous one.
+3. `VERSION-MENTIONS-HERDR-LOCK` returns to its npm form (find the new version, plant
+   the previous pin). Edit only; its PARTIAL runs in step 5.
+4. Post-ship wording: read the live setup, durable, ACP/mux and roadmap version/SDK
+   wording; correct only now-stale claims.
+5. On the same reviewed re-pin candidate, run the affected
+   `["bash","run.sh","check-dep-versions"]` PARTIAL once, then the current
+   `check-herdr-*` gates, `check-dep-versions`, `check-gate-manifests`,
+   `check-install-surface`, `check-pack` and lint. Record measured and unmeasured axes
+   in the CHANGELOG snapshot entry; U3 and static gates do not prove Herdr npm
+   acquisition or a source switch. Any production source switch still owes the
+   source-specific re-proof in `VERIFY.md`.
+
+Like the carrier switch, the re-pin edits repository bytes only and installs nothing on
+the operator host (host rule above).
 
 ## Recovery table
 
