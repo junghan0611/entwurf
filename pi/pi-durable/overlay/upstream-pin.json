@@ -76,8 +76,8 @@
 			{
 				"name": "tui.js",
 				"source": "pi/pi-durable/src/experimental/durable/tui.ts",
-				"blob": "a7bf1b9268f62fd871835de43a5f06f347cecfba",
-				"sha256": "92fb07ee5602c79bacb00916006323db4e2aa3396823a695fb71389ccd5107b1"
+				"blob": "a54cbe5b136a7c8ce24e197e956c098bf40d1c37",
+				"sha256": "013032a6dad84fd06ae427f05c96f647507e3e08736583cafeff1c5d1f991d4d"
 			},
 			{
 				"name": "harness-setup.js",
@@ -112,8 +112,8 @@
 			{
 				"name": "program-status.js",
 				"source": "pi/pi-durable/src/experimental/durable/program-status.ts",
-				"blob": "a5dda57b0a8364c1fc967d0dcbf33e4e5132788d",
-				"sha256": "def854c207e6f50af33b4c59417c114cf5f377b74608b3e4b2f5868221eeaa4a"
+				"blob": "dfe065ea990a956c0e446ee081bd3f57b7aeb342",
+				"sha256": "04d8cf2b5cc33cd982878cc7301de5f584bd6e53acf3f980db41cdd219745f89"
 			}
 		],
 		"distTargets": [

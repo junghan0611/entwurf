@@ -530,8 +530,13 @@ const PATH_MIN_CELLS = 8;
 /** The most cells the placement column takes; a longer word (a long tmux session name) is cut with
  * `~` there, and the selected line carries it whole where the width allows. */
 const PLACEMENT_MAX_CELLS = 24;
-/** The fewest cells a cut placement word is drawn in on the selected line. */
+/** The fewest cells a cut placement word is drawn in on the selected line; with less left it is not drawn. */
 const PLACEMENT_MIN_CELLS = 5;
+/** The provider's word for "no placement owner looked": it names no place, and is not drawn as one. */
+const UNOBSERVED_WORD = "unobserved";
+/** Whether a placement word names a terminal: a real place always starts `herdr `, `tmux ` or `hc `, and the three
+ * other words (`none`, `ambiguous`, `unobserved`) say only that there is none to name. */
+const isPlace = (word: string): boolean => word !== "none" && word !== "ambiguous" && word !== UNOBSERVED_WORD;
 
 /** Column widths for one kind of row — bookmarked or not — in a terminal `columns` wide. */
 interface RowColumns {
@@ -545,8 +550,7 @@ interface RowColumns {
 	/** Cells of the activity time; 0 when it does not fit whole, and then nothing after it is drawn. */
 	activity: number;
 	/** Cells of the placement column, right after the activity time; 0 when the column does not fit
-	 * whole or no row of the listing is placed (#178). The selected line carries the placement at
-	 * every width. */
+	 * whole or no row in the directory scope shown has a real place (#178). */
 	placement: number;
 }
 
@@ -560,18 +564,26 @@ interface RowColumns {
  * takes room before its activity time does; an unbookmarked row is ordered and found by its time,
  * which comes right after its facts. Widths are measured over EVERY row of the listing, so the columns stay put
  * while the operator narrows, scrolls or lifts the filter, and the id, backend, facts and activity
- * columns are as wide for a bookmarked row as for any other.
+ * columns are as wide for a bookmarked row as for any other. The placement column alone is measured over `scope`:
+ * the placement words of the rows in the directory scope shown, whatever is typed in the search. A sibling the
+ * default view hides cannot add a column to it; typing never moves it; Ctrl-A may.
  */
-function rowColumns(texts: readonly ResumeRowText[], pinned: boolean, columns: number): RowColumns {
+function rowColumns(
+	texts: readonly ResumeRowText[],
+	scope: readonly string[],
+	pinned: boolean,
+	columns: number,
+): RowColumns {
 	const id = widest(texts.map((t) => t.gardenId));
 	const backend = widest(texts.map((t) => t.backend));
 	const facts = widest(texts.map((t) => t.facts.join(", ")));
 	const activityCells = widest(texts.map((t) => t.activity));
-	// A listing in which no owner placed anyone draws no placement column at all: every row would say
-	// `unobserved`, and the column would push out the model that tells such rows apart. The selected
-	// line still says it. Measured over every row, so the choice holds while the list is narrowed.
-	const placed = texts.some((t) => t.placement !== "unobserved");
-	const placementCells = placed ? Math.min(PLACEMENT_MAX_CELLS, widest(texts.map((t) => t.placement))) : 0;
+	// The placement column is drawn only when some row in scope has a REAL place: a column of `none`, `ambiguous`
+	// and `unobserved` names no terminal and would push out the model that tells such rows apart. The selected line
+	// still says `none` and `ambiguous`. An `unobserved` row's cell is blank, so it takes no width here.
+	const placed = scope.some(isPlace);
+	const drawn = scope.filter((word) => word !== UNOBSERVED_WORD);
+	const placementCells = placed ? Math.min(PLACEMENT_MAX_CELLS, widest(drawn)) : 0;
 	const nameFull = pinned ? Math.min(NAME_MAX_CELLS, widest(texts.map((t) => t.pin ?? ""))) : 0;
 	// A listing with no bookmark draws no bookmark column at all.
 	if (pinned && nameFull === 0) return { pinned, name: 0, id, backend, facts, activity: 0, placement: 0 };
@@ -605,6 +617,12 @@ function rowColumns(texts: readonly ResumeRowText[], pinned: boolean, columns: n
 	};
 }
 
+/** A row's cell in the placement column: the word, capped with `~`; blank for a row nobody looked for, which has
+ * nothing to say here, as on the selected line. */
+function placementCell(word: string, cells: number): string {
+	return word === UNOBSERVED_WORD ? "" : cutName(word, cells);
+}
+
 /** One row as pieces: `> ` on the cursor's row, `* ` and the name on a bookmarked one. */
 function rowSpans(text: ResumeRowText, cols: RowColumns, cursor: boolean, columns: number): PickerSpan[] {
 	const out: PickerSpan[] = [span(cursor ? "> " : "  ", "cursor")];
@@ -626,7 +644,7 @@ function rowSpans(text: ResumeRowText, cols: RowColumns, cursor: boolean, column
 	if (cols.activity > 0) {
 		out.push(span(GAP), span(padCells(text.activity, cols.activity), "activity"));
 		if (cols.placement > 0) {
-			out.push(span(GAP), span(padCells(cutName(text.placement, cols.placement), cols.placement), "placement"));
+			out.push(span(GAP), span(padCells(placementCell(text.placement, cols.placement), cols.placement), "placement"));
 		}
 		let used = displayWidth(joinSpans(out));
 		if (text.model !== null && used + GAP.length + displayWidth(text.model) <= columns) {
@@ -708,13 +726,15 @@ export function renderPickerFrame(
 		return { lines, spans: lines.map((line) => [span(line)]), cursorLine: -1 };
 	}
 	const rows = visibleResumeRows(listing, state);
-	const total = visibleResumeRows(listing, { allDirectories: state.allDirectories, query: "" }).length;
 	const items = pickerItems(rows);
 	const bodyHeight = pickerBodyHeight(size);
 	const fit = (pieces: readonly PickerSpan[]): PickerSpan[] => fitSpans(pieces, size.columns);
 	const texts = listing.rows.map(resumeRowText);
-	const pinnedCols = rowColumns(texts, true, size.columns);
-	const plainCols = rowColumns(texts, false, size.columns);
+	const inScope = visibleResumeRows(listing, { allDirectories: state.allDirectories, query: "" });
+	const total = inScope.length;
+	const scope = inScope.map((row) => row.placement);
+	const pinnedCols = rowColumns(texts, scope, true, size.columns);
+	const plainCols = rowColumns(texts, scope, false, size.columns);
 
 	// The key that lifts the filter is the line's point; a long path gives up its start instead.
 	const directoryRoom = size.columns - displayWidth("directory: ") - displayWidth(DIRECTORY_KEY);
@@ -747,33 +767,33 @@ export function renderPickerFrame(
 	// The body always takes its full height, so the four lines below stay where they are.
 	while (out.length < HEAD_LINES + bodyHeight) out.push([]);
 
-	// The row under the cursor again, on a line of its own: its id, its bookmark name, where its
-	// terminal is and its directory — what tells two siblings apart when a narrow terminal has cut the
-	// row. The id is always whole. The directory is whole, or its end after `...`; it keeps at least
-	// PATH_MIN_CELLS of the line (all of a shorter one). The placement word (#178) comes next: whole,
-	// or cut with `~` to what is left — this line is where a narrow terminal shows it. The name takes
-	// what remains: whole, cut with `~` inside its brackets, or, with fewer than NAME_MIN_CELLS left,
-	// left to the row above, which always draws a bookmark's name at the minimum size.
+	// The row under the cursor again, on a line of its own: its id, its bookmark name, where its terminal is and its
+	// directory — what tells two siblings apart when a narrow terminal has cut the row. In order of who gets cells
+	// first: the id, always whole; the directory's PATH_MIN_CELLS (all of a shorter one); the name's NAME_MIN_CELLS
+	// (all of a shorter one); the placement word (#178), whole, or cut with `~`, or left out when fewer than
+	// PLACEMENT_MIN_CELLS remain for it; then the name takes what is left, whole or cut with `~` inside its brackets,
+	// and the directory the rest, whole or its end after `...`. `unobserved` is not a place and is not drawn: no
+	// ` at ` and no cells kept for it.
 	const selected = rows[state.cursor];
 	if (selected === undefined) {
 		out.push([]);
 	} else {
 		const at = span("  at ", "dim");
 		const where = span("  in ", "dim");
+		const brackets = displayWidth("  []");
 		const pathCells = Math.min(displayWidth(selected.cwd), PATH_MIN_CELLS);
-		const base = displayWidth(`selected: ${selected.gardenId}${at.text}${where.text}`) + pathCells;
-		const placementCells = Math.min(
-			displayWidth(selected.placement),
-			Math.max(PLACEMENT_MIN_CELLS, size.columns - base),
-		);
-		const nameCells = size.columns - base - placementCells - displayWidth("  []");
-		const nameShown = selected.pin !== null && nameCells >= Math.min(displayWidth(selected.pin), NAME_MIN_CELLS);
+		const room = size.columns - displayWidth(`selected: ${selected.gardenId}${where.text}`) - pathCells;
+		const nameMin = selected.pin === null ? 0 : brackets + Math.min(displayWidth(selected.pin), NAME_MIN_CELLS);
+		const wordCells = selected.placement === UNOBSERVED_WORD ? 0 : displayWidth(selected.placement);
+		const wordRoom = room - nameMin - displayWidth(at.text);
+		const placementCells = wordRoom >= Math.min(wordCells, PLACEMENT_MIN_CELLS) ? Math.min(wordCells, wordRoom) : 0;
+		const placementUsed = placementCells > 0 ? displayWidth(at.text) + placementCells : 0;
+		const nameCells = room - placementUsed - brackets;
 		const head = [
 			span("selected: ", "dim"),
 			span(selected.gardenId, "id"),
-			...(nameShown ? [span("  ["), span(cutName(selected.pin ?? "", nameCells), "pin"), span("]")] : []),
-			at,
-			span(cutName(selected.placement, placementCells), "placement"),
+			...(selected.pin === null ? [] : [span("  ["), span(cutName(selected.pin, nameCells), "pin"), span("]")]),
+			...(placementCells > 0 ? [at, span(cutName(selected.placement, placementCells), "placement")] : []),
 			where,
 		];
 		out.push(fit([...head, span(fitPath(selected.cwd, size.columns - displayWidth(joinSpans(head))), "cwd")]));

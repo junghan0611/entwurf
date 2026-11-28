@@ -48,7 +48,7 @@ import { ToolExecutionComponent, type ToolRenderers } from "../../modes/interact
 import { UserMessageComponent } from "../../modes/interactive/components/user-message.ts";
 import { getEditorTheme, getMarkdownTheme, initTheme, theme } from "../../modes/interactive/theme/theme.ts";
 import { InteractiveThemeController } from "../../modes/interactive/theme/theme-controller.ts";
-import { RootStatusSink, rootStatusFact } from "./program-status.ts";
+import { RESTING_REASONS, RootStatusSink, rootStatusFact } from "./program-status.ts";
 import { agentOf, type DurableController, type DurableView, type DurableViewSource, type Notice } from "./runtime.ts";
 
 const SELECT_THEME: SelectListTheme = {
@@ -169,6 +169,26 @@ class CompactionComponent extends Box {
 	}
 }
 
+/** The line a running subagent's tool call shows until its output arrives. It names no command (#178). */
+export function subagentWorkingText(child: number): string {
+	return `Subagent ${child} is working.`;
+}
+
+/**
+ * The footer's hint line after the conversation label: the model, the thinking level and the keys and commands
+ * worth a reminder. `/agents` is not among them (#178): the command still works when typed, it is only not advertised.
+ */
+export function durableFooterHints(parts: {
+	readonly model: string;
+	readonly thinking: string;
+	readonly thinkingCycle: string;
+	readonly modelSelect: string;
+	readonly followUp: string;
+	readonly clear: string;
+}): string {
+	return ` · ${parts.model} · thinking:${parts.thinking} (${parts.thinkingCycle}) · ${parts.modelSelect} or /model · /compact · /tasks · ${parts.followUp} follow-up · ${parts.clear} exit`;
+}
+
 export interface Handlers {
 	submit(text: string): void;
 	followUp(text: string): void;
@@ -176,6 +196,42 @@ export interface Handlers {
 	exit(): void;
 	selectModel(): void;
 	cycleThinking(): void;
+}
+
+/** What the session's screen supplies itself: the two lists it mounts, and its exit. */
+export interface DurableLocalActions {
+	selectModel(): void;
+	selectConversation(): void;
+	exit(): void;
+}
+
+/**
+ * The handlers of one durable session's editor. A line sent with Enter and a line sent with the follow-up key take
+ * the SAME route: `/model`, `/tasks`, `/agents` and `/compact` are handled here and never reach the model, whichever
+ * key sent them; anything else is submitted, trimmed, as a steer or a follow-up; an empty line does nothing.
+ */
+export function durableHandlers(
+	controller: Pick<DurableController, "submit" | "toggleTasks" | "compact" | "abort" | "cycleThinking">,
+	local: DurableLocalActions,
+): Handlers {
+	const route = (text: string, mode: "steer" | "followUp"): void => {
+		const trimmed = text.trim();
+		if (!trimmed) return;
+		if (trimmed === "/model") local.selectModel();
+		else if (trimmed === "/tasks") void controller.toggleTasks();
+		else if (trimmed === "/agents") local.selectConversation();
+		else if (trimmed === "/compact" || trimmed.startsWith("/compact ")) {
+			void controller.compact(trimmed.slice("/compact".length).trim() || undefined);
+		} else void controller.submit(trimmed, mode);
+	};
+	return {
+		submit: (text) => route(text, "steer"),
+		followUp: (text) => route(text, "followUp"),
+		abort: () => void controller.abort(),
+		exit: local.exit,
+		selectModel: local.selectModel,
+		cycleThinking: () => void controller.cycleThinking(),
+	};
 }
 
 /**
@@ -197,10 +253,11 @@ export function durableNotices(view: DurableView): readonly Pick<Notice, "level"
 	if (compaction !== undefined) {
 		lines.push({ level: "error", message: `Compaction failed (${compaction.trigger}): ${compaction.error}` });
 	}
-	// SDK 1.5 keeps why the newest run ended without an answer. An aborted run is the user's own stop, as before:
-	// the answer it cut off already says so.
+	// SDK 1.5 keeps why the newest run ended without an answer. A resting reason is not a failure and draws no line:
+	// the user's own stop (the answer it cut off already says so), a reset, a continue with nothing to answer. The
+	// list is the program status's own (`RESTING_REASONS`), so the screen and the terminal's status agree.
 	const run = live.runFailure;
-	if (run !== undefined && run.reason !== "aborted") {
+	if (run !== undefined && !RESTING_REASONS.includes(run.reason)) {
 		const detail = run.detail === undefined ? "" : ` (${run.detail})`;
 		lines.push({ level: "error", message: `No answer: ${run.reason}${detail}` });
 	}
@@ -430,7 +487,7 @@ export class DurableTui {
 			component.markExecutionStarted();
 			const child = (slot.details as { conversationId?: number } | undefined)?.conversationId;
 			if (slot.output === undefined && child !== undefined) {
-				const text = `Subagent ${child} is working. /agents switches to it.`;
+				const text = subagentWorkingText(child);
 				component.updateResult({ content: [{ type: "text", text }], details: slot.details, isError: false }, true);
 			} else if (slot.output !== undefined) {
 				component.updateResult(
@@ -541,7 +598,14 @@ export class DurableTui {
 		this.#footerHints.setText(
 			`${theme.fg(label === "main" ? "dim" : "accent", label)}${theme.fg(
 				"dim",
-				` · ${model} · thinking:${agent.thinkingLevel ?? "off"} (${keyText("app.thinking.cycle")}) · ${keyText("app.model.select")} or /model · /agents · /compact · /tasks · ${keyText("app.message.followUp")} follow-up · ${keyText("app.clear")} exit`,
+				durableFooterHints({
+					model,
+					thinking: agent.thinkingLevel ?? "off",
+					thinkingCycle: keyText("app.thinking.cycle"),
+					modelSelect: keyText("app.model.select"),
+					followUp: keyText("app.message.followUp"),
+					clear: keyText("app.clear"),
+				}),
 			)}`,
 		);
 	}
@@ -796,25 +860,10 @@ export async function runDurableTui(
 		view.mount(selector);
 	};
 
-	view = new DurableTui(source.current().session.cwd, {
-		submit: (text) => {
-			const trimmed = text.trim();
-			if (!trimmed) return;
-			if (trimmed === "/model") return selectModel();
-			if (trimmed === "/tasks") return void controller.toggleTasks();
-			if (trimmed === "/agents") return selectConversation();
-			if (trimmed === "/compact" || trimmed.startsWith("/compact ")) {
-				const instructions = trimmed.slice("/compact".length).trim();
-				return void controller.compact(instructions || undefined);
-			}
-			void controller.submit(trimmed, "steer");
-		},
-		followUp: (text) => void controller.submit(text, "followUp"),
-		abort: () => void controller.abort(),
-		exit,
-		selectModel,
-		cycleThinking: () => void controller.cycleThinking(),
-	});
+	view = new DurableTui(
+		source.current().session.cwd,
+		durableHandlers(controller, { selectModel, selectConversation, exit }),
+	);
 
 	// pi's theme handling: the theme setting (also light/dark pairs) resolved against the terminal's reported colors.
 	const themes = new InteractiveThemeController(view.ui, {

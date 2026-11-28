@@ -588,6 +588,12 @@ const notices = {
 	runFailed: noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [3], reason: "model_error", detail: "E-MODEL" } })),
 	runPlain: noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [], reason: "no_model" } })),
 	runAborted: noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [3], reason: "aborted" } })),
+	// Every reason SDK 1.6.1 names, with a detail, as the screen draws it.
+	byReason: Object.fromEntries(
+		["model_error", "no_model", "aborted", "reset", "faulted", "orphaned", "interrupted", "restart_limit", "nothing_to_answer", "turn_limit"].map(
+			(reason) => [reason, noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [3], reason, detail: "D" } }))],
+		),
+	),
 	stalled: noticeLines(viewOf({}, { conversation: "E-VIEW", tasks: "E-GRAPH" })),
 	healthy: noticeLines(viewOf({})),
 };
@@ -691,6 +697,32 @@ tui.apply({ ...baseView, conversation: shownIdle, rootRun: { running: true, comp
 tui.apply({ ...baseView, conversation: shownIdle, rootRun: { running: false, compacting: false } });
 tui.apply({ ...baseView, rootRun: { running: false, compacting: false }, failure: {} });
 runtime.tuiStatuses = statuses;
+// What the screen advertises and where a typed line goes (#178): the card and the footer name no /agents, and the
+// typed command still switches conversations without reaching the model.
+const { subagentWorkingText, durableFooterHints, durableHandlers } = await import(carrier + "tui.js");
+// One line through the REAL handler object, by Enter (submit) or by the follow-up key, on a fake controller that
+// records what reached it.
+const routed = (key, text) => {
+	const calls = [];
+	const real = durableHandlers(
+		{
+			submit: async (trimmed, mode) => void calls.push("submit:" + mode + ":" + trimmed),
+			toggleTasks: async () => void calls.push("tasks"),
+			compact: async (instructions) => void calls.push("compact:" + (instructions ?? "")),
+			abort: async () => void calls.push("abort"),
+			cycleThinking: async () => void calls.push("thinking"),
+		},
+		{ selectModel: () => calls.push("model"), selectConversation: () => calls.push("agents"), exit: () => calls.push("exit") },
+	);
+	real[key](text);
+	return calls;
+};
+const typed = ["/agents", "  /agents  ", "/agents now", "/model", "/tasks", "/compact keep X", "hello", "   "];
+runtime.hints = {
+	card: subagentWorkingText(7),
+	footer: durableFooterHints({ model: "p/m", thinking: "off", thinkingCycle: "K1", modelSelect: "K2", followUp: "K3", clear: "K4" }),
+	routed: Object.fromEntries(["submit", "followUp"].map((key) => [key, Object.fromEntries(typed.map((text) => [text, routed(key, text)]))])),
+};
 console.log(JSON.stringify({ runtime, badge, panel, notices, cells, transitions, resize }));
 `;
 
@@ -708,10 +740,13 @@ interface FooterReport {
 			afterSubmit: unknown;
 		};
 		tuiStatuses: unknown[];
+		hints: { card: string; footer: string; routed: Record<"submit" | "followUp", Record<string, string[]>> };
 	};
 	badge: Record<string, { count: number; widths: Record<string, string[]> }>;
 	panel: { sleeping: string; signalOnly: string; blocked: Record<string, string>; unblocked: string };
-	notices: Record<"compaction" | "runFailed" | "runPlain" | "runAborted" | "stalled" | "healthy", string[]>;
+	notices: Record<"compaction" | "runFailed" | "runPlain" | "runAborted" | "stalled" | "healthy", string[]> & {
+		byReason: Record<string, string[]>;
+	};
 	cells: { count: number; rows: number; cols: number; marked: boolean; upstream: boolean }[];
 	transitions: { rows: number; cols: number; count: number; marked: boolean; upstream: boolean }[];
 	resize: { rows: number; cols: number; marked: boolean }[];
@@ -792,6 +827,38 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 			{ state: "done", app },
 			{ state: "error", app, message: "session failed" },
 		]);
+	});
+
+	it("[QK:PI-DURABLE-CARD-NO-AGENTS-HINT] a running subagent's card says it is working and names no command", () => {
+		expect(report.runtime.hints.card).toBe("Subagent 7 is working.");
+	});
+
+	it("[QK:PI-DURABLE-FOOTER-NO-AGENTS-HINT] the footer's hint line reminds of /model, /compact and /tasks and does not advertise /agents", () => {
+		expect(report.runtime.hints.footer).toBe(
+			" · p/m · thinking:off (K1) · K2 or /model · /compact · /tasks · K3 follow-up · K4 exit",
+		);
+		expect(report.runtime.hints.footer).not.toContain("/agents");
+	});
+
+	/** What each typed line did through the real handler object, for one key: `mode` is how a submitted line rides. */
+	const expectRouted = (key: "submit" | "followUp", mode: string): void => {
+		const routed = report.runtime.hints.routed[key];
+		expect(routed["/agents"], key).toEqual(["agents"]);
+		expect(routed["  /agents  "], key).toEqual(["agents"]);
+		expect(routed["/agents now"], key).toEqual([`submit:${mode}:/agents now`]);
+		expect(routed["/model"], key).toEqual(["model"]);
+		expect(routed["/tasks"], key).toEqual(["tasks"]);
+		expect(routed["/compact keep X"], key).toEqual(["compact:keep X"]);
+		expect(routed.hello, key).toEqual([`submit:${mode}:hello`]);
+		expect(routed["   "], key).toEqual([]);
+	};
+
+	it("[QK:PI-DURABLE-AGENTS-TYPED-LOCAL] a typed /agents sent with Enter opens the conversation list and submits nothing to the model; only the exact command is one, and /model, /tasks and /compact are local beside it", () => {
+		expectRouted("submit", "steer");
+	});
+
+	it("[QK:PI-DURABLE-FOLLOWUP-ROUTED-LOCAL] a line sent with the follow-up key takes the same route as one sent with Enter: /agents, /model, /tasks and /compact are local and submit nothing to the model, and any other line is submitted as a follow-up", () => {
+		expectRouted("followUp", "followUp");
 	});
 
 	it("[QK:PI-DURABLE-FOOTER-BADGE-COUNT] the badge counts live background tasks of any kind, names the ones not running, and draws nothing without one", () => {
@@ -877,6 +944,34 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 		expect(report.notices.runFailed).toEqual(["error: No answer: model_error (E-MODEL)"]);
 		expect(report.notices.runPlain).toEqual(["error: No answer: no_model"]);
 		expect(report.notices.runAborted).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-RESTING-ONE-LIST] the screen and the terminal's status agree on which run ends are not failures: for each of aborted, reset and nothing_to_answer the screen draws no error line and the status reads idle, and for every other reason the screen draws its line and the status reads error", () => {
+		const resting = ["aborted", "reset", "nothing_to_answer"];
+		expect([...programStatus.RESTING_REASONS]).toEqual(resting);
+		const settled = (reason: string): unknown => {
+			const out: { state: string }[] = [];
+			const sink = new programStatus.RootStatusSink((status) => out.push(status));
+			sink.apply({
+				run: programStatus.rootRunOf({ run: { taskId: 1, inputs: [], turns: 1 } } as never),
+				failed: false,
+			});
+			sink.apply({
+				run: programStatus.rootRunOf({ runFailure: { taskId: 2, inputs: [], reason } } as never),
+				failed: false,
+			});
+			return out.at(-1)?.state;
+		};
+		for (const [reason, lines] of Object.entries(report.notices.byReason)) {
+			if (resting.includes(reason)) {
+				expect(lines, reason).toEqual([]);
+				expect(settled(reason), reason).toBe("idle");
+			} else {
+				expect(lines, reason).toEqual([`error: No answer: ${reason} (D)`]);
+				expect(settled(reason), reason).toBe("error");
+			}
+		}
+		expect(Object.keys(report.notices.byReason)).toHaveLength(10);
 	});
 
 	it("[QK:PI-DURABLE-WATCH-STALL-SHOWN] a conversation or task-graph watch that stopped updating says so, each by its own cause, instead of leaving a frozen screen that looks healthy", () => {
@@ -4040,8 +4135,8 @@ describe("the carrier's program status (#178, OSC 7501): only what a root fact s
 		]);
 	});
 
-	it("[QK:PI-DURABLE-STATUS-USER-STOP-IDLE] a run the user stopped or reset reads idle, not error and not done", () => {
-		for (const reason of ["aborted", "reset"]) {
+	it("[QK:PI-DURABLE-STATUS-USER-STOP-IDLE] a run the user stopped or reset, or a continue with nothing to answer, reads idle, not error and not done", () => {
+		for (const reason of ["aborted", "reset", "nothing_to_answer"]) {
 			expect(reported([live({ run }), ended(reason)]), reason).toEqual([
 				{ state: "working", app },
 				{ state: "idle", app },
@@ -4050,16 +4145,7 @@ describe("the carrier's program status (#178, OSC 7501): only what a root fact s
 	});
 
 	it("[QK:PI-DURABLE-STATUS-ERROR-REASON-ONLY] any other end reads error with the reason code alone; the projection keeps no detail", () => {
-		const reasons = [
-			"model_error",
-			"no_model",
-			"faulted",
-			"orphaned",
-			"interrupted",
-			"restart_limit",
-			"nothing_to_answer",
-			"turn_limit",
-		];
+		const reasons = ["model_error", "no_model", "faulted", "orphaned", "interrupted", "restart_limit", "turn_limit"];
 		for (const reason of reasons) {
 			const fact = ended(reason, "SECRET-CANARY /home/someone/prompt text");
 			expect(JSON.stringify(fact), reason).not.toContain("CANARY");

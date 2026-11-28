@@ -43,17 +43,25 @@
  *                                       id; a cut name ends in `~` and the selected line has it whole
  *                                       where the width allows
  *   RESUMEPICK-SELECTED-LINE-FITS       a name the selected line cannot hold whole is cut there with
- *                                       `~` inside its brackets, or left to its row where fewer than five
- *                                       cells remain; the id stays whole and the directory keeps its end
+ *                                       `~` inside its brackets; the id stays whole and the directory
+ *                                       keeps its end
  *   RESUMEPICK-PLACEMENT-SELECTED-LINE  at every width the selected line says where the row's terminal
  *                                       is, in peer-facts' word — whole, or cut with `~` — beside the
  *                                       whole id and a readable directory (#178)
+ *   RESUMEPICK-SELECTED-UNOBSERVED-OMITTED  `unobserved` names no place: the selected line draws no
+ *                                       ` at ` for it and keeps no cells for it
+ *   RESUMEPICK-SELECTED-NAME-BEFORE-PLACEMENT  a bookmark's name keeps its five cells before the
+ *                                       placement word takes any, at the minimum size too
  *   RESUMEPICK-PLACEMENT-COLUMN         a wide terminal draws the placement word as a column right after
  *                                       the activity time, `~`-capped, at one position on every row and
  *                                       filter
  *   RESUMEPICK-PLACEMENT-COLUMN-WHOLE   that column is whole or absent, never a fragment; a narrow
  *                                       terminal's rows are what they were
- *   RESUMEPICK-PLACEMENT-COLUMN-ONLY-WHEN-PLACED  a listing where nobody is placed draws no column
+ *   RESUMEPICK-PLACEMENT-COLUMN-ONLY-WHEN-PLACED  a listing with no real place — only `none`,
+ *                                       `ambiguous` and `unobserved` — draws no column
+ *   RESUMEPICK-PLACEMENT-COLUMN-SCOPE   the column answers for the rows of the directory scope shown: a
+ *                                       sibling the default view hides adds none, and typing moves none
+ *   RESUMEPICK-PLACEMENT-COLUMN-BLANK-UNOBSERVED  in a drawn column an `unobserved` row's cell is blank
  *   RESUMEPICK-SECTION-RULER            a section title is a rule across the whole width, never
  *                                       shaped like a row
  *   RESUMEPICK-WHOLE-OR-NOTHING         after the facts, the activity time, placement, model and
@@ -618,7 +626,7 @@ describe("the entwurf resume picker", () => {
 						`== Bookmarked, other directories ${"=".repeat(47)}`,
 						"> * 운영코디-실무담당  20261101T000001-aaaaab  claude-code  receiver inactive",
 						`== This directory ${"=".repeat(62)}`,
-						"selected: 20261101T000001-aaaaab  [운영코디-실무담~]  at unobserved  in ...oject",
+						"selected: 20261101T000001-aaaaab  [운영코디-실무담당]  in ...repos/other-project",
 						"",
 						"Enter: reopen in a new tmux window beside this one",
 						KEYS_FULL,
@@ -712,7 +720,7 @@ describe("the entwurf resume picker", () => {
 				tmux.includes(
 					`> * Far  ${fact(2).gardenId}  pi  socket dead  2026-11-01T00:00Z  provider/model-a  /work/other`,
 				) &&
-				at(tmux, 4) === `selected: ${fact(2).gardenId}  [Far]  at unobserved  in /work/other` &&
+				at(tmux, 4) === `selected: ${fact(2).gardenId}  [Far]  in /work/other` &&
 				at(tmux, 3) === "1 citizen of other backends is not listed (codex 1) | 1 bookmark has no record here" &&
 				at(all, 3) === "2 citizens of other backends are not listed (codex 2) | 1 bookmark has no record here" &&
 				tmux[0] === "entwurf resume - 2 of 2 shown",
@@ -868,7 +876,7 @@ describe("the entwurf resume picker", () => {
 	const WIDTHS = Array.from({ length: 140 - PICKER_MIN_SIZE.columns + 1 }, (_, i) => PICKER_MIN_SIZE.columns + i);
 	const allRows = (cursor = 0): PickerState => ({ ...INITIAL_PICKER_STATE, allDirectories: true, cursor });
 
-	it("[QK:RESUMEPICK-BOOKMARK-NAME-FIRST] a bookmarked row starts with `*` and its name, before its whole garden id, backend and facts; an unbookmarked row has no mark; a name too long for its column ends in `~` and the selected line carries it whole where the width allows — the minimum size leaves it to the row, whose name is drawn there; and where no name fits the row keeps its `*`", () => {
+	it("[QK:RESUMEPICK-BOOKMARK-NAME-FIRST] a bookmarked row starts with `*` and its name, before its whole garden id, backend and facts; an unbookmarked row has no mark; a name too long for its column ends in `~` and the selected line carries it whole where the width allows, at the minimum size too for a name that fits; and where no name fits the row keeps its `*`", () => {
 		const at = (columns: number, cursor = 0): string[] =>
 			renderPickerFrame(SCREEN_LIKE, allRows(cursor), { columns, rows: 20 }, "tmux").lines;
 		const wide = at(120);
@@ -883,9 +891,9 @@ describe("the entwurf resume picker", () => {
 				pinnedRow(wide, 5).startsWith(`  ${fact(5).gardenId}  claude-code  receiver none`) &&
 				pinnedRow(at(90), 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}`) &&
 				pinnedRow(at(72), 3).startsWith(`  * 실무코디-TERRA  ${fact(3).gardenId}`) &&
-				screenWidth.includes(`selected: ${fact(3).gardenId}  [실무코디-TERRA]  at unobserved  in ${HERE}`) &&
+				screenWidth.includes(`selected: ${fact(3).gardenId}  [실무코디-TERRA]  in ${HERE}`) &&
 				pinnedRow(narrow, 1).startsWith(`> * 운영코디        ${fact(1).gardenId}  receiver active`) &&
-				narrow.some((l) => l.startsWith(`selected: ${fact(1).gardenId}  at unobserved  in `)) &&
+				narrow.some((l) => l.startsWith(`selected: ${fact(1).gardenId}  [운영코디]  in `)) &&
 				WIDTHS.every((columns) =>
 					visibleResumeRows(SCREEN_LIKE, allRows()).every((row) => {
 						const line = pinnedRow(at(columns), Number(row.gardenId.slice(9, 15)));
@@ -897,7 +905,7 @@ describe("the entwurf resume picker", () => {
 		);
 	});
 
-	it("[QK:RESUMEPICK-SELECTED-LINE-FITS] a bookmark name the selected line cannot hold whole beside the id, the placement word and a readable directory is cut there with `~` inside its brackets, and with fewer than five cells left it is left to its row; the garden id is always whole, the closing bracket stays, and the directory keeps its end after `...` — at the minimum size too; a wide terminal carries the same name whole", () => {
+	it("[QK:RESUMEPICK-SELECTED-LINE-FITS] a bookmark name the selected line cannot hold whole beside the id and a readable directory is cut there with `~` inside its brackets; the garden id is always whole, the closing bracket stays, and the directory keeps its end after `...` — at the minimum size too; a wide terminal carries the same name whole", () => {
 		const long = "한".repeat(20);
 		const listing = buildResumeListing([fact(1), fact(2, { cwd: "/home/operator/repos/elsewhere-project" })], HERE, [
 			{ gardenId: fact(1).gardenId, name: long },
@@ -919,15 +927,15 @@ describe("the entwurf resume picker", () => {
 				"tmux",
 			).lines.find((l) => l.includes(fact(1).gardenId) && !l.startsWith("selected: ")) ?? "";
 		ok(
-			"the id whole, the name cut and marked inside its brackets or left to its row, the directory's end kept, all in the width",
-			here === `selected: ${fact(1).gardenId}  at unobserved  in ...k/project` &&
-				elsewhere === `selected: ${fact(2).gardenId}  at unobserved  in ...e-project` &&
+			"the id whole, the name cut and marked inside its brackets, the directory's end kept, all in the width",
+			here === `selected: ${fact(1).gardenId}  [${"한".repeat(7)}~]  in ...oject` &&
+				elsewhere === `selected: ${fact(2).gardenId}  [${"한".repeat(7)}~]  in ...oject` &&
 				minRow.startsWith(`> * ${"한".repeat(11)}~`) &&
-				cut === `selected: ${fact(1).gardenId}  [${"한".repeat(7)}~]  at unobserved  in ...roject` &&
+				cut === `selected: ${fact(1).gardenId}  [${"한".repeat(15)}~]  in ...oject` &&
 				displayWidth(here) <= PICKER_MIN_SIZE.columns &&
 				displayWidth(elsewhere) <= PICKER_MIN_SIZE.columns &&
 				displayWidth(cut) <= 80 &&
-				wide === `selected: ${fact(2).gardenId}  [${long}]  at unobserved  in /home/operator/repos/elsewhere-project`,
+				wide === `selected: ${fact(2).gardenId}  [${long}]  in /home/operator/repos/elsewhere-project`,
 		);
 	});
 
@@ -1044,18 +1052,24 @@ describe("the entwurf resume picker", () => {
 		5: "ambiguous",
 		6: "unobserved",
 	};
+	/** The selected line of a frame drawn with every directory shown. */
+	const selectedLine = (listing: typeof PLACED, columns: number, cursor: number): string =>
+		renderPickerFrame(listing, allRows(cursor), { columns, rows: 16 }, "tmux").lines.find((l) =>
+			l.startsWith("selected: "),
+		) ?? "";
 
-	it("[QK:RESUMEPICK-PLACEMENT-SELECTED-LINE] at every width the list is drawn in, the selected line says where the row's terminal is in peer-facts' own word — a place, none, ambiguous or unobserved — whole, or cut with `~` to no fewer than five cells, after the whole garden id and before a directory that keeps at least eight cells or all of a shorter one; a bookmarked row in a long wide-character tmux session from a wide-character directory fits too (#178)", () => {
+	it("[QK:RESUMEPICK-PLACEMENT-SELECTED-LINE] at every width the list is drawn in, the selected line says where the row's terminal is in peer-facts' own word — a place, none or ambiguous — whole, or cut with `~` to no fewer than five cells, after the whole garden id and before a directory that keeps at least eight cells or all of a shorter one; a bookmarked row in a long wide-character tmux session from a wide-character directory fits too (#178)", () => {
 		const broken: string[] = [];
 		const order = visibleResumeRows(PLACED, allRows()).map((r) => Number(r.gardenId.slice(9, 15)));
 		for (const columns of WIDTHS) {
 			for (const [cursor, n] of order.entries()) {
+				const word = PLACE_WORD[n] as string;
+				if (word === "unobserved") continue;
 				const line =
 					renderPickerFrame(PLACED, allRows(cursor), { columns, rows: 16 }, "tmux").lines.find((l) =>
 						l.startsWith("selected: "),
 					) ?? "";
 				const m = /^selected: (\S+)(?: {2}\[[^\]]*\])? {2}at (.*?) {2}in (.*)$/.exec(line);
-				const word = PLACE_WORD[n] as string;
 				const cwd = (PLACED_FACTS[n - 1] as PeerFact).cwd;
 				const place = m?.[2] ?? "";
 				const dir = m?.[3] ?? "";
@@ -1070,20 +1084,59 @@ describe("the entwurf resume picker", () => {
 				if (!good) broken.push(`${columns}/${n}: ${line}`);
 			}
 		}
-		const sel = (columns: number, cursor: number): string =>
-			renderPickerFrame(PLACED, allRows(cursor), { columns, rows: 16 }, "tmux").lines.find((l) =>
-				l.startsWith("selected: "),
-			) ?? "";
+		const sel = (columns: number, cursor: number): string => selectedLine(PLACED, columns, cursor);
 		ok(
 			`the place on the selected line at every width (first broken: ${broken.slice(0, 2).join(" / ")})`,
 			broken.length === 0 &&
-				sel(64, 0) === `selected: ${fact(2).gardenId}  at tmux ${WIDE.repeat(4)}~  in ...oject` &&
+				sel(64, 0) === `selected: ${fact(2).gardenId}  [long~]  at tmux~  in ...oject` &&
 				sel(64, 5) === `selected: ${fact(1).gardenId}  at hc oracle/t1x  in ...roject` &&
-				sel(64, 1) === `selected: ${fact(6).gardenId}  at unobserved  in ...k/project` &&
+				sel(64, 4) === `selected: ${fact(3).gardenId}  at herdr w1-p2  in .../project` &&
 				sel(64, 2) === `selected: ${fact(5).gardenId}  at ambiguous  in ${HERE}` &&
 				sel(64, 3) === `selected: ${fact(4).gardenId}  at none  in ${HERE}` &&
 				sel(140, 0) ===
 					`selected: ${fact(2).gardenId}  [long-bookmark-name]  at tmux ${LONG_SESSION}:12  in ...pos/${WIDE.repeat(5)}/elsewhere-project`,
+		);
+	});
+
+	/** The same six citizens with five of them bookmarked under one short wide-character name (eight cells), in the
+	 * order herdr, none, ambiguous, unobserved, hc; the tmux one is left unbookmarked. */
+	const NAME = "운영코디";
+	const NAMED = buildResumeListing(
+		PLACED_FACTS,
+		HERE,
+		[3, 4, 5, 6, 1].map((n) => ({ gardenId: fact(n).gardenId, name: NAME })),
+	);
+
+	it("[QK:RESUMEPICK-SELECTED-UNOBSERVED-OMITTED] `unobserved` names no place, so the selected line draws no ` at ` for it and keeps no cells for it: at the minimum size a bookmarked row keeps its whole name and an unbookmarked one its whole directory, and a wide terminal adds nothing (#178)", () => {
+		const everywhere = WIDTHS.every(
+			(columns) =>
+				!selectedLine(PLACED, columns, 1).includes(" at ") && !selectedLine(NAMED, columns, 3).includes(" at "),
+		);
+		ok(
+			"no place, no ` at `, no cells kept",
+			everywhere &&
+				selectedLine(PLACED, 64, 1) === `selected: ${fact(6).gardenId}  in ${HERE}` &&
+				selectedLine(PLACED, 140, 1) === `selected: ${fact(6).gardenId}  in ${HERE}` &&
+				selectedLine(NAMED, 64, 3) === `selected: ${fact(6).gardenId}  [${NAME}]  in ${HERE}`,
+		);
+	});
+
+	it("[QK:RESUMEPICK-SELECTED-NAME-BEFORE-PLACEMENT] on the selected line a bookmark's name keeps five cells (all of a shorter name) before the placement word takes any: at the minimum size a bookmarked row in a herdr pane, with no place, ambiguous or in a Herdr Core terminal still shows its name, cut with `~`, beside a placement word of at least five cells; with room for both, both are whole (#178)", () => {
+		const named = WIDTHS.every((columns) =>
+			[0, 1, 2, 4].every((cursor) =>
+				/^selected: \S+ {2}\[운영(코디|코~|~)\] {2}at /.test(selectedLine(NAMED, columns, cursor)),
+			),
+		);
+		ok(
+			"the name first, then the place, all within the width",
+			named &&
+				selectedLine(NAMED, 64, 0) === `selected: ${fact(3).gardenId}  [운영~]  at herd~  in ...oject` &&
+				selectedLine(NAMED, 64, 1) === `selected: ${fact(4).gardenId}  [운영~]  at none  in ...roject` &&
+				selectedLine(NAMED, 64, 2) === `selected: ${fact(5).gardenId}  [운영~]  at ambi~  in ...oject` &&
+				selectedLine(NAMED, 64, 4) === `selected: ${fact(1).gardenId}  [운영~]  at hc o~  in ...oject` &&
+				[0, 1, 2, 4].every((cursor) => displayWidth(selectedLine(NAMED, 64, cursor)) === 64) &&
+				selectedLine(NAMED, 80, 0) === `selected: ${fact(3).gardenId}  [${NAME}]  at herdr w1-p2  in ${HERE}` &&
+				selectedLine(NAMED, 80, 4) === `selected: ${fact(1).gardenId}  [${NAME}]  at hc oracle/t1x  in ${HERE}`,
 		);
 	});
 
@@ -1106,8 +1159,11 @@ describe("the entwurf resume picker", () => {
 			const starts = new Set<number>();
 			for (const line of plainRows(bodyRows(PLACED, columns))) {
 				const word = PLACE_WORD[Number(line.slice(2 + 9, 2 + 15))] as string;
-				if (!line.includes(`2026-11-01T00:00Z  ${word}`)) broken.push(`${columns}: ${line}`);
-				starts.add(startCell(line, `2026-11-01T00:00Z  ${word}`));
+				// The `unobserved` row's cell is blank (RESUMEPICK-PLACEMENT-COLUMN-BLANK-UNOBSERVED); its time still
+				// starts where every other row's does.
+				const drawn = word === "unobserved" ? "2026-11-01T00:00Z" : `2026-11-01T00:00Z  ${word}`;
+				if (!line.includes(drawn)) broken.push(`${columns}: ${line}`);
+				starts.add(startCell(line, drawn));
 			}
 			const narrowed = plainRows(bodyRows(PLACED, columns, "pi-durable"));
 			const one = narrowed[0] ?? "";
@@ -1160,17 +1216,73 @@ describe("the entwurf resume picker", () => {
 		);
 	});
 
-	it("[QK:RESUMEPICK-PLACEMENT-COLUMN-ONLY-WHEN-PLACED] a listing in which no row is placed — every row `unobserved` — draws no placement column at any width, so its rows keep the model and directory they had; the selected line still says `at unobserved` (#178)", () => {
-		const broken = WIDTHS.filter((columns) => bodyRows(UNPLACED, columns).some((l) => l.includes("unobserved")));
-		const selected =
-			renderPickerFrame(UNPLACED, allRows(1), { columns: 140, rows: 16 }, "tmux").lines.find((l) =>
-				l.startsWith("selected: "),
-			) ?? "";
+	/** Nobody in a real place: one `none`, one `ambiguous`, the rest `unobserved`. */
+	const NOWHERE = buildResumeListing(
+		PLACED_FACTS.map(
+			(f, i) => ({ ...f, placement: { kind: ["none", "ambiguous"][i - 3] ?? "unobserved" } }) as PeerFact,
+		),
+		HERE,
+		[],
+	);
+
+	it("[QK:RESUMEPICK-PLACEMENT-COLUMN-ONLY-WHEN-PLACED] a listing in which no row has a real place — every row `none`, `ambiguous` or `unobserved` — draws no placement column at any width, so its rows keep the model and directory they had; the selected line still says `at none` and `at ambiguous` (#178)", () => {
+		const words = / {2}(none|ambiguous|unobserved)( {2}|$)/;
+		const broken = WIDTHS.filter(
+			(columns) =>
+				bodyRows(NOWHERE, columns).some((l) => words.test(l)) || bodyRows(UNPLACED, columns).some((l) => words.test(l)),
+		);
 		ok(
-			`no column when nobody is placed (drawn at: ${broken.slice(0, 3).join(", ")})`,
+			`no column when nobody is in a real place (drawn at: ${broken.slice(0, 3).join(", ")})`,
 			broken.length === 0 &&
-				bodyRows(UNPLACED, 140).some((l) => l.endsWith("provider/model-a")) &&
-				selected === `selected: ${fact(6).gardenId}  at unobserved  in ${HERE}`,
+				bodyRows(NOWHERE, 100).filter((l) => l.endsWith("2026-11-01T00:00Z  provider/model-a")).length === 3 &&
+				selectedLine(NOWHERE, 64, 2) === `selected: ${fact(4).gardenId}  at none  in ${HERE}` &&
+				selectedLine(NOWHERE, 64, 1) === `selected: ${fact(5).gardenId}  at ambiguous  in ${HERE}`,
+		);
+	});
+
+	it("[QK:RESUMEPICK-PLACEMENT-COLUMN-SCOPE] the placement column answers for the rows of the directory scope shown: a placed sibling in another directory adds no column to the default view, whose rows keep their model; Ctrl-A brings that sibling and the column; and what is typed in the search never moves it (#178)", () => {
+		const scoped = buildResumeListing(
+			[
+				fact(1),
+				fact(2),
+				fact(3, { cwd: "/work/other", placement: { kind: "herdr-pane", paneId: "w1-p2" } as never }),
+				fact(4, { cwd: "/work/other", backend: "claude-code" }),
+			],
+			HERE,
+			[],
+		);
+		const rows = (allDirectories: boolean, query = ""): string[] => {
+			const lines = renderPickerFrame(
+				scoped,
+				{ ...INITIAL_PICKER_STATE, allDirectories, query },
+				{ columns: 110, rows: 16 },
+				"tmux",
+			).lines;
+			return lines.slice(3, lines.length - 4).filter((l) => l.length > 0 && !l.startsWith("== "));
+		};
+		const blank = `2026-11-01T00:00Z${" ".repeat(2 + "herdr w1-p2".length + 2)}provider/model-a`;
+		ok(
+			"no column from a hidden sibling, one with it shown, the same one while typing",
+			rows(false).length === 2 &&
+				rows(false).every((l) => l.endsWith("2026-11-01T00:00Z  provider/model-a")) &&
+				rows(true).length === 4 &&
+				rows(true).some((l) => l.includes("2026-11-01T00:00Z  herdr w1-p2  provider/model-a")) &&
+				rows(true).filter((l) => l.includes(blank)).length === 3 &&
+				rows(true, "claude").length === 1 &&
+				(rows(true, "claude")[0] ?? "").includes(blank),
+		);
+	});
+
+	it("[QK:RESUMEPICK-PLACEMENT-COLUMN-BLANK-UNOBSERVED] in a drawn placement column a row nobody looked for has a blank cell, never the word `unobserved`: its model still starts where every other row's does (#178)", () => {
+		const rows = plainRows(bodyRows(PLACED, 120));
+		const unobserved = rows.find((l) => l.includes(fact(6).gardenId)) ?? "";
+		const herdr = rows.find((l) => l.includes(fact(3).gardenId)) ?? "";
+		ok(
+			"a blank cell as wide as the column, and no row says unobserved",
+			unobserved.endsWith(`2026-11-01T00:00Z${" ".repeat(2 + 24 + 2)}provider/model-a`) &&
+				herdr.endsWith(`2026-11-01T00:00Z  herdr w1-p2${" ".repeat(24 - "herdr w1-p2".length + 2)}provider/model-a`) &&
+				displayWidth(unobserved) === displayWidth(herdr) &&
+				WIDTHS.every((columns) => !bodyRows(PLACED, columns).some((l) => l.includes("unobserved"))),
 		);
 	});
 

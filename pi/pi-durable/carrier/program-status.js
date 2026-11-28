@@ -22,7 +22,8 @@
  *   a run was seen live and has ended:
  *     no failure, or the failure it started with   done (SDK 1.6.1 keeps an earlier run's failure through a reset or
  *                                                  `afterFailedRun: "continue"` run, and an answer does not clear it)
- *     a new failure, aborted or reset              idle (the user's own stop, or a fresh start)
+ *     a new failure: aborted, reset or             idle (the user's own stop, a fresh start, or a continue with
+ *     nothing_to_answer                            nothing owed: no request was sent, so nothing failed)
  *     a new failure of a known reason              error, that reason code
  *     a new failure of any other reason            error, "run failed"
  *   no run seen ending since this TUI started      idle (a past run's failure is not announced again)
@@ -89,8 +90,13 @@ export const INITIAL_ROOT_STATUS_MEMORY                   = {
 	resting: { state: "idle", app: PROGRAM_STATUS_APP },
 };
 
-/** The reasons a run ends without an answer that are the user's own stop or a fresh start, not a failure. */
-const RESTING_REASONS                    = ["aborted", "reset"];
+/**
+ * The reasons a run ends without an answer that are not a failure: the user's own stop, a fresh start, and a
+ * continue the model owed no answer to (`nothing_to_answer`: no request was sent). ONE LIST, TWO READERS: the status
+ * reads such a run idle, and the screen's notices (`durableNotices`) draw no error line for it, so the terminal and
+ * the screen never state the same fact differently.
+ */
+export const RESTING_REASONS                    = ["aborted", "reset", "nothing_to_answer"];
 /** SDK 1.6.1's `RunFailureReason`s that are reported by name; any other value reads "run failed". */
 const KNOWN_REASONS                    = [
 	"model_error",
@@ -99,7 +105,6 @@ const KNOWN_REASONS                    = [
 	"orphaned",
 	"interrupted",
 	"restart_limit",
-	"nothing_to_answer",
 	"turn_limit",
 ];
 
