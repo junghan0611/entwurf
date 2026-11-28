@@ -15,7 +15,7 @@
  *   HCP-GENERATION-PINNED      a core of another generation is not read past its hello
  *   HCP-LOCAL-LIVE-ONLY        only this core's own live terminals with a real pid are indexed
  *   HCP-PID-JOIN               a Claude Code owner pid joins exactly one terminal; two is ambiguous; no hit is none
- *   HCP-CC-ONLY                pi and pi-durable are never claimed: unobserved, even on a pid that matches
+ *   HCP-CC-ONLY                only Claude Code and pi-durable are claimed; pi and the rest stay unobserved, even on a pid that matches
  *   HCP-NO-OWNER-UNOBSERVED    a citizen with no active owner is unobserved, not none
  *   HCP-RENDER                 the column says `hc <core>/<terminal>`
  *   HCP-PROBE-NO-FOLLOW        the real probe: socket, regular file, symlink to a socket, missing
@@ -242,11 +242,16 @@ describe("hc placement: the join", () => {
 		ok("no index: this owner did not look", resolveHcPlacement(null, "claude-code", 443471).kind === "unobserved");
 	});
 
-	test("[QK:HCP-CC-ONLY] pi and pi-durable are never claimed, even on a pid that matches", () => {
+	test("[QK:HCP-CC-ONLY] only Claude Code and pi-durable are claimed; pi and the rest are never claimed, even on a pid that matches", () => {
 		const index = buildHcPlacementIndex(CORE, [{ terminal: "t1m", pid: 482825 }]);
-		for (const backend of ["pi", "pi-durable", "codex", "copilot", "agy"]) {
+		for (const backend of ["pi", "codex", "copilot", "agy"]) {
 			ok(`${backend} is unobserved`, resolveHcPlacement(index, backend, 482825).kind === "unobserved");
 		}
+		ok(
+			"pi-durable is placed by its host's pid",
+			JSON.stringify(resolveHcPlacement(index, "pi-durable", 482825)) ===
+				JSON.stringify({ kind: "hc-terminal", coreId: CORE.id, coreName: CORE.name, terminal: "t1m" }),
+		);
 	});
 
 	test("[QK:HCP-NO-OWNER-UNOBSERVED] a citizen with no active owner is unobserved, not none", () => {

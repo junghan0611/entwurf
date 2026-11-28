@@ -11,6 +11,7 @@
  *   HCP-WIRED-ACTIVE-OWNER      only a Claude Code citizen whose ACTIVE receiver owner a terminal runs is placed
  *   HCP-WIRED-TMUX              the same owner in a pane of the lister's tmux reads tmux <session>:<window>
  *   HCP-WIRED-NONE-NEEDS-ALL    none needs herdr, tmux and hc all read; one unread owner is unobserved
+ *   HCP-WIRED-DURABLE           a pi-durable citizen's active host joins a terminal or pane the same way
  *   HCP-WIRED-SHARED-OWNER      two citizens shown in one pid-joined place both read ambiguous
  *   HCP-WIRED-CONFIG-ERROR      a placement-config error stops the listing by name
  *   HCP-VIEW-NOT-DISPATCH       the view modules are imported by the peers observation only
@@ -162,7 +163,49 @@ describe("placement inside one listing", () => {
 			rowOf(r.facts.peers, LEFT_BEHIND).receiver === "inactive" && kindOf(r.facts.peers, LEFT_BEHIND) === "unobserved",
 		);
 		ok("no marker: not placed", kindOf(r.facts.peers, NO_MARKER) === "unobserved");
-		ok("pi-durable is never claimed", kindOf(r.facts.peers, DURABLE) === "unobserved");
+		ok("a pi-durable citizen with no marker is not placed", kindOf(r.facts.peers, DURABLE) === "unobserved");
+	});
+
+	test("[QK:HCP-WIRED-DURABLE] a pi-durable citizen whose active host a terminal or pane runs is placed by the same rule", async () => {
+		arm();
+		// Another live process stands in for the durable host: one sender marker per (backend, pid).
+		const host = process.ppid;
+		writeMetaReceiverMarker({
+			gardenId: DURABLE.gardenId,
+			backend: "pi-durable",
+			nativeSessionId: DURABLE.nativeSessionId,
+			ownerPid: host,
+			armProvenance: "session-start",
+			receiversDir: RECEIVERS,
+		});
+		writeMetaSenderMarker({
+			backend: "pi-durable",
+			gardenId: DURABLE.gardenId,
+			nativeSessionId: DURABLE.nativeSessionId,
+			cwd: "/x",
+			ownerPid: host,
+			sendersDir: SENDERS,
+		});
+		try {
+			const inHc = await listEntwurfFacts(
+				deps({ readHcPlacementIndex: async () => buildHcPlacementIndex(CORE, [{ terminal: "t1t", pid: host }]) }),
+			);
+			ok(
+				"active, and in the core's terminal",
+				rowOf(inHc.facts.peers, DURABLE).receiver === "active" &&
+					renderPlacement(rowOf(inHc.facts.peers, DURABLE).placement) === "hc oracle/t1t",
+			);
+			const inTmux = await listEntwurfFacts(
+				deps({
+					readTmuxPlacementIndex: () =>
+						buildTmuxPlacementIndex([{ pid: host, paneId: "%102", window: "9", session: "entwurf" }]),
+				}),
+			);
+			ok("in the pane", renderPlacement(rowOf(inTmux.facts.peers, DURABLE).placement) === "tmux entwurf:9");
+		} finally {
+			fs.rmSync(path.join(RECEIVERS, `${DURABLE.gardenId}.json`), { force: true });
+			fs.rmSync(path.join(SENDERS, "pi-durable"), { recursive: true, force: true });
+		}
 	});
 
 	test("[QK:HCP-WIRED-TMUX] the same owner in a pane of the lister's tmux reads tmux <session>:<window>", async () => {

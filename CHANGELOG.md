@@ -7,11 +7,11 @@ All notable changes to this project will be documented here. Format follows [Kee
 ### Added
 
 - **Same-id resume inside a Herdr Core terminal (#178).** `entwurf resume` and `entwurf_resume_call` reopen a dormant `pi`, `pi-durable` or `claude-code` citizen in a new terminal on the caller's own core, with no parent. The rail follows the process context (an hc marker, `HERDR_ENV=1`, or tmux) and never falls back; both markers at once are refused as `rail-markers-ambiguous`. A fresh call from a Herdr Core terminal is refused as `hc-fresh-unsupported`. Contract and limits: `docs/hc-launch-rail.md`.
-- **Placement from tmux and Herdr Core (#178).** A peers listing can show a Claude Code citizen at `tmux <session>:<window>` (the lister's own server) or `hc <core>/<terminal>` (a core the operator names in `ENTWURF_HC_PLACEMENT_SOCKET`). A view only: never an address, liveness or authority, and stored nowhere.
+- **Placement from tmux and Herdr Core (#178).** A peers listing can show a Claude Code or pi-durable citizen at `tmux <session>:<window>` (the lister's own server) or `hc <core>/<terminal>` (a core the operator names in `ENTWURF_HC_PLACEMENT_SOCKET`). A view only: never an address, liveness or authority, and stored nowhere.
 
 ### Changed
 
-- **`placement: none` is rarer.** The column is now the fold of three owners, and `none` is printed only when herdr, tmux and hc were all read for that citizen and none has it. A herdr-only listing that printed `none` for a citizen in none of its panes prints `unobserved`; Pi and pi-durable rows, and Claude Code rows with no active owner, no longer read `none` at all.
+- **`placement: none` is rarer.** The column is now the fold of three owners, and `none` is printed only when herdr, tmux and hc were all read for that citizen and none has it. A herdr-only listing that printed `none` for a citizen in none of its panes prints `unobserved`; Pi rows, and Claude Code or pi-durable rows with no active owner, no longer read `none` at all.
 - Guidance payload revision 26: the resume and fresh-call descriptions and two hints name the Herdr Core rail.
 
 ## v2026.11.28-herdr.0.64.2 — Herdr npm runtime snapshot

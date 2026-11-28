@@ -9,7 +9,7 @@ This rail is narrow on purpose. It reopens an EXISTING dormant citizen in a term
 | | |
 |---|---|
 | in | `entwurf resume [<garden-id>]` and `entwurf_resume_call` for `pi`, `pi-durable` and `claude-code`, launched from inside a Herdr Core terminal |
-| in | a placement view: where the lister's own tmux server and one operator-named core show a Claude Code citizen |
+| in | a placement view: where the lister's own tmux server and one operator-named core show a Claude Code or pi-durable citizen |
 | out | `entwurf_fresh_call` from a Herdr Core terminal: refused as `hc-fresh-unsupported`, nothing opened |
 | out | any other backend, any remote core, any delivery through hc |
 
@@ -69,7 +69,7 @@ Three owners can hold a citizen, each read at most once per listing, each only f
 | tmux | `TMUX` is set — the lister's OWN server only | one `tmux list-panes -a`, no `-S`/`-L` | `pane_pid` |
 | hc | `ENTWURF_HC_PLACEMENT_SOCKET=<absolute path>` — operator opt-in | one `hello`, one `terminal.list` | terminal `pid`, local live terminals only |
 
-The tmux and hc joins compare that pid with the citizen's ACTIVE receiver owner — the owner the `receiver` column itself calls `active`. Claude Code only. Pi and pi-durable rows are never claimed by these two owners.
+The tmux and hc joins compare that pid with the citizen's ACTIVE receiver owner — the owner the `receiver` column itself calls `active`. Claude Code and pi-durable only: for both, that owner is the citizen's own process (`claude`; the pi-durable host `run.sh` execs into), so it is the very pid the terminal or pane reports. Pi rows are never claimed by these two owners — Pi answers on a control socket and its row carries no owner pid.
 
 The column is the fold of the three answers (`placement-compose.ts`):
 
@@ -80,7 +80,7 @@ The column is the fold of the three answers (`placement-compose.ts`):
 | `none` | herdr, tmux AND hc were all read for this citizen and none has it |
 | `unobserved` | anything else: at least one owner did not look |
 
-So `none` still means "read, and not there", and it is rare: a lister that can read only one owner prints `unobserved`. A Claude Code citizen with no active owner, and every Pi or pi-durable citizen, can no longer read `none` at all, because tmux and hc cannot look for them. Before #178 a herdr-only listing printed `none` for a citizen in none of its panes; it prints `unobserved` now.
+So `none` still means "read, and not there", and it is rare: a lister that can read only one owner prints `unobserved`. A Claude Code or pi-durable citizen with no active owner, and every Pi citizen, can no longer read `none` at all, because tmux and hc cannot look for them. Before #178 a herdr-only listing printed `none` for a citizen in none of its panes; it prints `unobserved` now.
 
 The hc opt-in variable:
 
@@ -96,12 +96,12 @@ It is a same-host view input only. It is not a launch input, not an address, not
 
 ## 6. Premises and known limits
 
-- **PATH inside a core-started program.** A program a core starts has the CORE's environment. On the measured host the core's `PATH` (the user manager's) held neither `entwurf` nor `pi` nor `claude`. The resume itself resolves the runtime on the CALLER's `PATH`, so a human shell with a normal `PATH` works; a reopened citizen's own shell may not find `entwurf`. A resume call made BY such a citizen for a Pi or Claude Code target is expected to refuse `hc-runtime-unresolved` — an estimate, unmeasured. Entwurf adds no resolver or fallback for this; it is an operating premise (put the bins on the core's start `PATH`).
+- **PATH inside a core-started program.** A program a core starts has the CORE's environment. On the measured host the core's `PATH` (the user manager's) held neither `entwurf` nor `pi` nor `claude`. The resume itself resolves the runtime on the CALLER's `PATH`, so a human shell with a normal `PATH` works; a reopened citizen's own shell may not find `entwurf`. Measured for the CLI (L-9, n=1): in a Herdr Core terminal with the core's `PATH` untouched, `~/.local/bin/entwurf resume <a dormant Claude Code citizen>` exits 4 with `launch-refused … hc-runtime-unresolved` and no terminal is created; the same line after adding the two bin directories to `PATH` reopens it. A resume call made BY a core-started citizen (`entwurf_resume_call` in its bridge) meets the same caller-`PATH` condition and is expected to refuse the same way for a Pi or Claude Code target — that tool path is still unmeasured. Entwurf adds no resolver or fallback for this; it is an operating premise (put the bins on the core's start `PATH`).
 - **Same host is a documented contract.** Nothing can verify that the named socket belongs to a core on this host. Never name a forwarded remote socket: its local-address rows carry another machine's pids.
 - **Waiting.** A core that does not answer costs up to 2 s for each of the two reads, and tmux up to 2 s: a listing can wait about 6 s in the worst case. A core with registered machines may spend up to 3 s per machine inside `terminal.list`, so with the 2 s bound it can read `unobserved` every time — the safe side.
 - **A mis-set variable stops listings in that shell**, the no-argument `entwurf resume` list included. `entwurf resume <garden-id>` does not list and is unaffected.
 - **Two panes of one window print the same `tmux <session>:<window>`.** The pane id is in the `peer-facts` export, not in the column.
-- **Environment reach of the opt-in variable** is whatever environment the listing process has. `entwurf peer-facts` from a shell: measured. `entwurf_peers` inside a running MCP bridge: unmeasured — a bridge's environment is fixed when its harness starts it. Codex: unverified.
+- **Environment reach of the opt-in variable** is whatever environment the listing process has. `entwurf peer-facts` from a shell: measured. `entwurf_peers` inside a running MCP bridge: measured for one Claude Code citizen started with the variable in its environment (L-8, n=1 — its listing showed `hc oracle/t1g` and its own `tmux entwurf:9`). A bridge's environment is fixed when its harness starts it, so a citizen started without the variable, or started by a core (the core's environment), does not have it. Codex, Pi and pi-durable bridges: unverified.
 - **A citizen started by hand from a shell in a pane or terminal does not join**: the pane's process is the shell.
 - **Herdr App status is not an Entwurf fact.** The App's Inbox lists what a program self-reports to the core. On the measured host Claude Code and Pi terminals appeared there and pi-durable's did not, while all three terminals were visible. Entwurf uses none of that for liveness, delivery or placement.
 - **pi-durable** may leave a detached helper after a terminal is killed; this rail never kills a terminal.
@@ -117,7 +117,9 @@ Local lab receipts on the implementing host, 2026-11-28 (paths under `~/.local/s
 | `live2/` | Claude Code, same; marker owner pid equals the `terminal.run` pid; Bash and MCP tools work; a resume call asked of an hc citizen over mail was declined by that citizen (the tool needs its operator's own request) |
 | `live3/` | citizens born in tmux reopened in hc: Claude Code, pi-durable, Pi; GLG's App observation |
 | `live7/` | placement: control, hc opt-in, tmux, both; a citizen born in hc reopened in tmux |
+| `live8/` | the no-argument picker typed in a Herdr Core terminal (narrowed to one test citizen, Enter, socket answered); the opt-in variable reaching `entwurf_peers` in a Claude Code citizen's bridge |
+| `live9/` | the core's own `PATH`: resume refused `hc-runtime-unresolved`, then reopened with the supplement; pi-durable owner pid equals the `terminal.run` pid and the tmux `pane_pid`; pi-durable rows `tmux entwurf:9` and `hc oracle/t1w` |
 
-Not measured: `entwurf_resume_call` made by an hc-seated citizen; the picker inside a Herdr Core terminal; a core started from a tmux or herdr seat; two cores on one host; a herdr-seated lister with the hc variable.
+Not measured: `entwurf_resume_call` made by an hc-seated citizen; a human at the App's keyboard driving the picker; a core started from a tmux or herdr seat; two cores on one host; a herdr-seated lister with the hc variable.
 
 Gates: `check-entwurf-v2-visible-resume` (beside tests `hc-launch`, `hc-placement`, `hc-placement-wiring`, `placement-compose`, `resume-cli`), `check-fresh-call-dispatch`, `check-mux-resume-call`, `check-herdr-placement`, `check-install-surface`. Mutant manifests: `scripts/mutants/hc-launch.json`, `hc-placement.json`.

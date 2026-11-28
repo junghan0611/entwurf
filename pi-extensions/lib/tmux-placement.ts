@@ -9,11 +9,11 @@
  * every citizen stays `unobserved` for this owner; so does a tmux that did not answer, exited
  * non-zero, or printed a line this cannot read. One listing, one read, no retry, nothing stored.
  *
- * THE JOIN IS A PROCESS ID, AND ONLY FOR CLAUDE CODE (decision G-P2): `pane_pid`, the process tmux
+ * THE JOIN IS A PROCESS ID, FOR CLAUDE CODE AND PI-DURABLE ONLY (decision G-P2, widened to
+ * pi-durable after measurement): `pane_pid`, the process tmux
  * started in the pane — the same pid the tmux Claude Code resume already joins on — against the
  * citizen's ACTIVE receiver owner. A citizen started by hand from a shell in a pane does not join
- * (the pane's process is the shell) and this owner answers `none` for it. Pi and pi-durable are
- * never claimed.
+ * (the pane's process is the shell) and this owner answers `none` for it. Pi is never claimed.
  */
 
 import { spawnSync } from "node:child_process";

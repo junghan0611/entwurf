@@ -18,6 +18,7 @@ import { type PlacementObservation, renderPlacement } from "./herdr-placement.ts
 import {
 	ambiguateSharedOwnerPlacements,
 	composePlacement,
+	OWNER_PID_PLACEMENT_BACKENDS,
 	placementLocationKey,
 	resolveOwnerPidPlacement,
 } from "./placement-compose.ts";
@@ -96,7 +97,7 @@ describe("placement: the owner fold", () => {
 		ok("the input rows are not rewritten", rows[0]?.placement.kind === "hc-terminal");
 	});
 
-	test("[QK:PLC-OWNER-PID-RULE] Claude Code only, active owner only, ambiguous pid, miss is none", () => {
+	test("[QK:PLC-OWNER-PID-RULE] Claude Code and pi-durable only, active owner only, ambiguous pid, miss is none", () => {
 		const index = { byPid: new Map([[500, "x"]]), ambiguous: new Set([600]) };
 		const place = (hit: string): PlacementObservation => ({ kind: "herdr-pane", paneId: hit });
 		ok("a hit is placed", say(resolveOwnerPidPlacement(index, "claude-code", 500, place)) === "herdr x");
@@ -107,7 +108,17 @@ describe("placement: the owner fold", () => {
 			resolveOwnerPidPlacement(index, "claude-code", null, place).kind === "unobserved",
 		);
 		ok("an unread owner: unobserved", resolveOwnerPidPlacement(null, "claude-code", 500, place).kind === "unobserved");
-		for (const backend of ["pi", "pi-durable", "codex"]) {
+		ok(
+			"pi-durable joins by the same rule",
+			say(resolveOwnerPidPlacement(index, "pi-durable", 500, place)) === "herdr x",
+		);
+		ok("pi-durable miss is none", resolveOwnerPidPlacement(index, "pi-durable", 7, place).kind === "none");
+		ok(
+			"pi-durable with no active owner: unobserved",
+			resolveOwnerPidPlacement(index, "pi-durable", null, place).kind === "unobserved",
+		);
+		ok("the claimed set is exactly two backends", OWNER_PID_PLACEMENT_BACKENDS.join() === "claude-code,pi-durable");
+		for (const backend of ["pi", "codex", "copilot", "agy", "omp"]) {
 			ok(`${backend} is never claimed`, resolveOwnerPidPlacement(index, backend, 500, place).kind === "unobserved");
 		}
 	});

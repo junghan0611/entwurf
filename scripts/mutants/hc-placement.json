@@ -308,6 +308,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:TMP-RENDER]",
 			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-DURABLE",
+			"title": "the owner-pid join claims Claude Code alone again, so a pi-durable citizen whose host a terminal or pane runs is never shown there",
+			"subject": "pi-extensions/lib/placement-compose.ts",
+			"find": ["export const OWNER_PID_PLACEMENT_BACKENDS: readonly string[] = [\"claude-code\", \"pi-durable\"];"],
+			"replace": ["export const OWNER_PID_PLACEMENT_BACKENDS: readonly string[] = [\"claude-code\"];"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-DURABLE]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
 		}
 	]
 }

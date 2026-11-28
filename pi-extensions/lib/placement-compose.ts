@@ -50,9 +50,14 @@ export function composePlacement(owners: readonly PlacementObservation[]): Place
 
 /**
  * The owner-process join both tmux and hc use: a citizen is where the terminal whose own process is
- * its ACTIVE receiver owner is. Claude Code only (decision G-P2) — no other backend has a verified
- * owner-pid source, so its rows are never claimed and are not `none` either.
+ * its ACTIVE receiver owner is. Claude Code and pi-durable: the two backends whose receiver owner is
+ * the citizen's own process, so the pid a terminal or pane reports IS that owner (measured for both on
+ * both owners, #178 L-3 and L-9: `claude` and the pi-durable host are each the direct program). No
+ * other backend has a verified owner-pid source — Pi answers on a control socket and its rows carry
+ * no owner pid — so those rows are never claimed and are not `none` either.
  */
+export const OWNER_PID_PLACEMENT_BACKENDS: readonly string[] = ["claude-code", "pi-durable"];
+
 export function resolveOwnerPidPlacement<T>(
 	index: { readonly byPid: ReadonlyMap<number, T>; readonly ambiguous: ReadonlySet<number> } | null,
 	backend: string,
@@ -60,7 +65,7 @@ export function resolveOwnerPidPlacement<T>(
 	place: (hit: T) => PlacementObservation,
 ): PlacementObservation {
 	if (index === null) return UNOBSERVED_PLACEMENT;
-	if (backend !== "claude-code") return UNOBSERVED_PLACEMENT;
+	if (!OWNER_PID_PLACEMENT_BACKENDS.includes(backend)) return UNOBSERVED_PLACEMENT;
 	// No active owner: there is no key to look up, so nothing was measured about this citizen.
 	if (activeOwnerPid === null) return UNOBSERVED_PLACEMENT;
 	if (index.ambiguous.has(activeOwnerPid)) return AMBIGUOUS_PLACEMENT;

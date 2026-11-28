@@ -21,14 +21,16 @@
  * each, bounded, never retried. The result lives for one listing; no location is written anywhere,
  * so an old location cannot be shown as current.
  *
- * THE JOIN IS A PROCESS ID, AND ONLY FOR CLAUDE CODE (decision G-P2). The core reports the pid of
+ * THE JOIN IS A PROCESS ID, FOR CLAUDE CODE AND PI-DURABLE ONLY (decision G-P2, widened to
+ * pi-durable after measurement). The core reports the pid of
  * the program each terminal runs (`[HC api.rs:253-268]`, `Public` terminal at v0.1.20). A Claude
  * Code citizen's ACTIVE receiver owner — the one the receiver axis itself calls active, so a process
  * that has moved on to another session no longer places the one it left — is that same process when
  * the terminal runs
- * `claude` directly — measured on oracle 2026-11-28, n=2 (marker ownerPid === terminal pid). Pi and
- * pi-durable have no verified owner-pid source here, so their rows are never claimed: `unobserved`,
- * not `none`. A citizen started by hand from a shell inside a terminal does not join (the terminal's
+ * `claude` directly — measured on oracle 2026-11-28, n=2 (marker ownerPid === terminal pid). A pi-durable
+ * citizen's receiver owner is its durable host, which `run.sh` execs into, so the same equality holds
+ * (measured on oracle 2026-11-28, n=1 in a terminal and n=1 in a tmux pane). Pi has no verified
+ * owner-pid source here, so its rows are never claimed: `unobserved`, not `none`. A citizen started by hand from a shell inside a terminal does not join (the terminal's
  * process is the shell) and reads `none`: the core was read and no terminal's own process is it.
  *
  * ONLY THIS CORE'S OWN TERMINALS. `terminal.list` also relays terminals of machines the core knows;

@@ -56,7 +56,7 @@ import type { MetaIdentity } from "./meta-session.ts";
  *                 shows it, but not in one place, so naming a pane would be a guess.
  *   `herdr-pane`  exactly one pane joined on the unique key.
  *   `tmux-pane`   exactly one pane of the lister's own tmux server runs the citizen's active
- *                 receiver owner process (#178; Claude Code only).
+ *                 receiver owner process (#178; Claude Code and pi-durable only).
  *   `hc-terminal` exactly one terminal of the operator-named Herdr Core runs it (#178; same rule).
  *
  * SINCE #178 THERE ARE THREE OWNERS, AND THE COLUMN IS THEIR FOLD (`placement-compose.ts`). The words
