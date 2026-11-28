@@ -696,7 +696,13 @@ const shownIdle = { ...baseView.conversation, docs: { ...baseView.conversation.d
 tui.apply({ ...baseView, conversation: shownIdle, rootRun: { running: true, compacting: false } });
 tui.apply({ ...baseView, conversation: shownIdle, rootRun: { running: false, compacting: false } });
 tui.apply({ ...baseView, rootRun: { running: false, compacting: false }, failure: {} });
+// #178 L-12: a run that started and failed between two values of the root watch, as the two values the TUI is given.
+const foldedStatuses = [];
+const folded = new DurableTui(project, handlers, { ...terminal({ rows: 24, cols: 80 }), setProgramStatus: (status) => foldedStatuses.push(status) });
+folded.apply({ ...baseView, conversation: shownIdle, rootRun: { running: false, compacting: false } });
+folded.apply({ ...baseView, conversation: shownIdle, rootRun: { running: false, compacting: false, failure: { taskId: 9, reason: "model_error" } } });
 runtime.tuiStatuses = statuses;
+runtime.tuiFoldedStatuses = foldedStatuses;
 // What the screen advertises and where a typed line goes (#178): the card and the footer name no /agents, and the
 // typed command still switches conversations without reaching the model.
 const { subagentWorkingText, durableFooterHints, durableHandlers } = await import(carrier + "tui.js");
@@ -740,6 +746,7 @@ interface FooterReport {
 			afterSubmit: unknown;
 		};
 		tuiStatuses: unknown[];
+		tuiFoldedStatuses: unknown[];
 		hints: { card: string; footer: string; routed: Record<"submit" | "followUp", Record<string, string[]>> };
 	};
 	badge: Record<string, { count: number; widths: Record<string, string[]> }>;
@@ -826,6 +833,11 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 			{ state: "working", app },
 			{ state: "done", app },
 			{ state: "error", app, message: "session failed" },
+		]);
+		// #178 L-12, as the TUI was given it: idle, then the same root with a failure and no run seen between.
+		expect(report.runtime.tuiFoldedStatuses).toEqual([
+			{ state: "idle", app },
+			{ state: "error", app, message: "model_error" },
 		]);
 	});
 
@@ -4169,6 +4181,62 @@ describe("the carrier's program status (#178, OSC 7501): only what a root fact s
 
 	it("[QK:PI-DURABLE-STATUS-PAST-NOT-ANNOUNCED] a failure already on record when the TUI starts is not announced again: it reads idle", () => {
 		expect(reported([ended("model_error", "old")])).toEqual([{ state: "idle", app }]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-UNSEEN-FAILURE] a run that started and failed between two values is reported by its failure: an error with its reason code, or idle for a resting reason (#178 L-12)", () => {
+		// L-12 exactly: the root rests, then rests with a failure on record, and no value had a live run.
+		expect(reported([live({}), live(failure(7, "model_error", "Provider is not configured"))])).toEqual([
+			{ state: "idle", app },
+			{ state: "error", app, message: "model_error" },
+		]);
+		expect(reported([live({}), live(failure(7, "SECRET-CANARY reason"))])).toEqual([
+			{ state: "idle", app },
+			{ state: "error", app, message: "run failed" },
+		]);
+		for (const reason of ["aborted", "reset", "nothing_to_answer"]) {
+			expect(reported([live({}), live(failure(7, reason))]), reason).toEqual([{ state: "idle", app }]);
+		}
+		// After an error, a resting end of another task reads idle again, and the next unseen failure is told too.
+		expect(
+			reported([live({}), live(failure(7, "model_error")), live(failure(8, "reset")), live(failure(9, "no_model"))]),
+		).toEqual([
+			{ state: "idle", app },
+			{ state: "error", app, message: "model_error" },
+			{ state: "idle", app },
+			{ state: "error", app, message: "no_model" },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-UNSEEN-ANSWER-CLEARS] a failure on record that is gone while the root rests means a run started, answered and ended unseen: it reads done, and an error does not stand", () => {
+		expect(reported([live({}), live(failure(7, "model_error")), live({})])).toEqual([
+			{ state: "idle", app },
+			{ state: "error", app, message: "model_error" },
+			{ state: "done", app },
+		]);
+		// A past failure the TUI started with was not announced; its going away is still a run that answered.
+		expect(reported([live(failure(3, "model_error")), live({})])).toEqual([
+			{ state: "idle", app },
+			{ state: "done", app },
+		]);
+		// Nothing on record before and nothing after: no trace of a run, so nothing is claimed.
+		expect(reported([live({}), live({})])).toEqual([{ state: "idle", app }]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-UNSEEN-FAILURE-ONCE] a failure the last value already carried is not a new one: after a later run answered, the same failure on record does not turn done back into an error", () => {
+		expect(
+			reported([
+				live({ run }),
+				live(failure(7, "model_error")),
+				live({ run, ...failure(7, "model_error") }),
+				live(failure(7, "model_error")),
+				live(failure(7, "model_error")),
+			]),
+		).toEqual([
+			{ state: "working", app },
+			{ state: "error", app, message: "model_error" },
+			{ state: "working", app },
+			{ state: "done", app },
+		]);
 	});
 
 	it("[QK:PI-DURABLE-STATUS-SESSION-FAILED] a session that failed and closed itself reads error with one fixed line, whatever its last run state", () => {

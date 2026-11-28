@@ -8,7 +8,7 @@
  *   PLC-OWNER-PID-RULE        Claude Code only, active owner only, ambiguous pid, miss is none
  *   TMP-OWN-SERVER-ONLY       without TMUX nothing is run; the run names no server
  *   TMP-READ-OR-NOTHING       a failed, signalled or unreadable listing is nobody-looked, never a partial index
- *   TMP-PARSE                 four tab fields, the session name takes the rest of the line
+ *   TMP-PARSE                 six tab fields, the session name takes the rest of the line
  *   TMP-PID-INDEX             a pid in two panes is ambiguous
  *   TMP-RENDER                the column says tmux <session>:<window>
  */
@@ -125,7 +125,8 @@ describe("placement: the owner fold", () => {
 });
 
 describe("placement: the lister's own tmux server", () => {
-	const LIST = "481107\t%97\t9\torg\n482029\t%98\t10\tmy session\twith a tab\n";
+	const LIST =
+		"481107\t%97\t9\t3458632\t/dev/pts/3\torg\n482029\t%98\t10\t3458632\t/dev/pts/4\tmy session\twith a tab\n";
 
 	test("[QK:TMP-OWN-SERVER-ONLY] without TMUX nothing is run; the run names no server", () => {
 		for (const env of [{}, { TMUX: "" }, { HC_TERMINAL_ID: "t7", TMUX_PANE: "%1" }] as NodeJS.ProcessEnv[]) {
@@ -173,30 +174,47 @@ describe("placement: the lister's own tmux server", () => {
 		);
 	});
 
-	test("[QK:TMP-PARSE] four tab fields, the session name takes the rest of the line", () => {
+	test("[QK:TMP-PARSE] six tab fields, the session name takes the rest of the line", () => {
 		const rows = parseTmuxPaneList(LIST);
 		ok(
 			"two rows",
 			JSON.stringify(rows) ===
 				JSON.stringify([
-					{ pid: 481107, paneId: "%97", window: "9", session: "org" },
-					{ pid: 482029, paneId: "%98", window: "10", session: "my session\twith a tab" },
+					{ pid: 481107, paneId: "%97", window: "9", session: "org", serverPid: 3458632, tty: "/dev/pts/3" },
+					{
+						pid: 482029,
+						paneId: "%98",
+						window: "10",
+						session: "my session\twith a tab",
+						serverPid: 3458632,
+						tty: "/dev/pts/4",
+					},
 				]),
 		);
 		for (const bad of [
 			"481107\t%97\t9\n",
-			"x\t%97\t9\torg\n",
-			"1\t%97\t9\torg\n",
-			"5\t97\t9\torg\n",
-			"5\t%97\tw\torg\n",
-			"5\t%97\t9\t\n",
+			// The four fields an earlier listing asked for: another shape, so nobody looked.
+			"481107\t%97\t9\torg\n",
+			"481107\t%97\t9\t3458632\torg\n",
+			"x\t%97\t9\t7\t/dev/pts/3\torg\n",
+			"1\t%97\t9\t7\t/dev/pts/3\torg\n",
+			"5\t97\t9\t7\t/dev/pts/3\torg\n",
+			"5\t%97\tw\t7\t/dev/pts/3\torg\n",
+			"5\t%97\t9\t7\t/dev/pts/3\t\n",
 		]) {
 			ok(`unreadable: ${JSON.stringify(bad)}`, parseTmuxPaneList(bad) === null);
 		}
 	});
 
 	test("[QK:TMP-PID-INDEX] a pid in two panes is ambiguous", () => {
-		const row = (pid: number, paneId: string): TmuxPaneRow => ({ pid, paneId, window: "1", session: "s" });
+		const row = (pid: number, paneId: string): TmuxPaneRow => ({
+			pid,
+			paneId,
+			window: "1",
+			session: "s",
+			serverPid: null,
+			tty: null,
+		});
 		const index = buildTmuxPlacementIndex([row(5, "%1"), row(6, "%2"), row(6, "%3"), row(6, "%4"), row(5, "%1")]);
 		ok("one pane, one pid", index.byPid.get(5)?.paneId === "%1" && !index.ambiguous.has(5));
 		ok("two panes, one pid: ambiguous and not indexed", index.ambiguous.has(6) && !index.byPid.has(6));

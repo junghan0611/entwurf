@@ -60,6 +60,7 @@ Lab receipts are host-local (`oracle`, under the #178 lab directory) and do not 
 | L9 | `live9/RECEIPT.md` | working tree on `99f1f5c8` | (A) CLI under the core's own `PATH` → Claude Code; (B) `peer-facts` from a tmux shell with the opt-in | (A) exit 4 `hc-runtime-unresolved`, then reopened with `PATH` supplemented; (B) pi-durable `tmux entwurf:9` then `hc oracle/t1w`, Claude Code `hc oracle/t1g` and `hc oracle/t1r` |
 | L10 | `live10/RECEIPT.md` | dist built from `56ca6f28` | `entwurf_peers` in a compiled pi-durable bridge started with the opt-in | rows `hc oracle/t1g` and its own `tmux lab178:2` |
 | L11 | `live11-pathB/RECEIPT.md` | caller bytes loaded 12:53, about `f0f251b9` (TypeScript source, not the shared dist) | Claude Code `d9ecc0` in a Herdr Core terminal, `entwurf_resume_call` on GLG's own request → pi-durable `a05627` | launch receipt and `adopted` from the tool's text; App visibility and recall are GLG's observations; the v2 round trip is relayed by `68bd94` |
+| L12 | `live12/RECEIPT.md` | carrier at `c286382a`; Pi 1.6.1; Claude Code 2.1.332 | each program started in a private test core with no viewer attached, no model and no credential; ×2 runs each | the core's `status` events and the raw OSC 7501 bytes each program wrote and was sent |
 | P1 | `peers-2045/rows.txt` | HEAD not recorded; the working tree held the checkpoint 11 candidate | `peer-facts` from a tmux shell, opt-in unset, 20:32 KST | four Claude Code rows `tmux entwurf:<window>` |
 | #157 A-L1, G1a, B3, stage 4 | [baseline-receipts.md](./baseline-receipts.md) | earlier releases' candidates | named in each cell | Herdr TUI rows |
 
@@ -92,7 +93,7 @@ The question is where a sibling is, asked from each lister seat. CLI `peer-facts
 | lister seat → target place | Pi | Claude Code | pi-durable |
 |---|---|---|---|
 | tmux lister, owner is the pane's direct process | GAP G3: no Pi owner pid source | M (P1, CLI) | M (L9 B, CLI) |
-| tmux lister, owner started by hand behind a shell | GAP G3 and G4 | GAP G4 (R; not measured) | GAP G4 (observed on two operating citizens) |
+| tmux lister, owner started by hand behind a shell | GAP G3 | R + gate (`TMP-FG-*`); live U | R + gate (`TMP-FG-*`); live U |
 | tmux lister, target in a Herdr Core terminal | GAP G3 (L8: a Pi in a core terminal read unobserved) | M with the opt-in set (L9 B, CLI; L8, MCP); deployment GAP G2 | M with the opt-in set (L9 B, CLI); deployment GAP G2 |
 | lister inside Herdr Core, target in Herdr Core (the App's own seat) | GAP G3 | GAP G2: the opt-in is not in the core's program environment | GAP G2, same |
 | lister inside Herdr Core, target in tmux | GAP G5 | GAP G5 | GAP G5 |
@@ -109,10 +110,10 @@ The question is where a sibling is, asked from each lister seat. CLI `peer-facts
 
 | | Pi | Claude Code | pi-durable |
 |---|---|---|---|
-| program status reporter (OSC 7501) | R: Pi 1.6.1 `ProgramStatusReporter`, interactive mode only; reports `blocked` and the session name | U: no reporter found (a binary scan is not proof either way) | R + gate (`PI-DURABLE-STATUS-*`); never `blocked`, never a session name; live handshake U |
-| Core shows the status | U. Observed only (L3): `hc ls` named the agent and GLG's Idle list held it | U. Observed only (L3), same; the source of the report is unknown | U. L3 is the control from before the reporter existed: no status, absent from the Idle list |
+| program status reporter (OSC 7501) | R: Pi 1.6.1 `ProgramStatusReporter`, interactive mode only; reports `blocked` and the session name. M (L12): query, `idle`, `clear` on the wire | M (L12): it sends the support query and, on its first-run screen, no status. Logged in: U | R + gate (`PI-DURABLE-STATUS-*`); never `blocked`, never a session name. M (L12): the query is answered with no viewer attached; `idle` and `clear` on the wire |
+| Core shows the status | M (L12): `idle` with `app=pi` at start, cleared on quit. `working`, `done`, `error`: U | M (L12), first-run screen only: no status value; one unexplained `reported: true, status: null` event, which is not proof that it reports. Logged in: U. Observed (L3): GLG's Idle list held it | M (L12): `idle` with `app=pi-durable` at start, cleared on quit. `working`, `done`, `error`: U. L3 is the control from before the reporter existed |
 | App shows the sibling's terminal | M (L3: GLG's observation, "all three visible"; which terminal is not stated) | M (L3, same) | M (L3, same; L11: GLG, labeled `pd`) |
-| screen and status agree on a run that ended with no answer | U (the reporter's default outcome is read; the screen is not compared) | U | R + gate, for the classification only (`PI-DURABLE-STATUS-RESTING-ONE-LIST`: one resting-reason list, ten SDK reasons). The wire and the App are U; the watch can miss a whole short run |
+| screen and status agree on a run that ended with no answer | Observed (L12): a prompt refused for a missing API key left the status `idle`. Whether a run started is U, so this is not yet the row's case | U | Measured disagreement (L12, at `c286382a`): the screen said "No answer: model_error", the status stayed `idle`. Fixed after it, R + gate (`PI-DURABLE-STATUS-UNSEEN-FAILURE`; `PI-DURABLE-STATUS-RESTING-ONE-LIST`); live U until measured again; that the live sequence was the one the fix reads is from the source, not measured. A run started in the same commit as a failure and answered unseen is still told wrong |
 | recall after reopening, Herdr Core | M (L3; not blind) | M (L3; not blind) | M (L1, L3; not blind); M (L11, human-read) |
 | recall after reopening, Herdr TUI | U | M (#157 stage 4, blind) | U |
 | delivery and reply after reopening, Herdr Core: the writer asks first | M (L3; `control-socket → sent`) | M (L3; mailbox) | M (L1, L3); M (L11, relayed) |
@@ -133,16 +134,18 @@ Open decision (symmetry): Pi reports `blocked` and its session name; pi-durable 
   - Candidate: a placement-only, bounded `get_info` for a record-backed, non-renewing live Pi when a tmux or Herdr Core listing is usable. Both ids must match; any mismatch or timeout reads unobserved, with no retry.
   - Its cost, named: it brings back one RPC per live Pi socket per listing, the cost #50 C4 removed. It is narrower than that enrichment, not free of it.
   - `SO_PEERCRED` would name the peer process, not its native chapter, and the current probe has no accessor for it (inherited from the ASTRA review; not re-read here).
-  - A hand-started Pi behind a shell needs G4 as well.
+  - A hand-started Pi behind a shell needs the G4 join as well.
   - Needs GLG's decision. Compare on one fixture first.
-- **G4, hand-started behind a shell.** The pane's process is the shell, so the owner pid never equals it. This covers `claude` typed in a bash pane, not only pi-durable. A tty match alone would place a background citizen behind an unrelated foreground program.
-  - The join needs: the same controlling tty, the owner's process group being the tty's foreground group, and an unchanged process binding. Otherwise it reads unobserved. A citizen suspended in its pane then also reads unobserved; that is the conservative side.
-  - Next: a single-background negative before any promotion.
+- **G4, hand-started behind a shell.** The pane's process is the shell, so the owner pid never equals it. This covers `claude` typed in a bash pane, not only pi-durable. The tmux owner now looks once more on a pid miss (`pi-extensions/lib/owner-foreground.ts`); the mechanism is in [hc-launch-rail.md](./hc-launch-rail.md) §5.
+  - The contract is the foreground JOB LEADER: the owner's pid is its process group and that group is the tty's foreground group, on the pane's own tty and in the pane's own session, with the process checked against the receiver marker's start key in two reads.
+  - Its named weaker meaning: "this pane's foreground job is this citizen", not "this citizen draws the screen". A background or suspended citizen, and a member of the foreground group that does not lead it, read unobserved.
+  - tmux only. A citizen started by hand in a Herdr Core terminal stays a GAP, and no tmux proof transfers to it.
+  - Next: one live listing from a tmux shell with a hand-started pi-durable and a hand-started Claude Code, plus one citizen in the background behind another program.
 - **G5, a Herdr Core lister seeing tmux.** A program in a core has no `TMUX`. Needed for the two-way listing.
   - Next: an explicit, operator-named tmux endpoint, symmetric to G2. No guessing.
 - **Core `PATH`.** A program a core starts has the core's `PATH`. Entwurf adds no resolver or fallback; the mechanism and the measured refusal are in [hc-launch-rail.md](./hc-launch-rail.md) §6.
 - **Claude Code program status.** No reporter is known. The App's Idle list held Claude Code (L3), so something reports; its source is not read.
-- **Core status.** Next: one `events.subscribe` on a test core, never the operating one, while a scratch pi-durable runs idle → working → done, aborts to idle, and exits to clear. The same run settles the Claude Code reporter row.
+- **Core status.** `idle` and `clear` are measured for Pi and pi-durable (L12). Next: the remaining `working`, `done` and `error` cells, which need a model or a stand-in provider, on a test core and never the operating one; and a logged-in Claude Code.
 - **"Every sibling appears".** GLG has not decided whether this means a full repo-scoped MCP listing, or a correct place on every displayed open row. The lister-inside-Core seat is part of what it must answer. Neither changing the cap nor replacing the MCP surface with the CLI is authorized by this page.
 
 ## Ownership

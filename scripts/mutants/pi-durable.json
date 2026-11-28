@@ -2570,6 +2570,42 @@
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
+			"claim": "PI-DURABLE-STATUS-UNSEEN-FAILURE",
+			"title": "a run that started and failed between two values of the root watch leaves the status as it was, idle beside the screen's error",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\t\tresting: unseen || answeredUnseen ? settled(run, undefined) : resting,"],
+			"replace": ["\t\tresting: answeredUnseen ? settled(run, undefined) : resting,"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-UNSEEN-FAILURE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-UNSEEN-ANSWER-CLEARS",
+			"title": "a failure that went away while the root rests is not read, so the terminal keeps saying error after a run answered",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tconst answeredUnseen = idleBefore && memory.failureSeen !== undefined && failureSeen === undefined;"],
+			"replace": ["\tconst answeredUnseen = false;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-UNSEEN-ANSWER-CLEARS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-UNSEEN-FAILURE-ONCE",
+			"title": "any failure on record while the root rests is read as a new one, so an answered run's done turns back into the old error",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tconst unseen = idleBefore && failureSeen !== undefined && failureSeen !== memory.failureSeen;"],
+			"replace": ["\tconst unseen = idleBefore && failureSeen !== undefined;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-UNSEEN-FAILURE-ONCE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
 			"claim": "PI-DURABLE-STATUS-USER-STOP-IDLE",
 			"title": "the user's own abort, a reset or a continue with nothing to answer reads as an error",
 			"subject": "pi/pi-durable/carrier/program-status.js",

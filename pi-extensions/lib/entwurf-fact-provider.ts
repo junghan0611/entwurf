@@ -46,6 +46,7 @@ import {
 	type MetaCitizenBackend,
 	type MetaIdentity,
 } from "./meta-session.ts";
+import type { OwnerProcReads } from "./owner-foreground.ts";
 import { ambiguateSharedOwnerPlacements } from "./placement-compose.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
@@ -141,6 +142,8 @@ export interface EntwurfFactsDeps<T = undefined> {
 	/** tmux placement axis (#178): the ONE pane listing of the lister's own tmux server this listing
 	 * is allowed. `undefined` uses the real read; `null` from a reader is "nobody looked". */
 	readTmuxPlacementIndex?: () => TmuxPlacementIndex | null;
+	/** The reads of an owner's process the tmux owner's foreground join makes (#178 G4). `undefined` reads procfs. */
+	ownerProcReads?: OwnerProcReads;
 	/** Optional presentation budget. Undefined preserves the generic fact provider's full
 	 * observation contract; peers surfaces pass their shared render limit. Older machine
 	 * payload rows then say `unobserved` rather than fabricating `active` / `exists`. */
@@ -257,7 +260,7 @@ export async function listEntwurfFacts<T = undefined>(deps: EntwurfFactsDeps<T>)
 	const hcIndex = deps.observe ? null : await (deps.readHcPlacementIndex ?? readHcPlacementIndex)();
 	const tmuxIndex = deps.observe ? null : (deps.readTmuxPlacementIndex ?? readTmuxPlacementIndex)();
 	const herdrIndex = deps.observe ? null : (deps.readPlacementIndex ?? readHerdrPlacementIndex)();
-	const observe = deps.observe ?? makeObservePeerFacts(herdrIndex, hcIndex, tmuxIndex);
+	const observe = deps.observe ?? makeObservePeerFacts(herdrIndex, hcIndex, tmuxIndex, deps.ownerProcReads);
 	let selectedObserve = observe;
 	if (deps.observationLimit !== undefined) {
 		if (!Number.isSafeInteger(deps.observationLimit) || deps.observationLimit < 0) {

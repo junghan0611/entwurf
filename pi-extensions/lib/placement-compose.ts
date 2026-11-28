@@ -55,6 +55,10 @@ export function composePlacement(owners: readonly PlacementObservation[]): Place
  * both owners, #178 L-3 and L-9: `claude` and the pi-durable host are each the direct program). No
  * other backend has a verified owner-pid source — Pi answers on a control socket and its rows carry
  * no owner pid — so those rows are never claimed and are not `none` either.
+ *
+ * `onMiss` is what the owner answers when it was read and no terminal's own process is that owner.
+ * The default is `none`. The tmux owner looks once more there, for a citizen started by hand behind
+ * the pane's shell (`owner-foreground.ts`); a pid hit is never handed to it.
  */
 export const OWNER_PID_PLACEMENT_BACKENDS: readonly string[] = ["claude-code", "pi-durable"];
 
@@ -63,6 +67,7 @@ export function resolveOwnerPidPlacement<T>(
 	backend: string,
 	activeOwnerPid: number | null,
 	place: (hit: T) => PlacementObservation,
+	onMiss: () => PlacementObservation = () => NO_PLACEMENT,
 ): PlacementObservation {
 	if (index === null) return UNOBSERVED_PLACEMENT;
 	if (!OWNER_PID_PLACEMENT_BACKENDS.includes(backend)) return UNOBSERVED_PLACEMENT;
@@ -70,7 +75,7 @@ export function resolveOwnerPidPlacement<T>(
 	if (activeOwnerPid === null) return UNOBSERVED_PLACEMENT;
 	if (index.ambiguous.has(activeOwnerPid)) return AMBIGUOUS_PLACEMENT;
 	const hit = index.byPid.get(activeOwnerPid);
-	return hit === undefined ? NO_PLACEMENT : place(hit);
+	return hit === undefined ? onMiss() : place(hit);
 }
 
 /**

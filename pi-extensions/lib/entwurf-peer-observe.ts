@@ -35,7 +35,6 @@ import { type HcPlacementIndex, resolveHcPlacement } from "./hc-placement.ts";
 import {
 	buildPlacementIndex,
 	type HerdrPlacementIndex,
-	type PlacementObservation,
 	parseHerdrPaneList,
 	resolvePlacement,
 } from "./herdr-placement.ts";
@@ -48,7 +47,8 @@ import {
 	readMetaSenderMarker,
 	requireBackend,
 } from "./meta-session.ts";
-import { composePlacement, resolveOwnerPidPlacement } from "./placement-compose.ts";
+import { type OwnerProcReads, procOwnerReads, resolveTmuxOwnerPlacement } from "./owner-foreground.ts";
+import { composePlacement } from "./placement-compose.ts";
 import type { TmuxPlacementIndex } from "./tmux-placement.ts";
 
 /**
@@ -62,20 +62,27 @@ import type { TmuxPlacementIndex } from "./tmux-placement.ts";
  * reader's null — the reader folds absent, corrupt and dead-owner into one null.
  */
 function observeReceiver(identity: MetaIdentity): ReceiverState {
-	if (metaCapabilityFor(identity.backend).wakeMode !== "self-fetch") return { receiver: "n/a", activeOwnerPid: null };
+	if (metaCapabilityFor(identity.backend).wakeMode !== "self-fetch") {
+		return { receiver: "n/a", activeOwnerStartKey: null, activeOwnerPid: null };
+	}
 	let ownerPid: number | null = null;
+	let ownerStartKey: string | null = null;
 	const facts = resolveMailboxReceiverFacts(identity, {
 		readReceiverMarker: (gardenId: string) => {
 			const marker = readMetaReceiverMarker({ gardenId });
 			ownerPid = marker === null ? null : marker.ownerPid;
+			ownerStartKey = marker === null ? null : marker.ownerStartKey;
 			return marker;
 		},
 		readSenderMarker: (backend: string, ownerPid: number) =>
 			readMetaSenderMarker({ backend: requireBackend(backend) as MetaBackend, ownerPid }),
 	});
-	if (facts.ownerAlive && facts.watchArmed) return { receiver: "active", activeOwnerPid: ownerPid };
+	if (facts.ownerAlive && facts.watchArmed) {
+		return { receiver: "active", activeOwnerStartKey: ownerStartKey, activeOwnerPid: ownerPid };
+	}
 	return {
 		receiver: fs.existsSync(metaReceiverMarkerPath(identity.gardenId)) ? "inactive" : "none",
+		activeOwnerStartKey: null,
 		activeOwnerPid: null,
 	};
 }
@@ -85,10 +92,12 @@ function observeReceiver(identity: MetaIdentity): ReceiverState {
  * look for (#178). `activeOwnerPid` is set only when the receiver is `active` — the owner is alive,
  * is this citizen's, and still serves this garden. A process that switched sessions in place keeps
  * the old garden's marker but no longer serves it; that citizen has no owner here, so no terminal is
- * claimed for it.
+ * claimed for it. `activeOwnerStartKey` is that marker's own start key for the same process: the tmux
+ * owner's foreground join checks the process against it before it reads anything else about it.
  */
 interface ReceiverState {
 	readonly receiver: ReceiverObservation;
+	readonly activeOwnerStartKey: string | null;
 	readonly activeOwnerPid: number | null;
 }
 
@@ -160,33 +169,22 @@ export function makeObservePeerFacts(
 	placementIndex: HerdrPlacementIndex | null,
 	hcPlacementIndex: HcPlacementIndex | null = null,
 	tmuxPlacementIndex: TmuxPlacementIndex | null = null,
+	ownerReads: OwnerProcReads = procOwnerReads,
 ) {
 	return (identity: MetaIdentity): PeerObservations => {
-		const { receiver, activeOwnerPid } = observeReceiver(identity);
+		const { receiver, activeOwnerPid, activeOwnerStartKey } = observeReceiver(identity);
+		const tmuxOwner = activeOwnerPid === null ? null : { pid: activeOwnerPid, startKey: activeOwnerStartKey };
 		return {
 			receiver,
 			transcript: observeTranscript(identity),
 			// Three owners can hold a citizen; each answers for itself and the fold decides the word.
 			placement: composePlacement([
 				resolvePlacement(placementIndex, identity),
-				resolveTmuxPlacement(tmuxPlacementIndex, identity.backend, activeOwnerPid),
+				resolveTmuxOwnerPlacement(tmuxPlacementIndex, identity.backend, tmuxOwner, ownerReads),
 				resolveHcPlacement(hcPlacementIndex, identity.backend, activeOwnerPid),
 			]),
 		};
 	};
-}
-
-function resolveTmuxPlacement(
-	index: TmuxPlacementIndex | null,
-	backend: string,
-	activeOwnerPid: number | null,
-): PlacementObservation {
-	return resolveOwnerPidPlacement(index, backend, activeOwnerPid, (pane) => ({
-		kind: "tmux-pane",
-		session: pane.session,
-		window: pane.window,
-		paneId: pane.paneId,
-	}));
 }
 
 /** The production observer with no placement owner read — the shape every caller that

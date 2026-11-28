@@ -112,8 +112,8 @@
 			{
 				"name": "program-status.js",
 				"source": "pi/pi-durable/src/experimental/durable/program-status.ts",
-				"blob": "dfe065ea990a956c0e446ee081bd3f57b7aeb342",
-				"sha256": "04d8cf2b5cc33cd982878cc7301de5f584bd6e53acf3f980db41cdd219745f89"
+				"blob": "a8bab8c61c3926466888edbf2b8e4743e500a666",
+				"sha256": "3cd75d9b900094cf330f05062c407c501a3aa22cfb58fe4dd6ab42a39116beff"
 			}
 		],
 		"distTargets": [

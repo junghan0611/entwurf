@@ -26,11 +26,19 @@
  *     nothing_to_answer                            nothing owed: no request was sent, so nothing failed)
  *     a new failure of a known reason              error, that reason code
  *     a new failure of any other reason            error, "run failed"
+ *   no run seen live, and a failure of another task
+ *   than the last value carried                    the same three lines: a run started and failed between two values
+ *   no run seen live, and the failure the last
+ *   value carried is gone                          done (the SDK removes a failure when a later commit starts a run, so
+ *                                                  a run started, answered and ended between two values)
  *   no run seen ending since this TUI started      idle (a past run's failure is not announced again)
  *   no root fact yet                               nothing
  *
- * A run that starts and ends between two values of the root watch is not seen: the status stays what it was. That
- * under-reports; it never claims what did not happen. One case is told wrong, and no value can tell it right: a run
+ * A run that starts and ends between two values of the root watch is never seen live (a Herdr Core showed idle beside
+ * the screen's error for a run with no usable provider, #178 L-12; that this was the cause is read from this source,
+ * not measured). A run that fails unseen is reported by its failure, and one that answers unseen after a failure by
+ * that failure going away. A run that answers unseen with no failure on record before it leaves no trace, and the
+ * status stays what it was: that under-reports. One case is told wrong, and no value can tell it right: a run
  * that fails, the next run it starts in the same commit, and that run's answer, all folded into one value, leave only
  * the first run's failure, which reads as how the last run ended. `blocked` is never reported: pi-durable has no permission or
  * question dialog to wait on. No prompt, answer, error text, path or session name is ever part of a report. A view
@@ -80,6 +88,8 @@ export interface RootStatusMemory {
 	 * the next one in one commit, so the watch never sees a value without a run between them.
 	 */
 	readonly inherited?: TaskId;
+	/** The task of the failure the last fact carried, live run or not: a failure of another task is a new one. */
+	readonly failureSeen?: TaskId;
 	/** What the last settled run left. */
 	readonly resting: ProgramStatus;
 }
@@ -131,17 +141,25 @@ export function rootProgramStatus(
 	}
 	const inherited = run.running ? run.failure?.taskId : undefined;
 	const resting = !run.running && memory.running ? settled(run, memory.inherited) : memory.resting;
+	// A run that started and failed between two values was never seen live: the failure of another task than the last
+	// value carried is all that tells it. The first value's failure is a past run's and stays unannounced.
+	const failureSeen = run.failure?.taskId;
+	const idleBefore = memory.seen && !memory.running && !run.running;
+	const unseen = idleBefore && failureSeen !== undefined && failureSeen !== memory.failureSeen;
+	// The failure the last value carried is gone and no run is live: a later commit started a run, and it answered.
+	const answeredUnseen = idleBefore && memory.failureSeen !== undefined && failureSeen === undefined;
 	const next: RootStatusMemory = {
 		seen: true,
 		running: run.running,
 		...(inherited === undefined ? {} : { inherited }),
-		resting,
+		...(failureSeen === undefined ? {} : { failureSeen }),
+		resting: unseen || answeredUnseen ? settled(run, undefined) : resting,
 	};
 	if (run.compacting) {
 		return { status: { state: "working", app: PROGRAM_STATUS_APP, message: "Compacting context" }, memory: next };
 	}
 	if (run.running) return { status: { state: "working", app: PROGRAM_STATUS_APP }, memory: next };
-	return { status: resting, memory: next };
+	return { status: next.resting, memory: next };
 }
 
 /** The root fact of one view: the ROOT conversation's run state, never the shown one's, and the session's failure. */

@@ -288,6 +288,10 @@
 		// two importers. Typechecked by scripts/tsconfig.json through them and their beside tests.
 		"pi-extensions/lib/placement-compose.ts",
 		"pi-extensions/lib/tmux-placement.ts",
+		// owner-foreground.ts is the #178 G4 foreground join the tmux owner makes on a pid miss — a lib→lib
+		// VALUE importer of the three modules above, loaded under strip-types by entwurf-peer-observe.ts.
+		// Typechecked by scripts/tsconfig.json through that importer and its beside test.
+		"pi-extensions/lib/owner-foreground.ts",
 		// fresh-call-dispatch.ts is the #116 C3 composition root — the ONE module that may know
 		// both rails. A lib→lib VALUE importer of both plus the codex preflight with explicit
 		// `.ts` extensions, same fence. Its consumers reach it the two ways their own fences

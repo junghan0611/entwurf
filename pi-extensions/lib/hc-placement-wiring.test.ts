@@ -11,6 +11,7 @@
  *   HCP-WIRED-ACTIVE-OWNER      only a Claude Code citizen whose ACTIVE receiver owner a terminal runs is placed
  *   HCP-WIRED-TMUX              the same owner in a pane of the lister's tmux reads tmux <session>:<window>
  *   HCP-WIRED-NONE-NEEDS-ALL    none needs herdr, tmux and hc all read; one unread owner is unobserved
+ *   TMP-FG-WIRED                a citizen behind a pane's shell is placed through the receiver marker's own start key
  *   HCP-WIRED-DURABLE           a pi-durable citizen's active host joins a terminal or pane the same way
  *   HCP-WIRED-SHARED-OWNER      two citizens shown in one pid-joined place both read ambiguous
  *   HCP-WIRED-CONFIG-ERROR      a placement-config error stops the listing by name
@@ -31,6 +32,7 @@ import {
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "./meta-session.ts";
+import type { OwnerProcReads } from "./owner-foreground.ts";
 import { buildTmuxPlacementIndex } from "./tmux-placement.ts";
 
 function ok(label: string, cond: boolean): void {
@@ -124,7 +126,10 @@ function arm(): void {
 }
 
 const HC_HERE = async () => buildHcPlacementIndex(CORE, [{ terminal: "t1d", pid: process.pid }]);
-const TMUX_HERE = () => buildTmuxPlacementIndex([{ pid: process.pid, paneId: "%97", window: "9", session: "org" }]);
+const TMUX_HERE = () =>
+	buildTmuxPlacementIndex([
+		{ pid: process.pid, paneId: "%97", window: "9", session: "org", serverPid: null, tty: null },
+	]);
 type Row = { gardenId: string; receiver: string; placement: PeerObservations["placement"] };
 const rowOf = (peers: readonly Row[], i: MetaIdentity) => peers.find((p) => p.gardenId === i.gardenId) as Row;
 const kindOf = (peers: readonly Row[], i: MetaIdentity) => rowOf(peers, i).placement.kind;
@@ -198,7 +203,9 @@ describe("placement inside one listing", () => {
 			const inTmux = await listEntwurfFacts(
 				deps({
 					readTmuxPlacementIndex: () =>
-						buildTmuxPlacementIndex([{ pid: host, paneId: "%102", window: "9", session: "entwurf" }]),
+						buildTmuxPlacementIndex([
+							{ pid: host, paneId: "%102", window: "9", session: "entwurf", serverPid: null, tty: null },
+						]),
 				}),
 			);
 			ok("in the pane", renderPlacement(rowOf(inTmux.facts.peers, DURABLE).placement) === "tmux entwurf:9");
@@ -220,6 +227,60 @@ describe("placement inside one listing", () => {
 		ok("the left-behind citizen is not", kindOf(r.facts.peers, LEFT_BEHIND) === "unobserved");
 		const both = await listEntwurfFacts(deps({ readTmuxPlacementIndex: TMUX_HERE, readHcPlacementIndex: HC_HERE }));
 		ok("a pane AND a terminal claiming it: ambiguous", kindOf(both.facts.peers, PLACED) === "ambiguous");
+	});
+
+	test("[QK:TMP-FG-WIRED] a citizen started by hand behind a pane's shell is placed through the receiver marker's own start key", async () => {
+		arm();
+		// The marker the production observer reads: its key is this process's real start time.
+		const marker = JSON.parse(fs.readFileSync(path.join(RECEIVERS, `${PLACED.gardenId}.json`), "utf8"));
+		const key = marker.ownerStartKey as string;
+		const linux = /^linux:\d+$/.test(key);
+		// Off Linux the key is another kind (`ps:`), and the second join declines by design.
+		const start = linux ? key.slice("linux:".length) : "5000";
+		// The pane's own process is a shell (pid 100) on pts/9; this process stands in for the citizen typed there.
+		const shell = process.pid === 100 ? 101 : 100;
+		const pts9 = (136 << 8) | 9;
+		const behindShell = () =>
+			buildTmuxPlacementIndex(
+				[{ pid: shell, paneId: "%6", window: "1", session: "entwurf", serverPid: 50, tty: "/dev/pts/9" }],
+				() => "136:9",
+			);
+		const reads = (starttime: string): OwnerProcReads => ({
+			readStat: (pid) =>
+				pid === process.pid
+					? `${pid} (node) S 1 ${pid} ${shell} ${pts9} ${pid} ${"0 ".repeat(13)}${starttime} 0 0\n`
+					: null,
+			readNamespace: (_pid, name) => `${name}:[1]`,
+		});
+		const r = await listEntwurfFacts(deps({ readTmuxPlacementIndex: behindShell, ownerProcReads: reads(start) }));
+		ok("the citizen is active", rowOf(r.facts.peers, PLACED).receiver === "active");
+		if (!linux) {
+			ok(
+				"no Linux start key: the second join is unsupported and says unobserved",
+				kindOf(r.facts.peers, PLACED) === "unobserved",
+			);
+			return;
+		}
+		ok(
+			"placed in the pane whose foreground job it leads",
+			JSON.stringify(rowOf(r.facts.peers, PLACED).placement) ===
+				JSON.stringify({ kind: "tmux-pane", session: "entwurf", window: "1", paneId: "%6" }),
+		);
+		ok("the citizen that process left behind is not placed", kindOf(r.facts.peers, LEFT_BEHIND) === "unobserved");
+		const other = await listEntwurfFacts(
+			deps({ readTmuxPlacementIndex: behindShell, ownerProcReads: reads(`${start}1`) }),
+		);
+		ok(
+			"a process with another start time is not the marker's: unobserved",
+			kindOf(other.facts.peers, PLACED) === "unobserved",
+		);
+		const inCore = await listEntwurfFacts(
+			deps({ readTmuxPlacementIndex: behindShell, ownerProcReads: reads(`${start}1`), readHcPlacementIndex: HC_HERE }),
+		);
+		ok(
+			"an unread tmux answer does not hide the core's sighting",
+			renderPlacement(rowOf(inCore.facts.peers, PLACED).placement) === "hc oracle/t1d",
+		);
 	});
 
 	test("[QK:HCP-WIRED-NONE-NEEDS-ALL] none needs herdr, tmux and hc all read", async () => {
@@ -303,7 +364,7 @@ describe("placement inside one listing", () => {
 				else if (/\.(ts|mts|mjs|js)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name)) {
 					const src = fs.readFileSync(full, "utf8");
 					if (
-						/from\s+"[^"]*(hc-placement|tmux-placement|placement-compose)(\.ts|\.js)?"/.test(src) ||
+						/from\s+"[^"]*(hc-placement|tmux-placement|placement-compose|owner-foreground)(\.ts|\.js)?"/.test(src) ||
 						src.includes("ENTWURF_HC_PLACEMENT_SOCKET")
 					) {
 						importers.push(path.relative(root, full));
@@ -322,6 +383,7 @@ describe("placement inside one listing", () => {
 					"pi-extensions/lib/entwurf-fact-provider.ts",
 					"pi-extensions/lib/entwurf-peer-observe.ts",
 					"pi-extensions/lib/hc-placement.ts",
+					"pi-extensions/lib/owner-foreground.ts",
 				].join(),
 		);
 		// Inside the view: hc-placement reads the variable and takes the shared owner rule from the fold.
@@ -330,8 +392,16 @@ describe("placement inside one listing", () => {
 			["placement-compose.ts", "tmux-placement.ts"].every((name) => {
 				const src = fs.readFileSync(path.join(root, "pi-extensions/lib", name), "utf8");
 				const froms = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-				return froms.every((f) => f === "./herdr-placement.ts" || f === "node:child_process");
+				return froms.every((f) => f === "./herdr-placement.ts" || f === "node:child_process" || f === "node:fs");
 			}),
+		);
+		const foreground = fs.readFileSync(path.join(root, "pi-extensions/lib/owner-foreground.ts"), "utf8");
+		ok(
+			"the foreground join imports the fold, the tmux view and the placement types, and nothing else of entwurf",
+			[...foreground.matchAll(/from\s+"([^"]+)"/g)]
+				.map((m) => m[1])
+				.sort()
+				.join() === ["./herdr-placement.ts", "./placement-compose.ts", "./tmux-placement.ts", "node:fs"].join(),
 		);
 	});
 });
