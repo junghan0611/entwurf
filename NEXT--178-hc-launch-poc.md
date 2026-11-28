@@ -43,11 +43,15 @@ Record vs observation: no location is recorded anywhere. Core observation at 202
 | garden id | backend | born | now |
 |---|---|---|---|
 | `20261128T125309-d9ecc0` | claude-code | tmux @97 | live, hc t1g (`hc oracle/t1g`) |
-| `20261128T125340-9f9443` | pi-durable | tmux @98 | live, hc t1j (`unobserved`, G-P2) |
-| `20261128T125432-ea3378` | pi | tmux @99 | live, hc t1m (`unobserved`, G-P2) |
-| `20261128T124035-5541ae` | claude-code | hc t1b | live, tmux @100 pane %100 (`tmux entwurf:9`) — reopened from hc to tmux |
+| `20261128T125340-9f9443` | pi-durable | tmux @98 | dormant — quit 13:5x with ctrl+c in hc t1j |
+| `20261128T125432-ea3378` | pi | tmux @99 | dormant — quit with `/quit` in hc t1m |
+| `20261128T124035-5541ae` | claude-code | hc t1b | dormant — quit with `/exit` in tmux pane %100 |
 | `20261128T123102-a05627` | pi-durable | hc | dormant (was t19) — path B target |
 | `20261128T121853-7bc485` | pi | hc | dormant, never prompted (no transcript) |
+
+Kept live on purpose: `d9ecc0` (hc t1g, the seat for path B). Kept dormant: `a05627` (path B target). No record or transcript was removed and nothing was retired.
+
+To show the three backends in the App again, from any Herdr Core terminal whose `PATH` has `entwurf` (one new terminal each; the Claude Code one is already there as t1g): `entwurf resume 20261128T125340-9f9443` (pi-durable), `entwurf resume 20261128T125432-ea3378` (pi). To see one in tmux instead, run the same line from a tmux pane with no `HC_*` variables: `entwurf resume 20261128T124035-5541ae` (Claude Code). Quit them afterwards in their own terminals: `/exit` (Claude Code), `/quit` (pi), ctrl+c (pi-durable).
 
 Quit: `/exit` (Claude Code), Ctrl-C (pi-durable), `/quit` (Pi) in the terminal. Sensitive absolute socket paths stay in the local receipts.
 

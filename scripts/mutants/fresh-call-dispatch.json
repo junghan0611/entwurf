@@ -229,7 +229,7 @@
 			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
 			"find": ["\tif (hasHcMarker(env)) return herdr ? \"ambiguous\" : \"hc\";"],
 			"replace": ["\tif (hasHcMarker(env)) return herdr ? \"ambiguous\" : \"tmux\";"],
-			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-RESUME-RAIL-TABLE]",
 			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
@@ -240,7 +240,7 @@
 			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
 			"find": ["\tif (hasHcMarker(env)) return herdr ? \"ambiguous\" : \"hc\";"],
 			"replace": ["\tif (hasHcMarker(env)) return herdr ? \"herdr\" : \"hc\";"],
-			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-RESUME-AMBIGUOUS-NO-RAIL]",
 			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
@@ -253,7 +253,7 @@
 			"replace": [
 				"\tif (rail === \"hc\") return launchHcResume(input, env).then((o) => (o.ok ? o : (tmuxLaunch(input) as never)));"
 			],
-			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-RESUME-HC-NO-FALLBACK]",
 			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
@@ -266,7 +266,7 @@
 			"replace": [
 				"\tif (hasHcMarker(env) && request.task === \"\") return { rail: \"hc\", result: { ok: false, reason: HC_FRESH_UNSUPPORTED } };"
 			],
-			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-FRESH-HC-UNSUPPORTED]",
 			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"

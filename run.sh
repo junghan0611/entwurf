@@ -1355,6 +1355,8 @@ check_fresh_call_provider() {
   # MUTANT EXECUTION COORDINATE for the #76 provider claims in scripts/mutants/fresh-call-dispatch.json
   # (same reasoning as check_entwurf_resume_args above): pi and pi-durable refuse a model that names
   # the openrouter provider, and pi refuses one that names no provider, at the dispatch root.
+  # #178: the same coordinate carries the Herdr Core claims of that test file — the resume rail table,
+  # the ambiguous-marker refusal, the no-fallback rule and the fresh-call refusal.
   section "fresh-call provider contract (mutant execution coordinate)"
   run_vitest pi-extensions/lib/fresh-call-dispatch.test.ts
 }
