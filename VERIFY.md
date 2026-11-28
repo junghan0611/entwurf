@@ -647,6 +647,7 @@ every focused gate green at the time:
   reached `check:full` with a stale compiled entry and failed in 22 seconds on "artifact is not
   stale". The installed surfaces run compiled JS (Hard Rule 11), so an un-rebuilt `dist` means the
   focused gates proved the source while every package-shaped gate still judged the previous build.
+- **So does an edit to `ENTWURF.json` or to any `pi-extensions/lib/**` module the bridge imports:** both are emitted into the same `mcp/entwurf-bridge/dist`. `[측정 2026-11-28, #178]` a candidate that added a guidance revision and four lib modules reached `check:full` with a dist built before the work and failed in 262 seconds at `[QK:BUNDLE-REACH-GUIDANCE-CARRIER]`; after `pnpm run build-bridge` the same SHA was green. Two operating facts ride on that dist in a development checkout: Pi and pi-durable citizens run the COMPILED bridge while Claude Code citizens run the TypeScript source (`mcp/entwurf-bridge/start.sh`), so a stale dist leaves the two on different code; and `check:full`'s package tier (`check-pack`, through prepack) REWRITES that dist from the checkout it runs in. On a host whose checkout is also the operating install, a build or a full floor therefore changes what the next Pi or pi-durable bridge loads — run the candidate from an exact-SHA export in a sandbox when the test must not move the operating consumers.
 
 ---
 
