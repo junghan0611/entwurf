@@ -459,6 +459,7 @@ export type PickerRole =
 	| "backend"
 	| "fact"
 	| "activity"
+	| "placement"
 	| "model"
 	| "cwd"
 	| "key";
@@ -526,6 +527,11 @@ const NAME_MAX_CELLS = 24;
 const NAME_MIN_CELLS = 5;
 /** The fewest cells a cut path is drawn in; below that it is left to the selected line. */
 const PATH_MIN_CELLS = 8;
+/** The most cells the placement column takes; a longer word (a long tmux session name) is cut with
+ * `~` there, and the selected line carries it whole where the width allows. */
+const PLACEMENT_MAX_CELLS = 24;
+/** The fewest cells a cut placement word is drawn in on the selected line. */
+const PLACEMENT_MIN_CELLS = 5;
 
 /** Column widths for one kind of row — bookmarked or not — in a terminal `columns` wide. */
 interface RowColumns {
@@ -538,6 +544,10 @@ interface RowColumns {
 	facts: number;
 	/** Cells of the activity time; 0 when it does not fit whole, and then nothing after it is drawn. */
 	activity: number;
+	/** Cells of the placement column, right after the activity time; 0 when the column does not fit
+	 * whole or no row of the listing is placed (#178). The selected line carries the placement at
+	 * every width. */
+	placement: number;
 }
 
 /**
@@ -545,8 +555,8 @@ interface RowColumns {
  * never be cut — the whole garden id, and on an unbookmarked row the backend and the facts, which the
  * minimum size guarantees; a bookmarked row draws its facts and backend only where they fit after its
  * name —
- * then the activity time, the model and the directory, each drawn whole or not at all (a cut path
- * keeps its end). A bookmarked row is found by its name and kept in bookmark order, so its name
+ * then the activity time, the placement (#178), the model and the directory, each drawn whole or
+ * not at all (a cut path keeps its end; a placement word past the column's cap ends in `~`). A bookmarked row is found by its name and kept in bookmark order, so its name
  * takes room before its activity time does; an unbookmarked row is ordered and found by its time,
  * which comes right after its facts. Widths are measured over EVERY row of the listing, so the columns stay put
  * while the operator narrows, scrolls or lifts the filter, and the id, backend, facts and activity
@@ -557,9 +567,14 @@ function rowColumns(texts: readonly ResumeRowText[], pinned: boolean, columns: n
 	const backend = widest(texts.map((t) => t.backend));
 	const facts = widest(texts.map((t) => t.facts.join(", ")));
 	const activityCells = widest(texts.map((t) => t.activity));
+	// A listing in which no owner placed anyone draws no placement column at all: every row would say
+	// `unobserved`, and the column would push out the model that tells such rows apart. The selected
+	// line still says it. Measured over every row, so the choice holds while the list is narrowed.
+	const placed = texts.some((t) => t.placement !== "unobserved");
+	const placementCells = placed ? Math.min(PLACEMENT_MAX_CELLS, widest(texts.map((t) => t.placement))) : 0;
 	const nameFull = pinned ? Math.min(NAME_MAX_CELLS, widest(texts.map((t) => t.pin ?? ""))) : 0;
 	// A listing with no bookmark draws no bookmark column at all.
-	if (pinned && nameFull === 0) return { pinned, name: 0, id, backend, facts, activity: 0 };
+	if (pinned && nameFull === 0) return { pinned, name: 0, id, backend, facts, activity: 0, placement: 0 };
 	// What is set aside before the name. An unbookmarked row has no name and keeps its backend and
 	// facts whole (the minimum size guarantees it). A bookmarked row keeps its NAME before them
 	// (#176: the name is how it is found, in a narrow Korean terminal too): only the id, its address,
@@ -576,7 +591,18 @@ function rowColumns(texts: readonly ResumeRowText[], pinned: boolean, columns: n
 	// Nothing is drawn after a field that was left out: a time beside an id reads as the wrong column.
 	if (!factsShown || !backendShown) room = 0;
 	const activity = room >= GAP.length + activityCells ? activityCells : 0;
-	return { pinned, name, id, backend: backendShown ? backend : 0, facts: factsShown ? facts : 0, activity };
+	if (activity > 0) room -= GAP.length + activity;
+	// The placement column comes only after a drawn activity time, and whole or not at all.
+	const placement = activity > 0 && placementCells > 0 && room >= GAP.length + placementCells ? placementCells : 0;
+	return {
+		pinned,
+		name,
+		id,
+		backend: backendShown ? backend : 0,
+		facts: factsShown ? facts : 0,
+		activity,
+		placement,
+	};
 }
 
 /** One row as pieces: `> ` on the cursor's row, `* ` and the name on a bookmarked one. */
@@ -599,6 +625,9 @@ function rowSpans(text: ResumeRowText, cols: RowColumns, cursor: boolean, column
 	}
 	if (cols.activity > 0) {
 		out.push(span(GAP), span(padCells(text.activity, cols.activity), "activity"));
+		if (cols.placement > 0) {
+			out.push(span(GAP), span(padCells(cutName(text.placement, cols.placement), cols.placement), "placement"));
+		}
 		let used = displayWidth(joinSpans(out));
 		if (text.model !== null && used + GAP.length + displayWidth(text.model) <= columns) {
 			out.push(span(GAP), span(text.model, "model"));
@@ -718,23 +747,33 @@ export function renderPickerFrame(
 	// The body always takes its full height, so the four lines below stay where they are.
 	while (out.length < HEAD_LINES + bodyHeight) out.push([]);
 
-	// The row under the cursor again, on a line of its own: its id, its bookmark name and its
-	// directory — what tells two siblings apart when a narrow terminal has cut the row. The id is
-	// always whole. The name is whole unless the line cannot hold it beside the id and a readable
-	// directory; then it is cut with `~` inside its brackets. The directory is whole, or its end after
-	// `...`; it keeps at least PATH_MIN_CELLS of the line (all of a shorter one).
+	// The row under the cursor again, on a line of its own: its id, its bookmark name, where its
+	// terminal is and its directory — what tells two siblings apart when a narrow terminal has cut the
+	// row. The id is always whole. The directory is whole, or its end after `...`; it keeps at least
+	// PATH_MIN_CELLS of the line (all of a shorter one). The placement word (#178) comes next: whole,
+	// or cut with `~` to what is left — this line is where a narrow terminal shows it. The name takes
+	// what remains: whole, cut with `~` inside its brackets, or, with fewer than NAME_MIN_CELLS left,
+	// left to the row above, which always draws a bookmark's name at the minimum size.
 	const selected = rows[state.cursor];
 	if (selected === undefined) {
 		out.push([]);
 	} else {
+		const at = span("  at ", "dim");
 		const where = span("  in ", "dim");
 		const pathCells = Math.min(displayWidth(selected.cwd), PATH_MIN_CELLS);
-		const fixed = displayWidth(`selected: ${selected.gardenId}  []${where.text}`) + pathCells;
-		const nameCells = Math.max(NAME_MIN_CELLS, size.columns - fixed);
+		const base = displayWidth(`selected: ${selected.gardenId}${at.text}${where.text}`) + pathCells;
+		const placementCells = Math.min(
+			displayWidth(selected.placement),
+			Math.max(PLACEMENT_MIN_CELLS, size.columns - base),
+		);
+		const nameCells = size.columns - base - placementCells - displayWidth("  []");
+		const nameShown = selected.pin !== null && nameCells >= Math.min(displayWidth(selected.pin), NAME_MIN_CELLS);
 		const head = [
 			span("selected: ", "dim"),
 			span(selected.gardenId, "id"),
-			...(selected.pin === null ? [] : [span("  ["), span(cutName(selected.pin, nameCells), "pin"), span("]")]),
+			...(nameShown ? [span("  ["), span(cutName(selected.pin ?? "", nameCells), "pin"), span("]")] : []),
+			at,
+			span(cutName(selected.placement, placementCells), "placement"),
 			where,
 		];
 		out.push(fit([...head, span(fitPath(selected.cwd, size.columns - displayWidth(joinSpans(head))), "cwd")]));
@@ -785,6 +824,7 @@ const ROLE_SGR: Record<PickerRole, string> = {
 	backend: "",
 	fact: "",
 	activity: "90",
+	placement: "",
 	model: "90",
 	cwd: "",
 	key: "",

@@ -241,6 +241,32 @@
 			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
 		},
 		{
+			"claim": "RESUMEROWS-PLACEMENT-VIEW",
+			"title": "a row prints the placement kind instead of peer-facts' word, so a citizen in a Herdr Core terminal reads hc-terminal and the person cannot tell which terminal",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": ["\t\t\tplacement: renderPlacement(fact.placement),"],
+			"replace": ["\t\t\tplacement: fact.placement.kind,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-PLACEMENT-VIEW]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
+			"claim": "RESUMEROWS-PLACEMENT-NOT-SEARCHED",
+			"title": "typing a placement word finds rows, so the view of where a terminal sits starts deciding which citizens are listed",
+			"subject": "pi-extensions/lib/resume-picker-rows.ts",
+			"find": [
+				"\treturn [row.gardenId, row.backend, row.model ?? \"\", row.facts, row.cwd, row.pin ?? \"\"].join(\" \").toLowerCase();"
+			],
+			"replace": [
+				"\treturn [row.gardenId, row.backend, row.model ?? \"\", row.facts, row.cwd, row.pin ?? \"\", row.placement].join(\" \").toLowerCase();"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEROWS-PLACEMENT-NOT-SEARCHED]",
+			"signatureSource": "pi-extensions/lib/resume-picker-rows.test.ts"
+		},
+		{
 			"claim": "RESUMEROWS-DEFAULT-IS-THIS-DIR",
 			"title": "the directory filter also hides bookmarked citizens of other directories, so a pinned sibling vanishes from the default view",
 			"subject": "pi-extensions/lib/resume-picker-rows.ts",
@@ -649,15 +675,71 @@
 		},
 		{
 			"claim": "RESUMEPICK-SELECTED-LINE-FITS",
-			"title": "the selected line prints a long bookmark name whole again, so at the minimum size the line is cut inside the name and loses its bracket and directory",
+			"title": "the selected line prints a long bookmark name whole again, so the line is cut inside the name and loses its bracket, its placement and its directory",
 			"subject": "pi-extensions/lib/resume-picker.ts",
 			"find": [
-				"\t\t\t...(selected.pin === null ? [] : [span(\"  [\"), span(cutName(selected.pin, nameCells), \"pin\"), span(\"]\")]),"
+				"\t\t\t...(nameShown ? [span(\"  [\"), span(cutName(selected.pin ?? \"\", nameCells), \"pin\"), span(\"]\")] : []),"
 			],
-			"replace": ["\t\t\t...(selected.pin === null ? [] : [span(\"  [\"), span(selected.pin, \"pin\"), span(\"]\")]),"],
+			"replace": ["\t\t\t...(nameShown ? [span(\"  [\"), span(selected.pin ?? \"\", \"pin\"), span(\"]\")] : []),"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-SELECTED-LINE-FITS]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-PLACEMENT-SELECTED-LINE",
+			"title": "the selected line drops the placement word, so a narrow terminal shows nowhere where the chosen sibling sits",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\t\t\tspan(cutName(selected.placement, placementCells), \"placement\"),"],
+			"replace": ["\t\t\tspan(\"\", \"placement\"),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-PLACEMENT-SELECTED-LINE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-PLACEMENT-COLUMN",
+			"title": "the placement column is drawn before the activity time, so the time a row is ordered by no longer sits right after its facts",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": [
+				"\t\tout.push(span(GAP), span(padCells(text.activity, cols.activity), \"activity\"));",
+				"\t\tif (cols.placement > 0) {",
+				"\t\t\tout.push(span(GAP), span(padCells(cutName(text.placement, cols.placement), cols.placement), \"placement\"));",
+				"\t\t}"
+			],
+			"replace": [
+				"\t\tif (cols.placement > 0) {",
+				"\t\t\tout.push(span(GAP), span(padCells(cutName(text.placement, cols.placement), cols.placement), \"placement\"));",
+				"\t\t}",
+				"\t\tout.push(span(GAP), span(padCells(text.activity, cols.activity), \"activity\"));"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-PLACEMENT-COLUMN]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-PLACEMENT-COLUMN-WHOLE",
+			"title": "the placement column is drawn wherever the activity time fits, whole or not, so a row between those widths ends in a fragment of a placement word",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": [
+				"\tconst placement = activity > 0 && placementCells > 0 && room >= GAP.length + placementCells ? placementCells : 0;"
+			],
+			"replace": ["\tconst placement = activity > 0 && placementCells > 0 ? placementCells : 0;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-PLACEMENT-COLUMN-WHOLE]",
+			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMEPICK-PLACEMENT-COLUMN-ONLY-WHEN-PLACED",
+			"title": "a listing in which nobody is placed still draws the column, so every row says unobserved where its model used to be",
+			"subject": "pi-extensions/lib/resume-picker.ts",
+			"find": ["\tconst placed = texts.some((t) => t.placement !== \"unobserved\");"],
+			"replace": ["\tconst placed = texts.length > 0;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMEPICK-PLACEMENT-COLUMN-ONLY-WHEN-PLACED]",
 			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
 		},
 		{

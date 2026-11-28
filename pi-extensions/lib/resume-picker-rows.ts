@@ -10,9 +10,15 @@
  * WHAT IT READS. `PeerFact` rows exactly as `listEntwurfFacts` produced them (the provider is not
  * re-run, re-joined or re-ordered at the fact level), the directory the operator typed the command
  * in, bookmark pins and the presentation hints (test room, activity time). Of a fact it reads
- * identity, cwd, model, the record's update time and the two liveness-side observations; it does NOT read `placement` — a pane is a view, and this list
- * neither shows nor decides anything from one. `unsupported`, `unobserved` and `unknown` are
- * printed as the provider's own words, never translated into dead, inactive or eligible.
+ * identity, cwd, model, the record's update time, the two liveness-side observations and its
+ * `placement`. `unsupported`, `unobserved` and `unknown` are printed as the provider's own words,
+ * never translated into dead, inactive or eligible.
+ *
+ * PLACEMENT IS SHOWN, NEVER USED (#178). Where a citizen's terminal is — the word peer-facts prints
+ * (`renderPlacement`: `herdr <pane>`, `tmux <session>:<window>`, `hc <core>/<terminal>`, or `none`,
+ * `ambiguous`, `unobserved`) — is printed so a person can tell siblings apart by where they sit. It
+ * is a view, not an address: no row is filtered, ordered or found by it, and it never reaches what
+ * Enter returns. The provider read it once for the whole listing; this module reads nothing more.
  *
  * PINS ARE BOOKMARKS. A pin joins a fact row on the GARDEN ID and on nothing else; it carries a
  * name for the eye and an order. A pin whose id has no record makes no row — a bookmark cannot
@@ -26,6 +32,7 @@
  */
 
 import type { PeerFact } from "./entwurf-facts.ts";
+import { renderPlacement } from "./herdr-placement.ts";
 import { isWithinWindow, type PeerPresentation, RECENT_WINDOW_MS, renderActivity } from "./peer-presentation.ts";
 
 /** A bookmark: an id to float to the top and the name the operator knows it by. */
@@ -47,6 +54,9 @@ export interface ResumeRow {
 	model: string | null;
 	/** The liveness-side facts, in the provider's words. */
 	facts: string;
+	/** Where the citizen's terminal is, in peer-facts' word for it. A view: never filtered, ordered
+	 * or searched by. */
+	placement: string;
 	/** When this citizen was last active (its transcript's mtime, else its record's update time), or
 	 * `null` when neither is known. The order of the unpinned rows and the time a row prints. */
 	activityMs: number | null;
@@ -137,6 +147,7 @@ export function buildResumeListing(
 			cwd: fact.cwd,
 			model: fact.model,
 			facts: describeFacts(fact),
+			placement: renderPlacement(fact.placement),
 			activityMs,
 			pin: pin === undefined ? null : pin.name,
 			section: pin === undefined ? (here ? "here" : "elsewhere") : here ? "pin-here" : "pin-elsewhere",
@@ -179,7 +190,9 @@ export interface ResumeView {
 	query: string;
 }
 
-/** Everything a row can be found by — what is printed, and nothing that is not. */
+/** Everything a row can be found by — what is printed, and nothing that is not. The placement word
+ * is printed but deliberately not here: it is a view of where a terminal sits, and typing narrows
+ * by who a citizen is (#178). */
 function haystack(row: ResumeRow): string {
 	return [row.gardenId, row.backend, row.model ?? "", row.facts, row.cwd, row.pin ?? ""].join(" ").toLowerCase();
 }
@@ -214,6 +227,8 @@ export interface ResumeRowText {
 	backend: string;
 	/** The liveness-side facts, one entry per axis, in the provider's words (`describeFacts`). */
 	facts: string[];
+	/** Where the citizen's terminal is, in peer-facts' word for it. */
+	placement: string;
 	/** The activity time the row is ordered by, in UTC, or `unknown`. */
 	activity: string;
 	model: string | null;
@@ -230,6 +245,7 @@ export function resumeRowText(row: ResumeRow): ResumeRowText {
 		gardenId: row.gardenId,
 		backend: row.backend,
 		facts: row.facts.split(", "),
+		placement: row.placement,
 		activity: renderActivity(row.activityMs),
 		model: row.model,
 		pin: row.pin,

@@ -8,8 +8,11 @@
  *                                   record makes no row
  *   RESUMEROWS-LIVE-STILL-LISTED    liveness never removes or reorders a row: the list is not
  *                                   eligibility, the leaf is
- *   RESUMEROWS-FACTS-VERBATIM       the liveness-side facts are the provider's words; placement
- *                                   is neither read nor printed
+ *   RESUMEROWS-FACTS-VERBATIM       the liveness-side facts are the provider's words
+ *   RESUMEROWS-PLACEMENT-VIEW       a row carries peer-facts' placement word for each kind — a
+ *                                   place, `none`, `ambiguous`, `unobserved` — and no row is
+ *                                   filtered or ordered by it (#178)
+ *   RESUMEROWS-PLACEMENT-NOT-SEARCHED  typing a placement word finds no row (#178)
  *   RESUMEROWS-DEFAULT-IS-THIS-DIR  the default view is this directory plus every pin; a pin from
  *                                   elsewhere stays, in its own section, with its path
  *   RESUMEROWS-UNLISTED-COUNTED     a backend with no same-id resume is counted, not listed, and
@@ -111,24 +114,59 @@ describe("the entwurf resume list", () => {
 		);
 	});
 
-	it("[QK:RESUMEROWS-FACTS-VERBATIM] the liveness-side facts are printed in the provider's own words — unsupported, unobserved and unknown are never turned into dead, inactive or eligible — and placement is neither read nor printed", () => {
-		const src = fs.readFileSync(
-			path.join(path.dirname(fileURLToPath(import.meta.url)), "resume-picker-rows.ts"),
-			"utf8",
-		);
-		const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-		const withPane = fact({ gardenId: A, placement: { kind: "herdr-pane", paneId: "pane-77" } as never });
-		const rendered = JSON.stringify(resumeRowText(buildResumeListing([withPane], HERE, []).rows[0] as never));
+	it("[QK:RESUMEROWS-FACTS-VERBATIM] the liveness-side facts are printed in the provider's own words — unsupported, unobserved and unknown are never turned into dead, inactive or eligible", () => {
 		ok(
-			"each axis only where it applies, the provider's word where neither does, and no placement",
+			"each axis only where it applies, the provider's word where neither does",
 			describeFacts({ liveness: "dead", receiver: "n/a" }) === "socket dead" &&
 				describeFacts({ liveness: "unknown" as never, receiver: "n/a" }) === "socket unknown" &&
 				describeFacts({ liveness: "unsupported", receiver: "unobserved" }) === "receiver unobserved" &&
 				describeFacts({ liveness: "unsupported", receiver: "inactive" }) === "receiver inactive" &&
 				describeFacts({ liveness: "alive", receiver: "active" }) === "socket alive, receiver active" &&
-				describeFacts({ liveness: "unsupported", receiver: "n/a" }) === "liveness unsupported" &&
-				!/placement/.test(code) &&
-				!rendered.includes("pane-77"),
+				describeFacts({ liveness: "unsupported", receiver: "n/a" }) === "liveness unsupported",
+		);
+	});
+
+	/** One row in each place an owner can report, plus the three blank words (#178), newest last. */
+	const placedFacts = (): PeerFact[] =>
+		[
+			{ kind: "herdr-pane", paneId: "w1-p2" },
+			{ kind: "tmux-pane", paneId: "%7", session: "work", window: "3" },
+			{ kind: "hc-terminal", coreId: "c0", coreName: "oracle", terminal: "t1x" },
+			{ kind: "none" },
+			{ kind: "ambiguous" },
+			{ kind: "unobserved" },
+		].map((p, i) =>
+			fact({
+				gardenId: `20261101T00000${i + 1}-a0000${i + 1}`,
+				recordUpdatedAt: `2026-11-0${i + 1}T00:00:00.000Z`,
+				placement: p as never,
+			}),
+		);
+
+	it("[QK:RESUMEROWS-PLACEMENT-VIEW] a row carries the word peer-facts prints for where its terminal is — herdr pane, tmux session:window, hc core/terminal, none, ambiguous, unobserved — and that word never filters or orders a row: the same rows in the same order whatever the placement (#178)", () => {
+		const placed = placedFacts();
+		const blank = placed.map((f) => ({ ...f, placement: { kind: "unobserved" } }) as PeerFact);
+		const listing = buildResumeListing(placed, HERE, []);
+		const words = visibleResumeRows(listing, DEFAULT).map((r) => resumeRowText(r).placement);
+		const same = (query: string): boolean =>
+			ids(visibleResumeRows(listing, { ...DEFAULT, query })) ===
+			ids(visibleResumeRows(buildResumeListing(blank, HERE, []), { ...DEFAULT, query }));
+		ok(
+			"the provider's word for each kind, in an order and set the placement never moves",
+			words.join("|") === "unobserved|ambiguous|none|hc oracle/t1x|tmux work:3|herdr w1-p2" &&
+				same("") &&
+				same("provider"),
+		);
+	});
+
+	it("[QK:RESUMEROWS-PLACEMENT-NOT-SEARCHED] typing a placement word finds no row: the word is printed but typing narrows by who a citizen is, never by where its terminal sits (#178)", () => {
+		const listing = buildResumeListing(placedFacts(), HERE, []);
+		ok(
+			"no placement word finds a row",
+			visibleResumeRows(listing, DEFAULT).length === 6 &&
+				["t1x", "oracle", "work:3", "w1-p2", "ambiguous", "herdr"].every(
+					(q) => visibleResumeRows(listing, { ...DEFAULT, query: q }).length === 0,
+				),
 		);
 	});
 
@@ -146,6 +184,7 @@ describe("the entwurf resume list", () => {
 						gardenId: E,
 						backend: "pi-durable",
 						facts: ["receiver unobserved"],
+						placement: "unobserved",
 						activity: "2026-11-01T00:00Z",
 						model: "provider/model-a",
 						pin: "Elsewhere pin",
@@ -205,6 +244,7 @@ describe("the entwurf resume list", () => {
 						gardenId: P,
 						backend: "pi-durable",
 						facts: ["receiver active"],
+						placement: "unobserved",
 						activity: "2026-11-01T00:00Z",
 						model: null,
 						pin: "운영코디",

@@ -59,7 +59,7 @@ Keep these apart; one does not imply the next: launch receipt, observation recei
 
 ## 5. The placement view
 
-Shown beside the garden id by `entwurf_peers` / `entwurf peer-facts`. It is computed for each listing and stored nowhere, so an old location cannot be shown as current. It is never an address, a liveness answer or an authority, and no send or launch path imports it (`hc-placement-wiring.test.ts` `HCP-VIEW-NOT-DISPATCH` holds the direct imports).
+Shown beside the garden id by `entwurf_peers` / `entwurf peer-facts`, and by the `entwurf resume` list: on the line under the list for the row under the cursor at every width (whole, or cut with `~`), and as a column after the activity time where the terminal is wide enough and at least one row is placed (a listing where every row is `unobserved` draws no column). A sibling that is not open has no owner process to join and reads `unobserved`; a place is shown for a sibling that is open now — which is not a statement about whether it can be reopened. The list reuses the listing it already reads; typing never searches the word, and it never filters, orders or chooses a row (`resume-picker-rows.test.ts` `RESUMEROWS-PLACEMENT-VIEW`, `resume-picker.test.ts` `RESUMEPICK-PLACEMENT-*`). It is computed for each listing and stored nowhere, so an old location cannot be shown as current. It is never an address, a liveness answer or an authority, and no send or launch path imports it (`hc-placement-wiring.test.ts` `HCP-VIEW-NOT-DISPATCH` holds the direct imports).
 
 Three owners can hold a citizen, each read at most once per listing, each only from an explicit source:
 

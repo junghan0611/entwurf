@@ -7,7 +7,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 ### Added
 
 - **Same-id resume inside a Herdr Core terminal (#178).** `entwurf resume` and `entwurf_resume_call` reopen a dormant `pi`, `pi-durable` or `claude-code` citizen in a new terminal on the caller's own core, with no parent. The rail follows the process context (an hc marker, `HERDR_ENV=1`, or tmux) and never falls back; both markers at once are refused as `rail-markers-ambiguous`. A fresh call from a Herdr Core terminal is refused as `hc-fresh-unsupported`. Contract and limits: `docs/hc-launch-rail.md`.
-- **Placement from tmux and Herdr Core (#178).** A peers listing can show a Claude Code or pi-durable citizen at `tmux <session>:<window>` (the lister's own server) or `hc <core>/<terminal>` (a core the operator names in `ENTWURF_HC_PLACEMENT_SOCKET`). A view only: never an address, liveness or authority, and stored nowhere.
+- **Placement from tmux and Herdr Core (#178).** A peers listing can show a Claude Code or pi-durable citizen at `tmux <session>:<window>` (the lister's own server) or `hc <core>/<terminal>` (a core the operator names in `ENTWURF_HC_PLACEMENT_SOCKET`). A view only: never an address, liveness or authority, and stored nowhere. The `entwurf resume` list shows the same word for the row under the cursor at every width, and as a column where the terminal is wide enough and someone is placed; a sibling that is not open reads `unobserved`. It is never searched and never filters, orders or chooses a row.
 
 ### Changed
 
