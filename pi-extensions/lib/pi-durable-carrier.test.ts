@@ -426,7 +426,7 @@ const FOOTER_ORACLE = String.raw`
 const { readdirSync, statSync } = await import("node:fs");
 const { join } = await import("node:path");
 const { BACKGROUND_CONTEXT: context } = await import("@earendil-works/chord/context");
-const { createRegistry, Harness } = await import("@earendil-works/pi-durable");
+const { createRegistry, Harness, LiveDoc } = await import("@earendil-works/pi-durable");
 const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
 const carrier = new URL("./pi/pi-durable/carrier/", "file://" + process.cwd() + "/").href;
 const { TaskBadge, describeTask, durableLayout, durableNotices } = await import(carrier + "tui.js");
@@ -498,6 +498,40 @@ runtime.native = { databases: databases.length, shown: live() };
 await continued.controller.toggleTasks();
 runtime.native.hidden = live();
 await continued.close();
+
+// The root's own run state whichever conversation is shown (#178). The root's pi.live and one child's are seeded
+// different through the SDK's public commit, then the carrier opens the session and shows the child.
+const rooted = await Harness.open(await openNodeSqliteStorage(databases[0]), { models: await ModelRuntime.create(), registry }, context);
+const rootConversation = await rooted.root(context, {});
+const childConversation = await rooted.createConversation({ ownership: { kind: "ownerless" } }, context);
+await rooted.commit(async (tx) => {
+	const rootDoc = await tx.doc(LiveDoc, rootConversation.id);
+	rootDoc.runFailure = { taskId: 91, inputs: [], reason: "turn_limit", detail: "ROOT-CANARY" };
+	const childDoc = await tx.doc(LiveDoc, childConversation.id);
+	childDoc.runFailure = { taskId: 92, inputs: [], reason: "no_model", detail: "CHILD-CANARY" };
+}, context);
+await rooted.close(context);
+const viewed = await openDurable({ cwd: project, continueSession: true, extensions: [extension], fence });
+const rootSeen = () => {
+	const view = viewed.view.current();
+	return { rootRun: view.rootRun ?? null, shown: view.conversation.docs["pi.live"] ?? null };
+};
+runtime.root = { atOpen: rootSeen() };
+await viewed.controller.switchConversation(childConversation.id);
+runtime.root.childShown = rootSeen();
+await viewed.close();
+const unseeded = await openDurable({ cwd: project, extensions: [extension], fence });
+runtime.root.neverRan = unseeded.view.current().rootRun ?? null;
+// The view the TUI wiring below is driven with: a real runtime's.
+const baseView = unseeded.view.current();
+// While the session is open: an input submitted with no model ends its run with no_model, and the root run state
+// follows the root's own watch.
+await unseeded.submitToRoot({ type: "input", content: "LIVE-CANARY" });
+for (const deadline = Date.now() + 15_000; unseeded.view.current().rootRun?.failure === undefined && Date.now() < deadline; ) {
+	await new Promise((resolve) => setTimeout(resolve, 25));
+}
+runtime.root.afterSubmit = unseeded.view.current().rootRun ?? null;
+await unseeded.close();
 
 const node = (id, kind, background, state, abortRequested = false) =>
 	({ id: String(id), kind, conversationId: 1, background, abortRequested, state, conversations: [] });
@@ -646,6 +680,17 @@ const resize = [];
 		resize.push({ rows, cols, marked: marked(draw(ui)) });
 	}
 }
+// The carrier TUI's own wiring (#178): the status it hands its terminal, from the root run state of each view it is
+// given, whichever conversation that view shows.
+const { DurableTui } = await import(carrier + "tui.js");
+const statuses = [];
+const handlers = { submit() {}, followUp() {}, abort() {}, exit() {}, selectModel() {}, cycleThinking() {} };
+const tui = new DurableTui(project, handlers, { ...terminal({ rows: 24, cols: 80 }), setProgramStatus: (status) => statuses.push(status) });
+const shownIdle = { ...baseView.conversation, docs: { ...baseView.conversation.docs, "pi.live": {} } };
+tui.apply({ ...baseView, conversation: shownIdle, rootRun: { running: true, compacting: false } });
+tui.apply({ ...baseView, conversation: shownIdle, rootRun: { running: false, compacting: false } });
+tui.apply({ ...baseView, rootRun: { running: false, compacting: false }, failure: {} });
+runtime.tuiStatuses = statuses;
 console.log(JSON.stringify({ runtime, badge, panel, notices, cells, transitions, resize }));
 `;
 
@@ -658,6 +703,11 @@ interface NativeView {
 interface FooterReport {
 	runtime: Record<"opened" | "hidden" | "shown", { observed: boolean; panel: boolean }> & {
 		native: { databases: number; shown: NativeView; hidden: NativeView };
+		root: Record<"atOpen" | "childShown", { rootRun: unknown; shown: unknown }> & {
+			neverRan: unknown;
+			afterSubmit: unknown;
+		};
+		tuiStatuses: unknown[];
 	};
 	badge: Record<string, { count: number; widths: Record<string, string[]> }>;
 	panel: { sleeping: string; signalOnly: string; blocked: Record<string, string>; unblocked: string };
@@ -705,8 +755,8 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 
 	it("[QK:PI-DURABLE-FOOTER-GRAPH-LIFETIME] the real carrier runtime observes the task graph from open to close, a committed native background task included; /tasks toggles only the panel", () => {
 		const both = (panel: boolean) => ({ observed: true, panel });
-		const { native, ...fresh } = report.runtime;
-		expect(fresh).toEqual({ opened: both(true), hidden: both(false), shown: both(true) });
+		const { opened, hidden, shown, native } = report.runtime;
+		expect({ opened, hidden, shown }).toEqual({ opened: both(true), hidden: both(false), shown: both(true) });
 		expect(native.databases).toBe(1);
 		for (const [view, panel] of [
 			[native.shown, true],
@@ -717,6 +767,31 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 			expect(view.nodes[0]).toMatchObject({ kind: "footer-oracle.hold", background: true });
 			expect(["pending", "running"]).toContain(view.nodes[0]?.status);
 		}
+	});
+
+	it("[QK:PI-DURABLE-STATUS-ROOT-WATCH] the runtime's root run state is the root conversation's own, and showing a child does not replace it", () => {
+		const root = { running: false, compacting: false, failure: { taskId: 91, reason: "turn_limit" } };
+		const shownRoot = { runFailure: { taskId: 91, inputs: [], reason: "turn_limit", detail: "ROOT-CANARY" } };
+		const shownChild = { runFailure: { taskId: 92, inputs: [], reason: "no_model", detail: "CHILD-CANARY" } };
+		expect(report.runtime.root.atOpen).toEqual({ rootRun: root, shown: shownRoot });
+		expect(report.runtime.root.childShown).toEqual({ rootRun: root, shown: shownChild });
+	});
+
+	it("[QK:PI-DURABLE-STATUS-NEVER-RAN] a root that never ran has a run state at open, no run and no failure, which reads idle", () => {
+		expect(report.runtime.root.neverRan).toEqual({ running: false, compacting: false });
+	});
+
+	it("[QK:PI-DURABLE-STATUS-LIVE-UPDATE] while the session is open the root run state follows the root's own watch: a run that ended with no model shows its failure", () => {
+		expect(report.runtime.root.afterSubmit).toMatchObject({ running: false, failure: { reason: "no_model" } });
+	});
+
+	it("[QK:PI-DURABLE-STATUS-TUI-WIRING] the carrier TUI hands its terminal the root's status from each view, not the shown conversation's", () => {
+		const app = "pi-durable";
+		expect(report.runtime.tuiStatuses).toEqual([
+			{ state: "working", app },
+			{ state: "done", app },
+			{ state: "error", app, message: "session failed" },
+		]);
 	});
 
 	it("[QK:PI-DURABLE-FOOTER-BADGE-COUNT] the badge counts live background tasks of any kind, names the ones not running, and draws nothing without one", () => {
@@ -3897,5 +3972,148 @@ describe("the owned prompt's skills, read as pi reads the skills setting", () =>
 			"project-skill": "project-skill fixture",
 			"same-name-skill": "the project copy",
 		});
+	});
+});
+
+/** The carrier's own program-status module (#178), loaded as an installed package loads it: the emitted JS. */
+type ProgramStatusModule = typeof import("../../pi/pi-durable/src/experimental/durable/program-status.ts");
+const programStatus = (await import(
+	pathToFileURL(path.join(ROOT, "pi", "pi-durable", "carrier", "program-status.js")).href
+)) as ProgramStatusModule;
+
+describe("the carrier's program status (#178, OSC 7501): only what a root fact says", () => {
+	type Fact = Parameters<ProgramStatusModule["rootProgramStatus"]>[0];
+	/** Each fact in turn through one sink; every status it hands the terminal. */
+	const reported = (facts: Fact[]) => {
+		const out: unknown[] = [];
+		const sink = new programStatus.RootStatusSink((status) => out.push(status));
+		for (const fact of facts) sink.apply(fact);
+		return out;
+	};
+	/** A root fact from a `pi.live` document, through the projection the runtime applies. */
+	const live = (state: object): Fact => ({ run: programStatus.rootRunOf(state as never), failed: false });
+	const run = { taskId: 1, inputs: [], turns: 1 };
+	const failure = (taskId: number, reason: string, detail?: string) => ({
+		runFailure: { taskId, inputs: [], reason, ...(detail === undefined ? {} : { detail }) },
+	});
+	const ended = (reason: string, detail?: string) => live(failure(7, reason, detail));
+	const app = "pi-durable";
+
+	it("[QK:PI-DURABLE-STATUS-WORKING] a live run reads working, a live compaction working with its fixed line", () => {
+		expect(reported([live({}), live({ run })])).toEqual([
+			{ state: "idle", app },
+			{ state: "working", app },
+		]);
+		expect(reported([live({ compactions: [{ taskId: 2 }] })])).toEqual([
+			{ state: "working", app, message: "Compacting context" },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-SETTLED-DONE] a run seen live that ends with no failure reads done, and stays done", () => {
+		expect(reported([live({ run }), live({}), live({})])).toEqual([
+			{ state: "working", app },
+			{ state: "done", app },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-INHERITED-FAILURE] a run that started with an earlier run's failure still on record and answered reads done, not that old failure", () => {
+		for (const reason of ["reset", "model_error"]) {
+			expect(reported([live({ run, ...failure(3, reason) }), live(failure(3, reason))]), reason).toEqual([
+				{ state: "working", app },
+				{ state: "done", app },
+			]);
+		}
+		// SDK 1.6.1 ends the failed run and starts the next in one commit: the watch sees a live run throughout, first
+		// without the failure, then beside it.
+		for (const reason of ["reset", "model_error"]) {
+			expect(reported([live({ run }), live({ run, ...failure(3, reason) }), live(failure(3, reason))]), reason).toEqual(
+				[
+					{ state: "working", app },
+					{ state: "done", app },
+				],
+			);
+		}
+		// Its own failure is a new one: another task.
+		expect(reported([live({ run, ...failure(3, "reset") }), live(failure(4, "model_error"))])).toEqual([
+			{ state: "working", app },
+			{ state: "error", app, message: "model_error" },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-USER-STOP-IDLE] a run the user stopped or reset reads idle, not error and not done", () => {
+		for (const reason of ["aborted", "reset"]) {
+			expect(reported([live({ run }), ended(reason)]), reason).toEqual([
+				{ state: "working", app },
+				{ state: "idle", app },
+			]);
+		}
+	});
+
+	it("[QK:PI-DURABLE-STATUS-ERROR-REASON-ONLY] any other end reads error with the reason code alone; the projection keeps no detail", () => {
+		const reasons = [
+			"model_error",
+			"no_model",
+			"faulted",
+			"orphaned",
+			"interrupted",
+			"restart_limit",
+			"nothing_to_answer",
+			"turn_limit",
+		];
+		for (const reason of reasons) {
+			const fact = ended(reason, "SECRET-CANARY /home/someone/prompt text");
+			expect(JSON.stringify(fact), reason).not.toContain("CANARY");
+			const out = reported([live({ run }), fact]);
+			expect(out, reason).toEqual([
+				{ state: "working", app },
+				{ state: "error", app, message: reason },
+			]);
+		}
+		const streaming = live({ run, generation: { attempt: 1, message: { content: "ANSWER-CANARY" } } });
+		expect(JSON.stringify(streaming)).not.toContain("CANARY");
+	});
+
+	it("[QK:PI-DURABLE-STATUS-UNKNOWN-REASON] a reason outside SDK 1.6.1's list reads one fixed line, never the value it carries", () => {
+		const out = reported([live({ run }), ended("SECRET-CANARY reason")]);
+		expect(out).toEqual([
+			{ state: "working", app },
+			{ state: "error", app, message: "run failed" },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-PAST-NOT-ANNOUNCED] a failure already on record when the TUI starts is not announced again: it reads idle", () => {
+		expect(reported([ended("model_error", "old")])).toEqual([{ state: "idle", app }]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-SESSION-FAILED] a session that failed and closed itself reads error with one fixed line, whatever its last run state", () => {
+		expect(reported([live({ run }), { run: programStatus.rootRunOf({ run } as never), failed: true }])).toEqual([
+			{ state: "working", app },
+			{ state: "error", app, message: "session failed" },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-WATCH-END-CLEAR] a root run state that is gone after a value clears the status; none before any value reports nothing", () => {
+		expect(reported([{ run: undefined, failed: false }])).toEqual([]);
+		expect(reported([live({ run }), { run: undefined, failed: false }, live({})])).toEqual([
+			{ state: "working", app },
+			{ state: "clear" },
+			{ state: "idle", app },
+		]);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-DEDUPE] the same status twice is handed to the terminal once", () => {
+		expect(reported([live({ run }), live({ run: { ...run, turns: 2 } }), live({ run: { ...run, turns: 3 } })])).toEqual(
+			[{ state: "working", app }],
+		);
+	});
+
+	it("[QK:PI-DURABLE-STATUS-ROOT-FACT] the fact is the ROOT conversation's run state: a child shown while the root runs still reads working", () => {
+		const view = (rootRun: object, shown: object) =>
+			({ rootRun, conversation: { docs: { "pi.live": shown } } }) as never;
+		const running = { running: true, compacting: false };
+		const resting = { running: false, compacting: false };
+		expect(reported([programStatus.rootStatusFact(view(running, {}))])).toEqual([{ state: "working", app }]);
+		expect(reported([programStatus.rootStatusFact(view(resting, { run }))])).toEqual([{ state: "idle", app }]);
+		expect(programStatus.rootStatusFact({ rootRun: resting, failure: {} } as never).failed).toBe(true);
 	});
 });

@@ -13,6 +13,7 @@ import {
 	Harness,
 	                          
 	LiveDoc,
+	               
 	              
 	            
 	ROOT_CONVERSATION_ID,
@@ -32,6 +33,7 @@ import {
 	ExecutionEnvs,
 	findInitialAgentModel,
 } from "./harness-setup.js";
+import {               rootRunOf } from "./program-status.js";
 import {                                   selectSession } from "./sessions.js";
 import { Subagent } from "./subagent.js";
 
@@ -65,6 +67,12 @@ const context = BACKGROUND_CONTEXT;
 	                                                                 
 	   
 	                                        
+	   
+	                                                                                                                     
+	                                                                                                                
+	                                                        
+	   
+	                           
 	   
 	                                                                                                          
 	                                                                                                               
@@ -303,6 +311,9 @@ export async function openDurable(options                    )                  
 			return { watch: attached, shown: { entries: read.entries, newest } };
 		};
 		const first = await seed(root);
+		// The root's own run state, watched for the whole session whatever is shown (#178): one more official watch of the
+		// same kind, with a window that holds no history (it starts past the newest entry and keeps one).
+		const rootWatch = await root.watch(context, { from: Number.MAX_SAFE_INTEGER           , min: 1, max: 1 });
 		// The shown watch: the first one until `install` makes it so, then each one a switch or a new read installs.
 		let watch                               ;
 		let shown        = first.shown;
@@ -317,6 +328,7 @@ export async function openDurable(options                    )                  
 		let state              = {
 			session: { id: location.id, directory: location.directory, cwd: location.cwd },
 			conversation: first.watch.value,
+			rootRun: rootRunOf(rootWatch.value.docs["pi.live"]                         ),
 			transcript: transcriptOf(first.watch.value, shown.entries),
 			conversations: summaries,
 			models: models(),
@@ -594,6 +606,19 @@ export async function openDurable(options                    )                  
 			else notice("warning", `The task graph could not update: ${causeOf(call.error)}`);
 		});
 		void graph.closed.then((end) => ended("tasks", end));
+		rootWatch.start(async (call) => {
+			if (call.kind === "value") update({ rootRun: rootRunOf(call.value.docs["pi.live"]                         ) });
+			else notice("warning", `The program status could not update: ${causeOf(call.error)}`);
+		});
+		// A root watch that ends by itself while the Session runs leaves a status nobody updates: drop the run state, so
+		// the terminal's status is cleared rather than left saying what is no longer known. As `ended` has it, ending at
+		// close or at a failure the Session already shows is no news.
+		void rootWatch.closed.then((end) => {
+			if (closing !== undefined || state.failure !== undefined) return;
+			if (end.kind !== "failed" && end.kind !== "listener_error") return;
+			update({ rootRun: undefined });
+			notice("warning", `The program status stopped updating: ${causeOf(end.error)}`);
+		});
 		// Recovered work from an interrupted turn continues now.
 		harness.resume();
 
@@ -626,6 +651,7 @@ export async function openDurable(options                    )                  
 					// First: the Session runs its close listeners inside its own close call.
 					unsubscribeClose();
 					void watch?.stop();
+					void rootWatch.stop();
 					commits.detach();
 					closeTasks();
 					// The resource end the fence records (#157 B3). Storage is `closed` only when the first actual close

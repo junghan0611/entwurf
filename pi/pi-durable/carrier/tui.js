@@ -27,6 +27,7 @@ import {
 	                
 	setCapabilityOverrides,
 	setKeybindings,
+	              
 	Text,
 	TruncatedText,
 	TuiAltScreen,
@@ -47,6 +48,7 @@ import { ToolExecutionComponent,                    } from "entwurf-pi-dist:mode
 import { UserMessageComponent } from "entwurf-pi-dist:modes/interactive/components/user-message.js";
 import { getEditorTheme, getMarkdownTheme, initTheme, theme } from "entwurf-pi-dist:modes/interactive/theme/theme.js";
 import { InteractiveThemeController } from "entwurf-pi-dist:modes/interactive/theme/theme-controller.js";
+import { RootStatusSink, rootStatusFact } from "./program-status.js";
 import { agentOf,                                                                               } from "./runtime.js";
 
 const SELECT_THEME                  = {
@@ -167,7 +169,7 @@ class CompactionComponent extends Box {
 	}
 }
 
-                    
+                           
 	                           
 	                             
 	              
@@ -281,7 +283,11 @@ export function durableLayout(transcript           , badge           , dock     
 	]);
 }
 
-class DurableTui {
+/**
+ * The durable session's screen. Exported, with the terminal a parameter, so the carrier's own test can drive it on a
+ * fake terminal; the session's TUI passes nothing and draws on the process's terminal.
+ */
+export class DurableTui {
 	static          #renderers                                = createAllToolRenderers();
 	         #ui              ;
 	         #chat = new Container();
@@ -312,10 +318,13 @@ class DurableTui {
 	/** Set when the transcript was rebuilt: the next render repaints the screen and shows the end. */
 	#rebuilt = false;
 	#transcript            ;
+	/** The root citizen's program status (OSC 7501, #178), through the same terminal the screen is drawn on. */
+	         #rootStatus                ;
 
-	constructor(cwd        , handlers          ) {
+	constructor(cwd        , handlers          , terminal           = new ProcessTerminal()) {
 		this.#cwd = cwd;
-		this.#ui = new TuiAltScreen(new ProcessTerminal(), false, getAgentDir());
+		this.#rootStatus = new RootStatusSink((status) => terminal.setProgramStatus(status));
+		this.#ui = new TuiAltScreen(terminal, false, getAgentDir());
 		const keybindings = KeybindingsManager.create();
 		setKeybindings(keybindings);
 		this.#editor = new CustomEditor(this.#ui, getEditorTheme(), keybindings, {
@@ -437,6 +446,7 @@ class DurableTui {
 		this.#editor.borderColor = theme.getThinkingBorderColor(agentOf(view.conversation).thinkingLevel ?? "off");
 		// A failed session's live state is its last one; nothing is working any more.
 		this.#syncStatus(view.failure === undefined ? live : {});
+		this.#rootStatus.apply(rootStatusFact(view));
 		this.#syncFooter(view);
 		if (this.#rebuilt) this.#transcript.scrollToEnd();
 		this.#ui.requestRender(this.#rebuilt);

@@ -3488,7 +3488,7 @@ let manifestCount: number;
 		"pi-bridge-sender": 4,
 		"pi-mcp-bridge": 2,
 		"pi-mcp-register": 3,
-		"pi-durable": 185,
+		"pi-durable": 200,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
 		"fresh-call-dispatch": 22,

@@ -525,7 +525,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"fd8c5959791e0588d15f430dde5dd9637baf31cfec20f151d2d5ff12e5f32f81\""],
+			"find": ["\"sha256\": \"e0c2c9ab7b86f850c962f67b96f3c329605aba0a9333dae2256cca167302b8da\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
@@ -2528,6 +2528,196 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:PDR-WITHDRAW-TX-RELEASE-NAMES-WRITE]",
 			"signatureSource": "pi-extensions/lib/pi-durable-release-failure.test.ts"
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-WORKING",
+			"title": "a live run reads idle, so a running citizen looks as if it waits for input",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tif (run.running) return { status: { state: \"working\", app: PROGRAM_STATUS_APP }, memory: next };"],
+			"replace": ["\tif (run.running) return { status: { state: \"idle\", app: PROGRAM_STATUS_APP }, memory: next };"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-WORKING]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-SETTLED-DONE",
+			"title": "a run that ended with an answer reads idle, so the terminal never says the work is done",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": [
+				"\tif (failure === undefined || failure.taskId === inherited) return { state: \"done\", app: PROGRAM_STATUS_APP };"
+			],
+			"replace": [
+				"\tif (failure === undefined || failure.taskId === inherited) return { state: \"idle\", app: PROGRAM_STATUS_APP };"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-SETTLED-DONE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-INHERITED-FAILURE",
+			"title": "a run that answered after an earlier run's failure stayed on record reads as that old failure",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tif (failure === undefined || failure.taskId === inherited) return"],
+			"replace": ["\tif (failure === undefined) return"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-INHERITED-FAILURE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-USER-STOP-IDLE",
+			"title": "the user's own abort or a reset reads as an error",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["= [\"aborted\", \"reset\"];"],
+			"replace": ["= [];"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-USER-STOP-IDLE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-ERROR-REASON-ONLY",
+			"title": "the projection carries a failure's free-text detail into the view and the status line",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["{ failure: { taskId: failure.taskId, reason: failure.reason } }"],
+			"replace": ["{ failure: { taskId: failure.taskId, reason: failure.reason, detail: failure.detail } }"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-ERROR-REASON-ONLY]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-UNKNOWN-REASON",
+			"title": "a reason outside the SDK's list rides the status line as it came",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tconst message = KNOWN_REASONS.includes(failure.reason) ? failure.reason : \"run failed\";"],
+			"replace": ["\tconst message = failure.reason;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-UNKNOWN-REASON]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-PAST-NOT-ANNOUNCED",
+			"title": "a failure already on record when the TUI opens is announced as if it just happened",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tconst resting = !run.running && memory.running ? settled(run, memory.inherited) : memory.resting;"],
+			"replace": ["\tconst resting = !run.running ? settled(run, memory.inherited) : memory.resting;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-PAST-NOT-ANNOUNCED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-SESSION-FAILED",
+			"title": "a session that failed and closed itself keeps reporting its last run state",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tif (fact.failed) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-SESSION-FAILED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-WATCH-END-CLEAR",
+			"title": "a root watch that stopped leaves its last status standing instead of clearing it",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\t\tif (!memory.seen) return { status: undefined, memory };"],
+			"replace": ["\t\treturn { status: undefined, memory };"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-WATCH-END-CLEAR]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-DEDUPE",
+			"title": "every root fact writes a status, so a streaming run floods the terminal with the same report",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\t\tif (key === this.#last) return;", ""],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-DEDUPE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-ROOT-FACT",
+			"title": "the status follows the SHOWN conversation, so looking at a subagent turns a running root idle",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\treturn { run: view.rootRun, failed: view.failure !== undefined };"],
+			"replace": [
+				"\treturn { run: rootRunOf(view.conversation?.docs[\"pi.live\"]), failed: view.failure !== undefined };"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-ROOT-FACT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-NEVER-RAN",
+			"title": "a root that never ran has no run state at open, so it reports nothing until its first run",
+			"subject": "pi/pi-durable/carrier/program-status.js",
+			"find": ["\tconst state = live ?? {};"],
+			"replace": ["\tif (live === undefined) return undefined;", "\tconst state = live;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-NEVER-RAN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-ROOT-WATCH",
+			"title": "a conversation switch re-reads the run state from the conversation it shows",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": [
+				"\t\t\tupdate({ conversation: next.watch.value, transcript: transcriptOf(next.watch.value, shown.entries), stalled });"
+			],
+			"replace": [
+				"\t\t\tupdate({ conversation: next.watch.value, rootRun: rootRunOf(next.watch.value.docs[\"pi.live\"]), transcript: transcriptOf(next.watch.value, shown.entries), stalled });"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-ROOT-WATCH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-LIVE-UPDATE",
+			"title": "the root run state is read once at open and never follows the root's watch",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["if (call.kind === \"value\") update({ rootRun: rootRunOf("],
+			"replace": ["if (call.kind === \"value\") void ({ rootRun: rootRunOf("],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-LIVE-UPDATE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-STATUS-TUI-WIRING",
+			"title": "the TUI never hands its terminal a status",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\tthis.#rootStatus.apply(rootStatusFact(view));", ""],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-STATUS-TUI-WIRING]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

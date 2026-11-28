@@ -1,0 +1,170 @@
+/**
+ * program-status — what this terminal's citizen is doing, as an OSC 7501 program status (#178).
+ *
+ * A Herdr Core terminal (and any terminal that answers the OSC 7501 query) shows a program's own report of its state;
+ * nothing else does it for a program. Pi's interactive mode reports through `ProgramStatusReporter`, which reads
+ * AgentSession events that pi-durable does not emit, so the durable TUI reports through the same pi-tui
+ * `ProcessTerminal.setProgramStatus`, from the SDK's own `pi.live` document of the ROOT conversation.
+ *
+ * ONE REPORTER PER TERMINAL, THE ROOT CITIZEN'S. The status follows the root conversation's run state whichever
+ * conversation is on screen: looking at a subagent does not turn a running root idle.
+ *
+ * THE VIEW HOLDS THREE FACTS, NOT THE DOCUMENT. `rootRunOf` keeps whether a run is live, whether a compaction is
+ * live, and the recorded run failure's task and reason code. A streaming answer, a failure's free-text detail and
+ * every other field of `pi.live` never reach the view, so no later reader of it can pass them on.
+ *
+ * ONLY WHAT A FACT SAYS. Each status comes from one of those facts, and nothing else is reported:
+ *
+ *   the session failed and closed itself           error, "session failed"
+ *   the root watch stopped after a value           clear (a status nobody updates any more is not stated)
+ *   a compaction is live                           working, "Compacting context"
+ *   a run is live                                  working
+ *   a run was seen live and has ended:
+ *     no failure, or the failure it started with   done (SDK 1.6.1 keeps an earlier run's failure through a reset or
+ *                                                  `afterFailedRun: "continue"` run, and an answer does not clear it)
+ *     a new failure, aborted or reset              idle (the user's own stop, or a fresh start)
+ *     a new failure of a known reason              error, that reason code
+ *     a new failure of any other reason            error, "run failed"
+ *   no run seen ending since this TUI started      idle (a past run's failure is not announced again)
+ *   no root fact yet                               nothing
+ *
+ * A run that starts and ends between two values of the root watch is not seen: the status stays what it was. That
+ * under-reports; it never claims what did not happen. One case is told wrong, and no value can tell it right: a run
+ * that fails, the next run it starts in the same commit, and that run's answer, all folded into one value, leave only
+ * the first run's failure, which reads as how the last run ended. `blocked` is never reported: pi-durable has no permission or
+ * question dialog to wait on. No prompt, answer, error text, path or session name is ever part of a report. A view
+ * only: nothing in Entwurf reads it as placement, liveness or a delivery input.
+ */
+
+                                                                                      
+                                                            
+
+/** The `app` name every report carries: a stable program name, as the protocol asks. */
+export const PROGRAM_STATUS_APP = "pi-durable";
+
+/** The root conversation's run state, as much of `pi.live` as a program status reads. */
+                          
+	                          
+	                             
+	                                                                                  
+ 
+
+/** The three facts of one root `pi.live`; a root without one (it never ran) has none of them. */
+export function rootRunOf(live                       )          {
+	const state = live ?? {};
+	const failure = state.runFailure;
+	return {
+		running: state.run !== undefined,
+		compacting: (state.compactions?.length ?? 0) > 0,
+		...(failure === undefined ? {} : { failure: { taskId: failure.taskId, reason: failure.reason } }),
+	};
+}
+
+/** One root fact: the root's run state (absent before the root watch's first value, or after it stopped), and the
+ * session's own failure. */
+                           
+	                                  
+	                         
+ 
+
+/** What the mapper remembers between two root facts. */
+                                   
+	                                                             
+	                       
+	                                    
+	                          
+	   
+	                                                                                                                    
+	                                                                                                                 
+	                                                                                          
+	   
+	                            
+	                                      
+	                                
+ 
+
+export const INITIAL_ROOT_STATUS_MEMORY                   = {
+	seen: false,
+	running: false,
+	resting: { state: "idle", app: PROGRAM_STATUS_APP },
+};
+
+/** The reasons a run ends without an answer that are the user's own stop or a fresh start, not a failure. */
+const RESTING_REASONS                    = ["aborted", "reset"];
+/** SDK 1.6.1's `RunFailureReason`s that are reported by name; any other value reads "run failed". */
+const KNOWN_REASONS                    = [
+	"model_error",
+	"no_model",
+	"faulted",
+	"orphaned",
+	"interrupted",
+	"restart_limit",
+	"nothing_to_answer",
+	"turn_limit",
+];
+
+function settled(run         , inherited                    )                {
+	const failure = run.failure;
+	if (failure === undefined || failure.taskId === inherited) return { state: "done", app: PROGRAM_STATUS_APP };
+	if (RESTING_REASONS.includes(failure.reason)) return { state: "idle", app: PROGRAM_STATUS_APP };
+	const message = KNOWN_REASONS.includes(failure.reason) ? failure.reason : "run failed";
+	return { state: "error", app: PROGRAM_STATUS_APP, message };
+}
+
+/** The status for one root fact, and what to remember for the next. */
+export function rootProgramStatus(
+	fact          ,
+	memory                  ,
+)                                                                  {
+	if (fact.failed) {
+		return { status: { state: "error", app: PROGRAM_STATUS_APP, message: "session failed" }, memory };
+	}
+	const run = fact.run;
+	if (run === undefined) {
+		if (!memory.seen) return { status: undefined, memory };
+		return { status: { state: "clear" }, memory: INITIAL_ROOT_STATUS_MEMORY };
+	}
+	const inherited = run.running ? run.failure?.taskId : undefined;
+	const resting = !run.running && memory.running ? settled(run, memory.inherited) : memory.resting;
+	const next                   = {
+		seen: true,
+		running: run.running,
+		...(inherited === undefined ? {} : { inherited }),
+		resting,
+	};
+	if (run.compacting) {
+		return { status: { state: "working", app: PROGRAM_STATUS_APP, message: "Compacting context" }, memory: next };
+	}
+	if (run.running) return { status: { state: "working", app: PROGRAM_STATUS_APP }, memory: next };
+	return { status: resting, memory: next };
+}
+
+/** The root fact of one view: the ROOT conversation's run state, never the shown one's, and the session's failure. */
+export function rootStatusFact(view                                                           )           {
+	return { run: view.rootRun, failed: view.failure !== undefined };
+}
+
+/**
+ * Reports each root fact to a terminal, once per change: the same status twice is written once. The terminal's
+ * `setProgramStatus` keeps the latest one and writes it only where the terminal confirmed support; its `stop()` clears
+ * it. This sink never writes to stdout itself.
+ */
+export class RootStatusSink {
+	         #setProgramStatus                                 ;
+	#memory                   = INITIAL_ROOT_STATUS_MEMORY;
+	#last                    ;
+
+	constructor(setProgramStatus                                 ) {
+		this.#setProgramStatus = setProgramStatus;
+	}
+
+	apply(fact          )       {
+		const { status, memory } = rootProgramStatus(fact, this.#memory);
+		this.#memory = memory;
+		if (status === undefined) return;
+		const key = JSON.stringify(status);
+		if (key === this.#last) return;
+		this.#last = key;
+		this.#setProgramStatus(status);
+	}
+}

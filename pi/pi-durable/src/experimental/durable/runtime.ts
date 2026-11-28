@@ -13,6 +13,7 @@ import {
 	Harness,
 	type InputSubmissionDraft,
 	LiveDoc,
+	type LiveState,
 	type ModelRef,
 	type Report,
 	ROOT_CONVERSATION_ID,
@@ -32,6 +33,7 @@ import {
 	ExecutionEnvs,
 	findInitialAgentModel,
 } from "./harness-setup.ts";
+import { type RootRun, rootRunOf } from "./program-status.ts";
 import { type FenceEnd, type SessionFence, selectSession } from "./sessions.ts";
 import { Subagent } from "./subagent.ts";
 
@@ -65,6 +67,12 @@ export interface DurableView {
 	 * max of 100 it drops to its newest min of 50. Not a transcript.
 	 */
 	readonly conversation: ConversationView;
+	/**
+	 * The ROOT conversation's run state, whichever conversation is shown (#178): three facts of its `pi.live`, which the
+	 * terminal's program status reports. Absent in a view built without a runtime, and after the root watch stopped
+	 * while the session runs. A view, read by nothing else.
+	 */
+	readonly rootRun?: RootRun;
 	/**
 	 * The shown conversation's active transcript, as pi 1.4 showed it (#155 D1): the SDK's raw active entries
 	 * (`Conversation.context().entries`), the newest head marker first and then the entries from its head, with no
@@ -303,6 +311,9 @@ export async function openDurable(options: OpenDurableOptions): Promise<OpenDura
 			return { watch: attached, shown: { entries: read.entries, newest } };
 		};
 		const first = await seed(root);
+		// The root's own run state, watched for the whole session whatever is shown (#178): one more official watch of the
+		// same kind, with a window that holds no history (it starts past the newest entry and keeps one).
+		const rootWatch = await root.watch(context, { from: Number.MAX_SAFE_INTEGER as EntryId, min: 1, max: 1 });
 		// The shown watch: the first one until `install` makes it so, then each one a switch or a new read installs.
 		let watch: ConversationWatch | undefined;
 		let shown: Shown = first.shown;
@@ -317,6 +328,7 @@ export async function openDurable(options: OpenDurableOptions): Promise<OpenDura
 		let state: DurableView = {
 			session: { id: location.id, directory: location.directory, cwd: location.cwd },
 			conversation: first.watch.value,
+			rootRun: rootRunOf(rootWatch.value.docs["pi.live"] as LiveState | undefined),
 			transcript: transcriptOf(first.watch.value, shown.entries),
 			conversations: summaries,
 			models: models(),
@@ -594,6 +606,19 @@ export async function openDurable(options: OpenDurableOptions): Promise<OpenDura
 			else notice("warning", `The task graph could not update: ${causeOf(call.error)}`);
 		});
 		void graph.closed.then((end) => ended("tasks", end));
+		rootWatch.start(async (call) => {
+			if (call.kind === "value") update({ rootRun: rootRunOf(call.value.docs["pi.live"] as LiveState | undefined) });
+			else notice("warning", `The program status could not update: ${causeOf(call.error)}`);
+		});
+		// A root watch that ends by itself while the Session runs leaves a status nobody updates: drop the run state, so
+		// the terminal's status is cleared rather than left saying what is no longer known. As `ended` has it, ending at
+		// close or at a failure the Session already shows is no news.
+		void rootWatch.closed.then((end) => {
+			if (closing !== undefined || state.failure !== undefined) return;
+			if (end.kind !== "failed" && end.kind !== "listener_error") return;
+			update({ rootRun: undefined });
+			notice("warning", `The program status stopped updating: ${causeOf(end.error)}`);
+		});
 		// Recovered work from an interrupted turn continues now.
 		harness.resume();
 
@@ -626,6 +651,7 @@ export async function openDurable(options: OpenDurableOptions): Promise<OpenDura
 					// First: the Session runs its close listeners inside its own close call.
 					unsubscribeClose();
 					void watch?.stop();
+					void rootWatch.stop();
 					commits.detach();
 					closeTasks();
 					// The resource end the fence records (#157 B3). Storage is `closed` only when the first actual close
