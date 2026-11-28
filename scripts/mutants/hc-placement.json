@@ -69,50 +69,6 @@
 			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
 		},
 		{
-			"claim": "HCP-PID-JOIN",
-			"title": "a pid two terminals report reads none instead of ambiguous, so a real double sighting is reported as a measured absence",
-			"subject": "pi-extensions/lib/hc-placement.ts",
-			"find": ["\tif (index.ambiguous.has(ownerPid)) return AMBIGUOUS_PLACEMENT;"],
-			"replace": ["\tif (index.ambiguous.has(-1)) return AMBIGUOUS_PLACEMENT;"],
-			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 120,
-			"signature": "[QK:HCP-PID-JOIN]",
-			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
-		},
-		{
-			"claim": "HCP-CC-ONLY",
-			"title": "the backend restriction is dropped, so a pi or pi-durable row is claimed from a pid source nobody verified",
-			"subject": "pi-extensions/lib/hc-placement.ts",
-			"find": ["\tif (backend !== \"claude-code\") return UNOBSERVED_PLACEMENT;"],
-			"replace": ["\tif (backend === \"\") return UNOBSERVED_PLACEMENT;"],
-			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 120,
-			"signature": "[QK:HCP-CC-ONLY]",
-			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
-		},
-		{
-			"claim": "HCP-NO-OWNER-UNOBSERVED",
-			"title": "a citizen with no live owner reads none, so a dormant citizen nobody could look for is reported as measured absent",
-			"subject": "pi-extensions/lib/hc-placement.ts",
-			"find": ["\tif (ownerPid === null) return UNOBSERVED_PLACEMENT;"],
-			"replace": ["\tif (ownerPid === null) return NO_PLACEMENT;"],
-			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 120,
-			"signature": "[QK:HCP-NO-OWNER-UNOBSERVED]",
-			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
-		},
-		{
-			"claim": "HCP-COMBINE",
-			"title": "a citizen two owners both show is given to one of them, so a double sighting names a place as if it were the only one",
-			"subject": "pi-extensions/lib/hc-placement.ts",
-			"find": ["\tif (seen(herdr) && seen(hc)) return AMBIGUOUS_PLACEMENT;"],
-			"replace": ["\tif (seen(herdr) && seen(hc)) return herdr;"],
-			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
-			"timeoutSeconds": 120,
-			"signature": "[QK:HCP-COMBINE]",
-			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
-		},
-		{
 			"claim": "HCP-RENDER",
 			"title": "the column drops the core name, so two cores on one host print the same terminal",
 			"subject": "pi-extensions/lib/herdr-placement.ts",
@@ -135,6 +91,39 @@
 			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
 		},
 		{
+			"claim": "HCP-PID-JOIN",
+			"title": "a terminal is reported under another core's name, so two cores on one host cannot be told apart in the row",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\t\tcoreId: (index as HcPlacementIndex).coreId,"],
+			"replace": ["\t\tcoreId: \"\","],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-PID-JOIN]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-CC-ONLY",
+			"title": "the hc answer forgets the backend, so a pi or pi-durable row is claimed from a pid source nobody verified",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\treturn resolveOwnerPidPlacement(index, backend, activeOwnerPid, (terminal) => ({"],
+			"replace": ["\treturn resolveOwnerPidPlacement(index, \"claude-code\", activeOwnerPid, (terminal) => ({"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-CC-ONLY]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-NO-OWNER-UNOBSERVED",
+			"title": "a citizen with no active owner is looked up under pid 0, so a dormant citizen nobody could look for reads as measured absent",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\treturn resolveOwnerPidPlacement(index, backend, activeOwnerPid, (terminal) => ({"],
+			"replace": ["\treturn resolveOwnerPidPlacement(index, backend, activeOwnerPid ?? 0, (terminal) => ({"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-NO-OWNER-UNOBSERVED]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
 			"claim": "HCP-WIRED-ONE-READ",
 			"title": "the listing reads the core twice, the first step of a retry loop around a view",
 			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
@@ -148,14 +137,49 @@
 			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
 		},
 		{
-			"claim": "HCP-WIRED-VALIDATED-OWNER",
-			"title": "the identity match is dropped, so a live owner armed for another session places this citizen in that session's terminal",
+			"claim": "HCP-WIRED-ACTIVE-OWNER",
+			"title": "the join key is any live marker owner instead of the active one, so a process that moved to another session still places the citizen it left",
 			"subject": "pi-extensions/lib/entwurf-peer-observe.ts",
-			"find": ["\treturn marker !== null && receiverMarkerMatchesIdentity(marker, identity) ? marker.ownerPid : null;"],
-			"replace": ["\treturn marker !== null ? marker.ownerPid : null;"],
+			"find": ["\t\tactiveOwnerPid: null,\n\t};"],
+			"replace": ["\t\tactiveOwnerPid: ownerPid,\n\t};"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:HCP-WIRED-VALIDATED-OWNER]",
+			"signature": "[QK:HCP-WIRED-ACTIVE-OWNER]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-TMUX",
+			"title": "the tmux owner is given no owner pid, so a Claude Code citizen in a pane of the lister's own server is never seen there",
+			"subject": "pi-extensions/lib/entwurf-peer-observe.ts",
+			"find": ["\t\t\t\tresolveTmuxPlacement(tmuxPlacementIndex, identity.backend, activeOwnerPid),"],
+			"replace": ["\t\t\t\tresolveTmuxPlacement(tmuxPlacementIndex, identity.backend, null),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-TMUX]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-NONE-NEEDS-ALL",
+			"title": "the herdr answer is left out of the fold, so none is printed while herdr was never read",
+			"subject": "pi-extensions/lib/entwurf-peer-observe.ts",
+			"find": ["\t\t\t\tresolvePlacement(placementIndex, identity),\n\t\t\t\tresolveTmuxPlacement"],
+			"replace": [
+				"\t\t\t\tplacementIndex === null ? { kind: \"none\" } : resolvePlacement(placementIndex, identity),\n\t\t\t\tresolveTmuxPlacement"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-NONE-NEEDS-ALL]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-SHARED-OWNER",
+			"title": "the shared-owner pass is skipped, so two citizens are each shown as the one process a terminal runs",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": ["\tconst facts: FactList = { ...listed, peers: ambiguateSharedOwnerPlacements(listed.peers) };"],
+			"replace": ["\tconst facts: FactList = { ...listed, peers: listed.peers };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-SHARED-OWNER]",
 			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
 		},
 		{
@@ -183,6 +207,107 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:HCP-VIEW-NOT-DISPATCH]",
 			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "PLC-FOLD",
+			"title": "two owners that see a citizen in different places are folded to the later one, so a double sighting names one place as if it were the only one",
+			"subject": "pi-extensions/lib/placement-compose.ts",
+			"find": [
+				"\t\tif (seen !== null && placementLocationKey(seen) !== placementLocationKey(answer)) return AMBIGUOUS_PLACEMENT;"
+			],
+			"replace": ["\t\tif (seen !== null && placementLocationKey(seen) === \"never\") return AMBIGUOUS_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PLC-FOLD]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "PLC-NONE-NEEDS-ALL",
+			"title": "one owner's none is enough, so a lister that read a single owner reports a measured absence for every place it never looked",
+			"subject": "pi-extensions/lib/placement-compose.ts",
+			"find": ["\treturn everyOwnerSaysNone ? NO_PLACEMENT : UNOBSERVED_PLACEMENT;"],
+			"replace": ["\treturn owners.some((o) => o.kind === \"none\") ? NO_PLACEMENT : UNOBSERVED_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PLC-NONE-NEEDS-ALL]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "PLC-SHARED-OWNER",
+			"title": "a shared place needs three claims before it is ambiguous, so two citizens keep one terminal each",
+			"subject": "pi-extensions/lib/placement-compose.ts",
+			"find": ["\t\treturn (claims.get(placementLocationKey(row.placement) as string) ?? 0) > 1"],
+			"replace": ["\t\treturn (claims.get(placementLocationKey(row.placement) as string) ?? 0) > 2"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PLC-SHARED-OWNER]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "PLC-OWNER-PID-RULE",
+			"title": "a pid two terminals report reads none instead of ambiguous, so a real double sighting is reported as a measured absence",
+			"subject": "pi-extensions/lib/placement-compose.ts",
+			"find": ["\tif (index.ambiguous.has(activeOwnerPid)) return AMBIGUOUS_PLACEMENT;"],
+			"replace": ["\tif (index.ambiguous.has(-1)) return AMBIGUOUS_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PLC-OWNER-PID-RULE]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "TMP-OWN-SERVER-ONLY",
+			"title": "the listing runs with no TMUX in the environment, so tmux falls back to the default server and another server's panes are read as the lister's",
+			"subject": "pi-extensions/lib/tmux-placement.ts",
+			"find": ["\tif ((env.TMUX ?? \"\") === \"\") return null;"],
+			"replace": ["\tif (env.TMUX === \"never\") return null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:TMP-OWN-SERVER-ONLY]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "TMP-READ-OR-NOTHING",
+			"title": "a tmux that exited non-zero is parsed anyway, so whatever it printed before failing becomes an index none can be said over",
+			"subject": "pi-extensions/lib/tmux-placement.ts",
+			"find": ["\tif (ran.status !== 0) return null;"],
+			"replace": ["\tif (ran.status === -1) return null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:TMP-READ-OR-NOTHING]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "TMP-PARSE",
+			"title": "an unreadable line is skipped instead of voiding the read, so a partial index lets none be said over panes that were not read",
+			"subject": "pi-extensions/lib/tmux-placement.ts",
+			"find": ["\t\tif (c < 0) return null;"],
+			"replace": ["\t\tif (c < 0) continue;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:TMP-PARSE]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "TMP-PID-INDEX",
+			"title": "the later pane silently replaces the earlier one for a shared pid, so the row names a pane by listing order",
+			"subject": "pi-extensions/lib/tmux-placement.ts",
+			"find": ["\t\tif (seen !== undefined && seen.paneId !== row.paneId) {"],
+			"replace": ["\t\tif (seen !== undefined && seen.paneId === \"never\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:TMP-PID-INDEX]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
+		},
+		{
+			"claim": "TMP-RENDER",
+			"title": "the column drops the session name, so two sessions on one server print the same window",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["return `tmux ${placement.session}:${placement.window}`;"],
+			"replace": ["return `tmux ${placement.window}`;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:TMP-RENDER]",
+			"signatureSource": "pi-extensions/lib/placement-compose.test.ts"
 		}
 	]
 }

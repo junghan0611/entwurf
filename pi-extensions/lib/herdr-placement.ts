@@ -55,8 +55,16 @@ import type { MetaIdentity } from "./meta-session.ts";
  *   `ambiguous`   two or more panes claim this citizen's native session id. herdr
  *                 shows it, but not in one place, so naming a pane would be a guess.
  *   `herdr-pane`  exactly one pane joined on the unique key.
- *   `hc-terminal` exactly one terminal of the operator-named Herdr Core runs the citizen's
- *                 validated owner process (#178; Claude Code only).
+ *   `tmux-pane`   exactly one pane of the lister's own tmux server runs the citizen's active
+ *                 receiver owner process (#178; Claude Code only).
+ *   `hc-terminal` exactly one terminal of the operator-named Herdr Core runs it (#178; same rule).
+ *
+ * SINCE #178 THERE ARE THREE OWNERS, AND THE COLUMN IS THEIR FOLD (`placement-compose.ts`). The words
+ * above are what ONE owner answers. In the listing, `none` is printed only when herdr, tmux and hc
+ * were ALL read for that citizen and none has it; with any owner unread the column says
+ * `unobserved`. So a herdr-only listing that used to print `none` for a citizen in none of its panes
+ * now prints `unobserved` — the meaning of `none` ("read, and not there") did not move, the set of
+ * places a citizen can be did.
  */
 export type PlacementObservation =
 	| { readonly kind: "unobserved" }
@@ -66,6 +74,9 @@ export type PlacementObservation =
 	// #178: the terminal of ONE Herdr Core whose own process is the citizen's validated owner, as
 	// read for this listing through the operator-named socket (`hc-placement.ts`). A view, never an
 	// address; `coreId` keeps two cores on one host apart.
+	// #178: the pane of the LISTER'S OWN tmux server whose process is the citizen's active receiver
+	// owner (`tmux-placement.ts`). `paneId` keeps two panes of one window apart; a view, never a target.
+	| { readonly kind: "tmux-pane"; readonly session: string; readonly window: string; readonly paneId: string }
 	| { readonly kind: "hc-terminal"; readonly coreId: string; readonly coreName: string; readonly terminal: string };
 
 export const UNOBSERVED_PLACEMENT: PlacementObservation = { kind: "unobserved" };
@@ -299,6 +310,7 @@ export function resolvePlacement(index: HerdrPlacementIndex | null, identity: Me
  * was seen and by WHOM, so a reader never mistakes the pane id for one of ours. */
 export function renderPlacement(placement: PlacementObservation): string {
 	if (placement.kind === "herdr-pane") return `herdr ${placement.paneId}`;
+	if (placement.kind === "tmux-pane") return `tmux ${placement.session}:${placement.window}`;
 	if (placement.kind === "hc-terminal") return `hc ${placement.coreName}/${placement.terminal}`;
 	return placement.kind;
 }

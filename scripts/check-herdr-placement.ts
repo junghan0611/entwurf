@@ -316,6 +316,9 @@ async function main(): Promise<void> {
 				return v;
 			},
 			socket: { readdir: async () => [], probe: async () => "dead" },
+			// The other two owners are named as unread, so this gate never reads the host's tmux or a core.
+			readTmuxPlacementIndex: () => null,
+			readHcPlacementIndex: async () => null,
 		};
 
 		let reads = 0;
@@ -335,9 +338,15 @@ async function main(): Promise<void> {
 		);
 		const joined = r.facts.peers.find((p) => p.gardenId === claude.gardenId);
 		const unjoined = r.facts.peers.find((p) => p.gardenId === other.gardenId);
+		// #178: herdr is one of three owners now. herdr's OWN answer for the unjoined citizen is still
+		// `none` (section 3 above holds that on `resolvePlacement`); the listing prints `none` only when
+		// tmux and hc were read too, and here they were not — `hc-placement-wiring.test.ts` holds the
+		// all-owners-read row.
 		ok(
-			"one listing carries both a joined citizen and a measured-absent one",
-			r.facts.peers.length === 2 && joined?.placement.kind === "herdr-pane" && unjoined?.placement.kind === "none",
+			"one listing carries a joined citizen, and one herdr does not have while two owners were unread: `unobserved`",
+			r.facts.peers.length === 2 &&
+				joined?.placement.kind === "herdr-pane" &&
+				unjoined?.placement.kind === "unobserved",
 		);
 
 		const withoutHerdr = await listEntwurfFacts({ ...base, readPlacementIndex: () => null });

@@ -23,7 +23,9 @@
  *
  * THE JOIN IS A PROCESS ID, AND ONLY FOR CLAUDE CODE (decision G-P2). The core reports the pid of
  * the program each terminal runs (`[HC api.rs:253-268]`, `Public` terminal at v0.1.20). A Claude
- * Code citizen's validated receiver-marker owner is that same process when the terminal runs
+ * Code citizen's ACTIVE receiver owner — the one the receiver axis itself calls active, so a process
+ * that has moved on to another session no longer places the one it left — is that same process when
+ * the terminal runs
  * `claude` directly — measured on oracle 2026-11-28, n=2 (marker ownerPid === terminal pid). Pi and
  * pi-durable have no verified owner-pid source here, so their rows are never claimed: `unobserved`,
  * not `none`. A citizen started by hand from a shell inside a terminal does not join (the terminal's
@@ -42,12 +44,8 @@ import {
 	type HcSocketCall,
 	readHcEnvelope,
 } from "./hc-launch.ts";
-import {
-	AMBIGUOUS_PLACEMENT,
-	NO_PLACEMENT,
-	type PlacementObservation,
-	UNOBSERVED_PLACEMENT,
-} from "./herdr-placement.ts";
+import type { PlacementObservation } from "./herdr-placement.ts";
+import { resolveOwnerPidPlacement } from "./placement-compose.ts";
 
 /** The operator's opt-in. Read by this module only. */
 export const HC_PLACEMENT_SOCKET_ENV = "ENTWURF_HC_PLACEMENT_SOCKET";
@@ -204,37 +202,18 @@ export async function readHcPlacementIndex(
 }
 
 /**
- * The hc decision for one citizen. `null` means this owner makes no claim (it was not read), so
- * whatever the other placement owner said stands. `ownerPid` is the citizen's VALIDATED live owner,
- * supplied by the caller for Claude Code only; null when there is none.
+ * The hc answer for one citizen: `unobserved` when this owner was not read. `activeOwnerPid` is the
+ * citizen's ACTIVE receiver owner, supplied by the caller; null when there is none.
  */
 export function resolveHcPlacement(
 	index: HcPlacementIndex | null,
 	backend: string,
-	ownerPid: number | null,
-): PlacementObservation | null {
-	if (index === null) return null;
-	// G-P2: no verified owner-pid source for any other backend. Not looked at, so not `none`.
-	if (backend !== "claude-code") return UNOBSERVED_PLACEMENT;
-	// No live validated owner: there is no key to look up, so nothing was measured about this citizen.
-	if (ownerPid === null) return UNOBSERVED_PLACEMENT;
-	if (index.ambiguous.has(ownerPid)) return AMBIGUOUS_PLACEMENT;
-	const terminal = index.byPid.get(ownerPid);
-	return terminal === undefined
-		? NO_PLACEMENT
-		: { kind: "hc-terminal", coreId: index.coreId, coreName: index.coreName, terminal };
-}
-
-/**
- * Two owners, one column. A sighting wins over a blank; two sightings, or any `ambiguous`, are
- * `ambiguous`; `none` needs one owner that looked and none that saw; otherwise nobody looked.
- */
-export function combinePlacement(herdr: PlacementObservation, hc: PlacementObservation | null): PlacementObservation {
-	if (hc === null) return herdr;
-	const seen = (p: PlacementObservation) => p.kind === "herdr-pane" || p.kind === "hc-terminal";
-	if (herdr.kind === "ambiguous" || hc.kind === "ambiguous") return AMBIGUOUS_PLACEMENT;
-	if (seen(herdr) && seen(hc)) return AMBIGUOUS_PLACEMENT;
-	if (seen(herdr)) return herdr;
-	if (seen(hc)) return hc;
-	return herdr.kind === "none" || hc.kind === "none" ? NO_PLACEMENT : UNOBSERVED_PLACEMENT;
+	activeOwnerPid: number | null,
+): PlacementObservation {
+	return resolveOwnerPidPlacement(index, backend, activeOwnerPid, (terminal) => ({
+		kind: "hc-terminal",
+		coreId: (index as HcPlacementIndex).coreId,
+		coreName: (index as HcPlacementIndex).coreName,
+		terminal,
+	}));
 }

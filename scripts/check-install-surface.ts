@@ -471,15 +471,23 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			old: "Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,\nnot commands here. Advanced maintenance and development gates: entwurf help all\n",
 			next: "Fresh call, send and retire are entwurf-bridge MCP tools inside a session, not commands\nhere; resume is both. Advanced maintenance and development gates: entwurf help all\n",
 		},
+		// #178 (GLG via 885314, 2026-11-28; bf156a review D-2): the same resume also launches from a
+		// Herdr Core terminal — receipt: fresh-call-dispatch.ts `selectResumeRail` (hc | herdr | tmux |
+		// ambiguous) and resume-cli.ts `resumeLaunchContextRefusal`. Applied to the #173 title.
+		{
+			old: "Reopen a sibling (inside tmux or herdr):",
+			next: "Reopen a sibling (inside tmux, herdr or a Herdr Core terminal):",
+		},
 	];
 	let expectedCompact = compact153;
 	for (const a of ROOT_AMENDMENTS_157) {
 		if (expectedCompact.split(a.old).length !== 2) throw new Error(`S9: root amendment not exactly once: ${a.old}`);
 		expectedCompact = expectedCompact.replace(a.old, a.next);
 	}
-	// 24d41fb4… was the #157 page; the two #173 amendments move it. Taken from the amended literal.
-	if (sha256(expectedCompact) !== "362da2c0493e245072dd0f1d9d3ed7035bc10bef831bedda9f34f037cecbe123") {
-		throw new Error("S9: the amended root page is not the reviewed #157 + #173 page");
+	// 24d41fb4… was the #157 page and 362da2c0… the #173 one; the #178 title amendment moves it.
+	// Taken from the amended literal.
+	if (sha256(expectedCompact) !== "e0104cf20413d659795736bfe27f1af5e85621f2c057798593ee170a3e374de4") {
+		throw new Error("S9: the amended root page is not the reviewed #157 + #173 + #178 page");
 	}
 	// The guide topics' oracles: reviewed literals, pinned, written before the data and never
 	// generated from it. Each names the package files it sends the reader to (S9w checks they ship).
@@ -629,9 +637,11 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		},
 		// #173 (GLG 2026-11-24, contract issuecomment-7130851749): the operator's terminal entry to the
 		// same-id visible resume, right after renew-recover — receipt: the run.sh `resume)` arm.
+		// #178 (GLG via 885314, 2026-11-28): the literal names the Herdr Core rail and the two-marker
+		// refusal — receipt: fresh-call-dispatch.ts `selectResumeRail` / `dispatchResumeLaunch`.
 		{
 			after: "  entwurf renew-recover <gardenId>    # ",
-			line: "  entwurf resume [<garden-id>]        # Reopen ONE dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside this terminal (inside herdr, a new herdr tab). No prompt is submitted; the record is the address, so no session name, harness or model is given. It works only inside tmux or herdr; elsewhere it says so first and reads nothing. With a garden id it reopens that sibling and needs no terminal. With none it shows a list: type to narrow, arrows to move, Ctrl-A for all directories (the default is the one you typed the command in), Enter reopens the row under the cursor with no confirmation, Esc opens nothing. Siblings in that directory's team.json (garden_id and name only) come first, whatever their age. The others are listed when active in the last 7 days, most recent first; older ones and test rooms (record cwd under the OS temp directory) are counted, not listed, and a garden id typed directly still reaches any of them. A row is recorded facts, not a promise; siblings of other backends are counted, not listed. Below 64x8 Enter does nothing; a bracketed paste is search text, never a choice. A sibling that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened, never a message or a new session instead. The receipt is unattributed: a terminal has no garden identity. Same code path as entwurf_resume_call (#173). EXIT: 0 launched and the backend's same-id observation was positive (pi: socket connect; Claude Code: receiver re-armed by a new owner; pi-durable: reservation adopted, which is not readiness) / 3 launched, not observed in the bounded wait (it stays visible; no retry) / 4 refused, nothing opened / 5 failed at the launch step (the recovery receipt says what remains) / 6 list shown, nothing chosen / 7 the list could not be shown (store, unreadable team.json or terminal) / 2 usage / 1 the resume threw; its message is printed as written (e.g. no record for that id)",
+			line: "  entwurf resume [<garden-id>]        # Reopen ONE dormant pi, pi-durable or Claude Code sibling under its own garden id, in a new tmux window beside this terminal (inside herdr, a new herdr tab; inside a Herdr Core terminal, a new terminal on that same core, with no parent). No prompt is submitted; the record is the address, so no session name, harness or model is given. It works only inside tmux, herdr or a Herdr Core terminal; elsewhere it says so first and reads nothing, and a terminal that carries both the herdr and the Herdr Core markers is refused by name rather than given to either. With a garden id it reopens that sibling and needs no terminal. With none it shows a list: type to narrow, arrows to move, Ctrl-A for all directories (the default is the one you typed the command in), Enter reopens the row under the cursor with no confirmation, Esc opens nothing. Siblings in that directory's team.json (garden_id and name only) come first, whatever their age. The others are listed when active in the last 7 days, most recent first; older ones and test rooms (record cwd under the OS temp directory) are counted, not listed, and a garden id typed directly still reaches any of them. A row is recorded facts, not a promise; siblings of other backends are counted, not listed. Below 64x8 Enter does nothing; a bracketed paste is search text, never a choice. A sibling that is live, of another backend, mid-/renew or not provably dormant is refused and nothing is opened, never a message or a new session instead. The receipt is unattributed: a terminal has no garden identity. Same code path as entwurf_resume_call (#173). EXIT: 0 launched and the backend's same-id observation was positive (pi: socket connect; Claude Code: receiver re-armed by a new owner; pi-durable: reservation adopted, which is not readiness) / 3 launched, not observed in the bounded wait (it stays visible; no retry) / 4 refused, nothing opened / 5 failed at the launch step (the recovery receipt says what remains) / 6 list shown, nothing chosen / 7 the list could not be shown (store, unreadable team.json or terminal) / 2 usage / 1 the resume threw; its message is printed as written (e.g. no record for that id)",
 			receipt:
 				"run.sh `resume)` arm -> scripts/resume.ts -> pi-extensions/lib/resume-cli.ts: runResumeCli argv shape (exit 2), resumeByGardenId -> visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch)) -> renderVisibleResume(result, { actor: null }), resumeCliExitCode 0/3/4/5, the launch-context preflight (selectFreshCallRail + readAnchor) before the list and the leaf exit 4, no argument: no terminal exit 2, else chooseFromList (listFacts, readPins, pick) cancelled exit 6 / failed exit 7, leaf throw exit 1 (#173 C2, C3)",
 		},
@@ -763,7 +773,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	};
 	const rootBad = rendersRoot(path.join(REPO, "run.sh"), REPO);
 	ok(
-		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the three #157 and two #173 amendments)`,
+		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the three #157, two #173 and one #178 amendments)`,
 		rootBad.length === 0,
 		rootBad.join("\n"),
 	);

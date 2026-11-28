@@ -29,12 +29,13 @@
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
-import { receiverMarkerMatchesIdentity, resolveMailboxReceiverFacts } from "./entwurf-deliverability.ts";
+import { resolveMailboxReceiverFacts } from "./entwurf-deliverability.ts";
 import type { PeerObservations, ReceiverObservation, TranscriptObservation } from "./entwurf-facts.ts";
-import { combinePlacement, type HcPlacementIndex, resolveHcPlacement } from "./hc-placement.ts";
+import { type HcPlacementIndex, resolveHcPlacement } from "./hc-placement.ts";
 import {
 	buildPlacementIndex,
 	type HerdrPlacementIndex,
+	type PlacementObservation,
 	parseHerdrPaneList,
 	resolvePlacement,
 } from "./herdr-placement.ts";
@@ -47,6 +48,8 @@ import {
 	readMetaSenderMarker,
 	requireBackend,
 } from "./meta-session.ts";
+import { composePlacement, resolveOwnerPidPlacement } from "./placement-compose.ts";
+import type { TmuxPlacementIndex } from "./tmux-placement.ts";
 
 /**
  * The mailbox receiver axis for one citizen.
@@ -58,15 +61,35 @@ import {
  * armed here", so it is taken from the marker FILE's existence rather than from the
  * reader's null — the reader folds absent, corrupt and dead-owner into one null.
  */
-function observeReceiver(identity: MetaIdentity): ReceiverObservation {
-	if (metaCapabilityFor(identity.backend).wakeMode !== "self-fetch") return "n/a";
+function observeReceiver(identity: MetaIdentity): ReceiverState {
+	if (metaCapabilityFor(identity.backend).wakeMode !== "self-fetch") return { receiver: "n/a", activeOwnerPid: null };
+	let ownerPid: number | null = null;
 	const facts = resolveMailboxReceiverFacts(identity, {
-		readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId }),
+		readReceiverMarker: (gardenId: string) => {
+			const marker = readMetaReceiverMarker({ gardenId });
+			ownerPid = marker === null ? null : marker.ownerPid;
+			return marker;
+		},
 		readSenderMarker: (backend: string, ownerPid: number) =>
 			readMetaSenderMarker({ backend: requireBackend(backend) as MetaBackend, ownerPid }),
 	});
-	if (facts.ownerAlive && facts.watchArmed) return "active";
-	return fs.existsSync(metaReceiverMarkerPath(identity.gardenId)) ? "inactive" : "none";
+	if (facts.ownerAlive && facts.watchArmed) return { receiver: "active", activeOwnerPid: ownerPid };
+	return {
+		receiver: fs.existsSync(metaReceiverMarkerPath(identity.gardenId)) ? "inactive" : "none",
+		activeOwnerPid: null,
+	};
+}
+
+/**
+ * The receiver axis and, from the SAME marker read, the process the pid-joined placement owners may
+ * look for (#178). `activeOwnerPid` is set only when the receiver is `active` — the owner is alive,
+ * is this citizen's, and still serves this garden. A process that switched sessions in place keeps
+ * the old garden's marker but no longer serves it; that citizen has no owner here, so no terminal is
+ * claimed for it.
+ */
+interface ReceiverState {
+	readonly receiver: ReceiverObservation;
+	readonly activeOwnerPid: number | null;
 }
 
 /**
@@ -136,30 +159,34 @@ export function readHerdrPlacementIndex(env: NodeJS.ProcessEnv = process.env): H
 export function makeObservePeerFacts(
 	placementIndex: HerdrPlacementIndex | null,
 	hcPlacementIndex: HcPlacementIndex | null = null,
+	tmuxPlacementIndex: TmuxPlacementIndex | null = null,
 ) {
-	return (identity: MetaIdentity): PeerObservations => ({
-		receiver: observeReceiver(identity),
-		transcript: observeTranscript(identity),
-		placement: combinePlacement(
-			resolvePlacement(placementIndex, identity),
-			resolveHcPlacement(
-				hcPlacementIndex,
-				identity.backend,
-				hcPlacementIndex === null ? null : validatedClaudeCodeOwnerPid(identity),
-			),
-		),
-	});
+	return (identity: MetaIdentity): PeerObservations => {
+		const { receiver, activeOwnerPid } = observeReceiver(identity);
+		return {
+			receiver,
+			transcript: observeTranscript(identity),
+			// Three owners can hold a citizen; each answers for itself and the fold decides the word.
+			placement: composePlacement([
+				resolvePlacement(placementIndex, identity),
+				resolveTmuxPlacement(tmuxPlacementIndex, identity.backend, activeOwnerPid),
+				resolveHcPlacement(hcPlacementIndex, identity.backend, activeOwnerPid),
+			]),
+		};
+	};
 }
 
-/**
- * The live process that owns a Claude Code citizen's receiver, or null (#178 placement join).
- * The marker reader already refuses a dead or reused owner pid; the identity match is the same one
- * the receiver axis uses. Only asked when an hc index exists, and only for Claude Code (G-P2).
- */
-function validatedClaudeCodeOwnerPid(identity: MetaIdentity): number | null {
-	if (identity.backend !== "claude-code") return null;
-	const marker = readMetaReceiverMarker({ gardenId: identity.gardenId });
-	return marker !== null && receiverMarkerMatchesIdentity(marker, identity) ? marker.ownerPid : null;
+function resolveTmuxPlacement(
+	index: TmuxPlacementIndex | null,
+	backend: string,
+	activeOwnerPid: number | null,
+): PlacementObservation {
+	return resolveOwnerPidPlacement(index, backend, activeOwnerPid, (pane) => ({
+		kind: "tmux-pane",
+		session: pane.session,
+		window: pane.window,
+		paneId: pane.paneId,
+	}));
 }
 
 /** The production observer with no placement owner read — the shape every caller that

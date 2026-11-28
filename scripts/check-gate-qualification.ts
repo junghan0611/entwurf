@@ -3505,7 +3505,7 @@ let manifestCount: number;
 		"herdr-fresh-call": 61,
 		"herdr-resume-call": 24,
 		"hc-launch": 14,
-		"hc-placement": 16,
+		"hc-placement": 27,
 		"herdr-supply": 11,
 		"meta-facts": 5,
 		"peer-facts": 9,

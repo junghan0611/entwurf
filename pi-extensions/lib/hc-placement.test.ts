@@ -16,8 +16,7 @@
  *   HCP-LOCAL-LIVE-ONLY        only this core's own live terminals with a real pid are indexed
  *   HCP-PID-JOIN               a Claude Code owner pid joins exactly one terminal; two is ambiguous; no hit is none
  *   HCP-CC-ONLY                pi and pi-durable are never claimed: unobserved, even on a pid that matches
- *   HCP-NO-OWNER-UNOBSERVED    a citizen with no validated live owner is unobserved, not none
- *   HCP-COMBINE                two owners, one column: a sighting wins, two sightings are ambiguous
+ *   HCP-NO-OWNER-UNOBSERVED    a citizen with no active owner is unobserved, not none
  *   HCP-RENDER                 the column says `hc <core>/<terminal>`
  *   HCP-PROBE-NO-FOLLOW        the real probe: socket, regular file, symlink to a socket, missing
  */
@@ -30,7 +29,6 @@ import { afterAll, describe, expect, test } from "vitest";
 import type { HcSocketOutcome } from "./hc-launch.ts";
 import {
 	buildHcPlacementIndex,
-	combinePlacement,
 	HC_PLACEMENT_SOCKET_ENV,
 	HcPlacementConfigError,
 	type HcPlacementReadDeps,
@@ -41,7 +39,7 @@ import {
 	resolveHcPlacement,
 	resolveHcPlacementSocket,
 } from "./hc-placement.ts";
-import { type PlacementObservation, renderPlacement } from "./herdr-placement.ts";
+import { renderPlacement } from "./herdr-placement.ts";
 
 function ok(label: string, cond: boolean): void {
 	expect(cond, label).toBe(true);
@@ -238,62 +236,22 @@ describe("hc placement: the join", () => {
 			JSON.stringify(hit) ===
 				JSON.stringify({ kind: "hc-terminal", coreId: CORE.id, coreName: "oracle", terminal: "t1d" }),
 		);
-		ok("a pid two terminals report is ambiguous", resolveHcPlacement(index, "claude-code", 900)?.kind === "ambiguous");
-		ok(
-			"the same terminal twice is one terminal",
-			resolveHcPlacement(index, "claude-code", 901)?.kind === "hc-terminal",
-		);
-		ok("a core that was read and does not run it: none", resolveHcPlacement(index, "claude-code", 5)?.kind === "none");
-		ok("no index: this owner makes no claim at all", resolveHcPlacement(null, "claude-code", 443471) === null);
+		ok("a pid two terminals report is ambiguous", resolveHcPlacement(index, "claude-code", 900).kind === "ambiguous");
+		ok("the same terminal twice is one terminal", resolveHcPlacement(index, "claude-code", 901).kind === "hc-terminal");
+		ok("a core that was read and does not run it: none", resolveHcPlacement(index, "claude-code", 5).kind === "none");
+		ok("no index: this owner did not look", resolveHcPlacement(null, "claude-code", 443471).kind === "unobserved");
 	});
 
 	test("[QK:HCP-CC-ONLY] pi and pi-durable are never claimed, even on a pid that matches", () => {
 		const index = buildHcPlacementIndex(CORE, [{ terminal: "t1m", pid: 482825 }]);
 		for (const backend of ["pi", "pi-durable", "codex", "copilot", "agy"]) {
-			ok(`${backend} is unobserved`, resolveHcPlacement(index, backend, 482825)?.kind === "unobserved");
+			ok(`${backend} is unobserved`, resolveHcPlacement(index, backend, 482825).kind === "unobserved");
 		}
 	});
 
-	test("[QK:HCP-NO-OWNER-UNOBSERVED] a citizen with no validated live owner is unobserved, not none", () => {
+	test("[QK:HCP-NO-OWNER-UNOBSERVED] a citizen with no active owner is unobserved, not none", () => {
 		const index = buildHcPlacementIndex(CORE, [{ terminal: "t1d", pid: 443471 }]);
-		ok("unobserved", resolveHcPlacement(index, "claude-code", null)?.kind === "unobserved");
-	});
-
-	test("[QK:HCP-COMBINE] two owners, one column", () => {
-		const U: PlacementObservation = { kind: "unobserved" };
-		const N: PlacementObservation = { kind: "none" };
-		const A: PlacementObservation = { kind: "ambiguous" };
-		const H: PlacementObservation = { kind: "herdr-pane", paneId: "p1" };
-		const C: PlacementObservation = { kind: "hc-terminal", coreId: CORE.id, coreName: "oracle", terminal: "t1d" };
-		const cells: [PlacementObservation, PlacementObservation | null, string][] = [
-			[U, null, "unobserved"],
-			[N, null, "none"],
-			[H, null, "herdr p1"],
-			[U, U, "unobserved"],
-			[U, N, "none"],
-			[N, U, "none"],
-			[U, C, "hc oracle/t1d"],
-			[N, C, "hc oracle/t1d"],
-			[H, U, "herdr p1"],
-			[H, N, "herdr p1"],
-			[H, C, "ambiguous"],
-			[A, C, "ambiguous"],
-			[H, A, "ambiguous"],
-			[U, A, "ambiguous"],
-		];
-		// Its own wording, so this claim does not ride on the renderer.
-		const say = (p: PlacementObservation): string =>
-			p.kind === "herdr-pane"
-				? `herdr ${p.paneId}`
-				: p.kind === "hc-terminal"
-					? `hc ${p.coreName}/${p.terminal}`
-					: p.kind;
-		for (const [herdr, hc, expected] of cells) {
-			ok(
-				`${herdr.kind} + ${hc === null ? "unread" : hc.kind} → ${expected}`,
-				say(combinePlacement(herdr, hc)) === expected,
-			);
-		}
+		ok("unobserved", resolveHcPlacement(index, "claude-code", null).kind === "unobserved");
 	});
 
 	test("[QK:HCP-RENDER] the column says hc <core>/<terminal>", () => {

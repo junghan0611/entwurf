@@ -46,8 +46,10 @@ import {
 	type MetaCitizenBackend,
 	type MetaIdentity,
 } from "./meta-session.ts";
+import { ambiguateSharedOwnerPlacements } from "./placement-compose.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
+import { readTmuxPlacementIndex, type TmuxPlacementIndex } from "./tmux-placement.ts";
 
 /** A listing-surface problem, surfaced explicitly rather than hidden or thrown.
  * Kind-tagged so the render layer shows provenance; each carries only verbatim
@@ -136,6 +138,9 @@ export interface EntwurfFactsDeps<T = undefined> {
 	 * allowed (`ENTWURF_HC_PLACEMENT_SOCKET`). `undefined` uses the real read; `null` from a reader
 	 * is "nobody looked". A placement-config error it throws stops this listing by name. */
 	readHcPlacementIndex?: () => Promise<HcPlacementIndex | null>;
+	/** tmux placement axis (#178): the ONE pane listing of the lister's own tmux server this listing
+	 * is allowed. `undefined` uses the real read; `null` from a reader is "nobody looked". */
+	readTmuxPlacementIndex?: () => TmuxPlacementIndex | null;
 	/** Optional presentation budget. Undefined preserves the generic fact provider's full
 	 * observation contract; peers surfaces pass their shared render limit. Older machine
 	 * payload rows then say `unobserved` rather than fabricating `active` / `exists`. */
@@ -250,7 +255,9 @@ export async function listEntwurfFacts<T = undefined>(deps: EntwurfFactsDeps<T>)
 	// is the discovery watcher `docs/mux-launch-rail.md` §7 refuses by name.
 	// The hc owner (#178) is likewise read once, and not at all when the caller brought its own observer.
 	const hcIndex = deps.observe ? null : await (deps.readHcPlacementIndex ?? readHcPlacementIndex)();
-	const observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)(), hcIndex);
+	const tmuxIndex = deps.observe ? null : (deps.readTmuxPlacementIndex ?? readTmuxPlacementIndex)();
+	const herdrIndex = deps.observe ? null : (deps.readPlacementIndex ?? readHerdrPlacementIndex)();
+	const observe = deps.observe ?? makeObservePeerFacts(herdrIndex, hcIndex, tmuxIndex);
 	let selectedObserve = observe;
 	if (deps.observationLimit !== undefined) {
 		if (!Number.isSafeInteger(deps.observationLimit) || deps.observationLimit < 0) {
@@ -271,7 +278,9 @@ export async function listEntwurfFacts<T = undefined>(deps: EntwurfFactsDeps<T>)
 	if (selection !== undefined) {
 		selectedObserve = (identity) => (selection.observe.has(identity.gardenId) ? observe(identity) : UNOBSERVED_PEER);
 	}
-	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes, selectedObserve);
+	const listed: FactList = resolveFactList(cleanIdentities, cleanProbes, selectedObserve);
+	// Two citizens in one pid-joined place are two claims on one owner process: neither is named.
+	const facts: FactList = { ...listed, peers: ambiguateSharedOwnerPlacements(listed.peers) };
 
 	// 5. #50 C4 demotion: a record-less socket is a diagnostic, not a listing
 	//    section. One diagnostic per socket (subjects aggregate at render, F8);
