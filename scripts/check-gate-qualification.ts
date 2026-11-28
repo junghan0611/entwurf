@@ -3504,6 +3504,7 @@ let manifestCount: number;
 		"herdr-runtime-bootstrap": 35,
 		"herdr-fresh-call": 61,
 		"herdr-resume-call": 24,
+		"hc-launch": 14,
 		"herdr-supply": 11,
 		"meta-facts": 5,
 		"peer-facts": 9,

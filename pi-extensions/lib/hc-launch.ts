@@ -295,18 +295,22 @@ export type HcRecovery =
 	| { readonly outcome: "left-open"; readonly terminal: string };
 
 /**
- * The core's error kinds that `terminal.run` raises BEFORE a terminal record exists
- * (`[HC api/run.rs:19, :86, :98-107, :136-144]`, `[HC terminals.rs:238-246]` at v0.1.20). After
- * `config` one holder process may already have been started and stays; no terminal exists. Every
- * other kind — `spawn_failed` first of all, which also covers "the holder did not answer" and is not
- * split by its message — is `unknown`.
+ * The core's error kinds that `terminal.run` raises ONLY before a terminal record exists
+ * (`[HC api/run.rs:19, :104, :107]`, `[HC terminals.rs:238-246]` at v0.1.20). After `config` one
+ * holder process may already have been started and stays; no terminal exists.
+ *
+ * `unavailable` IS NOT HERE, on purpose. The core raises it before the record (`[HC api/run.rs:86,
+ * :98-103, :136-144]`) AND after the program has started: `terminal_run` ends with `flush_saved()`
+ * (`[HC api/run.rs:60]`), which answers `unavailable` — "registry persistence timed out; the operation
+ * may already have completed" (`[HC runtime.rs:232-241]`) — with the terminal and its process already
+ * there. One kind, both sides of the creation, so it proves nothing; and it is not split by its
+ * message, which is not a contract. Calling it `none` would say nothing was created over a live
+ * terminal and withdraw a pi-durable reservation a running child is about to adopt.
+ *
+ * Every kind not listed — `unavailable`, and `spawn_failed`, which also covers "the holder did not
+ * answer" — is `unknown`.
  */
-export const HC_RUN_NONE_KINDS: readonly string[] = Object.freeze([
-	"invalid_params",
-	"unavailable",
-	"name_taken",
-	"config",
-]);
+export const HC_RUN_NONE_KINDS: readonly string[] = Object.freeze(["invalid_params", "name_taken", "config"]);
 
 /** The core that answered, as it named itself in `hello`. `id` is permanent per state directory: it
  * names the core, not one run of it. */
@@ -645,7 +649,7 @@ export const HC_RESUME_HINT: Readonly<Record<HcResumeRejectReason | HcResumeLaun
 	"hc-run-transport-failed": "the one terminal.run request did not come back as a reply line",
 	"hc-run-refused": "the core declined terminal.run by name before any terminal existed",
 	"hc-run-failed":
-		"the core reported terminal.run as failed in a way that does not prove nothing was started (spawn_failed also covers a holder that did not answer in time)",
+		"the core reported terminal.run as failed in a way that does not prove nothing was started (spawn_failed also covers a holder that did not answer in time, and unavailable is also what the core answers when saving its registry timed out after the program had started)",
 	"hc-run-reply-unparsable":
 		"the core's terminal.run reply could not be read, so a terminal may exist that this call cannot name",
 	"hc-run-echo-drift":

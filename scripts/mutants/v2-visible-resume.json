@@ -553,8 +553,12 @@
 			"claim": "V2RESUME-CC-JOIN-HANDLE-ONLY",
 			"title": "the guard that admits only a handle carrying the opened pane's direct child is disabled, so a herdr agent-start or pi-durable layout handle reaches the join with no pid and the wiring defect no longer fails by name",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\tif (handle.rail !== \"tmux\" && handle.rail !== \"herdr-layout-claude\") {"],
-			"replace": ["\tif (handle.rail !== \"tmux\" && handle.rail !== \"herdr-layout-claude\" && false) {"],
+			"find": [
+				"\tif (handle.rail !== \"tmux\" && handle.rail !== \"herdr-layout-claude\" && handle.rail !== \"hc\") {"
+			],
+			"replace": [
+				"\tif (handle.rail !== \"tmux\" && handle.rail !== \"herdr-layout-claude\" && handle.rail !== \"hc\" && false) {"
+			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-CC-JOIN-HANDLE-ONLY]",
@@ -721,10 +725,8 @@
 			"claim": "V2RESUME-CC-HERDR-JOIN",
 			"title": "the herdr Claude Code observation joins the marker owner to herdr's pane VIEW id instead of the pane's direct-child pid, so a real return is never seen",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": [
-				"\tconst panePid = handle.rail === \"tmux\" ? handle.panePid : (handle.paneChild as { pid: string }).pid;"
-			],
-			"replace": ["\tconst panePid = handle.rail === \"tmux\" ? handle.panePid : handle.herdrPaneId;"],
+			"find": ["\t\t\t\t: (handle.paneChild as { pid: string }).pid;"],
+			"replace": ["\t\t\t\t: (handle as unknown as { herdrPaneId: string }).herdrPaneId;"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-CC-HERDR-JOIN]",

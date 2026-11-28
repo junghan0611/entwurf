@@ -1,0 +1,170 @@
+{
+	"schemaVersion": 1,
+	"lane": "hc-launch",
+	"mutants": [
+		{
+			"claim": "HCL-CONTEXT-NO-FALLBACK",
+			"title": "the context check is dropped, so a process with no hc terminal or socket goes on to name an endpoint from variables it does not have",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": [
+				"\tif (!HC_LOCAL_ADDRESS.test(callerTerminal) || !path.isAbsolute(socketPath) || socketPath.includes(\"\\0\")) {"
+			],
+			"replace": ["\tif (callerTerminal === undefined) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-CONTEXT-NO-FALLBACK]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-BACKEND-CLOSED",
+			"title": "the backend refusal narrows to one name, so a backend with no same-id resume reaches the runtime lookup",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\tif (backend !== \"pi\" && backend !== \"claude-code\" && backend !== \"pi-durable\") {"],
+			"replace": ["\tif (backend === \"agy\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-BACKEND-CLOSED]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-RUNTIME-ABSOLUTE",
+			"title": "a relative PATH entry is searched, so which binary starts depends on the directory the caller stood in",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\t\tif (!path.isAbsolute(dir)) continue;"],
+			"replace": ["\t\tif (dir === undefined) continue;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-RUNTIME-ABSOLUTE]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-NUL-REFUSED",
+			"title": "the NUL check is dropped, so an argv no program can be started with is refused by the core only after the write",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": [
+				"\tif (argv.some((a) => a.includes(\"\\0\")) || Object.values(launchEnv).some((v) => v.includes(\"\\0\"))) {"
+			],
+			"replace": ["\tif (argv.length === 0) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-NUL-REFUSED]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-READS-BEFORE-WRITE",
+			"title": "the handshake stops pinning the protocol generation, so a core of another generation is asked to start a program under rules this rail never read",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["method: \"hello\", params: { generation: HC_GENERATION } })}\\n`;"],
+			"replace": ["method: \"hello\", params: {} })}\\n`;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-READS-BEFORE-WRITE]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-CALLER-TERMINAL-ADMITS",
+			"title": "a finished caller terminal is accepted, so variables inherited from a terminal that is gone admit a socket the caller does not run on",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\tif (got.result.state !== \"live\") return { ok: false, reason: \"hc-caller-terminal-not-live\" };"],
+			"replace": [
+				"\tif (got.result.state === undefined) return { ok: false, reason: \"hc-caller-terminal-not-live\" };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-CALLER-TERMINAL-ADMITS]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-RUN-PACKET-EXACT",
+			"title": "the launch stops asking for no parent, so the reopened citizen becomes the caller terminal's child and is killed when that terminal's program ends",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\t\t\tno_parent: true,"],
+			"replace": ["\t\t\tno_parent: false,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-RUN-PACKET-EXACT]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-ADOPT-ENV-FIVE",
+			"title": "the launcher probe is skipped, so a package whose run.sh is missing opens a terminal that cannot start the durable app",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": [
+				"\t\tif (!deps.isExecutable(runtimePath)) return { ok: false, reason: \"pi-durable-launcher-missing\" };"
+			],
+			"replace": ["\t\tif (runtimePath === \"\") return { ok: false, reason: \"pi-durable-launcher-missing\" };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-ADOPT-ENV-FIVE]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-RECOVERY-CLASSIFIED",
+			"title": "unavailable is taken as proof that nothing was created, so a registry-save timeout after the program started reports no terminal and withdraws a reservation a live child is about to adopt",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["Object.freeze([\"invalid_params\", \"name_taken\", \"config\"]);"],
+			"replace": ["Object.freeze([\"invalid_params\", \"name_taken\", \"config\", \"unavailable\"]);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-RECOVERY-CLASSIFIED]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-ECHO-DRIFT-LEFT-OPEN",
+			"title": "a kept terminal passes the echo check, so a launch the core will bring back as a shell after a restart is reported as the citizen's launch",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\t\tterminal.keep !== false ||"],
+			"replace": ["\t\tterminal.keep === undefined ||"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-ECHO-DRIFT-LEFT-OPEN]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-RECEIPT-IS-A-VIEW",
+			"title": "pid 0 and 1 are reported as the terminal's process, so a Claude Code resume waits to join a receiver marker to a pid no citizen can have",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["Number.isSafeInteger(pid) && pid > 1 ? String(pid) : null,"],
+			"replace": ["Number.isSafeInteger(pid) && pid >= 0 ? String(pid) : null,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-RECEIPT-IS-A-VIEW]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-OUTCOME-MAPPING",
+			"title": "the core's own error kind is dropped at the seam, so a failed launch reaches the operator without the word the core used",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\t\t\t...(result.hcErrorKind === undefined ? {} : { vendorCode: result.hcErrorKind }),"],
+			"replace": ["\t\t\t...(result.hcErrorKind === undefined ? {} : {}),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-OUTCOME-MAPPING]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-SOCKET-NO-AUTOSTART",
+			"title": "the reply bound is dropped, so an endless line is collected until the timer instead of being refused as oversize",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["\t\t\t\tif (lineBytes > maxReplyBytes) {"],
+			"replace": ["\t\t\t\tif (lineBytes < 0) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-SOCKET-NO-AUTOSTART]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		},
+		{
+			"claim": "HCL-NO-TYPING-NO-KILL",
+			"title": "the leaf gains a child-process import, the first step to running an hc CLI that can start a core",
+			"subject": "pi-extensions/lib/hc-launch.ts",
+			"find": ["import { createConnection } from \"node:net\";"],
+			"replace": [
+				"import * as childProcessForCli from \"node:child_process\";\nimport { createConnection } from \"node:net\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCL-NO-TYPING-NO-KILL]",
+			"signatureSource": "pi-extensions/lib/hc-launch.test.ts"
+		}
+	]
+}

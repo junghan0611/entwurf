@@ -20,6 +20,7 @@
  *   HCL-RUN-PACKET-EXACT         the write is argv, cwd, the fixed env, a name, no parent, no notes
  *   HCL-ADOPT-ENV-FIVE           a pi-durable launch adds exactly the five adopt names
  *   HCL-RECOVERY-CLASSIFIED      none only when unwritten or declined before a record; else unknown
+ *                                (`unavailable` is raised on both sides of the creation: unknown)
  *   HCL-ECHO-DRIFT-LEFT-OPEN     a drifted echo is a named failure naming the terminal, never killed
  *   HCL-RECEIPT-IS-A-VIEW        the receipt carries core, terminal, name, pid — and no garden id
  *   HCL-OUTCOME-MAPPING          the v2 seam gets an hc handle, a refusal, or a failure with recovery
@@ -186,7 +187,11 @@ describe("hc-launch", () => {
 		const none = await hcResumeCall(pi, { ...ENV, PATH: `${TMP}:rel` }, missing.deps, NAME);
 		ok("no pi on PATH refuses", !none.ok && none.reason === "hc-runtime-unresolved" && missing.requests.length === 0);
 		ok("a non-executable file is not a runtime", resolveHcRuntimeOnPath("not-exec", { PATH: BIN }) === null);
-		ok("a relative PATH entry is skipped", resolveHcRuntimeOnPath("pi", { PATH: "bin" }) === null);
+		// A relative entry that DOES hold an executable `pi` from this process's directory: skipped anyway.
+		ok(
+			"a relative PATH entry is skipped",
+			resolveHcRuntimeOnPath("pi", { PATH: path.relative(process.cwd(), BIN) }) === null,
+		);
 		ok("no PATH is no runtime", resolveHcRuntimeOnPath("pi", {}) === null);
 
 		const core = scripted([HELLO, CALLER_LIVE, (r) => echoOf(r)]);
@@ -363,7 +368,14 @@ describe("hc-launch", () => {
 			[reply(id, { address: "vps/t3" }), "hc-run-reply-unparsable", "unknown"],
 			[reply(id, { terminal: { address: "t3" } }), "hc-run-reply-unparsable", "unknown"],
 			[errorReply(id, "invalid_params"), "hc-run-refused", "none"],
-			[errorReply(id, "unavailable"), "hc-run-refused", "none"],
+			// One kind on both sides of the creation: before the record, and after the program started
+			// when the registry save timed out (run.rs:60 → runtime.rs:232-241). Never `none`.
+			[errorReply(id, "unavailable", "the core is stopping"), "hc-run-failed", "unknown"],
+			[
+				errorReply(id, "unavailable", "registry persistence timed out; the operation may already have completed"),
+				"hc-run-failed",
+				"unknown",
+			],
 			[errorReply(id, "name_taken"), "hc-run-refused", "none"],
 			[errorReply(id, "config"), "hc-run-refused", "none"],
 			[errorReply(id, "spawn_failed", "the holder did not answer"), "hc-run-failed", "unknown"],
@@ -384,8 +396,8 @@ describe("hc-launch", () => {
 			);
 		}
 		ok(
-			"the none set is exactly the four pre-record kinds",
-			[...HC_RUN_NONE_KINDS].sort().join() === "config,invalid_params,name_taken,unavailable",
+			"the none set is exactly the three kinds raised only before a record — unavailable is not one",
+			[...HC_RUN_NONE_KINDS].sort().join() === "config,invalid_params,name_taken",
 		);
 		const kind = scripted([HELLO, CALLER_LIVE, errorReply(id, "spawn_failed")]);
 		const quoted = await hcResumeCall(pi, ENV, kind.deps, NAME);
