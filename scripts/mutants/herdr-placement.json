@@ -77,10 +77,10 @@
 			"title": "moving the placement read INSIDE the per-citizen observer spawns one placement-owner call per record and is the first half of a discovery watcher (#116 S1)",
 			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
 			"find": [
-				"\tconst observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)());"
+				"\tconst observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)(), hcIndex);"
 			],
 			"replace": [
-				"\tconst observe =\n\t\tdeps.observe ??\n\t\t((identity) => makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)())(identity));"
+				"\tconst observe =\n\t\tdeps.observe ??\n\t\t((identity) => makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)(), hcIndex)(identity));"
 			],
 			"gate": ["bash", "run.sh", "check-herdr-placement"],
 			"timeoutSeconds": 60,

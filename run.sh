@@ -1471,7 +1471,7 @@ check_entwurf_v2_visible_resume() {
   # terminal entry to this same leaf (resume-cli.test.ts) joins it for that reason as well.
   # Named files, no glob.
   section "visible same-id resume + its herdr and tmux launches (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/entwurf-v2-visible-resume.test.ts pi-extensions/lib/herdr-resume-call.test.ts pi-extensions/lib/hc-launch.test.ts pi-extensions/lib/mux-resume-call.test.ts pi-extensions/lib/pi-durable-release-failure.test.ts pi-extensions/lib/resume-cli.test.ts pi-extensions/lib/resume-picker-rows.test.ts pi-extensions/lib/resume-picker.test.ts pi-extensions/lib/resume-picker-production.test.ts
+  run_vitest pi-extensions/lib/entwurf-v2-visible-resume.test.ts pi-extensions/lib/herdr-resume-call.test.ts pi-extensions/lib/hc-launch.test.ts pi-extensions/lib/hc-placement.test.ts pi-extensions/lib/hc-placement-wiring.test.ts pi-extensions/lib/mux-resume-call.test.ts pi-extensions/lib/pi-durable-release-failure.test.ts pi-extensions/lib/resume-cli.test.ts pi-extensions/lib/resume-picker-rows.test.ts pi-extensions/lib/resume-picker.test.ts pi-extensions/lib/resume-picker-production.test.ts
 }
 
 check_resume_launch_identity() {

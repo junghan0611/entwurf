@@ -1,0 +1,188 @@
+{
+	"schemaVersion": 1,
+	"lane": "hc-placement",
+	"mutants": [
+		{
+			"claim": "HCP-OPT-IN-ONLY",
+			"title": "the placement read borrows the launch socket when the operator named none, so a view nobody opted into reads a core",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tconst named = env[HC_PLACEMENT_SOCKET_ENV] ?? \"\";"],
+			"replace": ["\tconst named = env[HC_PLACEMENT_SOCKET_ENV] ?? env.HC_TERMINAL_SOCKET ?? \"\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-OPT-IN-ONLY]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-CONFIG-NAMED-ERROR",
+			"title": "a named path that is not a socket is handed on as if it were one, so an operator's mistake reads as nobody looked instead of by name",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (kind !== \"socket\") {"],
+			"replace": ["\tif (kind === \"never\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-CONFIG-NAMED-ERROR]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-ABSENT-UNOBSERVED",
+			"title": "a named path that does not exist is a config error, so a core that is simply not running breaks every listing",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (kind === \"absent\") return null;"],
+			"replace": ["\tif (kind === \"never\") return null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-ABSENT-UNOBSERVED]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-ONE-READ-NO-RETRY",
+			"title": "a core that did not answer yields an empty index, so every Claude Code citizen reads none over a core nobody read",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (said.kind !== \"reply\") return null;"],
+			"replace": ["\tif (said.kind !== \"reply\") return buildHcPlacementIndex({ id: \"x\", name: \"x\" }, []);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-ONE-READ-NO-RETRY]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-GENERATION-PINNED",
+			"title": "the generation check is dropped, so a core speaking another protocol is listed under rules this view never read",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["hello.arm !== \"result\" || hello.result.generation !== HC_GENERATION) return null;"],
+			"replace": ["hello.arm !== \"result\") return null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-GENERATION-PINNED]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-LOCAL-LIVE-ONLY",
+			"title": "a finished terminal is indexed, so a pid the kernel has since reused places a citizen in a terminal that ended",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\t\tif (!HC_LOCAL_TERMINAL.test(address) || state !== \"live\") continue;"],
+			"replace": ["\t\tif (!HC_LOCAL_TERMINAL.test(address)) continue;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-LOCAL-LIVE-ONLY]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-PID-JOIN",
+			"title": "a pid two terminals report reads none instead of ambiguous, so a real double sighting is reported as a measured absence",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (index.ambiguous.has(ownerPid)) return AMBIGUOUS_PLACEMENT;"],
+			"replace": ["\tif (index.ambiguous.has(-1)) return AMBIGUOUS_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-PID-JOIN]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-CC-ONLY",
+			"title": "the backend restriction is dropped, so a pi or pi-durable row is claimed from a pid source nobody verified",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (backend !== \"claude-code\") return UNOBSERVED_PLACEMENT;"],
+			"replace": ["\tif (backend === \"\") return UNOBSERVED_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-CC-ONLY]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-NO-OWNER-UNOBSERVED",
+			"title": "a citizen with no live owner reads none, so a dormant citizen nobody could look for is reported as measured absent",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (ownerPid === null) return UNOBSERVED_PLACEMENT;"],
+			"replace": ["\tif (ownerPid === null) return NO_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-NO-OWNER-UNOBSERVED]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-COMBINE",
+			"title": "a citizen two owners both show is given to one of them, so a double sighting names a place as if it were the only one",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\tif (seen(herdr) && seen(hc)) return AMBIGUOUS_PLACEMENT;"],
+			"replace": ["\tif (seen(herdr) && seen(hc)) return herdr;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-COMBINE]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-RENDER",
+			"title": "the column drops the core name, so two cores on one host print the same terminal",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["return `hc ${placement.coreName}/${placement.terminal}`;"],
+			"replace": ["return `hc ${placement.terminal}`;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-RENDER]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-PROBE-NO-FOLLOW",
+			"title": "the probe follows symlinks, so a link somebody else can repoint is accepted as the operator-named socket",
+			"subject": "pi-extensions/lib/hc-placement.ts",
+			"find": ["\t\tstat = fs.lstatSync(socketPath);"],
+			"replace": ["\t\tstat = fs.statSync(socketPath);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-PROBE-NO-FOLLOW]",
+			"signatureSource": "pi-extensions/lib/hc-placement.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-ONE-READ",
+			"title": "the listing reads the core twice, the first step of a retry loop around a view",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": ["\tconst hcIndex = deps.observe ? null : await (deps.readHcPlacementIndex ?? readHcPlacementIndex)();"],
+			"replace": [
+				"\tconst hcIndex = deps.observe\n\t\t? null\n\t\t: (await (deps.readHcPlacementIndex ?? readHcPlacementIndex)(), await (deps.readHcPlacementIndex ?? readHcPlacementIndex)());"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-ONE-READ]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-VALIDATED-OWNER",
+			"title": "the identity match is dropped, so a live owner armed for another session places this citizen in that session's terminal",
+			"subject": "pi-extensions/lib/entwurf-peer-observe.ts",
+			"find": ["\treturn marker !== null && receiverMarkerMatchesIdentity(marker, identity) ? marker.ownerPid : null;"],
+			"replace": ["\treturn marker !== null ? marker.ownerPid : null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-VALIDATED-OWNER]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "HCP-WIRED-CONFIG-ERROR",
+			"title": "a placement-config error is swallowed into nobody looked, so a mistyped path is never reported",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": ["\tconst hcIndex = deps.observe ? null : await (deps.readHcPlacementIndex ?? readHcPlacementIndex)();"],
+			"replace": [
+				"\tconst hcIndex = deps.observe ? null : await (deps.readHcPlacementIndex ?? readHcPlacementIndex)().catch(() => null);"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-WIRED-CONFIG-ERROR]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		},
+		{
+			"claim": "HCP-VIEW-NOT-DISPATCH",
+			"title": "the launch dispatch root imports the placement view, the first step to a location deciding where something is sent or opened",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["import { type HcResumeLaunchOutcome, hasHcMarker, launchHcResume } from \"./hc-launch.ts\";"],
+			"replace": [
+				"import { type HcResumeLaunchOutcome, hasHcMarker, launchHcResume } from \"./hc-launch.ts\";\nimport { HC_PLACEMENT_SOCKET_ENV as hcPlacementForDispatch } from \"./hc-placement.ts\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HCP-VIEW-NOT-DISPATCH]",
+			"signatureSource": "pi-extensions/lib/hc-placement-wiring.test.ts"
+		}
+	]
+}

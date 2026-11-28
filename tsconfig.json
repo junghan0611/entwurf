@@ -278,6 +278,11 @@
 		// and no entwurf module. Received by scripts/tsconfig.json and mcp/tsconfig.json through their
 		// existing ../pi-extensions/lib/**/*.ts includes; its beside test takes the existing test fence.
 		"pi-extensions/lib/hc-launch.ts",
+		// hc-placement.ts is the #178 Herdr Core placement view — a lib→lib VALUE importer of
+		// hc-launch.ts (the socket client) and herdr-placement.ts, loaded under strip-types by
+		// entwurf-peer-observe.ts / entwurf-fact-provider.ts. Typechecked by scripts/tsconfig.json
+		// through its importers and its beside test.
+		"pi-extensions/lib/hc-placement.ts",
 		// fresh-call-dispatch.ts is the #116 C3 composition root — the ONE module that may know
 		// both rails. A lib→lib VALUE importer of both plus the codex preflight with explicit
 		// `.ts` extensions, same fence. Its consumers reach it the two ways their own fences

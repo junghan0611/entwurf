@@ -37,6 +37,7 @@ import {
 } from "./entwurf-facts.ts";
 import { makeObservePeerFacts, readHerdrPlacementIndex } from "./entwurf-peer-observe.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
+import { type HcPlacementIndex, readHcPlacementIndex } from "./hc-placement.ts";
 import type { HerdrPlacementIndex } from "./herdr-placement.ts";
 import {
 	type ActiveStoreEntry,
@@ -131,6 +132,10 @@ export interface EntwurfFactsDeps<T = undefined> {
 	 * no-herdr host and every row then says `unobserved`. Deliberately a READ, not a
 	 * per-citizen lookup: a per-citizen hook would invite one child process per record. */
 	readPlacementIndex?: () => HerdrPlacementIndex | null;
+	/** hc placement axis (#178): the ONE read of the operator-named Herdr Core this listing is
+	 * allowed (`ENTWURF_HC_PLACEMENT_SOCKET`). `undefined` uses the real read; `null` from a reader
+	 * is "nobody looked". A placement-config error it throws stops this listing by name. */
+	readHcPlacementIndex?: () => Promise<HcPlacementIndex | null>;
 	/** Optional presentation budget. Undefined preserves the generic fact provider's full
 	 * observation contract; peers surfaces pass their shared render limit. Older machine
 	 * payload rows then say `unobserved` rather than fabricating `active` / `exists`. */
@@ -243,7 +248,9 @@ export async function listEntwurfFacts<T = undefined>(deps: EntwurfFactsDeps<T>)
 	// never again for this call. That single read is the anti-watcher rule in code: herdr
 	// publishes no "the session reference landed" event, and a retry loop around that gap
 	// is the discovery watcher `docs/mux-launch-rail.md` §7 refuses by name.
-	const observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)());
+	// The hc owner (#178) is likewise read once, and not at all when the caller brought its own observer.
+	const hcIndex = deps.observe ? null : await (deps.readHcPlacementIndex ?? readHcPlacementIndex)();
+	const observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)(), hcIndex);
 	let selectedObserve = observe;
 	if (deps.observationLimit !== undefined) {
 		if (!Number.isSafeInteger(deps.observationLimit) || deps.observationLimit < 0) {

@@ -29,8 +29,9 @@
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
-import { resolveMailboxReceiverFacts } from "./entwurf-deliverability.ts";
+import { receiverMarkerMatchesIdentity, resolveMailboxReceiverFacts } from "./entwurf-deliverability.ts";
 import type { PeerObservations, ReceiverObservation, TranscriptObservation } from "./entwurf-facts.ts";
+import { combinePlacement, type HcPlacementIndex, resolveHcPlacement } from "./hc-placement.ts";
 import {
 	buildPlacementIndex,
 	type HerdrPlacementIndex,
@@ -132,12 +133,33 @@ export function readHerdrPlacementIndex(env: NodeJS.ProcessEnv = process.env): H
  * `unobserved`, which is the only honest answer when nobody looked. It is NOT `none`:
  * that word is reserved for a herdr that WAS read and does not have this citizen.
  */
-export function makeObservePeerFacts(placementIndex: HerdrPlacementIndex | null) {
+export function makeObservePeerFacts(
+	placementIndex: HerdrPlacementIndex | null,
+	hcPlacementIndex: HcPlacementIndex | null = null,
+) {
 	return (identity: MetaIdentity): PeerObservations => ({
 		receiver: observeReceiver(identity),
 		transcript: observeTranscript(identity),
-		placement: resolvePlacement(placementIndex, identity),
+		placement: combinePlacement(
+			resolvePlacement(placementIndex, identity),
+			resolveHcPlacement(
+				hcPlacementIndex,
+				identity.backend,
+				hcPlacementIndex === null ? null : validatedClaudeCodeOwnerPid(identity),
+			),
+		),
 	});
+}
+
+/**
+ * The live process that owns a Claude Code citizen's receiver, or null (#178 placement join).
+ * The marker reader already refuses a dead or reused owner pid; the identity match is the same one
+ * the receiver axis uses. Only asked when an hc index exists, and only for Claude Code (G-P2).
+ */
+function validatedClaudeCodeOwnerPid(identity: MetaIdentity): number | null {
+	if (identity.backend !== "claude-code") return null;
+	const marker = readMetaReceiverMarker({ gardenId: identity.gardenId });
+	return marker !== null && receiverMarkerMatchesIdentity(marker, identity) ? marker.ownerPid : null;
 }
 
 /** The production observer with no placement owner read — the shape every caller that

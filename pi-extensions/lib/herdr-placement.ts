@@ -55,12 +55,18 @@ import type { MetaIdentity } from "./meta-session.ts";
  *   `ambiguous`   two or more panes claim this citizen's native session id. herdr
  *                 shows it, but not in one place, so naming a pane would be a guess.
  *   `herdr-pane`  exactly one pane joined on the unique key.
+ *   `hc-terminal` exactly one terminal of the operator-named Herdr Core runs the citizen's
+ *                 validated owner process (#178; Claude Code only).
  */
 export type PlacementObservation =
 	| { readonly kind: "unobserved" }
 	| { readonly kind: "none" }
 	| { readonly kind: "ambiguous" }
-	| { readonly kind: "herdr-pane"; readonly paneId: string };
+	| { readonly kind: "herdr-pane"; readonly paneId: string }
+	// #178: the terminal of ONE Herdr Core whose own process is the citizen's validated owner, as
+	// read for this listing through the operator-named socket (`hc-placement.ts`). A view, never an
+	// address; `coreId` keeps two cores on one host apart.
+	| { readonly kind: "hc-terminal"; readonly coreId: string; readonly coreName: string; readonly terminal: string };
 
 export const UNOBSERVED_PLACEMENT: PlacementObservation = { kind: "unobserved" };
 export const NO_PLACEMENT: PlacementObservation = { kind: "none" };
@@ -292,5 +298,7 @@ export function resolvePlacement(index: HerdrPlacementIndex | null, identity: Me
 /** Render one observation as the listing's column value. `herdr <pane>` says WHERE it
  * was seen and by WHOM, so a reader never mistakes the pane id for one of ours. */
 export function renderPlacement(placement: PlacementObservation): string {
-	return placement.kind === "herdr-pane" ? `herdr ${placement.paneId}` : placement.kind;
+	if (placement.kind === "herdr-pane") return `herdr ${placement.paneId}`;
+	if (placement.kind === "hc-terminal") return `hc ${placement.coreName}/${placement.terminal}`;
+	return placement.kind;
 }

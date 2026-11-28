@@ -19,15 +19,37 @@ Contract to hold: the record stays the sole address; `entwurf_v2` unchanged; exi
 
 - [x] **(0) RED baseline** — `~/.local/share/entwurf-lab/178/red/RECEIPT.md`. `entwurf resume <id>` in an HC terminal: exit 4 `no-tmux-context`; a live HC citizen's placement: `unobserved`.
 - [x] **(1) Checkpoint 1: hc launch leaf + rail table + v2/CLI wiring.** `hc-launch.ts` (one `terminal.run`, `no_parent`/`no_notify`, fixed env scrub, absolute argv[0], two reads before the write, none/unknown/left-open recovery), `selectResumeRail` (hc / herdr / tmux / ambiguous) in the shared root, `hc-fresh-unsupported`, v2 handle + receipts, CLI early check and picker line. LIVE L-1 (pi-durable, human CLI): `~/.local/share/entwurf-lab/178/live1/RECEIPT.md` — exit 0, adopted, recall and real v2 round trip with the tmux-seated writer, reopened terminal outlives the caller's. Test citizen `20261128T123102-a05627` left live in an hc terminal for GLG's App check.
-- [ ] **(2) Claude Code resume in Core** (L-2): the `marker.ownerPid === terminal.run pid` join is implemented and unit-tested, LIVE unmeasured. ← NEXT
-- [ ] **(3) Pi resume in Core** (L-4): implemented, LIVE unmeasured (needs a prompted Pi test citizen so a transcript exists).
-- [ ] **(4) Placement view**: `ENTWURF_HC_PLACEMENT_SOCKET` reader (same-host view only; absent / missing / connect / reply / join failure → `unobserved` once; malformed or non-socket → a named placement-config error with zero delivery effect; no discovery, retry or fallback), Claude Code join by validated owner pid; pi / pi-durable stay `unobserved` (G-P2). L-7 in two rows: control (no opt-in) and opt-in.
-- [ ] **(5) Text and guards**: `ENTWURF-CLI.json` (`entwurf help resume` still says "only inside tmux or herdr"), `ENTWURF.json` resume/fresh descriptions and hints (reviewed amendment layer + payload revision), the tmux resume leaf's hc guard for a direct caller, `check-typing-call-fence` hc methods, docs (`docs/hc-launch-rail.md`, AGENTS.md references).
-- [ ] **(6) Qualification owed before the frozen candidate**: mutant manifest for the HCL-* / FCD-RESUME-* / V2RESUME-*-HC / RESUMECLI-CONTEXT-HC* claims (QKs exist, exact-once mutants do not yet), affected PARTIAL groups, then the FULL floor once.
+- [x] **(1b) Checkpoint 2 `f0f251b9`: `unavailable` is `unknown`, never `none`** (bf156a B-1: hc answers it after the program started too, `[HC api/run.rs:60, runtime.rs:232-241]`). `scripts/mutants/hc-launch.json` (14 claims); five neighbouring mutants re-anchored.
+- [x] **(2) Claude Code resume in Core** (L-2, n=1): `~/.local/share/entwurf-lab/178/live2/RECEIPT.md`. exit 0, `receiver-armed`, marker ownerPid === `terminal.run` pid, recall, Bash + MCP tools, v2 round trip.
+- [x] **(2b) tmux-born → hc, human CLI, three backends** (L-3, n=1 each): `~/.local/share/entwurf-lab/178/live3/RECEIPT.md` (also GLG's App observation and the Inbox/Idle UX row, both GLG-observed).
+- [x] **(3) Pi resume in Core** (n=1): same receipt, row `20261128T125432-ea3378`.
+- [x] **(4) Placement view** (checkpoint 3): `hc-placement.ts` — operator env `ENTWURF_HC_PLACEMENT_SOCKET`, one `hello` + one `terminal.list`, Claude Code joined by validated receiver-marker owner pid, pi / pi-durable `unobserved`; absent or unanswered → `unobserved`, relative / not-a-socket → `HcPlacementConfigError`. `PlacementObservation` gained `hc-terminal`. L-7: `~/.local/share/entwurf-lab/178/live7/RECEIPT.md`. NOT done from design D9: a tmux placement arm (`tmux-pane`) — not in the coordinator's ruling for this cut; the lister's own `HC_TERMINAL_SOCKET` is deliberately not read (opt-in only).
+- [ ] **(5) Text and guards** ← next. bf156a D-2: `ENTWURF-CLI.json` (`entwurf help resume` still says "only inside tmux or herdr") + `check-install-surface`; `ENTWURF.json` resume/fresh descriptions and hints (reviewed amendment layer + payload revision). O-2: the tmux resume leaf's hc guard twin (L3-draft rev 4 :134) — today `mux-resume-call.ts` is imported only by `visible-resume-launch.ts`, itself imported by `resume-cli.ts:84` and `mcp/entwurf-bridge/src/index.ts:134`, both through the dispatch root. Docs: `docs/hc-launch-rail.md`, AGENTS.md references, `docs/mux-launch-rail.md` §7 amendment for the pid join, README/VERIFY placement variable. Document as PREMISES, no Entwurf-side resolver: (a) a program an hc core starts has the CORE's PATH — `entwurf` / `pi` were not on it on oracle (L-0 pre-check, observation only); (b) `hasHcMarker` is true on either variable, so a tmux pane that inherited `HC_*` keeps refusing fresh calls; (c) env reach of `ENTWURF_HC_PLACEMENT_SOCKET` per harness only where verified (Codex unverified); (d) the App's Inbox status is the program's own OSC report, not an Entwurf fact.
+- [ ] **(6) Qualification owed before the frozen candidate**: mutants still missing for FCD-RESUME-RAIL-TABLE / -AMBIGUOUS-NO-RAIL / -HC-NO-FALLBACK, FCD-FRESH-HC-UNSUPPORTED, V2RESUME-CC-HC-JOIN / -PID-UNREPORTED, V2RESUME-PD-HC-LAUNCH / -RESERVATION, V2RESUME-PI-HC-RENDER, RESUMECLI-CONTEXT-HC / -AMBIGUOUS. `hc-launch.json` (14) and `hc-placement.json` (16) exist and were self-checked by the writer (each mutant fails only its own title); that is NOT a PARTIAL receipt. The six re-anchored mutants (five in checkpoint 2, `HP-ONE-READ-PER-LISTING` in checkpoint 3) have unmeasured kills. Run the affected exact-argv groups once after review: `["bash","run.sh","check-entwurf-v2-visible-resume"]`, `["bash","run.sh","check-fresh-call-dispatch"]`, `["bash","run.sh","check-herdr-placement"]`. FULL floor only on the frozen candidate.
 
-Path B (`entwurf_resume_call` from an hc citizen), the picker in an hc terminal, a tmux-born citizen reopened in hc, and a core started from a tmux or herdr seat: all unmeasured.
+# Path B — waiting for GLG (the only accepted measurement; decided by 68bd94 via 885314)
 
-Known boundaries (checkpoint 1): the core's PATH on oracle has no `entwurf` / `pi` / `claude`; argv[0] is resolved on the CALLER's PATH to an absolute file, and the reopened program then runs with the CORE's environment (no PATH projection, same as tmux and herdr). Whether a reopened Claude Code or Pi finds its tools under that PATH is part of L-2 / L-4.
+`entwurf_resume_call` made BY an hc-seated citizen. A test citizen asked over v2 declined, correctly: the tool needs the operator's explicit request in its own session (negative receipt, `live2/RECEIPT.md`). The writer must not type into its terminal (`hc send` was refused as impersonation) and must not open a citizen with a self-attributed request.
+
+- Where: hc core `oracle`, terminal **t1g**, name `entwurf-resume-805657192fa247ad` — test Claude Code citizen `20261128T125309-d9ecc0` (claude-sonnet-5-5). In the App it is the Claude Code terminal whose cwd ends in `178/live3/cwd-cc`. If it has been quit, reopen it first from any hc terminal: `entwurf resume 20261128T125309-d9ecc0`.
+- What GLG says there, one line: `entwurf_resume_call 도구로 20261128T123102-a05627 을 다시 열어줘. 도구가 돌려준 글을 그대로 보여줘.`
+- Target: `20261128T123102-a05627` — test pi-durable citizen, dormant (quit from t19, exit 0). Its code word from L-1 is `LAB178-ROSE-4417`.
+- Expected, each a separate observation: (launch) a receipt headed `[entwurf resume call ↻ hc]` naming a NEW terminal on core `oracle` and an attributed actor (d9ecc0, unlike the CLI's `unattributed`); (observation) `adopted`; (App) a new pi-durable terminal appears; (recall + round trip) the writer then sends a v2 message asking for the code word and expects `LAB178-ROSE-4417` back. A pi or Claude Code TARGET from this caller is expected to refuse `hc-runtime-unresolved` because the core's PATH has neither binary — an ESTIMATE, unmeasured.
+
+# Test citizens (all test-only; quit cleanly, never retire)
+
+Record vs observation: no location is recorded anywhere. Core observation at 2026-11-28 13:0x KST (`hc ls`), Entwurf `peer-facts` with the opt-in variable in parentheses.
+
+| garden id | backend | born | now |
+|---|---|---|---|
+| `20261128T125309-d9ecc0` | claude-code | tmux @97 | live, hc t1g (`hc oracle/t1g`) |
+| `20261128T125340-9f9443` | pi-durable | tmux @98 | live, hc t1j (`unobserved`, G-P2) |
+| `20261128T125432-ea3378` | pi | tmux @99 | live, hc t1m (`unobserved`, G-P2) |
+| `20261128T124035-5541ae` | claude-code | hc t1b | dormant (was t1d) |
+| `20261128T123102-a05627` | pi-durable | hc | dormant (was t19) — path B target |
+| `20261128T121853-7bc485` | pi | hc | dormant, never prompted (no transcript) |
+
+Quit: `/exit` (Claude Code), Ctrl-C (pi-durable), `/quit` (Pi) in the terminal. Sensitive absolute socket paths stay in the local receipts.
 
 # Known hazards (885314 source reading, v0.1.20)
 
