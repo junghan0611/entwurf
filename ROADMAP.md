@@ -9,6 +9,13 @@
 
 ---
 
+## 방향 (2026-11-28 기록) — #178: 작업대가 바뀌어도 같은 형제, 같은 주소
+
+GLG 결정(2026-11-28): 첫 출하 목표는 0.70.0, 대상은 Pi·pi-durable·Claude Code. 도구들이 mux 레일을 품은
+작업대(Herdr Core/App, Rex)로 옮겨가는 동안 Entwurf는 어느 한 레일을 따르지 않고 주소 하나를 지킨다.
+방향과 대칭표의 정본은 [docs/workbench-rails.md](./docs/workbench-rails.md)다. 표는 여기에 복사하지 않는다.
+못 채운 칸은 0.70.x에서 다시 시도하되, 패치 번호가 수용 기준을 면제하지는 않는다.
+
 ## 보류 방향 — #151 `/renew` 뒤 (2026-11-20)
 
 Pi native `/renew` 코드는 main에 착지했다(`b4971826`; 설계·결정 원문·남은 경계는 [docs/renew-memory-outline.md](./docs/renew-memory-outline.md)). GLG 원칙대로 한두 달 써 본 뒤 코드와 스킬의 몫을 다시 나눈다. 그때까지 아래는 열지 않는다.

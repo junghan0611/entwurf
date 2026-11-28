@@ -226,6 +226,8 @@ role, caller identity or tool annotation grants it
 caller's Herdr workspace or tmux session; `placement.tmuxSession` names another existing tmux session and is refused inside Herdr.
 Missing or ambiguous context refuses with no fallback:
 [tmux launch](./docs/mux-launch-rail.md) · [Herdr launch](./docs/herdr-launch-rail.md).
+Where this is heading — the same sibling at the same address on any workbench, and what is proven
+for each one today — lives in one place: [workbench rails](./docs/workbench-rails.md).
 
 ### Remote siblings and team bookmarks
 
