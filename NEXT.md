@@ -1,8 +1,29 @@
-# NEXT — 0.64.2 shipped (guidance R25); Herdr pinned to 0.64.2
+# NEXT — #178 Herdr Mobile 초안 검증 / #156 pi-durable 입력 UX
 
-**현재 (2026-11-28 08:xx KST):** 0.64.2(코드 변경 없는 guidance revision 25 패치)가 출하됐다. npm `latest`=0.64.2이고 Herdr lock도 0.64.2를 가리킨다. P5를 위해 GLG 승인으로 내린 Codex managed daemon(원격 제어 포함)은 꺼진 채이며, 다시 띄울지는 GLG가 정한다. 다음 레일은 GLG가 고른다. oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable). 0.64.1·0.64.2 컷은 `20261126T081804-885314`(Claude Code)가 단독 writer로 맡았고 검수는 Sol `d85cad`(대기 중, retire는 GLG 요청 때만). 0.64.0까지의 실무코디·main writer·릴리스 `20261113T043350-ff08d4`는 68bd94에 따르면 지금 비활성이다. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
+**현재 (2026-11-28 08:xx KST):** 0.64.2(코드 변경 없는 guidance revision 25 패치)가 출하됐다. npm `latest`=0.64.2이고 Herdr lock도 0.64.2를 가리킨다. P5를 위해 GLG 승인으로 내린 Codex managed daemon(원격 제어 포함)은 꺼진 채이며, 다시 띄울지는 GLG가 정한다. 다음 레일은 GLG가 #156과 #170으로 정했다. oracle 운영 host는 Pi 1.6.1로 넘어갔다(CHANGELOG #176 operating-host 줄). 역할: 운영코디 `20261014T212756-68bd94`(pi-durable). 0.64.1·0.64.2 컷은 `20261126T081804-885314`(Claude Code)가 단독 writer로 맡았고 검수는 Sol `d85cad`(대기 중, retire는 GLG 요청 때만). 0.64.0까지의 실무코디·main writer·릴리스 `20261113T043350-ff08d4`는 68bd94에 따르면 지금 비활성이다. #175 실무진(A/B 구현 Opus `20261125T121018-b4f4e3`, C 구현 Astra `20261125T124619-b8c1c0`, 코드 리뷰 Sonnet `20261125T121028-d0ea26`, 사실·대칭 Sol `20261125T123927-0f3787`)은 GLG 요청으로 2026-11-26에 retire했다(Claude Code 둘은 exited, Pi 둘은 shutdown-requested 뒤 liveness dead).
 
 # RAIL — 현재 좌표
+
+- [x] **1. R25 / 0.64.2 출하, Herdr npm 재고정.** `097c653e`, exact-SHA CI 4/4; 릴리즈 증거는 CHANGELOG.
+- [ ] **2. #178 Herdr Mobile 경로 확인.** ← CURRENT: Android 앱·Oracle에서 실제 실행 가능한 `hc`·사설 SSH 경로 확인. #156 휴대폰 텍스트에 앞서 볼 수 있으나 노트북 로컬 이미지와 무관.
+- [ ] **3. #156 첫 수선 범위.** 잘못된 자동 제출을 막고 로컬 이미지 입력을 검증; 원문 회수·history는 별도 동작.
+- [ ] **별도 레일: #170 같은 garden ID 복귀 벤치마크.** #156과 순서·인수·완료 조건을 묶지 않는다.
+
+# NOW
+
+- **Current:** GLG가 [#156](https://github.com/junghan0611/entwurf/issues/156)과 [#170](https://github.com/junghan0611/entwurf/issues/170)을 다음 순서로 잡았다. Astra `20261021T184815-46e595`와 순서를 대조했다. 두 이슈는 SDK 기준선만 공유하고 각각 수용한다. 구현·설치 미착수.
+- **역할 / #178:** Opus `20261126T081804-885314`가 실무코디로 브랜치와 writer 창을 관리한다. 작업 중 인수인계는 해당 브랜치의 `NEXT--<branch>.md`에 모아 main 문서 push를 반복하지 말고, 합치기 전 지운다. 실무코디가 별도 native Claude Code Fable을 첫 구현자로 부르고, Astra와 기존 Fable 등은 독립 검토에 집중한다. #156 로컬 입력과 #170은 섞지 않는다.
+- **Next / #178:** [Android Herdr Mobile → Oracle Core](https://github.com/junghan0611/entwurf/issues/178) 연구에는 Astra·오푸스의 판독을 반영했다. 공식 앱의 직접 터미널에 합성 여러 줄을 붙여 명시 Enter 전 제출 0회인지 볼 것(별도 실행 승인). Compose는 paste+Enter라 대체 불가. Oracle의 Core 0.1.18은 Nix 선언만 확인, 활성 `hc`와 Android 빌드 호환은 미확인. 별도로 `nixos-unstable` `2786a2a72088`의 0.1.20은 Oracle aarch64에서 dry-run상 바이너리 캐시 31경로(26.2 MiB), 로컬 빌드 없음. 실제 설치·기동은 미실행; 소스 대조는 `~/repos/3rd/herdr-core`의 v0.1.20과 v0.1.22를 구분한다. 시험 재연결과 Entwurf 같은 주소 실제 전달은 따로 관측; 설치·포트·공개 서비스·새 Core launch adapter는 승인되지 않았다.
+- **Next / #156:** Entwurf SHA/패키지·SDK 버전 세트·carrier·OS를 고정하고, 입력 동작을 `SDK 제공 → 셸 연결 → 실제 키 조작 성공`으로 나눠 대조한다. 1.6.1부터 보되 1.7.0은 별도 후보. 로컬 이미지는 #178을 기다리지 않는다.
+- **#156 휴대폰 텍스트:** GLG 보고: 휴대폰에서 여러 줄을 Oracle 세션에 붙이면 Claude Code는 한 덩어리로 받지만 일반 Pi는 줄별로 제출한다. agent-config의 `pi-extensions/raw-paste.ts`가 일반 Pi에서 명시적으로 켜는 우회이고 durable에는 없다. 그 구현에는 마커 없는 여러 줄의 버퍼링과 tmux 개행 재인코딩 처리가 있다(소스, 현 증상 재현 아님). 같은 경로에서 합성 본문으로 `Claude Code / 일반 Pi 기본·rawpaste / durable`을 비교한다. 성공은 여러 줄이 초안 하나, 명시 Enter 전 제출 0, Enter 후 정확히 한 번. 표준 paste나 확인된 셸 결함은 Entwurf; 마커 없는 기기별 입력 추정·개인 토글은 agent-config 우선. 추정기를 기본으로 켜거나 기존 prototype patch를 복제하지 않는다. 현재 seam으로 durable에 이식할 수 있는지는 별도 확인.
+- **#156 원문 회수:** 저장된 제출 원문을 사용자가 읽고 복사하는 동작도 별도로 검토. 초안 유지, 읽기만, 재제출·모델 턴 없음. SDK 소유의 정식 조회를 우선하고 외부 라이브 SQLite·새 transcript 권위는 금지. 저장 본문의 여러 줄·코드펜스 정확성, active/이전 페이지 범위, 출처 불명 항목을 구분한다. 이슈의 완료점은 세 동작 대조와 첫 leaf·완료 기준·검증/설치 게이트에 대한 GLG 합의다. `/inputs`는 후보일 뿐 확정 아님. [이월된 U4/U16](https://github.com/junghan0611/entwurf/issues/156#issuecomment-7069232824)은 일반 Pi의 ACP 별도 실측이며 durable ACP 통합은 PAUSED.
+- **#170:** 짧은/긴 히스토리에서 재시작 없는 대조 후 idle 수신자만 같은 garden ID로 복귀. 준비 완료 → nonce가 실제 수신 턴에 나타남 → 같은 nonce 답신 수신을 별도 기록. 같은 저장소를 쓰며 DB open·claim adoption·enqueue는 준비 또는 실제 수신으로 세지 않는다. 조건별 턴 수·반복 수·rail·원시 시각과 누락·중복·오배달·timeout을 따로 기록하고 재송신하지 않는다. 첫 판에서 fork·멀티호스트·강제종료·복구 중 발송·`/renew` 금지.
+- **실무코디 인수 / #156 텍스트 worker:** 1.6.1 소스에서 durable `pi/pi-durable/src/experimental/durable/tui.ts:336–340`의 Alt+Enter가 `getText()`, 일반 Pi는 `getExpandedText()` 우선임을 확인했다. 이것은 휴대폰의 마커 없는 paste와 별도 결함 후보. 긴 bracketed paste의 표시용 `[paste #…]`가 제출될 가능성을 격리 재현한다: 같은 입력을 Enter/Alt+Enter로 각각 보내 stub controller에서 저장할 원문 정확히 한 번, 표식 0회, 기존 trim 유지. 휴대폰 증상의 원인은 별개로, 클라이언트·붙여넣기 방식(키/메뉴)·mux 유무를 받아 합성 텍스트가 어디서 끊기는지 확인한다. 운영 stdin·클립보드·대화 DB 수집 없음.
+- **#156 로컬 이미지:** 노트북에서 스크린샷을 로컬 클립보드에 담아 같은 노트북의 pi-durable에 직접 넣는 일이다. 휴대폰 이미지→Oracle은 범위 밖. 일반 Pi의 로컬 이미지 붙여넣기는 임시 파일 경로를 초안에 넣으며 durable에는 콜백 연결이 없다(Astra 소스 판독). 같은 더미 스크린샷으로 일반 Pi/durable 붙여넣기와 최종 이미지 전달 지점을 확인한다. 경로 삽입만으로 모델에 이미지가 전달됐다고 세지 않는다. 로컬 클립보드→초안→제출의 기본 연결은 Entwurf; 개인별 Emacs/Org 내보내기·키 편의는 agent-config. SQLite나 모델 도구로 우회하지 않는다.
+- **#170 worker 인수:** 별도 실험 카드. 고정 스크립트 모델·발신자·수신자와 short/long 턴 수를 정해 무재시작 대조 → idle 수신자 재개 → nonce 한 번 왕복을 측정한다. release gate 승격·#156 완료 조건 편입 금지. #156과 공유하는 것은 버전·격리 기준뿐이다. GLG 배치 후 실무코디가 각 경로와 단독 writer 창을 확정한다.
+- **Do not touch:** 운영 세션·profile, SDK pin·설치, 출하 바이트, commit/push는 이 계획 정리로 승인된 것이 아니다.
+
+# 이전 레일 — 출하 기록
 
 - [x] **1–8. 0.61.0·0.62.0 cut과 Herdr re-pin.** 증거는 CHANGELOG 0.61.0·0.62.0 Release evidence와 Herdr snapshot 항목에 있다.
 - [x] **9. 0.62.0 뒷정리.** 수정은 CHANGELOG `## Unreleased`에 있다. 남아 있던 PARTIAL은 뒤 후보에서 측정했다: set-model-readback 212/212 @`4e6045e5`(acp-step8 mutant 포함), visible-resume 137/137 @`d379a6f0`(herdr·mux resume 테스트 포함), mux-resume-call @`52c95685`.
@@ -21,8 +42,6 @@
 - [x] **21. GLG publish와 Herdr re-pin.** U2 `latest`=0.64.0, `repair` 유지. registry tarball sha256 = 후보, sha512·sha1 = integrity·shasum. U3 sandbox registry 설치(host Pi 1.6.1) entwurf 6행, provider 오류 없음. Herdr re-pin은 CHANGELOG `v2026.11.26-herdr.0.64.0` 항목. `docs/durable-native-support.md` SDK 문단(B 🌀 발견)도 같이 고쳤다. Codex managed daemon은 되살리지 않는다(GLG 2026-11-26).
 - [x] **22. 0.64.1 cut.** release 스킬 보강 `4b1e6099`(exact-SHA CI run 45925165905 4/4). P3의 새 lock 확인이 `runtime-lock-incoherent`로 설계대로 멈췄고 carrier `fcaac7b9`(check-dep-versions PARTIAL 12/12, receipt `15dfb0eeaaeb`)를 따로 커밋했다. prepare `bc16e414`: P4 1187s exit 0, P5 MUST 25/0/0, BEHAVIOR 1/0, `cut: OK`(OpenClaw receipt `receipt-0.64.1-fcaac7b9`). make: M0 1176s exit 0, exact-SHA CI run 45933185199 4/4, Windows preview run 45934342102, 후보 `~/.local/state/entwurf-releases/0.64.1-bc16e4149e25/candidate.Wrc9kg/junghanacs-entwurf-0.64.1.tgz` sha256 `e891572f…`, tag `v0.64.1`, GitHub release. GLG publish 뒤 U2 `latest`=0.64.1, `repair` 유지; U3 sandbox registry 설치 entwurf 6행. Herdr re-pin은 CHANGELOG `v2026.11.27-herdr.0.64.1` 항목.
 - [x] **23. 0.64.2 cut.** R25 guidance `854da09a`(exact-SHA CI run 46004078564 4/4). P3 lock 확인이 `runtime-lock-incoherent`로 멈췄고 carrier `86471960`(check-dep-versions PARTIAL 12/12, receipt `99ac2fcb22f3`)를 따로 커밋했다. prepare `700543fa`: P4 1166s exit 0, P5 MUST 25/0/0, BEHAVIOR 1/0, `cut: OK`(OpenClaw receipt `receipt-0.64.2-86471960`; Codex는 GLG 승인으로 managed daemon을 내리고 전용 tmux의 `entwurf codex-app-server` pid 34720, Codex 0.172.0). make: M0 1168s exit 0, exact-SHA CI run 46076983977 4/4, Windows preview run 46078232761, 후보 `~/.local/state/entwurf-releases/0.64.2-700543fa6dbe/candidate.VLHWza/junghanacs-entwurf-0.64.2.tgz` sha256 `27a967c6…`, tag `v0.64.2`, GitHub release. GLG publish 뒤 U2 `latest`=0.64.2, `repair` 유지; U3 sandbox registry 설치 entwurf 6행. Herdr re-pin은 CHANGELOG `v2026.11.28-herdr.0.64.2` 항목.
-- [ ] **24. 다음 레일.** ← CURRENT. GLG가 고른다: 아래 이월의 D1·O3, GLG 결정 대기, 열린 관찰의 낡은 OMP·Copilot writer.
-
 # 열린 관찰 (일을 열지 않음)
 
 - **낡은 운영 writer 2개 (2026-11-25, 0.63.0 cut).** `26f14eda`(#173)가 `meta-session.ts`를 바꾼 뒤 `doctor-omp-bridge`, `doctor-copilot-receive`가 STALE writer를 보고한다. 운영 extension이라 cut에서 건드리지 않았고, GLG가 2026-11-26에 Claude Code만 올리라고 정했으므로 그대로 둔다(해결은 `install-omp-bridge`, `install-copilot-receive`). `install-omp-receive`는 P5 때문에, `install-meta-bridge`는 GLG 결정으로 올렸다(01bbe9c3 checkout, `.assembled`에서 `lib/meta-session.ts` 하나만 바뀜, `~/.claude/settings.json` 바이트 동일, `doctor-meta-bridge` FAIL→PASS; `~/.local/share/entwurf-lab/063/writers/`).
@@ -53,7 +72,7 @@
 - GLG 결정: 코어는 npm pin 설치, Orca 플러그인은 npm 패키징하지 않고 안내 문서만 둔다(점검 스크립트 없음). 대상 하네스는 pi·claude-code, opencode는 범위 밖.
 - 0.55.0 소비자 관측(노트북): pi 첫 record·상태줄 모델이 `claude-fable-5-1`이었다(턴 실패 여부 미측정). 시작 화면에 `Extension issues … peerDependencies` 경고가 뜨지만 동작에는 지장이 없다(아래 U3 경고와 같은 것).
 
-# NOW
+# 운영 참고
 
 - **역할:** 맨 위 "현재" 줄을 따른다.
 - **운영 관찰:**
