@@ -11,7 +11,13 @@
  * has shipped passes for the same reason a current one does.
  */
 import { describe, expect, it } from "vitest";
-import { dispatchFreshCall, freshCallProviderRefusal, renderDispatchedFreshCall } from "./fresh-call-dispatch.ts";
+import {
+	dispatchFreshCall,
+	dispatchResumeLaunch,
+	freshCallProviderRefusal,
+	renderDispatchedFreshCall,
+	selectResumeRail,
+} from "./fresh-call-dispatch.ts";
 import type { SpawnedHerdrProcess, SpawnFn } from "./herdr-fresh-call.ts";
 
 const HERDR_ENV = { HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr", HERDR_PANE_ID: "w7:p1" };
@@ -122,5 +128,96 @@ describe("fresh-call provider contract (#76)", () => {
 		);
 		expect(alias.result.ok ? null : alias.result.reason).not.toBe("pi-model-not-provider-qualified");
 		expect(herdr.calls.length).toBeGreaterThan(0);
+	});
+});
+
+// ── #178: the Herdr Core rail at the shared root ─────────────────────────────────────────────
+describe("the resume rail table and the hc refusal of a fresh call (#178)", () => {
+	const HC = { HC_TERMINAL_ID: "t7", HC_TERMINAL_SOCKET: "/nonexistent/hc-dispatch-test.sock" };
+	const INPUT = { backend: "pi", cwd: "/nonexistent/hc-dispatch-test", runtimeArgs: ["--session", "/x.jsonl"] };
+
+	it("[QK:FCD-RESUME-RAIL-TABLE] the rail a resume reopens on is read from four rows: an hc marker alone is hc, HERDR_ENV=1 alone is herdr, neither is tmux, and both is ambiguous — TMUX is never a marker, so a tmux anchor a core inherited does not win over hc", () => {
+		const TMUX = { TMUX: "/tmp/tmux-1000/default,1,0", TMUX_PANE: "%1" };
+		expect(selectResumeRail(HC)).toBe("hc");
+		expect(selectResumeRail({ ...HC, ...TMUX })).toBe("hc");
+		expect(selectResumeRail({ HC_TERMINAL_ID: "t7" })).toBe("hc");
+		expect(selectResumeRail({ HC_TERMINAL_SOCKET: "/s.sock" })).toBe("hc");
+		expect(selectResumeRail({ HERDR_ENV: "1" })).toBe("herdr");
+		expect(selectResumeRail({ HERDR_ENV: "1", ...TMUX })).toBe("herdr");
+		expect(selectResumeRail({})).toBe("tmux");
+		expect(selectResumeRail(TMUX)).toBe("tmux");
+		expect(selectResumeRail({ HC_TERMINAL_ID: "", HC_TERMINAL_SOCKET: "", HERDR_ENV: "true" })).toBe("tmux");
+		expect(selectResumeRail({ ...HC, HERDR_ENV: "1" })).toBe("ambiguous");
+		expect(selectResumeRail({ HC_TERMINAL_ID: "t7", HERDR_ENV: "1" })).toBe("ambiguous");
+	});
+
+	it("[QK:FCD-RESUME-AMBIGUOUS-NO-RAIL] contradictory markers are refused at the root by name with nothing created: neither the tmux mapping nor herdr is asked, and no rail is chosen by preference", async () => {
+		const herdr = recordingSpawn();
+		let tmuxCalls = 0;
+		const outcome = await dispatchResumeLaunch(
+			INPUT,
+			() => {
+				tmuxCalls++;
+				return { ok: true as const };
+			},
+			{ ...HC, HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr", HERDR_PANE_ID: "w7:p1" },
+			herdr.spawn,
+		);
+		expect(outcome).toMatchObject({ ok: false, reason: "rail-markers-ambiguous" });
+		expect("failure" in outcome).toBe(false);
+		expect(tmuxCalls).toBe(0);
+		expect(herdr.calls.length).toBe(0);
+	});
+
+	it("[QK:FCD-RESUME-HC-NO-FALLBACK] inside an hc terminal the hc launch answers and no other rail is asked: an hc refusal stays an hc refusal even when a tmux anchor and a tmux mapping are right there", async () => {
+		const herdr = recordingSpawn();
+		let tmuxCalls = 0;
+		const tmuxLaunch = () => {
+			tmuxCalls++;
+			return { ok: true as const };
+		};
+		// A complete context whose cwd does not exist: refused by the hc leaf before any socket use.
+		const refused = await dispatchResumeLaunch(
+			INPUT,
+			tmuxLaunch,
+			{ ...HC, TMUX: "/tmp/tmux-1000/default,1,0", TMUX_PANE: "%1" },
+			herdr.spawn,
+		);
+		expect(refused).toMatchObject({ ok: false, reason: "cwd-missing" });
+		// A half-present marker selects hc and is refused there by name.
+		const half = await dispatchResumeLaunch(INPUT, tmuxLaunch, { HC_TERMINAL_ID: "t7" }, herdr.spawn);
+		expect(half).toMatchObject({ ok: false, reason: "hc-context-missing" });
+		expect(tmuxCalls).toBe(0);
+		expect(herdr.calls.length).toBe(0);
+		// Outside hc the two existing rows are what they were.
+		const onTmux = await dispatchResumeLaunch(INPUT, tmuxLaunch, {}, herdr.spawn);
+		expect(onTmux).toEqual({ ok: true });
+		expect(tmuxCalls).toBe(1);
+	});
+
+	it("[QK:FCD-FRESH-HC-UNSUPPORTED] a fresh call from inside an hc terminal is refused by name before any other question — no provider or model answer, nothing spawned, nothing sent to tmux or herdr", async () => {
+		for (const env of [HC, { ...HC, HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr", HERDR_PANE_ID: "w7:p1" }]) {
+			for (const [backend, model] of [
+				["pi", "openai-codex/gpt-6.1-terra"],
+				["pi", "terra"],
+				["claude-code", "claude-sonnet-5-5"],
+				["pi-durable", "openai-codex/gpt-6.1-terra"],
+				["codex", "gpt-6.1-sol"],
+			] as const) {
+				const herdr = recordingSpawn();
+				const dispatched = await dispatchFreshCall(
+					{ backend, model, task: "do it", callerGardenId: CALLER },
+					env,
+					herdr.spawn,
+				);
+				expect(dispatched.rail, `${backend} ${model}`).toBe("hc");
+				expect(dispatched.result).toEqual({ ok: false, reason: "hc-fresh-unsupported" });
+				expect(herdr.calls.length).toBe(0);
+				const rendered = renderDispatchedFreshCall(dispatched);
+				expect(rendered.isError).toBe(true);
+				expect(rendered.text.startsWith("entwurf_fresh_call rejected: hc-fresh-unsupported — ")).toBe(true);
+				expect(rendered.text.endsWith("Nothing was opened.")).toBe(true);
+			}
+		}
 	});
 });

@@ -29,8 +29,8 @@
  * liveness question and, for pi-durable, a reservation it must then withdraw. A human in a bare
  * terminal should hear it first, with nothing listed, read, locked, reserved or launched. It asks
  * only the two questions the rails already ask, through their own predicates:
- * `selectFreshCallRail(env)` (inside herdr no tmux variable is required) and `readAnchor(env)` (both
- * TMUX and TMUX_PANE). It is an environment check, not evidence that the tmux session exists or
+ * `selectResumeRail(env)` (inside herdr or a Herdr Core terminal no tmux variable is required) and
+ * `readAnchor(env)` (both TMUX and TMUX_PANE). It is an environment check, not evidence that the tmux session exists or
  * that herdr is ready; the leaf and its launcher still decide that, and may still refuse.
  *
  * THE LIST CHOOSES AN ID AND NOTHING ELSE. Step 4 ends in exactly one string — a garden id — and
@@ -51,7 +51,8 @@
  *   3 — launched, and that observation was not positive in the bounded wait (or could not be read).
  *       A window or tab was opened and stays visible; nothing was retried and nothing was closed.
  *   4 — refused: nothing was opened. The text names the reason — the leaf's, or the early
- *       launch-context one (`no-tmux-context` / `anchor-malformed`), after which nothing ran at all.
+ *       launch-context one (`no-tmux-context` / `anchor-malformed` / `rail-markers-ambiguous`), after
+ *       which nothing ran at all.
  *   5 — failed AT THE LAUNCH STEP. What was created and what remains is the recovery receipt in the
  *       text (none / unknown / closed / orphan-unreclaimed), and only that: a `none` recovery is not
  *       re-typed as a refusal here, and an `unknown` one is not rounded to either side.
@@ -75,7 +76,7 @@ import {
 	type VisibleResumeResult,
 	visibleResume,
 } from "./entwurf-v2-visible-resume.ts";
-import { selectFreshCallRail } from "./fresh-call-dispatch.ts";
+import { RAIL_MARKERS_AMBIGUOUS, RAIL_MARKERS_AMBIGUOUS_HINT, selectResumeRail } from "./fresh-call-dispatch.ts";
 import { readAnchor } from "./mux-placement.ts";
 import type { PeerPresentation } from "./peer-presentation.ts";
 import type { PickerRail, PickerResult } from "./resume-picker.ts";
@@ -140,24 +141,27 @@ export function productionResumeCliDeps(list: ResumeListDeps): ResumeCliDeps {
 	};
 }
 
-export type ResumeLaunchContextRefusal = "no-tmux-context" | "anchor-malformed";
+export type ResumeLaunchContextRefusal = "no-tmux-context" | "anchor-malformed" | typeof RAIL_MARKERS_AMBIGUOUS;
 
 /**
- * Can this terminal be the place a resume opens beside? Null when it can. The two existing
- * predicates only, in the rail root's own order: inside herdr the tmux anchor is never asked for.
+ * Can this terminal be the place a resume opens beside? Null when it can. The rail root's own table
+ * (`selectResumeRail`) and, on the tmux rail only, the tmux anchor: inside herdr or a Herdr Core
+ * terminal (#178) no tmux variable is asked for, and contradictory rail markers are refused here,
+ * first, exactly as the root would refuse them last.
  */
 export function resumeLaunchContextRefusal(env: NodeJS.ProcessEnv): ResumeLaunchContextRefusal | null {
-	if (selectFreshCallRail(env) === "herdr") return null;
+	const rail = selectResumeRail(env);
+	if (rail === "ambiguous") return RAIL_MARKERS_AMBIGUOUS;
+	if (rail !== "tmux") return null;
 	const anchor = readAnchor(env);
 	return anchor.ok ? null : anchor.reason;
 }
 
 /** The early answer: same reason names and hint text the launch leaf would give at the very end. */
 export function renderResumeLaunchContextRefusal(reason: ResumeLaunchContextRefusal): string {
-	return (
-		`entwurf resume refused: ${reason} — ${ENTWURF_RESUME_LAUNCH_REJECT_HINTS[reason]}. ` +
-		`Nothing was read, locked or opened.`
-	);
+	const hint =
+		reason === RAIL_MARKERS_AMBIGUOUS ? RAIL_MARKERS_AMBIGUOUS_HINT : ENTWURF_RESUME_LAUNCH_REJECT_HINTS[reason];
+	return `entwurf resume refused: ${reason} — ${hint}. Nothing was read, locked or opened.`;
 }
 
 export interface ResumeCliOutcome {
@@ -206,7 +210,10 @@ async function chooseFromList(
 		const pins = deps.list.readPins(callerCwd);
 		const { facts, presentation } = await deps.list.listFacts(pins);
 		const listing = buildResumeListing(facts, callerCwd, pins, presentation);
-		picked = await deps.list.pick(listing, selectFreshCallRail(deps.env));
+		// The early check above already refused contradictory markers, so a rail is always named here.
+		const rail = selectResumeRail(deps.env);
+		if (rail === "ambiguous") throw new Error(RAIL_MARKERS_AMBIGUOUS_HINT);
+		picked = await deps.list.pick(listing, rail);
 	} catch (err) {
 		return {
 			kind: "ended",

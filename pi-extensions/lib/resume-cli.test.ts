@@ -333,7 +333,9 @@ describe("entwurf resume <garden-id>", () => {
 				src.includes('\nimport type { PeerPresentation } from "./peer-presentation.ts";\n') &&
 				src.includes('\nimport type { PickerRail, PickerResult } from "./resume-picker.ts";\n') &&
 				// The two rail modules are here for their PREDICATES alone: no launcher, lock or record reader.
-				src.includes('\nimport { selectFreshCallRail } from "./fresh-call-dispatch.ts";\n') &&
+				src.includes(
+					'\nimport { RAIL_MARKERS_AMBIGUOUS, RAIL_MARKERS_AMBIGUOUS_HINT, selectResumeRail } from "./fresh-call-dispatch.ts";\n',
+				) &&
 				src.includes('\nimport { readAnchor } from "./mux-placement.ts";\n') &&
 				src.includes('\nimport { visibleResumeLaunch } from "./visible-resume-launch.ts";\n') &&
 				/resume: \(target\) => visibleResume\(target, makeVisibleResumeDeps\(visibleResumeLaunch\)\)/.test(src) &&
@@ -386,6 +388,47 @@ describe("entwurf resume <garden-id>", () => {
 		ok(
 			"the leaf was called once with the id and its receipt came back",
 			JSON.stringify(herdr.seen) === JSON.stringify([GID]) && out.exitCode === RESUME_CLI_EXIT.resumed,
+		);
+	});
+
+	it("[QK:RESUMECLI-CONTEXT-HC] inside a Herdr Core terminal the tmux anchor is not asked for: an hc marker with no tmux variable reaches the leaf, and a TMUX the core inherited does not send the caller to tmux's check (#178)", async () => {
+		const HC = { HC_TERMINAL_ID: "t7", HC_TERMINAL_SOCKET: "/run/user/1000/herdr-core/default.sock" };
+		const bareHc = recording(BACK_PI, HC);
+		// A half-present anchor would be `no-tmux-context` on the tmux rail; in hc it is never read.
+		const leakedTmux = recording(BACK_PI, { ...HC, TMUX: "/tmp/tmux-1000/default,4242,0" });
+		const halfMarker = recording(BACK_PI, { HC_TERMINAL_ID: "t7" });
+		const outs = [
+			await runResumeCli([GID], bareHc.deps),
+			await runResumeCli([GID], leakedTmux.deps),
+			await runResumeCli([GID], halfMarker.deps),
+		];
+		ok(
+			"the leaf was called once with the id in each, and its receipt came back",
+			[bareHc, leakedTmux, halfMarker].every((r) => JSON.stringify(r.seen) === JSON.stringify([GID])) &&
+				outs.every((o) => o.exitCode === RESUME_CLI_EXIT.resumed),
+		);
+		const picked = recording(BACK_PI, HC, { ...TTY, pick: { kind: "cancelled" } });
+		await runResumeCli([], picked.deps);
+		ok("the picker is told the hc rail", picked.calls.pick[0]?.rail === "hc");
+	});
+
+	it("[QK:RESUMECLI-CONTEXT-AMBIGUOUS] an hc marker together with `HERDR_ENV=1` is refused first, by name, with nothing listed, read, locked or launched — no rail is chosen by preference (#178)", async () => {
+		const both = recording(
+			BACK_PI,
+			{ HC_TERMINAL_ID: "t7", HC_TERMINAL_SOCKET: "/s.sock", HERDR_ENV: "1" },
+			{ ...TTY, pick: { kind: "selected", gardenId: GID } },
+		);
+		const typed = await runResumeCli([GID], both.deps);
+		const listed = await runResumeCli([], both.deps);
+		ok(
+			"exit 4 with the named reason on stderr, both with an id and with the list",
+			[typed, listed].every(
+				(o) =>
+					o.exitCode === RESUME_CLI_EXIT.refused &&
+					o.stdout === "" &&
+					o.stderr.startsWith("entwurf resume refused: rail-markers-ambiguous — ") &&
+					o.stderr.endsWith("Nothing was read, locked or opened.\n"),
+			) && nothingRan(both),
 		);
 	});
 });

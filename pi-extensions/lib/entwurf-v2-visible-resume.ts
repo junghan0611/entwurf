@@ -208,6 +208,25 @@ export interface VisibleResumeHerdrLaunchHandle {
 
 export type VisibleResumeLaunchHandle = VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrLaunchHandle;
 
+/**
+ * #178: the Herdr Core (hc) rail's handle — ONE `terminal.run` on the caller's own core, the same
+ * shape for all three backends. `core` is the core as it named itself, `terminal` its address for the
+ * new terminal and `name` this call's random label: VIEW coordinates, never an address, liveness or
+ * a delivery coordinate. `pid` is the terminal's own process as the core reported it (the argv vector
+ * is exec'd with no shell between) — for Claude Code the twin of tmux's pane pid, a join for the
+ * observation; null when the core reported none. `runtimePath` is `argv[0]`, the absolute file the
+ * hc leaf resolved.
+ */
+export interface VisibleResumeHcLaunchHandle {
+	rail: "hc";
+	core: { id: string; name: string };
+	terminal: string;
+	name: string;
+	pid: string | null;
+	runtimePath: string;
+	cwd: string;
+}
+
 /** #157 B3: the herdr rail's pi-durable resume — ONE layout.apply, so herdr's layout reply is the whole
  * receipt: the launcher asked for, the requested directory and herdr's VIEW coordinates. No agent name
  * and no terminal id exist for it, which is why it carries its own rail tag: a pi resume handed one
@@ -246,16 +265,27 @@ export type VisibleResumeLaunchInput =
  * after a mutation today (tmux opens its window in one step), and `rail` says so rather than leaving
  * the renderer to assume it: `herdr-layout` is the pi-durable rail's ONE layout.apply (#157 B3), whose
  * classifier answers only none or unknown and which has no tab create step of its own. */
-export interface VisibleResumeLaunchFailure {
-	rail: "herdr" | "herdr-layout";
-	vendorCode?: string;
-	recovery:
-		| { outcome: "none" }
-		| { outcome: "unknown" }
-		| { outcome: "closed"; paneId: string; terminalId: string }
-		| { outcome: "orphan-unreclaimed"; paneId: string; reason: string };
-	created?: { herdrWorkspaceId: string; herdrTabId: string; herdrPaneId: string; herdrTerminalId: string };
-}
+export type VisibleResumeLaunchFailure =
+	| {
+			rail: "herdr" | "herdr-layout";
+			vendorCode?: string;
+			recovery:
+				| { outcome: "none" }
+				| { outcome: "unknown" }
+				| { outcome: "closed"; paneId: string; terminalId: string }
+				| { outcome: "orphan-unreclaimed"; paneId: string; reason: string };
+			created?: { herdrWorkspaceId: string; herdrTabId: string; herdrPaneId: string; herdrTerminalId: string };
+	  }
+	/** #178: the hc rail's ONE `terminal.run`. `none` — never written, or the core declined before a
+	 * terminal record existed; `unknown` — a terminal MAY exist that the call cannot name; `left-open`
+	 * — the core created `terminal`, its echo was not what was asked, and it was left as it is (this
+	 * rail holds no kill authority). `core` is who answered the handshake. */
+	| {
+			rail: "hc";
+			vendorCode?: string;
+			recovery: { outcome: "none" } | { outcome: "unknown" } | { outcome: "left-open"; terminal: string };
+			core: { id: string; name: string };
+	  };
 
 /**
  * #157 stage 4: the herdr rail's Claude Code resume — ONE layout.apply, then ONE `pane.process_info`
@@ -277,7 +307,11 @@ export interface VisibleResumeHerdrClaudeLaunchHandle {
 export type VisibleResumeLaunchOutcome =
 	| {
 			ok: true;
-			handle: VisibleResumeLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle | VisibleResumeHerdrClaudeLaunchHandle;
+			handle:
+				| VisibleResumeLaunchHandle
+				| VisibleResumeHerdrLayoutLaunchHandle
+				| VisibleResumeHerdrClaudeLaunchHandle
+				| VisibleResumeHcLaunchHandle;
 	  }
 	/** Refused before anything was created. */
 	| { ok: false; reason: string; hint: string }
@@ -289,12 +323,17 @@ export type VisibleResumeLaunchOutcome =
  * The Claude Code receipt is tmux's window or herdr's layout tab: its observation joins that pane's
  * direct child. */
 export type ResumeLaunchReceipt =
-	| { backend: "pi"; targetGardenId: string; sessionFile: string; handle: VisibleResumeLaunchHandle }
+	| {
+			backend: "pi";
+			targetGardenId: string;
+			sessionFile: string;
+			handle: VisibleResumeLaunchHandle | VisibleResumeHcLaunchHandle;
+	  }
 	| {
 			backend: "claude-code";
 			targetGardenId: string;
 			nativeSessionId: string;
-			handle: VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrClaudeLaunchHandle;
+			handle: VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrClaudeLaunchHandle | VisibleResumeHcLaunchHandle;
 	  }
 	/** #157 B3: the reservation is part of the launch fact — the window or tab was opened FOR it. */
 	| {
@@ -302,7 +341,7 @@ export type ResumeLaunchReceipt =
 			targetGardenId: string;
 			cwd: string;
 			reservation: { generation: string; resource: string; ownerPid: number };
-			handle: VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle;
+			handle: VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle | VisibleResumeHcLaunchHandle;
 	  };
 
 /** Fact 2: the citizen's control socket came back under the SAME garden id, or it did not. This
@@ -746,7 +785,7 @@ async function resumeClaudeCode(
 	// for a pid that does not exist. Whatever that launcher opened is left as it is; the lock is still
 	// released.
 	const handle = launched.handle;
-	if (handle.rail !== "tmux" && handle.rail !== "herdr-layout-claude") {
+	if (handle.rail !== "tmux" && handle.rail !== "herdr-layout-claude" && handle.rail !== "hc") {
 		throw new Error(
 			`entwurf-v2-visible-resume: the launcher handed a Claude Code resume of ${targetGardenId} a ${handle.rail} ` +
 				`handle — its observation joins the opened pane's direct child, which that rail does not carry. Nothing was ` +
@@ -763,7 +802,24 @@ async function resumeClaudeCode(
 			observation: { kind: "pane-process-unread", cause: handle.paneChild.unread, waitedMs: 0 },
 		};
 	}
-	const panePid = handle.rail === "tmux" ? handle.panePid : (handle.paneChild as { pid: string }).pid;
+	// #178: the same for an hc terminal whose own process the core did not report.
+	if (handle.rail === "hc" && handle.pid === null) {
+		return {
+			ok: true,
+			launch,
+			observation: {
+				kind: "pane-process-unread",
+				cause: "the core reported no pid for the terminal it created",
+				waitedMs: 0,
+			},
+		};
+	}
+	const panePid =
+		handle.rail === "tmux"
+			? handle.panePid
+			: handle.rail === "hc"
+				? (handle.pid as string)
+				: (handle.paneChild as { pid: string }).pid;
 	const observation = await observeReceiverReattached(
 		targetGardenId,
 		current,
@@ -1161,6 +1217,7 @@ export function renderVisibleResume(
 	// The herdr rail has its own coordinates and its own words; the tmux text below stays as it was.
 	if (h.rail === "herdr") return renderHerdrPiResume(result, h, actor);
 	if (h.rail === "herdr-layout-claude") return renderHerdrClaudeResume(result, h, actor);
+	if (h.rail === "hc") return renderHcResume(result, h, actor);
 	const window =
 		`  runtime:  ${h.runtimePath} (requested start cwd ${h.cwd})\n` +
 		`  window:   ${h.windowId} (index ${h.windowIndex}) in session ${h.sessionId}\n` +
@@ -1227,15 +1284,18 @@ function renderPiDurableResume(
 	actor: string,
 ): { text: string; isError: boolean } {
 	const h = launch.handle;
-	const place = h.rail === "tmux" ? "window" : "tab";
+	const place = h.rail === "tmux" ? "window" : h.rail === "hc" ? "terminal" : "tab";
 	const where =
 		h.rail === "tmux"
 			? `  runtime:  ${h.runtimePath} pi-durable --entwurf-adopt (requested start cwd ${h.cwd})\n` +
 				`  window:   ${h.windowId} (index ${h.windowIndex}) in session ${h.sessionId}\n` +
 				`  pane:     ${h.paneId} pid ${h.panePid}\n`
-			: `  runtime:  ${h.runtime} pi-durable --entwurf-adopt (requested start cwd ${h.cwd})\n` +
-				`  tab:      ${h.herdrTabId} in workspace ${h.herdrWorkspaceId} — a NEW tab from ONE layout.apply, opened without taking focus\n` +
-				`  pane:     ${h.herdrPaneId} — herdr VIEW coordinates, not an address\n`;
+			: h.rail === "hc"
+				? `  runtime:  ${h.runtimePath} pi-durable --entwurf-adopt (requested start cwd ${h.cwd})\n` +
+					hcTerminalLines(h)
+				: `  runtime:  ${h.runtime} pi-durable --entwurf-adopt (requested start cwd ${h.cwd})\n` +
+					`  tab:      ${h.herdrTabId} in workspace ${h.herdrWorkspaceId} — a NEW tab from ONE layout.apply, opened without taking focus\n` +
+					`  pane:     ${h.herdrPaneId} — herdr VIEW coordinates, not an address\n`;
 	const r = launch.reservation;
 	const heldBy = `this process (pid ${r.ownerPid})`;
 	const observed =
@@ -1259,14 +1319,14 @@ function renderPiDurableResume(
 						`visible; nothing was retried, withdrawn or killed.`;
 	return {
 		text:
-			`[entwurf resume call ↻${h.rail === "tmux" ? "" : " herdr"}]\n` +
+			`[entwurf resume call ↻${h.rail === "tmux" ? "" : h.rail === "hc" ? " hc" : " herdr"}]\n` +
 			`  target:   ${launch.targetGardenId}\n` +
 			`  backend:  pi-durable\n` +
 			`  reserved: ${r.resource} at generation ${r.generation}, held by ${heldBy} for one child to adopt\n` +
 			where +
 			actor +
 			`\n` +
-			`LAUNCH receipt: ${h.rail === "tmux" ? "tmux created that window" : "herdr created that tab"} and was asked to ` +
+			`LAUNCH receipt: ${h.rail === "tmux" ? "tmux created that window" : h.rail === "hc" ? "the hc core created that terminal" : "herdr created that tab"} and was asked to ` +
 			`start the managed entwurf pi-durable with the closed adopt context of the reservation above, its raw ` +
 			`profile as PI_CODING_AGENT_DIR and its meta root's four ENTWURF_META_*_DIR children as its launch env, ` +
 			`in the record's cwd.\n` +
@@ -1311,6 +1371,82 @@ function renderHerdrPiResume(
 				: `OBSERVATION receipt: resume-unobserved — the control socket did not answer within ` +
 					`${observation.waitedMs}ms. The tab is open and visible; read it directly. The lock was ` +
 					`released, nothing was retried, and nothing was closed.`),
+		isError: false,
+	};
+}
+
+/** The hc VIEW lines every hc receipt shares (#178): which core, which terminal, which process. */
+function hcTerminalLines(h: VisibleResumeHcLaunchHandle): string {
+	return (
+		`  terminal: ${h.terminal} on hc core ${h.core.name} (${h.core.id}), named ${h.name} — a NEW terminal from ONE ` +
+		`terminal.run, with no parent; hc VIEW coordinates, not an address\n` +
+		`  process:  ${h.pid === null ? "not reported by the core" : `pid ${h.pid} (the core's report for that terminal; a join, not an address)`}\n`
+	);
+}
+
+/**
+ * The pi and Claude Code resumes on the hc rail (#178). The same two receipts as on the other rails,
+ * kept apart the same way. What is claimed about the place is only that the core created a live
+ * terminal: where an App shows it — beside, focused, grouped — is the App's, and is not said here.
+ */
+function renderHcResume(
+	result: Extract<VisibleResumeResult, { ok: true }>,
+	h: VisibleResumeHcLaunchHandle,
+	actor: string,
+): { text: string; isError: boolean } {
+	const target = result.launch.targetGardenId;
+	const left =
+		"The terminal exists on that core; read it directly. The lock was released, nothing was retried, and nothing was closed.";
+	if (result.launch.backend === "claude-code") {
+		const observation = result.observation as ReceiverObservationReceipt;
+		return {
+			text:
+				`[entwurf resume call ↻ hc]\n` +
+				`  target:   ${target}\n` +
+				`  backend:  claude-code\n` +
+				`  session:  ${result.launch.nativeSessionId}\n` +
+				`  runtime:  ${h.runtimePath} --resume (requested start cwd ${h.cwd})\n` +
+				hcTerminalLines(h) +
+				actor +
+				`\n` +
+				`LAUNCH receipt: the hc core created that terminal and was asked to start claude --resume on the session above.\n` +
+				(observation.kind === "receiver-armed"
+					? `OBSERVATION receipt: receiver-armed — a NEW live Claude Code process, the terminal's own process ` +
+						`(pid ${observation.ownerPid}), re-armed the receiver marker of ${target} for the same session after ` +
+						`${observation.waitedMs}ms, with a fresh arm binding the record also carries (same createdAt). ` +
+						`entwurf_v2 fire-and-forget now reaches its mailbox. This call submitted no prompt; the runtime's own ` +
+						`activity after resume (e.g. a doorbell on unread mail) is unmeasured.`
+					: observation.kind === "pane-process-unread"
+						? `OBSERVATION receipt: pane-process-unread — ${observation.cause}, so no receiver marker could be ` +
+							`joined to it and no wait ran. ${left}`
+						: observation.kind === "record-unreadable"
+							? `OBSERVATION receipt: record-unreadable — the record of ${target} could not be read after ` +
+								`${observation.waitedMs}ms: ${observation.cause}. ${left}`
+							: `OBSERVATION receipt: resume-unobserved — no new live receiver marker from the terminal's own ` +
+								`process, bound to the record, appeared within ${observation.waitedMs}ms. ${left}`),
+			isError: false,
+		};
+	}
+	if (result.launch.backend !== "pi") {
+		throw new Error("entwurf-v2-visible-resume: an hc pi/Claude Code receipt was asked to render another backend");
+	}
+	const observation = result.observation as ResumeObservationReceipt;
+	return {
+		text:
+			`[entwurf resume call ↻ hc]\n` +
+			`  target:   ${target}\n` +
+			`  session:  ${result.launch.sessionFile}\n` +
+			`  runtime:  ${h.runtimePath} (requested start cwd ${h.cwd})\n` +
+			hcTerminalLines(h) +
+			actor +
+			`\n` +
+			`LAUNCH receipt: the hc core created that terminal and was asked to start pi on the transcript above.\n` +
+			(observation.kind === "socket-alive"
+				? `OBSERVATION receipt: the control socket for ${target} answered after ${observation.waitedMs}ms — that ` +
+					`citizen is addressable again, and entwurf_v2 fire-and-forget now reaches it. No turn was run by this ` +
+					`call. The core's own status for the terminal was not consulted.`
+				: `OBSERVATION receipt: resume-unobserved — the control socket did not answer within ` +
+					`${observation.waitedMs}ms. ${left}`),
 		isError: false,
 	};
 }
@@ -1379,6 +1515,7 @@ function renderLaunchFailed(result: Extract<VisibleResumeResult, { reason: "laun
 	isError: boolean;
 } {
 	const f = result.failure;
+	if (f.rail === "hc") return renderHcLaunchFailed(result.detail, f);
 	const tabHeader =
 		f.recovery.outcome === "none"
 			? "entwurf_resume_call failed at the herdr tab create step"
@@ -1414,6 +1551,38 @@ function renderLaunchFailed(result: Extract<VisibleResumeResult, { reason: "laun
 			recovery +
 			`No observation was attempted, so this says nothing about whether the citizen came back — entwurf_peers ` +
 			`shows whether its ${layout ? "rail" : "control socket"} answers. The lock was released and nothing was retried.`,
+		isError: true,
+	};
+}
+
+/**
+ * A failed hc launch (#178): the ONE `terminal.run` did not become a launch receipt. The header claims
+ * no more than the recovery knows, and nothing is ever closed: this rail holds no kill authority.
+ */
+function renderHcLaunchFailed(
+	detail: string,
+	f: Extract<VisibleResumeLaunchFailure, { rail: "hc" }>,
+): { text: string; isError: boolean } {
+	const header =
+		f.recovery.outcome === "none"
+			? "entwurf_resume_call failed at the hc terminal.run step"
+			: f.recovery.outcome === "unknown"
+				? "entwurf_resume_call failed at the hc terminal.run step with an UNKNOWN outcome"
+				: "entwurf_resume_call failed after the hc terminal was created";
+	const code = f.vendorCode === undefined ? "" : ` [hc: ${f.vendorCode}]`;
+	const recovery =
+		f.recovery.outcome === "none"
+			? "  recovery: none — the request was never written, or the core declined it by name before a terminal existed, so there is no terminal to go look at (after a config error one holder process may have been started; it holds no terminal)\n"
+			: f.recovery.outcome === "unknown"
+				? "  recovery: UNKNOWN — we never got an answer we can act on, so a terminal MAY exist that this call cannot name. Nothing was closed; check the core's terminal list\n"
+				: `  recovery: left-open — terminal ${f.recovery.terminal} exists and was NOT closed, on purpose: its echo is not what this call asked for, and this rail closes nothing\n`;
+	return {
+		text:
+			`${header}: ${detail}.${code}\n` +
+			`  core:     ${f.core.name} (${f.core.id}) — hc VIEW coordinates, not an address\n` +
+			recovery +
+			`No observation was attempted, so this says nothing about whether the citizen came back — entwurf_peers ` +
+			`shows whether its rail answers. The lock was released and nothing was retried.`,
 		isError: true,
 	};
 }

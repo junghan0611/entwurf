@@ -1617,6 +1617,95 @@ describe("a Claude Code citizen", () => {
 		);
 	});
 
+	/** #178: the hc rail's handle for a Claude Code resume, reporting the terminal's own pid. */
+	const hcClaude =
+		(pid: string | null) =>
+		(cwd: string): VisibleResumeLaunchOutcome => ({
+			ok: true,
+			handle: {
+				rail: "hc",
+				core: { id: "96a4987dcca010b410faac93b2d0607c", name: "oracle" },
+				terminal: "t15",
+				name: "entwurf-resume-0123456789abcdef",
+				pid,
+				runtimePath: "/home/op/.local/bin/claude",
+				cwd,
+			},
+		});
+
+	it("[QK:V2RESUME-CC-HC-JOIN] on hc the observation is the SAME join as on tmux, against the terminal's own pid the core reported: a new live owner with that pid and a fresh binding the record carries is receiver-armed, another pid is never success, and the receipt names the core and terminal as a view with no tmux or herdr coordinate (#178)", async () => {
+		const run = async (pid: string) => {
+			const h = harness({
+				livenessSequence: ["dead"],
+				receiverSequence: [marker("dead"), herdrReattached],
+				resolveIdentity: records(CC)(),
+				launchResult: hcClaude(pid),
+			});
+			return { h, result: await visibleResume(GID, h.deps) };
+		};
+		const joined = await run(String(HERDR_CHILD));
+		const elsewhere = await run(String(PANE_PID));
+		const text = renderVisibleResume(joined.result, { actor: null }).text;
+		ok(
+			"the terminal pid joins the new owner → receiver-armed with that pid, launched as --resume at the record's cwd",
+			joined.result.ok &&
+				(joined.result.observation as ReceiverObservationReceipt).kind === "receiver-armed" &&
+				(joined.result.observation as { ownerPid: number }).ownerPid === HERDR_CHILD &&
+				joined.h.trace.includes(`launch:${CC.cwd}:--resume ${NATIVE}`),
+		);
+		ok(
+			"a pid that is not the new owner's ends resume-unobserved, released, nothing relaunched",
+			elsewhere.result.ok &&
+				(elsewhere.result.observation as ReceiverObservationReceipt).kind === "resume-unobserved" &&
+				elsewhere.h.launches === 1 &&
+				elsewhere.h.trace.includes("releaseLock"),
+		);
+		ok(
+			"rendered: hc header, the core and terminal as VIEW coordinates, the absolute runtime, the joined pid; no tmux or herdr word",
+			text.startsWith("[entwurf resume call ↻ hc]\n") &&
+				text.includes("  backend:  claude-code\n") &&
+				text.includes("  runtime:  /home/op/.local/bin/claude --resume (requested start cwd ") &&
+				text.includes(
+					"  terminal: t15 on hc core oracle (96a4987dcca010b410faac93b2d0607c), named entwurf-resume-0123456789abcdef",
+				) &&
+				text.includes("hc VIEW coordinates, not an address") &&
+				text.includes(`  process:  pid ${HERDR_CHILD} (the core's report for that terminal; a join, not an address)`) &&
+				text.includes("LAUNCH receipt: the hc core created that terminal") &&
+				text.includes("OBSERVATION receipt: receiver-armed") &&
+				text.includes("This call submitted no prompt") &&
+				!/tmux|herdr created|window:|tab:|beside|focus/.test(text),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-HC-PID-UNREPORTED] when the core reported no pid for the terminal it created there is nothing to join: the observation is pane-process-unread at once — no receiver wait, no retry — and the receipt says the terminal exists and nothing was closed (#178)", async () => {
+		const h = harness({
+			livenessSequence: ["dead"],
+			receiverSequence: [marker("dead"), herdrReattached],
+			resolveIdentity: records(CC)(),
+			launchResult: hcClaude(null),
+		});
+		const result = await visibleResume(GID, h.deps);
+		const text = renderVisibleResume(result).text;
+		ok(
+			"pane-process-unread, zero wait, one receiver read (the dormancy proof), no sleep, lock released",
+			result.ok &&
+				(result.observation as ReceiverObservationReceipt).kind === "pane-process-unread" &&
+				(result.observation as { waitedMs: number }).waitedMs === 0 &&
+				h.trace.filter((t) => t.startsWith("inspectReceiver")).length === 1 &&
+				!h.trace.some((t) => t.startsWith("sleep")) &&
+				h.trace.includes("releaseLock"),
+		);
+		ok(
+			"rendered: the cause, the terminal that exists, nothing closed",
+			text.includes("  process:  not reported by the core\n") &&
+				text.includes(
+					"OBSERVATION receipt: pane-process-unread — the core reported no pid for the terminal it created",
+				) &&
+				text.includes("The terminal exists on that core") &&
+				text.includes("nothing was closed"),
+		);
+	});
+
 	it("[QK:V2RESUME-CC-HERDR-RENDER] the herdr Claude Code receipt says herdr made a NEW tab with ONE layout.apply, that herdr resolved claude, and which pid it joined — herdr's view coordinates and no tmux window, pane id or runtime path", async () => {
 		const h = harness({
 			livenessSequence: ["dead"],
@@ -2315,6 +2404,158 @@ describe("a pi-durable citizen (#157 B3)", () => {
 				unknown.text.includes("a tab MAY exist") &&
 				[none, unknown].every((r) => r.text.includes("entwurf_peers shows whether its rail answers")) &&
 				![none, unknown].some((r) => /tab create step|control socket/.test(r.text)),
+		);
+	});
+
+	const hcHandle = (cwd: string): VisibleResumeLaunchOutcome => ({
+		ok: true,
+		handle: {
+			rail: "hc",
+			core: { id: "96a4987dcca010b410faac93b2d0607c", name: "oracle" },
+			terminal: "t16",
+			name: "entwurf-resume-fedcba9876543210",
+			pid: "5151",
+			runtimePath: "/opt/entwurf/run.sh",
+			cwd,
+		},
+	});
+	const hcFailure = (
+		recovery: { outcome: "none" } | { outcome: "unknown" } | { outcome: "left-open"; terminal: string },
+	): VisibleResumeLaunchOutcome => ({
+		ok: false,
+		reason: recovery.outcome === "left-open" ? "hc-run-echo-drift" : "hc-run-failed",
+		hint: "HINT",
+		failure: { rail: "hc", vendorCode: "spawn_failed", recovery, core: { id: "c0de", name: "oracle" } },
+	});
+
+	it("[QK:V2RESUME-PD-HC-LAUNCH] an hc handle is a pi-durable launch like tmux's: observed once through the reservation's D claim, and rendered as an hc terminal with the reservation, the adopt launch and no tmux or herdr coordinate (#178)", async () => {
+		const h = pd({ launchResult: hcHandle });
+		const result = await visibleResume(GID, h.deps);
+		const text = renderVisibleResume(result, { actor: null }).text;
+		ok(
+			"launched once, adopted, nothing withdrawn, lock released",
+			result.ok &&
+				(result.observation as { kind: string }).kind === "adopted" &&
+				h.launches === 1 &&
+				!h.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
+				h.trace.includes("releaseLock"),
+		);
+		ok(
+			"rendered: hc header, reservation, managed adopt runtime, core/terminal view, adopted is not readiness",
+			text.startsWith("[entwurf resume call ↻ hc]\n") &&
+				text.includes("  backend:  pi-durable\n") &&
+				text.includes(`  reserved: ${RESERVATION.resource} at generation ${G_R}`) &&
+				text.includes(
+					"  runtime:  /opt/entwurf/run.sh pi-durable --entwurf-adopt (requested start cwd /home/op/pd-project)\n",
+				) &&
+				text.includes(
+					"  terminal: t16 on hc core oracle (96a4987dcca010b410faac93b2d0607c), named entwurf-resume-fedcba9876543210",
+				) &&
+				text.includes(
+					"LAUNCH receipt: the hc core created that terminal and was asked to start the managed entwurf pi-durable",
+				) &&
+				text.includes("OBSERVATION receipt: adopted") &&
+				text.includes("That is not readiness") &&
+				!/tmux created|herdr created|window:|tab:/.test(text),
+		);
+		const waiting = pd({ launchResult: hcHandle, observeSequence: [NOT_YET] });
+		const late = renderVisibleResume(await visibleResume(GID, waiting.deps)).text;
+		ok("not-yet-adopted names the terminal, not a window or tab", late.includes("The terminal is open and visible"));
+	});
+
+	it("[QK:V2RESUME-PD-HC-RESERVATION] an hc launch failure decides the reservation by its recovery alone: none withdraws it, unknown and left-open KEEP it — a terminal that may or does exist can still adopt it (#178)", async () => {
+		const run = async (recovery: Parameters<typeof hcFailure>[0]) => {
+			const h = pd({ launchResult: () => hcFailure(recovery) });
+			const result = await visibleResume(GID, h.deps);
+			return { h, result, text: renderVisibleResume(result).text };
+		};
+		const none = await run({ outcome: "none" });
+		const unknown = await run({ outcome: "unknown" });
+		const leftOpen = await run({ outcome: "left-open", terminal: "t17" });
+		const withdrew = (h: Harness) => h.trace.some((t) => t.startsWith("withdrawPiDurable"));
+		ok(
+			"none → withdrawn; unknown and left-open → kept and said so; each is launch-failed, released, never retried",
+			withdrew(none.h) &&
+				!withdrew(unknown.h) &&
+				!withdrew(leftOpen.h) &&
+				none.text.includes("was withdrawn, since nothing was created") &&
+				[unknown, leftOpen].every((r) => r.text.includes("was KEPT")) &&
+				[none, unknown, leftOpen].every(
+					(r) =>
+						!r.result.ok &&
+						r.result.reason === "launch-failed" &&
+						r.h.launches === 1 &&
+						r.h.trace.includes("releaseLock") &&
+						!r.h.trace.some((t) => t.startsWith("observePiDurable")),
+				),
+		);
+		ok(
+			"the header claims no more than the recovery knows, and nothing says a terminal was closed",
+			none.text.startsWith("entwurf_resume_call failed at the hc terminal.run step: hc-run-failed") &&
+				none.text.includes("[hc: spawn_failed]") &&
+				none.text.includes("recovery: none") &&
+				unknown.text.startsWith("entwurf_resume_call failed at the hc terminal.run step with an UNKNOWN outcome") &&
+				unknown.text.includes("a terminal MAY exist") &&
+				leftOpen.text.startsWith("entwurf_resume_call failed after the hc terminal was created: hc-run-echo-drift") &&
+				leftOpen.text.includes("recovery: left-open — terminal t17 exists and was NOT closed") &&
+				[none, unknown, leftOpen].every(
+					(r) =>
+						r.text.includes("  core:     oracle (c0de)") &&
+						r.text.includes("No observation was attempted") &&
+						!/herdr|tab create|No window was opened/.test(r.text),
+				),
+		);
+	});
+});
+
+describe("a pi citizen on the hc rail (#178)", () => {
+	const hcPi = (cwd: string): VisibleResumeLaunchOutcome => ({
+		ok: true,
+		handle: {
+			rail: "hc",
+			core: { id: "96a4987dcca010b410faac93b2d0607c", name: "oracle" },
+			terminal: "t18",
+			name: "entwurf-resume-00112233445566aa",
+			pid: "6161",
+			runtimePath: "/home/op/.local/share/pnpm/bin/pi",
+			cwd,
+		},
+	});
+
+	it("[QK:V2RESUME-PI-HC-RENDER] an hc handle is a pi launch observed by the SAME same-gid control socket, and its two receipts are kept apart: the core created a terminal (a view), and the socket answered or did not — nothing is said about where an App shows it (#178)", async () => {
+		const back = harness({ livenessSequence: ["dead", "alive"], launchResult: hcPi });
+		const backResult = await visibleResume(GID, back.deps);
+		const gone = harness({ livenessSequence: ["dead"], launchResult: hcPi });
+		const goneResult = await visibleResume(GID, gone.deps);
+		const text = renderVisibleResume(backResult, { actor: "20260914T174741-2e9ba9" }).text;
+		const unobserved = renderVisibleResume(goneResult).text;
+		ok(
+			"socket-alive after one launch; the dead socket ends resume-unobserved with the terminal left",
+			backResult.ok &&
+				(backResult.observation as { kind: string }).kind === "socket-alive" &&
+				back.launches === 1 &&
+				goneResult.ok &&
+				(goneResult.observation as { kind: string }).kind === "resume-unobserved" &&
+				gone.trace.includes("releaseLock"),
+		);
+		ok(
+			"rendered: hc header, transcript, absolute runtime, core/terminal view, attribution, two receipts; no placement claim",
+			text.startsWith("[entwurf resume call ↻ hc]\n") &&
+				text.includes(`  session:  ${IDENTITY.sessionFile}\n`) &&
+				text.includes(`  runtime:  /home/op/.local/share/pnpm/bin/pi (requested start cwd ${IDENTITY.cwd})\n`) &&
+				text.includes(
+					"  terminal: t18 on hc core oracle (96a4987dcca010b410faac93b2d0607c), named entwurf-resume-00112233445566aa",
+				) &&
+				text.includes("  process:  pid 6161") &&
+				text.includes("attribution, not authority") &&
+				text.includes(
+					"LAUNCH receipt: the hc core created that terminal and was asked to start pi on the transcript above.",
+				) &&
+				text.includes(`OBSERVATION receipt: the control socket for ${GID} answered`) &&
+				text.includes("No turn was run by this call") &&
+				unobserved.includes("OBSERVATION receipt: resume-unobserved") &&
+				unobserved.includes("The terminal exists on that core") &&
+				![text, unobserved].some((t) => /tmux|herdr|window:|tab:|beside|focus/.test(t)),
 		);
 	});
 });

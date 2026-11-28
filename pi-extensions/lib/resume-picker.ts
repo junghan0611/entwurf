@@ -427,11 +427,12 @@ export function stepPicker(state: PickerState, key: PickerKey, listing: ResumeLi
 // ── frame ──────────────────────────────────────────────────────────────────────────────────────
 
 /** Where a chosen citizen will be reopened — said on screen because Enter asks nothing further. */
-export type PickerRail = "tmux" | "herdr";
+export type PickerRail = "tmux" | "herdr" | "hc";
 
 const ENTER_LINE: Record<PickerRail, string> = {
 	tmux: "Enter: reopen in a new tmux window beside this one",
 	herdr: "Enter: reopen in a new herdr tab",
+	hc: "Enter: reopen in a new hc terminal on this core",
 };
 
 /** The keys that move and the key that leaves, always whole: the full line where it fits, else the

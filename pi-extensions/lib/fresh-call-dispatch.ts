@@ -1,6 +1,7 @@
 /**
  * fresh-call-dispatch — the ONE place that decides which rail opens a sibling, and the only module
- * allowed to know that there are two. Since #157 G1a that rail choice is shared by the two visible
+ * allowed to know that there is more than one (tmux, herdr and, for a same-id resume, Herdr Core:
+ * #178). Since #157 G1a that rail choice is shared by the two visible
  * lifecycle verbs, fresh call and same-id visible resume, through two separate entry points; each
  * verb keeps its own lifecycle policy, and only the rail choice is common.
  *
@@ -32,6 +33,7 @@ import { spawn as spawnChildProcess } from "node:child_process";
 import { ACP_MODEL_NOT_CURATED, isCuratedAcpModelId, PROVIDER_ID } from "./acp/model-ids.js";
 import { codexCallerFreshPreflight, codexFreshPreflight } from "./codex-fresh-preflight.ts";
 import { type FreshCallProviderRejectReason, isSafeFreshCallModel, mintNonce } from "./fresh-call-composition.ts";
+import { type HcResumeLaunchOutcome, hasHcMarker, launchHcResume } from "./hc-launch.ts";
 import {
 	createHerdrRunner,
 	type HerdrFreshCallResult,
@@ -52,6 +54,44 @@ export type FreshCallRail = "herdr" | "tmux";
 export function selectFreshCallRail(env: NodeJS.ProcessEnv): FreshCallRail {
 	return env.HERDR_ENV === "1" ? "herdr" : "tmux";
 }
+
+/**
+ * #178: where a same-id visible RESUME reopens. One table, read by the launch root below, the CLI's
+ * early check and the picker's Enter line:
+ *
+ *   hc marker   HERDR_ENV=1   rail
+ *   yes         no            hc
+ *   yes         yes           ambiguous — refused by name; nothing is read, locked, reserved or opened
+ *   no          yes           herdr (unchanged)
+ *   no          no            tmux  (unchanged)
+ *
+ * The hc marker is `HC_TERMINAL_ID` / `HC_TERMINAL_SOCKET`, which Herdr Core sets on every program
+ * it starts. It is asked FIRST, so a `TMUX` a core inherited from the seat that started it no longer
+ * sends a caller in an hc terminal to a tmux window somewhere else; `TMUX` itself is still not a
+ * marker, and tmux stays the else-branch. Both markers present is a contradiction this root does not
+ * resolve by preference. ACCEPTED RESIDUAL: hc variables inherited into a tmux pane route that caller
+ * to hc while their source terminal is live — the receipt then truthfully names an hc terminal.
+ *
+ * A FRESH call does not use this table: inside hc it is refused as `hc-fresh-unsupported` (below).
+ */
+export type ResumeRail = "hc" | "herdr" | "tmux";
+
+export function selectResumeRail(env: NodeJS.ProcessEnv): ResumeRail | "ambiguous" {
+	const herdr = selectFreshCallRail(env) === "herdr";
+	if (hasHcMarker(env)) return herdr ? "ambiguous" : "hc";
+	return herdr ? "herdr" : "tmux";
+}
+
+export const RAIL_MARKERS_AMBIGUOUS = "rail-markers-ambiguous";
+export const RAIL_MARKERS_AMBIGUOUS_HINT =
+	"this process carries both a Herdr Core marker (HC_TERMINAL_ID / HC_TERMINAL_SOCKET) and HERDR_ENV=1, so where it actually runs cannot be told from its environment, and no rail is chosen by preference";
+
+/** #178: a fresh call from inside an hc terminal is refused by name. The hc rail reopens existing
+ * citizens only; opening a NEW sibling there is outside this rail, and falling through to tmux would
+ * open a window the caller in hc cannot see. */
+export const HC_FRESH_UNSUPPORTED = "hc-fresh-unsupported";
+export const HC_FRESH_UNSUPPORTED_HINT =
+	"this process runs in a Herdr Core terminal (HC_TERMINAL_ID / HC_TERMINAL_SOCKET), where entwurf opens no NEW sibling: the hc rail only reopens a dormant citizen under its own garden id (entwurf_resume_call). Nothing was sent to tmux or herdr instead";
 
 export interface FreshCallRequest {
 	readonly backend: string;
@@ -75,7 +115,8 @@ export interface FreshCallRequest {
 
 export type DispatchedFreshCall =
 	| { readonly rail: "tmux"; readonly result: FreshCallResult }
-	| { readonly rail: "herdr"; readonly result: HerdrFreshCallResult };
+	| { readonly rail: "herdr"; readonly result: HerdrFreshCallResult }
+	| { readonly rail: "hc"; readonly result: { readonly ok: false; readonly reason: typeof HC_FRESH_UNSUPPORTED } };
 
 /**
  * #76: the provider a Pi-dialect model string NAMES. pi passes the string to `--model` and Pi
@@ -148,6 +189,9 @@ export async function dispatchFreshCall(
 	spawn?: SpawnFn,
 	nonce: string = mintNonce(),
 ): Promise<DispatchedFreshCall> {
+	// #178: asked before anything else — no model, provider or capability question matters for a call
+	// this rail does not make.
+	if (hasHcMarker(env)) return { rail: "hc", result: { ok: false, reason: HC_FRESH_UNSUPPORTED } };
 	// Before either rail is asked anything: both would open a pane on a provider nobody chose.
 	const providerRefusal = freshCallProviderRefusal(request.backend, request.model);
 	if (providerRefusal !== null) {
@@ -224,7 +268,20 @@ export async function dispatchFreshCall(
  * "universal" renderer would have to speak about panes and windows at once, which is how prose
  * starts claiming every call uses tmux. */
 export function renderDispatchedFreshCall(dispatched: DispatchedFreshCall): { text: string; isError: boolean } {
+	if (dispatched.rail === "hc") {
+		return {
+			text: `entwurf_fresh_call rejected: ${dispatched.result.reason} — ${HC_FRESH_UNSUPPORTED_HINT}. Nothing was opened.`,
+			isError: true,
+		};
+	}
 	return dispatched.rail === "herdr" ? renderHerdrFreshCall(dispatched.result) : renderFreshCall(dispatched.result);
+}
+
+/** A refusal with nothing created, in the seam's own shape. */
+export interface RailMarkersAmbiguous {
+	readonly ok: false;
+	readonly reason: typeof RAIL_MARKERS_AMBIGUOUS;
+	readonly hint: string;
 }
 
 /** The record-derived launch input the v2 visible-resume seam hands its launcher. */
@@ -232,6 +289,13 @@ export interface ResumeLaunchInput {
 	readonly backend: string;
 	readonly cwd: string;
 	readonly runtimeArgs: readonly string[];
+	readonly piDurableAdoptEnv?: {
+		readonly PI_CODING_AGENT_DIR: string;
+		readonly ENTWURF_META_SESSIONS_DIR: string;
+		readonly ENTWURF_META_MAILBOX_DIR: string;
+		readonly ENTWURF_META_SENDERS_DIR: string;
+		readonly ENTWURF_META_RECEIVERS_DIR: string;
+	};
 }
 
 /**
@@ -247,13 +311,19 @@ export interface ResumeLaunchInput {
  *
  * Inside herdr the tmux mapping is never called, so a refused or failed herdr launch stays a herdr
  * answer. Outside herdr the tmux mapping keeps its own herdr guard for any direct caller.
+ *
+ * #178: the rail is read from `selectResumeRail`. Inside a Herdr Core terminal the hc launch runs and
+ * neither other mapping is called; contradictory markers are refused here, before any rail is asked.
  */
 export function dispatchResumeLaunch<I extends ResumeLaunchInput, T>(
 	input: I,
 	tmuxLaunch: (input: I) => T,
 	env: NodeJS.ProcessEnv = process.env,
 	spawn?: SpawnFn,
-): T | Promise<HerdrResumeLaunchOutcome> {
-	if (selectFreshCallRail(env) !== "herdr") return tmuxLaunch(input);
+): T | Promise<HerdrResumeLaunchOutcome> | Promise<HcResumeLaunchOutcome> | RailMarkersAmbiguous {
+	const rail = selectResumeRail(env);
+	if (rail === "ambiguous") return { ok: false, reason: RAIL_MARKERS_AMBIGUOUS, hint: RAIL_MARKERS_AMBIGUOUS_HINT };
+	if (rail === "hc") return launchHcResume(input, env);
+	if (rail === "tmux") return tmuxLaunch(input);
 	return launchHerdrResume(input, env, spawn ?? (spawnChildProcess as SpawnFn));
 }
