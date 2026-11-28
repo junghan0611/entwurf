@@ -3491,7 +3491,7 @@ let manifestCount: number;
 		"pi-durable": 185,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
-		"fresh-call-dispatch": 18,
+		"fresh-call-dispatch": 22,
 		"fresh-cut": 5,
 		"gate-qualification": 10,
 		"herdr-placement": 13,
@@ -3521,7 +3521,7 @@ let manifestCount: number;
 		"pi-package-ownership": 8,
 		"qualification-ledger": 42,
 		"mux-resume-call": 21,
-		"resume-cli": 58,
+		"resume-cli": 60,
 		"omp-birth": 13,
 		"omp-fresh": 25,
 		"omp-receive": 11,
@@ -3543,7 +3543,7 @@ let manifestCount: number;
 		"source-install": 11,
 		"typing-call-fence": 1,
 		"v2-surface": 16,
-		"v2-visible-resume": 62,
+		"v2-visible-resume": 67,
 		"win32-preview": 19,
 	};
 	const laneTally: Record<string, number> = {};

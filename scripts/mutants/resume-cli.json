@@ -681,6 +681,30 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMECLI-CONTEXT-HC-HALF]",
 			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-CONTEXT-HC",
+			"title": "the hc row of the early check asks for the tmux anchor, so entwurf resume in a Herdr Core terminal with no tmux variable is refused no-tmux-context as before #178",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (rail === \"hc\") return resolveHcContext(env).ok ? null : \"hc-context-missing\";"],
+			"replace": [
+				"\tif (rail === \"hc\") return !resolveHcContext(env).ok ? \"hc-context-missing\" : readAnchor(env).ok ? null : \"no-tmux-context\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-CONTEXT-HC]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-CONTEXT-AMBIGUOUS",
+			"title": "the early check lets contradictory rail markers through, so records are listed and read before the root refuses them",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (rail === \"ambiguous\") return RAIL_MARKERS_AMBIGUOUS;"],
+			"replace": ["\tif (rail === \"ambiguous\") return null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-CONTEXT-AMBIGUOUS]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		}
 	]
 }

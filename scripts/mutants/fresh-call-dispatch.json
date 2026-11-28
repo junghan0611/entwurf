@@ -222,6 +222,54 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-HERDR-NO-THREAD-ID]",
 			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-RESUME-RAIL-TABLE",
+			"title": "the hc row of the rail table answers tmux, so a resume asked from a Herdr Core terminal opens in whatever tmux its environment names",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\tif (hasHcMarker(env)) return herdr ? \"ambiguous\" : \"hc\";"],
+			"replace": ["\tif (hasHcMarker(env)) return herdr ? \"ambiguous\" : \"tmux\";"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RESUME-RAIL-TABLE]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
+		},
+		{
+			"claim": "FCD-RESUME-AMBIGUOUS-NO-RAIL",
+			"title": "contradictory rail markers resolve to herdr by preference instead of being refused, so a resume opens on a rail nobody chose",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\tif (hasHcMarker(env)) return herdr ? \"ambiguous\" : \"hc\";"],
+			"replace": ["\tif (hasHcMarker(env)) return herdr ? \"herdr\" : \"hc\";"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RESUME-AMBIGUOUS-NO-RAIL]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
+		},
+		{
+			"claim": "FCD-RESUME-HC-NO-FALLBACK",
+			"title": "the root falls back to the tmux mapping when the hc launch refuses, so an hc refusal becomes a window in an ambient tmux",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\tif (rail === \"hc\") return launchHcResume(input, env);"],
+			"replace": [
+				"\tif (rail === \"hc\") return launchHcResume(input, env).then((o) => (o.ok ? o : (tmuxLaunch(input) as never)));"
+			],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RESUME-HC-NO-FALLBACK]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
+		},
+		{
+			"claim": "FCD-FRESH-HC-UNSUPPORTED",
+			"title": "the fresh-call root no longer refuses a Herdr Core caller first, so a fresh call from an hc terminal is answered by the provider rules and then launched on tmux or herdr",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\tif (hasHcMarker(env)) return { rail: \"hc\", result: { ok: false, reason: HC_FRESH_UNSUPPORTED } };"],
+			"replace": [
+				"\tif (hasHcMarker(env) && request.task === \"\") return { rail: \"hc\", result: { ok: false, reason: HC_FRESH_UNSUPPORTED } };"
+			],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-FRESH-HC-UNSUPPORTED]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
 		}
 	]
 }

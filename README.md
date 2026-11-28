@@ -176,7 +176,10 @@ new tmux window beside your terminal, or a new Herdr tab — through the same co
 `entwurf_resume_call` uses. Nothing else is given: the record selects the native session, and no
 prompt is submitted.
 
-- **Run it inside tmux or Herdr.** A terminal with neither is told so first, before anything is read.
+- **Run it inside tmux, Herdr or a Herdr Core terminal.** The sibling reopens where you are: a tmux
+  window, a Herdr tab, or a new terminal on that core. A terminal with none of them is told so first,
+  before anything is read; so is one that carries both a Herdr and a Herdr Core marker, since no place
+  is chosen by preference, and one with only half a Herdr Core context.
 - **Only dormant siblings reopen.** One that is live, of another harness or not provably dormant is
   refused and nothing is opened — never a message or a new session instead.
 - **The list** starts with the siblings recorded in the directory you typed the command in; type to

@@ -753,6 +753,65 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-CC-HERDR-RENDER]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-HC-JOIN",
+			"title": "the Claude Code observation on the hc rail no longer joins the pid the core reported for the new terminal, so a marker re-armed by any other process counts as this resume",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\t\t? (handle.pid as string)"],
+			"replace": ["\t\t\t\t? \"0\""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-HC-JOIN]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-HC-PID-UNREPORTED",
+			"title": "a core that reported no pid is not answered pane-process-unread, so the observation waits on a pid that does not exist",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (handle.rail === \"hc\" && handle.pid === null) {"],
+			"replace": ["\tif (handle.rail === \"hc\" && handle.pid === undefined) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-HC-PID-UNREPORTED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-HC-LAUNCH",
+			"title": "a pi-durable hc receipt calls its place a tab, so the not-yet-adopted text sends the operator to a herdr tab that does not exist",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tconst place = h.rail === \"tmux\" ? \"window\" : h.rail === \"hc\" ? \"terminal\" : \"tab\";"],
+			"replace": ["\tconst place = h.rail === \"tmux\" ? \"window\" : \"tab\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-HC-LAUNCH]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-HC-RESERVATION",
+			"title": "any hc launch failure withdraws the pi-durable reservation, so a terminal that may or does exist can no longer adopt it",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tconst noneCreated = !(\"failure\" in launched) || launched.failure.recovery.outcome === \"none\";"],
+			"replace": [
+				"\t\tconst noneCreated = !(\"failure\" in launched) || launched.failure.recovery.outcome === \"none\" || launched.failure.rail === \"hc\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-HC-RESERVATION]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PI-HC-RENDER",
+			"title": "the pi hc receipt drops the requested start cwd from its runtime line, so the launch receipt no longer says where the transcript was reopened",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t`  runtime:  ${h.runtimePath} (requested start cwd ${h.cwd})\\n` +\n\t\t\thcTerminalLines(h) +\n\t\t\tactor +"
+			],
+			"replace": ["\t\t\t`  runtime:  ${h.runtimePath}\\n` +\n\t\t\thcTerminalLines(h) +\n\t\t\tactor +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PI-HC-RENDER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]
 }

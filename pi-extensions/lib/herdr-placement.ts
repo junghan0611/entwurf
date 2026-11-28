@@ -71,7 +71,7 @@ export type PlacementObservation =
 	| { readonly kind: "none" }
 	| { readonly kind: "ambiguous" }
 	| { readonly kind: "herdr-pane"; readonly paneId: string }
-	// #178: the terminal of ONE Herdr Core whose own process is the citizen's validated owner, as
+	// #178: the terminal of ONE Herdr Core whose own process is the citizen's active owner, as
 	// read for this listing through the operator-named socket (`hc-placement.ts`). A view, never an
 	// address; `coreId` keeps two cores on one host apart.
 	// #178: the pane of the LISTER'S OWN tmux server whose process is the citizen's active receiver
