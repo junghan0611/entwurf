@@ -87,6 +87,7 @@ const RESUME_LAUNCH_REJECT_HINT_REASONS = [
 	"cwd-missing",
 	"cwd-not-directory",
 	"herdr-resume-unsupported",
+	"hc-resume-unsupported",
 	"runtime-unresolved",
 	"runtime-not-absolute",
 	"runtime-path-whitespace",

@@ -200,9 +200,31 @@ function main(): void {
 			!insideHerdr.ok && insideHerdr.reason === "herdr-resume-unsupported",
 		);
 
+		// #178: the same for a Herdr Core marker — either variable, and before the cwd or the runtime is
+		// looked at. Both markers at once still name herdr first; the dispatch root owns that conflict.
+		const insideHc = [{ HC_TERMINAL_ID: "t7" }, { HC_TERMINAL_SOCKET: "/run/user/1000/herdr-core/default.sock" }].map(
+			(marker) =>
+				resumeCall(
+					{ backend: "pi", cwd: "relative/never-read", runtimeArgs: [] },
+					{ ...marker, PATH: "", TMUX: "/tmp/tmux-1000/default,1,0", TMUX_PANE: "%1" },
+				),
+		);
+		const emptyMarkers = resumeCall(
+			{ backend: "pi", cwd: realDir, runtimeArgs: [] },
+			{ HC_TERMINAL_ID: "", HC_TERMINAL_SOCKET: "", PATH: runtimeDir },
+		);
+		ok(
+			"[QK:MUXRESUME-HC-REFUSED] with a Herdr Core marker the tmux resume rail refuses as hc-resume-unsupported before the cwd, the runtime or tmux is consulted — an ambient TMUX would otherwise open the window outside the core the caller sits in; empty markers are no marker",
+			insideHc.every((r) => !r.ok && r.reason === "hc-resume-unsupported") &&
+				!emptyMarkers.ok &&
+				emptyMarkers.reason === "no-tmux-context" &&
+				RESUME_CALL_REJECT_HINT["hc-resume-unsupported"].includes("nothing was opened"),
+		);
+
 		// ── every reason is answerable ────────────────────────────────────────────────
 		const reasons: ResumeCallRejectReason[] = [
 			"herdr-resume-unsupported",
+			"hc-resume-unsupported",
 			"no-tmux-context",
 			"anchor-malformed",
 			"anchor-unresolved",

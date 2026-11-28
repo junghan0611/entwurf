@@ -673,6 +673,15 @@ name은 한 서버 scope다. 그러므로 이 값을 저장하지 않고, 다른
 
 구현과 게이트: `pi-extensions/lib/herdr-placement.ts`, `scripts/check-herdr-placement.ts`.
 
+### 7-b. 개정 `[#178, 2026-11-28]` — owner가 셋이고, pid 키 조인이 들어온다
+
+§7은 "배치 소유자가 공식적으로 보고한 유일 키"만 정확 증거로 받았다. #178은 그 모양을 유지한 채 두 가지를 더한다.
+
+- **pid 키.** tmux의 `pane_pid`와 Herdr Core의 terminal `pid`는 배치 소유자가 직접 보고하는 값이고, 맞은편 키는 우리가 독립적으로 가진 값 — receiver 축이 `active`라고 판정한 owner pid — 이다. Claude Code에만 적용한다. 이 pid는 이미 tmux Claude Code resume의 관측이 조인하던 그 값이다. 제목·cwd·시각 근접 추측은 여전히 없다.
+- **owner 셋의 합성.** herdr, lister 자신의 tmux 서버(`TMUX`), 운영자가 이름 붙인 Herdr Core(`ENTWURF_HC_PLACEMENT_SOCKET`)를 각각 한 번씩 읽고 `placement-compose.ts`가 접는다. §7-a의 표는 **owner 하나의 답**으로 읽는다. listing의 `none`은 세 owner를 모두 읽었고 어디에도 없을 때만 나오며, 하나라도 읽지 못했으면 `unobserved`다. 따라서 herdr만 읽은 listing이 조인 안 된 citizen에 찍던 `none`은 이제 `unobserved`다.
+
+읽기 출처는 여전히 명시적이다: tmux는 `TMUX`가 가리키는 서버 하나(`-S`/`-L` 없음), hc는 운영자가 준 절대 소켓 경로 하나. 발견·스캔·재시도·다른 endpoint는 없다. 전체 계약과 한계: [hc-launch-rail.md](./hc-launch-rail.md) §5–§6. 구현: `tmux-placement.ts`, `hc-placement.ts`, `placement-compose.ts`.
+
 ## 8. 지금 만들지 않을 것
 
 - 폐기된 token/lookup correlation 재개 (fresh-token 계약, lookup seam, 예약 authority 포함)

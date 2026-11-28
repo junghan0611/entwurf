@@ -42,6 +42,7 @@ import {
 	RESUME_CLI_USAGE,
 	type ResumeCliDeps,
 	resumeCliExitCode,
+	resumeLaunchContextRefusal,
 	runResumeCli,
 } from "./resume-cli.ts";
 import type { PickerRail, PickerResult } from "./resume-picker.ts";
@@ -321,6 +322,7 @@ describe("entwurf resume <garden-id>", () => {
 					"./entwurf-facts.ts",
 					"./entwurf-v2-visible-resume.ts",
 					"./fresh-call-dispatch.ts",
+					"./hc-launch.ts",
 					"./mux-placement.ts",
 					"./peer-presentation.ts",
 					"./resume-picker-rows.ts",
@@ -336,6 +338,7 @@ describe("entwurf resume <garden-id>", () => {
 				src.includes(
 					'\nimport { RAIL_MARKERS_AMBIGUOUS, RAIL_MARKERS_AMBIGUOUS_HINT, selectResumeRail } from "./fresh-call-dispatch.ts";\n',
 				) &&
+				src.includes('\nimport { HC_RESUME_HINT, resolveHcContext } from "./hc-launch.ts";\n') &&
 				src.includes('\nimport { readAnchor } from "./mux-placement.ts";\n') &&
 				src.includes('\nimport { visibleResumeLaunch } from "./visible-resume-launch.ts";\n') &&
 				/resume: \(target\) => visibleResume\(target, makeVisibleResumeDeps\(visibleResumeLaunch\)\)/.test(src) &&
@@ -396,20 +399,45 @@ describe("entwurf resume <garden-id>", () => {
 		const bareHc = recording(BACK_PI, HC);
 		// A half-present anchor would be `no-tmux-context` on the tmux rail; in hc it is never read.
 		const leakedTmux = recording(BACK_PI, { ...HC, TMUX: "/tmp/tmux-1000/default,4242,0" });
-		const halfMarker = recording(BACK_PI, { HC_TERMINAL_ID: "t7" });
-		const outs = [
-			await runResumeCli([GID], bareHc.deps),
-			await runResumeCli([GID], leakedTmux.deps),
-			await runResumeCli([GID], halfMarker.deps),
-		];
+		const outs = [await runResumeCli([GID], bareHc.deps), await runResumeCli([GID], leakedTmux.deps)];
 		ok(
 			"the leaf was called once with the id in each, and its receipt came back",
-			[bareHc, leakedTmux, halfMarker].every((r) => JSON.stringify(r.seen) === JSON.stringify([GID])) &&
+			[bareHc, leakedTmux].every((r) => JSON.stringify(r.seen) === JSON.stringify([GID])) &&
 				outs.every((o) => o.exitCode === RESUME_CLI_EXIT.resumed),
 		);
 		const picked = recording(BACK_PI, HC, { ...TTY, pick: { kind: "cancelled" } });
 		await runResumeCli([], picked.deps);
 		ok("the picker is told the hc rail", picked.calls.pick[0]?.rail === "hc");
+	});
+
+	it("[QK:RESUMECLI-CONTEXT-HC-HALF] half a Herdr Core context selects the hc rail and is refused FIRST as hc-context-missing: nothing is listed, read, locked or launched, with a typed id or without (#178)", async () => {
+		const SOCKET = "/run/user/1000/herdr-core/default.sock";
+		for (const env of [
+			{ HC_TERMINAL_ID: "t7" },
+			{ HC_TERMINAL_SOCKET: SOCKET },
+			{ HC_TERMINAL_ID: "not-an-address", HC_TERMINAL_SOCKET: SOCKET },
+			{ HC_TERMINAL_ID: "t7", HC_TERMINAL_SOCKET: "relative.sock" },
+			// A tmux anchor beside half a context does not rescue it: no rail is chosen by preference.
+			{ HC_TERMINAL_ID: "t7", TMUX: "/tmp/tmux-1000/default,4242,0", TMUX_PANE: "%1" },
+		] as NodeJS.ProcessEnv[]) {
+			ok(`the predicate names it: ${JSON.stringify(env)}`, resumeLaunchContextRefusal(env) === "hc-context-missing");
+			const typed = recording(BACK_PI, env);
+			const out = await runResumeCli([GID], typed.deps);
+			ok(
+				"a typed id is refused before the leaf, exit 4, by name, saying nothing was read",
+				typed.seen.length === 0 &&
+					out.exitCode === RESUME_CLI_EXIT.refused &&
+					out.stdout === "" &&
+					out.stderr.startsWith("entwurf resume refused: hc-context-missing — ") &&
+					out.stderr.includes("Nothing was read, locked or opened."),
+			);
+			const listed = recording(BACK_PI, env, { ...TTY, pick: { kind: "cancelled" } });
+			const noId = await runResumeCli([], listed.deps);
+			ok(
+				"with no id the list is not even built",
+				noId.exitCode === RESUME_CLI_EXIT.refused && listed.calls.pick.length === 0 && listed.seen.length === 0,
+			);
+		}
 	});
 
 	it("[QK:RESUMECLI-CONTEXT-AMBIGUOUS] an hc marker together with `HERDR_ENV=1` is refused first, by name, with nothing listed, read, locked or launched — no rail is chosen by preference (#178)", async () => {

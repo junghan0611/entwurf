@@ -267,6 +267,22 @@ const reviewedToolsR25: ReviewedAmendmentLayer = {
 	revision: reviewedR25.revision,
 	amendments: reviewedR25.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
 };
+// Revision 26 (#178): the Herdr Core resume rail. Five amended leaves (both resume descriptions,
+// launch-refused, both fresh descriptions) and ONE added key, the hc twin of the tmux leaf's herdr
+// guard. The five literals were approved before the producer edit; the added hint was written in the
+// same pass and is reviewed with the commit. The README paragraph owns that provenance.
+const reviewedR26 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-26.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: { key: string[]; old: string; new: string }[];
+	additions: { key: ["resumeLaunchRejectHints", string]; new: string }[];
+};
+const reviewedToolsR26: ReviewedAmendmentLayer = {
+	revision: reviewedR26.revision,
+	amendments: reviewedR26.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
+};
 /** The two parameter leaves outside entwurf_v2 that a reviewed layer may amend, and only in revision 25. */
 const R25_PARAMETER_KEYS: readonly string[] = [
 	"tools.entwurf_fresh_call.parameters.placement",
@@ -433,6 +449,32 @@ function applyR25(family: string, expected: Record<string, string>): void {
 	}
 }
 
+function applyR26(family: string, expected: Record<string, string>): void {
+	expect(reviewedR26.amendments).toHaveLength(5);
+	expect(reviewedR26.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"resumeRejectHints.launch-refused",
+		"tools.entwurf_fresh_call.descriptions.durable",
+		"tools.entwurf_fresh_call.descriptions.mcp",
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+	]);
+	expect(reviewedR26.additions.map((a) => a.key.join("."))).toEqual(["resumeLaunchRejectHints.hc-resume-unsupported"]);
+	for (const amendment of reviewedR26.amendments) {
+		if (amendment.key[0] === "tools" || amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+	for (const addition of reviewedR26.additions) {
+		if (addition.key[0] !== family) continue;
+		const key = addition.key[1];
+		expect(Object.keys(expected)).not.toContain(key);
+		expect(addition.new.length).toBeGreaterThan(0);
+		expected[key] = addition.new;
+	}
+}
+
 function applyR19(family: string, expected: Record<string, string>): void {
 	expect(reviewedR19.amendments).toHaveLength(3);
 	expect(reviewedR19.amendments.map((a) => a.key.join(".")).sort()).toEqual([
@@ -509,6 +551,12 @@ function currentExpectations() {
 		"tools.entwurf_v2.parameters.intent",
 		"tools.entwurf_v2.parameters.message",
 	]);
+	expect(reviewedToolsR26.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_fresh_call.descriptions.durable",
+		"tools.entwurf_fresh_call.descriptions.mcp",
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+	]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -525,6 +573,7 @@ function currentExpectations() {
 		reviewedR21,
 		reviewedR24,
 		reviewedToolsR25,
+		reviewedToolsR26,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -635,7 +684,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR24.revision).toBe(24);
 		expect(reviewedR25.previousRevision).toBe(reviewedR24.revision);
 		expect(reviewedR25.revision).toBe(25);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR25.revision);
+		expect(reviewedR26.previousRevision).toBe(reviewedR25.revision);
+		expect(reviewedR26.revision).toBe(26);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR26.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments and the reviewed revision-22 addition", () => {
@@ -654,6 +705,7 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR11("rejectHints", expected);
 		applyR22("rejectHints", expected);
 		applyR25("rejectHints", expected);
+		applyR26("rejectHints", expected);
 		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
@@ -678,6 +730,7 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR18("resumeRejectHints", expected);
 		applyR22("resumeRejectHints", expected);
 		applyR25("resumeRejectHints", expected);
+		applyR26("resumeRejectHints", expected);
 		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
@@ -698,6 +751,7 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		applyR23("resumeLaunchRejectHints", expectedResume);
 		// Revision 25: runtime-unresolved names entwurf, the runtime a pi-durable resume resolves.
 		applyR25("resumeLaunchRejectHints", expectedResume);
+		applyR26("resumeLaunchRejectHints", expectedResume);
 		for (const [actualFamily, expected] of [
 			[ENTWURF_FRESH_LAUNCH_REJECT_HINTS, originalLaunchRejectHints.fresh],
 			[ENTWURF_RESUME_LAUNCH_REJECT_HINTS, expectedResume],

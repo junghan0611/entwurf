@@ -77,6 +77,7 @@ import {
 	visibleResume,
 } from "./entwurf-v2-visible-resume.ts";
 import { RAIL_MARKERS_AMBIGUOUS, RAIL_MARKERS_AMBIGUOUS_HINT, selectResumeRail } from "./fresh-call-dispatch.ts";
+import { HC_RESUME_HINT, resolveHcContext } from "./hc-launch.ts";
 import { readAnchor } from "./mux-placement.ts";
 import type { PeerPresentation } from "./peer-presentation.ts";
 import type { PickerRail, PickerResult } from "./resume-picker.ts";
@@ -141,17 +142,25 @@ export function productionResumeCliDeps(list: ResumeListDeps): ResumeCliDeps {
 	};
 }
 
-export type ResumeLaunchContextRefusal = "no-tmux-context" | "anchor-malformed" | typeof RAIL_MARKERS_AMBIGUOUS;
+export type ResumeLaunchContextRefusal =
+	| "no-tmux-context"
+	| "anchor-malformed"
+	| "hc-context-missing"
+	| typeof RAIL_MARKERS_AMBIGUOUS;
 
 /**
  * Can this terminal be the place a resume opens beside? Null when it can. The rail root's own table
- * (`selectResumeRail`) and, on the tmux rail only, the tmux anchor: inside herdr or a Herdr Core
- * terminal (#178) no tmux variable is asked for, and contradictory rail markers are refused here,
- * first, exactly as the root would refuse them last.
+ * (`selectResumeRail`), then the chosen rail's own context: the tmux anchor on tmux, both Herdr Core
+ * markers on hc (#178). Inside herdr or hc no tmux variable is asked for, and contradictory rail
+ * markers are refused here, first, exactly as the root would refuse them last.
  */
 export function resumeLaunchContextRefusal(env: NodeJS.ProcessEnv): ResumeLaunchContextRefusal | null {
 	const rail = selectResumeRail(env);
 	if (rail === "ambiguous") return RAIL_MARKERS_AMBIGUOUS;
+	// The hc row of the same early check (#178): ONE marker selects the rail, the launch needs BOTH
+	// usable. Asked here with the leaf's own predicate, so half a context is refused before a record is
+	// read, a lock taken or a pi-durable reservation written, as the tmux row is.
+	if (rail === "hc") return resolveHcContext(env).ok ? null : "hc-context-missing";
 	if (rail !== "tmux") return null;
 	const anchor = readAnchor(env);
 	return anchor.ok ? null : anchor.reason;
@@ -160,7 +169,11 @@ export function resumeLaunchContextRefusal(env: NodeJS.ProcessEnv): ResumeLaunch
 /** The early answer: same reason names and hint text the launch leaf would give at the very end. */
 export function renderResumeLaunchContextRefusal(reason: ResumeLaunchContextRefusal): string {
 	const hint =
-		reason === RAIL_MARKERS_AMBIGUOUS ? RAIL_MARKERS_AMBIGUOUS_HINT : ENTWURF_RESUME_LAUNCH_REJECT_HINTS[reason];
+		reason === RAIL_MARKERS_AMBIGUOUS
+			? RAIL_MARKERS_AMBIGUOUS_HINT
+			: reason === "hc-context-missing"
+				? HC_RESUME_HINT[reason]
+				: ENTWURF_RESUME_LAUNCH_REJECT_HINTS[reason];
 	return `entwurf resume refused: ${reason} — ${hint}. Nothing was read, locked or opened.`;
 }
 

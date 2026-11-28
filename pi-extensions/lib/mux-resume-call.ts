@@ -131,7 +131,8 @@ export type ResumeCallRejectReason =
 	| PlacementRejectReason
 	| LaunchRejectReason
 	| TmuxCwdRejectReason
-	| "herdr-resume-unsupported";
+	| "herdr-resume-unsupported"
+	| "hc-resume-unsupported";
 
 /** Coordinates plus what was handed to tmux. `cwd` is the REQUESTED start directory — the same
  * kind of fact as `runtimePath`, namely what tmux was asked for, not an observation. */
@@ -215,6 +216,13 @@ function openResumeWindow(
 	env: NodeJS.ProcessEnv,
 ): ResumeCallResult {
 	if (env.HERDR_ENV === "1") return { ok: false, reason: "herdr-resume-unsupported" };
+	// #178: the hc twin of the guard above. The dispatch root already sends a process that carries a
+	// Herdr Core marker to the hc rail; this is for a DIRECT caller of this leaf, so that a resume
+	// asked from an hc terminal can never open in whatever tmux its environment happens to name. The
+	// marker rule is the root's (either variable, non-empty), spelled here so this leaf imports no rail.
+	if ((env.HC_TERMINAL_ID ?? "") !== "" || (env.HC_TERMINAL_SOCKET ?? "") !== "") {
+		return { ok: false, reason: "hc-resume-unsupported" };
+	}
 	const badCwd = classifyTmuxCwd(params.cwd);
 	if (badCwd) return { ok: false, reason: badCwd };
 
@@ -273,6 +281,7 @@ export const RESUME_CALL_REJECT_HINT: Record<ResumeCallRejectReason, string> = {
 	"cwd-missing": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["cwd-missing"],
 	"cwd-not-directory": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["cwd-not-directory"],
 	"herdr-resume-unsupported": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["herdr-resume-unsupported"],
+	"hc-resume-unsupported": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["hc-resume-unsupported"],
 	"runtime-unresolved": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-unresolved"],
 	"runtime-not-absolute": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-not-absolute"],
 	"runtime-path-whitespace": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-path-whitespace"],

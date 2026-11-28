@@ -670,6 +670,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:RESUMEPICK-ESC-WAIT-50]",
 			"signatureSource": "pi-extensions/lib/resume-picker.test.ts"
+		},
+		{
+			"claim": "RESUMECLI-CONTEXT-HC-HALF",
+			"title": "the hc row of the early check accepts any hc marker, so half a Herdr Core context reaches the leaf and is refused only after a record was read, a lock taken and a pi-durable reservation written",
+			"subject": "pi-extensions/lib/resume-cli.ts",
+			"find": ["\tif (rail === \"hc\") return resolveHcContext(env).ok ? null : \"hc-context-missing\";"],
+			"replace": ["\tif (rail === \"hc\") return null;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESUMECLI-CONTEXT-HC-HALF]",
+			"signatureSource": "pi-extensions/lib/resume-cli.test.ts"
 		}
 	]
 }

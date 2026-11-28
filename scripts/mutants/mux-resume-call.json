@@ -237,6 +237,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-PD-MANAGED-RUNTIME]",
 			"signatureSource": "pi-extensions/lib/mux-resume-call.test.ts"
+		},
+		{
+			"claim": "MUXRESUME-HC-REFUSED",
+			"title": "the hc guard reads only one of the two markers, so a direct caller in a Herdr Core terminal that carries the other falls through to whatever tmux its environment names",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\tif ((env.HC_TERMINAL_ID ?? \"\") !== \"\" || (env.HC_TERMINAL_SOCKET ?? \"\") !== \"\") {"],
+			"replace": ["\tif ((env.HC_TERMINAL_ID ?? \"\") !== \"\") {"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-HC-REFUSED]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
 		}
 	]
 }
